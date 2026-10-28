@@ -13,7 +13,7 @@ with green CI on both platforms, and then the tag.
 ## M0 Scaffold
 - [x] 0.1 Workspace, crate skeletons, checks (including the clean-room scan and `ci-local`)
 - [x] 0.2 CI, hooks, ignore rules (CI run itself awaits the owner's first push)
-- [ ] 0.3 Docs skeleton and ADRs 0001 to 0014
+- [x] 0.3 Docs skeleton and ADRs 0001 to 0014 (owner reads at the checkpoint)
 - [ ] 0.4 Copied schemas and the schema drift harness
 - [ ] 0.5 Owner readiness
 - [ ] Checkpoint M0 → tag `m0`
