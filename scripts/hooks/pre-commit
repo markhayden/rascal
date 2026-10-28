@@ -1,27 +1,33 @@
 #!/usr/bin/env bash
 # The pre-commit hook, installed with `just hooks`. In order: the credential scan of every
-# staged blob, the image-file guard, the clean-room scan of the staged files, then formatting
-# and Clippy in both feature configurations. RASCAL_HOOK_SKIP_CARGO=1 skips the cargo steps;
-# scripts/test-hooks.sh uses it to prove the guards in a scratch repository.
+# staged blob, the image-file guard, the clean-room scan of the staged blobs and paths, then
+# formatting and Clippy in both feature configurations. RASCAL_HOOK_SKIP_CARGO=1 skips the
+# cargo steps; scripts/test-hooks.sh uses it to prove the guards in a scratch repository.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 staged="$(mktemp)"
-blobs="$(mktemp)"
-trap 'rm -f "$staged" "$blobs"' EXIT
+blob="$(mktemp)"
+trap 'rm -f "$staged" "$blob"' EXIT
 git diff --cached --name-only -z --diff-filter=ACMR > "$staged"
 
-# Credentials: the staged contents as blobs, so binary files and renames are covered and a
-# deletion-only commit scans nothing.
-while IFS= read -r -d '' file; do git show ":$file"; printf '\n'; done < "$staged" > "$blobs"
-if ! scripts/scan-secrets.sh < "$blobs"; then
+# Credentials: each staged blob on its own, so a hit names the file (never the value). Blobs,
+# not worktree files, so what is scanned is what would be committed.
+refused=0
+while IFS= read -r -d '' file; do
+  git show ":$file" > "$blob"
+  if ! scripts/scan-secrets.sh < "$blob" 2> >(sed "s|^|$file: |" >&2); then
+    refused=1
+  fi
+done < "$staged"
+if [ "$refused" -ne 0 ]; then
   echo "pre-commit: staged content contains a credential-shaped value; refusing to commit" >&2
   exit 1
 fi
 
-# Images: real photographs never enter the repository. Image files are allowed only under
-# fixtures/ (synthetic goldens) and .github/assets/ (documentation pictures).
-refused=0
+# Images: real photographs never enter the repository. Raster image files are allowed only
+# under fixtures/ (synthetic goldens) and .github/assets/ (documentation pictures). SVG is text
+# and is left to the credential and clean-room scans.
 while IFS= read -r -d '' file; do
   # Lower-cased with tr: the hook runs under macOS's bash 3.2 as well as Linux's.
   lower="$(printf '%s' "$file" | tr '[:upper:]' '[:lower:]')"
@@ -35,10 +41,8 @@ while IFS= read -r -d '' file; do
 done < "$staged"
 [ "$refused" -eq 0 ] || exit 1
 
-# Clean room: the staged files against the forbidden-word list, when the list is configured.
-if [ -s "$staged" ]; then
-  xargs -0 scripts/scan-clean-room.sh < "$staged"
-fi
+# Clean room: the staged blobs and paths against the forbidden-word list, when it is configured.
+scripts/scan-clean-room.sh --staged
 
 [ "${RASCAL_HOOK_SKIP_CARGO:-0}" = "1" ] && exit 0
 cargo fmt --all -- --check

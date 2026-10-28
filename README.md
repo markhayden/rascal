@@ -93,8 +93,9 @@ just check                                      # what every commit must pass
 `just check` runs formatting, Clippy with warnings denied in both feature configurations,
 the tests in both, `cargo deny` for licences and sources, the crate-graph and packaging checks,
 the clean-room scan, and the self-tests of the hook and the checks. The pre-commit hook scans
-every staged blob for credential-shaped values, refuses image files outside `fixtures/` and
-`.github/assets/`, runs the clean-room scan on the staged files, then formatting and Clippy.
+every staged blob for credential-shaped values, refuses raster image files outside `fixtures/`
+and `.github/assets/`, runs the clean-room scan on the staged blobs and paths, then formatting
+and Clippy; the commit-msg hook scans the message.
 `just ci-local` runs the same inside a Linux container with the pinned toolchain (Docker).
 `just smoke <binary>` is the offline smoke against any built binary.
 

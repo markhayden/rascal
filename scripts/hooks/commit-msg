@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# The commit-msg hook, installed with `just hooks`: the commit message is published with the
+# repository, so it is scanned like a file. Passes when no word list is configured.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+scripts/scan-clean-room.sh "$1"

@@ -10,6 +10,7 @@ set -euo pipefail
 export LC_ALL=C
 here="$(cd "$(dirname "$0")" && pwd)"
 allowlist="$here/synthetic-tokens.txt"
+[ -r "$allowlist" ] || { echo "scan-secrets: $allowlist is missing; refusing to scan without the allowlist" >&2; exit 2; }
 
 patterns=(
   'anthropic:sk-ant-[A-Za-z0-9_-]{24,}'

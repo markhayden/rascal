@@ -34,26 +34,77 @@ else bad "packaging check rejected a packaged asset"; fi
 rm -rf "$probe"
 
 # --- clean room -------------------------------------------------------------------------------
-# A planted word in a file fails naming the file; a clean file passes; no list means skipped;
-# a list inside the repository is refused. The planted word is nonsense so this file is clean.
+# In a scratch repository with the scan copied in (the scan's repository is the one it lives
+# in), with the word list in a second scratch directory outside it. The planted word is
+# nonsense so this file is clean.
 planted="zq-planted-forbidden-zq"
-scratch="$(mktemp -d)"
-printf '# comment\n\n%s\n' "$planted" > "$scratch/words.txt"
-printf 'line one\nthe %s is here\n' "$(tr a-z A-Z <<< "$planted")" > "$scratch/dirty.md"
-printf 'nothing to see\n' > "$scratch/clean.md"
-out="$(RASCAL_FORBIDDEN_WORDS="$scratch/words.txt" scripts/scan-clean-room.sh "$scratch/dirty.md" "$scratch/clean.md" 2>&1 || true)"
-if grep -q "forbidden word in $scratch/dirty.md at line(s) 2" <<< "$out" && ! grep -q "$planted" <<< "$out"; then ok
-else bad "clean-room scan did not name the dirty file (and only its line): $out"; fi
-if RASCAL_FORBIDDEN_WORDS="$scratch/words.txt" scripts/scan-clean-room.sh "$scratch/clean.md" >/dev/null 2>&1; then ok
-else bad "clean-room scan rejected a clean file"; fi
-if RASCAL_FORBIDDEN_WORDS="$scratch/words.txt" scripts/scan-clean-room.sh "$scratch/dirty.md" >/dev/null 2>&1; then
-  bad "clean-room scan accepted a planted word"; else ok; fi
-out="$(env -u RASCAL_FORBIDDEN_WORDS scripts/scan-clean-room.sh "$scratch/dirty.md" 2>&1)" \
+outside="$(mktemp -d)"; repo="$(mktemp -d)"
+cleanup_clean_room () { rm -rf "$outside" "$repo"; }
+trap cleanup_clean_room EXIT
+mkdir -p "$repo/scripts"; cp scripts/scan-clean-room.sh "$repo/scripts/"
+git -C "$repo" init -q; git -C "$repo" config user.email t@example.invalid; git -C "$repo" config user.name t
+scan="$repo/scripts/scan-clean-room.sh"
+printf '# comment\n\n%s\n' "$planted" > "$outside/words.txt"
+printf 'line one\nthe %s is here\n' "$(tr a-z A-Z <<< "$planted")" > "$repo/dirty.md"
+printf 'nothing to see\n' > "$repo/clean.md"
+export RASCAL_FORBIDDEN_WORDS="$outside/words.txt"
+
+out="$("$scan" "$repo/dirty.md" "$repo/clean.md" 2>&1 || true)"
+if grep -q "forbidden word in $repo/dirty.md at line(s) 2" <<< "$out" && ! grep -qi "$planted" <<< "$out"; then ok
+else bad "clean-room scan did not name the dirty file by line without the word: $out"; fi
+if "$scan" "$repo/clean.md" >/dev/null 2>&1; then ok; else bad "clean-room scan rejected a clean file"; fi
+if "$scan" "$repo/dirty.md" >/dev/null 2>&1; then bad "clean-room scan accepted a planted word"; else ok; fi
+out="$(env -u RASCAL_FORBIDDEN_WORDS "$scan" "$repo/dirty.md" 2>&1)" \
   && grep -q 'skipped' <<< "$out" && ok || bad "clean-room scan without a list should skip: $out"
-inside="$(mktemp "$(pwd)/.words-XXXXXX")"; cp "$scratch/words.txt" "$inside"
-if RASCAL_FORBIDDEN_WORDS="$inside" scripts/scan-clean-room.sh "$scratch/clean.md" >/dev/null 2>&1; then
+if "$scan" "$repo/missing.md" >/dev/null 2>&1; then bad "clean-room scan accepted a missing file argument"; else ok; fi
+
+# A list with CRLF endings, or a trailing space, must still work; a too-short entry is refused.
+printf '%s\r\n' "$planted" > "$outside/crlf.txt"
+if RASCAL_FORBIDDEN_WORDS="$outside/crlf.txt" "$scan" "$repo/dirty.md" >/dev/null 2>&1; then
+  bad "clean-room scan accepted a planted word because the list had CRLF endings"; else ok; fi
+printf '  %s  \n' "$planted" > "$outside/spaces.txt"
+printf 'ends with %s\n' "$planted" > "$repo/eol.md"
+if RASCAL_FORBIDDEN_WORDS="$outside/spaces.txt" "$scan" "$repo/eol.md" >/dev/null 2>&1; then
+  bad "clean-room scan missed a word at end of line because the list entry had spaces"; else ok; fi
+printf 'ab\n' > "$outside/short.txt"
+out="$(RASCAL_FORBIDDEN_WORDS="$outside/short.txt" "$scan" "$repo/clean.md" 2>&1 || true)"
+if grep -q 'shorter than three' <<< "$out"; then ok; else bad "clean-room scan accepted a two-character entry: $out"; fi
+
+# A list inside the repository, directly or through a symlink, is refused.
+cp "$outside/words.txt" "$repo/words.txt"
+if RASCAL_FORBIDDEN_WORDS="$repo/words.txt" "$scan" "$repo/clean.md" >/dev/null 2>&1; then
   bad "clean-room scan accepted a word list inside the repository"; else ok; fi
-rm -f "$inside"; rm -rf "$scratch"
+ln -s "$repo/words.txt" "$outside/link.txt"
+if RASCAL_FORBIDDEN_WORDS="$outside/link.txt" "$scan" "$repo/clean.md" >/dev/null 2>&1; then
+  bad "clean-room scan accepted a symlink to a word list inside the repository"; else ok; fi
+rm -f "$repo/words.txt" "$outside/link.txt"
+
+# Tracked mode: a committed dirty file fails naming it; an untracked dirty file is not seen;
+# a tracked path containing the word fails without printing the word.
+git -C "$repo" add clean.md scripts; git -C "$repo" commit -q -m init
+if (cd "$repo" && "$scan") >/dev/null 2>&1; then ok; else bad "clean-room tracked mode rejected a clean repository with untracked dirty files"; fi
+git -C "$repo" add dirty.md; git -C "$repo" commit -q -m dirty
+out="$( (cd "$repo" && "$scan") 2>&1 || true)"
+if grep -q 'forbidden word in dirty.md at line(s) 2' <<< "$out"; then ok; else bad "clean-room tracked mode did not name the committed dirty file: $out"; fi
+git -C "$repo" rm -q dirty.md; git -C "$repo" commit -q -m clean
+printf 'clean\n' > "$repo/notes-$planted.md"; git -C "$repo" add "notes-$planted.md"; git -C "$repo" commit -q -m named
+out="$( (cd "$repo" && "$scan") 2>&1 || true)"
+if grep -q 'forbidden word in a path (entry' <<< "$out" && ! grep -qi "$planted" <<< "$out"; then ok
+else bad "clean-room tracked mode did not report a forbidden path without printing it: $out"; fi
+printf 'the %s\n' "$planted" > "$repo/notes-$planted.md"; git -C "$repo" commit -q -am both
+out="$( (cd "$repo" && "$scan") 2>&1 || true)"
+if grep -q 'its path also matches' <<< "$out" && ! grep -qi "$planted" <<< "$out"; then ok
+else bad "clean-room scan printed a path that contains the word: $out"; fi
+git -C "$repo" rm -q "notes-$planted.md"; git -C "$repo" commit -q -m removed
+
+# Staged mode scans the index, not the worktree.
+printf 'the %s\n' "$planted" > "$repo/a.md"; git -C "$repo" add a.md; printf 'clean\n' > "$repo/a.md"
+if (cd "$repo" && "$scan" --staged) >/dev/null 2>&1; then bad "clean-room staged mode missed a staged word hidden by a clean worktree"; else ok; fi
+git -C "$repo" reset -q
+printf 'clean\n' > "$repo/b.md"; git -C "$repo" add b.md; printf 'the %s\n' "$planted" > "$repo/b.md"
+if (cd "$repo" && "$scan" --staged) >/dev/null 2>&1; then ok; else bad "clean-room staged mode rejected a clean index because the worktree was dirty"; fi
+unset RASCAL_FORBIDDEN_WORDS
+cleanup_clean_room; trap - EXIT
 
 # --- smoke ------------------------------------------------------------------------------------
 # A binary with the wrong version fails; one that exits 2 on no arguments fails.
