@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# The pre-commit hook, installed with `just hooks`. In order: the credential scan of every
+# staged blob, the image-file guard, the clean-room scan of the staged blobs and paths, then
+# formatting and Clippy in both feature configurations. RASCAL_HOOK_SKIP_CARGO=1 skips the
+# cargo steps; scripts/test-hooks.sh uses it to prove the guards in a scratch repository.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+staged="$(mktemp)"
+blob="$(mktemp)"
+trap 'rm -f "$staged" "$blob"' EXIT
+git diff --cached --name-only -z --diff-filter=ACMR > "$staged"
+
+# Credentials: each staged blob on its own, so a hit names the file (never the value). Blobs,
+# not worktree files, so what is scanned is what would be committed.
+refused=0
+while IFS= read -r -d '' file; do
+  git show ":$file" > "$blob"
+  if ! scripts/scan-secrets.sh < "$blob" 2> >(sed "s|^|$file: |" >&2); then
+    refused=1
+  fi
+done < "$staged"
+if [ "$refused" -ne 0 ]; then
+  echo "pre-commit: staged content contains a credential-shaped value; refusing to commit" >&2
+  exit 1
+fi
+
+# Images: real photographs never enter the repository. Raster image files are allowed only
+# under fixtures/ (synthetic goldens) and .github/assets/ (documentation pictures). SVG is text
+# and is left to the credential and clean-room scans.
+while IFS= read -r -d '' file; do
+  # Lower-cased with tr: the hook runs under macOS's bash 3.2 as well as Linux's.
+  lower="$(printf '%s' "$file" | tr '[:upper:]' '[:lower:]')"
+  case "$lower" in
+    *.png|*.jpg|*.jpeg|*.webp|*.gif|*.tif|*.tiff|*.bmp|*.heic|*.avif)
+      case "$file" in
+        fixtures/*|.github/assets/*) ;;
+        *) echo "pre-commit: image file outside fixtures/ or .github/assets/: $file" >&2; refused=1 ;;
+      esac ;;
+  esac
+done < "$staged"
+[ "$refused" -eq 0 ] || exit 1
+
+# Clean room: the staged blobs and paths against the forbidden-word list, when it is configured.
+scripts/scan-clean-room.sh --staged
+
+[ "${RASCAL_HOOK_SKIP_CARGO:-0}" = "1" ] && exit 0
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy --workspace --all-targets --features rascal-mask/testkit -- -D warnings

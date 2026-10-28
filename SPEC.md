@@ -1040,7 +1040,8 @@ docs/
 Plain structs and enums; boxed trait objects for ops, fillers and packs; no clever generics;
 one `thiserror` enum per crate with context; no `unwrap` outside tests; `unsafe` forbidden.
 Every type that crosses a boundary derives `Serialize`, `Deserialize` and `JsonSchema`, uses
-`deny_unknown_fields`, and carries a version field. Pixel code takes and returns owned `image`
+`deny_unknown_fields`, and is versioned: by a version field, or by its schema's `$id` when its
+shape is shared with a copied schema that has none (the location; ADR 0009). Pixel code takes and returns owned `image`
 buffers or views, never paths; the Op wrapper does the IO.
 
 ```rust

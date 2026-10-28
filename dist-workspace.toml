@@ -1,0 +1,16 @@
+[workspace]
+members = ["cargo:."]
+
+# Release archives for the `rascal` binary, built by `dist` on a version tag and published as a
+# GitHub release (M7). `dist generate` writes .github/workflows/release.yml from this file; that
+# workflow is never edited by hand.
+[dist]
+cargo-dist-version = "0.33.1"
+ci = "github"
+# Archives only; `cargo install rascal-mask` is the other supported path.
+installers = []
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
+hosting = "github"
+# A pull request builds and uploads the archives without releasing.
+pr-run-mode = "upload"
+publish-prereleases = true

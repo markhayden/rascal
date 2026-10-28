@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rascal:schemas:rascal:location-v1",
+  "title": "Location",
+  "description": "A location in one frame with normalised coordinates (SPEC.md \"Locations\"). The five copied kinds (bbox, polygon, view, whole_image, absent) are the copied envelope schema's own definition, referenced unchanged; `line` and `stroke` are rascal's.",
+  "oneOf": [
+    { "$ref": "urn:rascal:schemas:copied:envelope-v1#/$defs/Location" },
+    { "$ref": "#/$defs/LineLocation" },
+    { "$ref": "#/$defs/StrokeLocation" }
+  ],
+  "$defs": {
+    "Point": {
+      "description": "`[x, y]` as fractions of the frame's width and height, each between 0 and 1.",
+      "type": "array",
+      "items": { "type": "number", "minimum": 0, "maximum": 1 },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "Path": {
+      "description": "Two or more points in order. On a wrapped frame a path is split at the seam into parts that share one `group`.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/Point" },
+      "minItems": 2
+    },
+    "LineLocation": {
+      "description": "A line the seam band follows: a whole column (`column`, a fraction of the width) or a path, with its full width in pixels.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "line" },
+        "frame": { "type": "string", "description": "The frame id the coordinates are in." },
+        "column": { "type": "number", "minimum": 0, "maximum": 1, "description": "The column as a fraction of the frame's width; exclusive with `path`." },
+        "path": { "$ref": "#/$defs/Path" },
+        "width_px": { "type": "number", "exclusiveMinimum": 0, "description": "The line's full width in pixels of its frame." },
+        "group": { "type": "string", "description": "Shared by the parts of one location split at a seam." }
+      },
+      "required": ["kind", "frame", "width_px"],
+      "oneOf": [
+        { "required": ["column"], "not": { "required": ["path"] } },
+        { "required": ["path"], "not": { "required": ["column"] } }
+      ]
+    },
+    "StrokeLocation": {
+      "description": "A rough mark along a path with a radius in pixels; `tighten` refines it to the defect's edges.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "stroke" },
+        "frame": { "type": "string", "description": "The frame id the coordinates are in." },
+        "path": { "$ref": "#/$defs/Path" },
+        "radius_px": { "type": "number", "exclusiveMinimum": 0, "description": "The stroke's radius in pixels of its frame." },
+        "group": { "type": "string", "description": "Shared by the parts of one location split at a seam." }
+      },
+      "required": ["kind", "frame", "path", "radius_px"]
+    }
+  }
+}

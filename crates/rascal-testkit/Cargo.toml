@@ -1,0 +1,13 @@
+[package]
+name = "rascal-testkit"
+description = "rascal testkit: fake fillers, the fake pack, the minimal MCP client and synthetic images for tests (library)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

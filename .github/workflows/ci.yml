@@ -1,0 +1,45 @@
+name: ci
+
+# `just check` on both supported platforms: macOS arm64 and Linux x86_64. The clean-room scan is
+# skipped here (no word list), and advisories run here because they need the network.
+on:
+  push:
+    branches: ["main", "m*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  check:
+    name: just check (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-arm64
+            runner: macos-14
+          - name: linux-x86_64
+            runner: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      # rustup reads the exact version pinned in rust-toolchain.toml and installs clippy and rustfmt.
+      - name: Install the toolchain from rust-toolchain.toml
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Install the pinned helper tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just@1.59.0,cargo-deny@0.20.2
+      - name: Scripts are executable
+        run: |
+          for f in scripts/*.sh scripts/hooks/pre-commit; do test -x "$f" || { echo "$f is not executable"; exit 1; }; done
+      - run: just check
+      - run: just deny-advisories
+      - name: Smoke the debug binary
+        run: cargo build -p rascal-mask && just smoke

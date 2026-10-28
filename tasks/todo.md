@@ -5,18 +5,20 @@ and the commit is on the milestone branch. Checkpoints need the owner's review, 
 with green CI on both platforms, and then the tag.
 
 ## Pre-M0
-- [ ] Owner confirms no conflicting obligation (dated in docs/owner-decisions.md)
-- [ ] Owner names the forbidden-word list location (`RASCAL_FORBIDDEN_WORDS`)
-- [ ] `git init`, remote added, bootstrap documentation commit on `main` → tag `m0-base`
-- [ ] Codex plan review, two or more rounds, under docs/reviews/plan-review-*.md
+- [x] Owner confirms no conflicting obligation (dated in docs/owner-decisions.md, 2026-10-28)
+- [x] Owner names the forbidden-word list location (`RASCAL_FORBIDDEN_WORDS`, 2026-10-28)
+- [x] `git init`, remote added, bootstrap documentation commit on `main` → tag `m0-base`
+- [x] Codex plan review, three rounds, under docs/reviews/plan-review-*.md
 
 ## M0 Scaffold
-- [ ] 0.1 Workspace, crate skeletons, checks (including the clean-room scan and `ci-local`)
-- [ ] 0.2 CI, hooks, ignore rules
-- [ ] 0.3 Docs skeleton and ADRs 0001 to 0014
-- [ ] 0.4 Copied schemas and the schema drift harness
-- [ ] 0.5 Owner readiness
-- [ ] Checkpoint M0 → tag `m0`
+- [x] 0.1 Workspace, crate skeletons, checks (including the clean-room scan and `ci-local`)
+- [x] 0.2 CI, hooks, ignore rules (CI run itself awaits the owner's first push)
+- [x] 0.3 Docs skeleton and ADRs 0001 to 0014 (owner reads at the checkpoint)
+- [x] 0.4 Copied schemas and the schema drift harness
+- [x] 0.5 Owner readiness (rows 1 and 2 made; 3 to 7 pending their tasks)
+- [x] M0 review and test review, findings fixed or recorded (docs/reviews/m0-checkpoint.md)
+- [x] `just check` and `just ci-local` green on the final branch; hooks tested; schema harness green
+- [ ] Checkpoint M0: owner reads the ADRs → merge to `main` → push → CI green on both platforms → tag `m0`
 
 ## M1 Core
 - [ ] 1.1 Walking slice → tag `m1.1`

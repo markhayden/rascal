@@ -1,0 +1,23 @@
+# Provenance of every file under schemas/copied/. Each is copied unchanged from its origin; a
+# test hashes the files and fails on any difference from the sha256 recorded here. Updating a
+# copied schema is a deliberate commit that changes this file and reruns the drift harness.
+#
+# Origin: the Deja View evaluation harness (https://github.com/markhayden/dejaview), Apache-2.0,
+# copyright Mark Hayden. The copies keep that licence; the LICENSE at this repository's root is
+# the same text. rascal has no code dependency on the origin (ADR 0009).
+
+[[file]]
+path = "copied/manifest-v1.json"
+origin = "https://github.com/markhayden/dejaview/blob/77eb593911c1840f167012306d65755bebcdd744/schemas/manifest-v1.json"
+commit = "77eb593911c1840f167012306d65755bebcdd744"
+version = "0.1.0"
+licence = "Apache-2.0"
+sha256 = "bcf0724934023fc849f5b3f7d4367900933c95526e548c107ae6bd81ecb78f3b"
+
+[[file]]
+path = "copied/envelope-v1.json"
+origin = "https://github.com/markhayden/dejaview/blob/121515909bcdcfd315d85fef8fe7c5966486d560/schemas/envelope-v1.json"
+commit = "121515909bcdcfd315d85fef8fe7c5966486d560"
+version = "0.1.0"
+licence = "Apache-2.0"
+sha256 = "c20da5dd91186ab659b11a528ca8a7b6ff658612289d68ee5b1f9bbba6001610"

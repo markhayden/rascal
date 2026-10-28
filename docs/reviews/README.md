@@ -21,3 +21,9 @@ findings plus new findings, most severe first.
 | 1 | PLAN.md draft 1 (2026-10-28) | not ready: 3 blockers, 7 important, 1 suggestion; 16 coverage gaps | draft 2 |
 | 2 | draft 2 | not ready: 7 of 11 and 11 of 16 gaps resolved; 1 new blocker (the spec additions had not landed), 5 important | draft 3 and spec draft 7 |
 | 3 | draft 3 | **ready to begin M0**: 0 blockers, 6 important to fix in the owning tasks | draft 4 and spec draft 8 (all six made) |
+
+## Checkpoints
+
+| Milestone | File | Verdict |
+|---|---|---|
+| M0 | [m0-checkpoint.md](m0-checkpoint.md) | two reviews; every must-have fixed the same day; open only the CI run after the first push |

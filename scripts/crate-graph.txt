@@ -1,0 +1,14 @@
+# The allowed crate-to-crate edges, one "<kind> <from> -> <to>" per line. "prod" is a normal or
+# build dependency; "dev" is a dev-dependency. scripts/check-crate-graph.sh fails on any edge the
+# workspace has that is not listed here. See PLAN.md "Crate dependency graph".
+prod rascal-ops -> rascal-core
+prod rascal-mcp -> rascal-core
+prod rascal-testkit -> rascal-core
+prod rascal-mask -> rascal-core
+prod rascal-mask -> rascal-ops
+prod rascal-mask -> rascal-mcp
+prod rascal-mask -> rascal-testkit
+dev rascal-core -> rascal-testkit
+dev rascal-ops -> rascal-testkit
+dev rascal-mcp -> rascal-testkit
+dev rascal-mask -> rascal-testkit
