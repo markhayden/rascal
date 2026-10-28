@@ -10,7 +10,18 @@ fn rascal() -> Command {
 fn version_prints_name_and_version() {
     let out = rascal().arg("--version").output().unwrap();
     assert!(out.status.success(), "status: {}", out.status);
-    assert_eq!(String::from_utf8(out.stdout).unwrap(), "rascal 0.1.0\n");
+    assert_eq!(
+        String::from_utf8(out.stdout).unwrap(),
+        format!("rascal {}\n", env!("CARGO_PKG_VERSION"))
+    );
+}
+
+#[test]
+fn help_is_on_stdout_and_succeeds() {
+    let out = rascal().arg("--help").output().unwrap();
+    assert!(out.status.success(), "status: {}", out.status);
+    assert!(String::from_utf8_lossy(&out.stdout).contains("Usage"));
+    assert!(out.stderr.is_empty());
 }
 
 #[test]

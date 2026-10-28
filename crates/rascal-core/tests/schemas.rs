@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use rascal_core::boundary_type;
-use rascal_core::schema_drift::{self, BoundaryType, Finding, Source};
+use rascal_core::schema_drift::{self, BoundaryType, Finding, Source, Versioning};
 use rascal_core::schemas::{self, SchemaDir};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -29,8 +29,11 @@ fn files(dir: &Path) -> Vec<PathBuf> {
         .map(|entry| entry.unwrap().path())
         .collect();
     paths.sort();
-    assert!(!paths.is_empty(), "no files under {}", dir.display());
     paths
+}
+
+fn read_json(path: &Path) -> serde_json::Value {
+    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
 // --- the copied schemas ---------------------------------------------------------------------
@@ -51,25 +54,55 @@ fn copied_schemas_match_sources_toml() {
     }
 }
 
-#[test]
-fn a_changed_copied_schema_is_caught() {
-    let dir = tempdir();
-    copy_dir(&schemas().root().join("copied"), &dir.join("copied"));
+/// A scratch copy of `schemas/copied` and `SOURCES.toml`.
+fn copied_world() -> Scratch {
+    let scratch = Scratch::new();
+    copy_dir(&schemas().root().join("copied"), &scratch.join("copied"));
     std::fs::copy(
         schemas().root().join("SOURCES.toml"),
-        dir.join("SOURCES.toml"),
+        scratch.join("SOURCES.toml"),
     )
     .unwrap();
+    scratch
+}
+
+#[test]
+fn a_changed_copied_schema_is_caught() {
+    let dir = copied_world();
     let planted = dir.join(schemas::COPIED_ENVELOPE);
     let mut text = std::fs::read_to_string(&planted).unwrap();
     text.push('\n');
     std::fs::write(&planted, text).unwrap();
-    let error = SchemaDir::new(&dir).verify_copied().unwrap_err();
+    let error = SchemaDir::new(dir.path()).verify_copied().unwrap_err();
     assert!(
         matches!(error, rascal_core::Error::CopiedSchemaChanged { .. }),
         "{error}"
     );
     assert!(error.to_string().contains("envelope-v1.json"), "{error}");
+}
+
+#[test]
+fn a_copied_file_without_provenance_is_caught() {
+    let dir = copied_world();
+    std::fs::write(dir.join("copied/extra-v1.json"), "{}\n").unwrap();
+    let error = SchemaDir::new(dir.path()).verify_copied().unwrap_err();
+    assert!(
+        matches!(error, rascal_core::Error::UnlistedCopiedSchema { .. }),
+        "{error}"
+    );
+    assert!(error.to_string().contains("extra-v1.json"), "{error}");
+}
+
+#[test]
+fn sources_toml_refuses_an_unknown_field() {
+    let dir = copied_world();
+    let path = dir.join("SOURCES.toml");
+    let mut text = std::fs::read_to_string(&path).unwrap();
+    text.push_str("\n[[file]]\npath = \"copied/x.json\"\norigin = \"o\"\ncommit = \"c\"\nversion = \"v\"\nlicence = \"l\"\nsha256 = \"s\"\nnotes = \"unknown\"\n");
+    std::fs::write(&path, text).unwrap();
+    let error = SchemaDir::new(dir.path()).sources().unwrap_err();
+    assert!(matches!(error, rascal_core::Error::Toml { .. }), "{error}");
+    assert!(error.to_string().contains("notes"), "{error}");
 }
 
 #[test]
@@ -85,10 +118,10 @@ fn copied_schemas_compile() {
 fn the_seven_location_kinds_validate() {
     let validator = schemas().validator(schemas::LOCATION).unwrap();
     let valid = files(&fixtures().join("location-v1/valid"));
+    assert!(!valid.is_empty());
     let mut kinds: Vec<String> = Vec::new();
     for path in &valid {
-        let value: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let value = read_json(path);
         if let Err(error) = validator.validate(&value) {
             panic!("{}: {error}", path.display());
         }
@@ -115,9 +148,10 @@ fn the_seven_location_kinds_validate() {
 #[test]
 fn an_unknown_kind_and_malformed_locations_fail() {
     let validator = schemas().validator(schemas::LOCATION).unwrap();
-    for path in files(&fixtures().join("location-v1/invalid")) {
-        let value: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let invalid = files(&fixtures().join("location-v1/invalid"));
+    assert!(invalid.len() >= 13, "{}", invalid.len());
+    for path in invalid {
+        let value = read_json(&path);
         assert!(
             validator.validate(&value).is_err(),
             "{} should not validate",
@@ -127,12 +161,54 @@ fn an_unknown_kind_and_malformed_locations_fail() {
 }
 
 #[test]
-fn a_reference_outside_the_schema_directory_is_refused() {
-    let schema = serde_json::json!({ "$ref": "urn:rascal:schemas:copied:../LICENSE" });
-    let error = schemas().validator_for(&schema).unwrap_err();
-    assert!(error.contains("unknown schema reference"), "{error}");
+fn the_location_schema_is_closed_and_versioned_by_its_id() {
+    // No Rust type yet (M1 task 1.2); the committed file is checked as an authored schema with
+    // a roundtrip that leaves JSON alone.
+    let entry = BoundaryType {
+        name: "Location",
+        schema: schemas::LOCATION,
+        source: Source::Authored,
+        versioning: Versioning::SchemaId,
+        generate: || serde_json::Value::Null,
+        roundtrip: |value| Ok(value.clone()),
+        fixtures: &[
+            "location-v1/valid/bbox.json",
+            "location-v1/valid/view.json",
+            "location-v1/valid/line-path.json",
+            "location-v1/valid/stroke.json",
+        ],
+    };
+    let findings = schema_drift::check(&entry, &schemas(), &fixtures());
+    assert!(findings.is_empty(), "{findings:?}");
+}
+
+// --- the schema directory's reference resolver -----------------------------------------------
+
+#[test]
+fn references_resolve_only_inside_the_schema_directory() {
+    for bad in [
+        "urn:rascal:schemas:copied:../LICENSE",
+        "urn:rascal:schemas:cop/ied:envelope-v1",
+        "urn:rascal:schemas:copied:envelope-v1.json",
+        "urn:rascal:schemas::envelope-v1",
+        "urn:rascal:schemas:copied:",
+        "urn:rascal:schemas:copied",
+        "urn:other:schemas:copied:envelope-v1",
+    ] {
+        let schema = serde_json::json!({ "$ref": bad });
+        let error = schemas().validator_for(&schema).unwrap_err();
+        assert!(error.contains("unknown schema reference"), "{bad}: {error}");
+    }
     let schema = serde_json::json!({ "$ref": "https://example.invalid/schema.json" });
     assert!(schemas().validator_for(&schema).is_err());
+    let schema = serde_json::json!({ "$ref": "urn:rascal:schemas:copied:nope" });
+    let error = schemas().validator_for(&schema).unwrap_err();
+    assert!(error.contains("nope.json"), "{error}");
+    let schema =
+        serde_json::json!({ "$ref": "urn:rascal:schemas:copied:envelope-v1#/$defs/LocationKind" });
+    let validator = schemas().validator_for(&schema).unwrap();
+    assert!(validator.is_valid(&serde_json::json!("bbox")));
+    assert!(!validator.is_valid(&serde_json::json!("line")));
 }
 
 // --- the drift harness ----------------------------------------------------------------------
@@ -152,8 +228,60 @@ struct ProbeWithoutVersion {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ProbeBareVersion {
+    version: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ProbeOptionalVersion {
+    probe_version: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 struct ProbeOpen {
     probe_version: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ProbeWithFloat {
+    probe_version: u32,
+    yaw: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct Inner {
+    depth: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ProbeNested {
+    probe_version: u32,
+    inner: Inner,
+    by_name: std::collections::BTreeMap<String, u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", deny_unknown_fields)]
+enum TaggedClosed {
+    Line { location_version: u32, column: f64 },
+    Stroke { location_version: u32, radius: f64 },
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind")]
+enum TaggedOpen {
+    Line { location_version: u32 },
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+enum ExternalOpen {
+    Line { location_version: u32 },
+    Unit,
 }
 
 fn probe_entry() -> BoundaryType {
@@ -167,61 +295,101 @@ fn probe_entry() -> BoundaryType {
 
 /// A scratch `schemas/` and `fixtures/schemas/` pair holding the probe's generated schema and
 /// two fixtures, so the harness can be driven to each failure.
-fn probe_world() -> (PathBuf, PathBuf) {
-    let root = tempdir();
-    let schemas_dir = root.join("schemas/rascal");
-    let fixtures_dir = root.join("fixtures/probe-v1");
-    std::fs::create_dir_all(&schemas_dir).unwrap();
-    std::fs::create_dir_all(&fixtures_dir).unwrap();
-    std::fs::write(
-        schemas_dir.join("probe-v1.json"),
-        schema_drift::render(&(probe_entry().generate)()),
-    )
-    .unwrap();
-    std::fs::write(
-        fixtures_dir.join("one.json"),
-        r#"{"probe_version":1,"width":4,"label":"a"}"#,
-    )
-    .unwrap();
-    std::fs::write(
-        fixtures_dir.join("two.json"),
-        r#"{"probe_version":1,"width":5,"label":null}"#,
-    )
-    .unwrap();
-    (root.join("schemas"), root.join("fixtures"))
+struct World {
+    scratch: Scratch,
+}
+
+impl World {
+    fn new() -> Self {
+        let scratch = Scratch::new();
+        std::fs::create_dir_all(scratch.join("schemas/rascal")).unwrap();
+        std::fs::create_dir_all(scratch.join("fixtures/probe-v1")).unwrap();
+        let world = World { scratch };
+        world.commit(&probe_entry());
+        world.fixture(
+            "probe-v1/one.json",
+            r#"{"probe_version":1,"width":4,"label":"a"}"#,
+        );
+        world.fixture(
+            "probe-v1/two.json",
+            r#"{"probe_version":1,"width":5,"label":null}"#,
+        );
+        world
+    }
+    fn schemas(&self) -> SchemaDir {
+        SchemaDir::new(self.scratch.join("schemas"))
+    }
+    fn fixtures(&self) -> PathBuf {
+        self.scratch.join("fixtures")
+    }
+    fn schema_path(&self) -> PathBuf {
+        self.scratch.join("schemas/rascal/probe-v1.json")
+    }
+    /// Writes the entry's generated schema as the committed file.
+    fn commit(&self, entry: &BoundaryType) {
+        std::fs::write(
+            self.schema_path(),
+            schema_drift::render(&(entry.generate)()),
+        )
+        .unwrap();
+    }
+    fn fixture(&self, name: &str, text: &str) {
+        std::fs::write(self.fixtures().join(name), text).unwrap();
+    }
+    fn check(&self, entry: &BoundaryType) -> Vec<Finding> {
+        schema_drift::check(entry, &self.schemas(), &self.fixtures())
+    }
+}
+
+fn drift() -> Finding {
+    Finding::Drift {
+        schema: "rascal/probe-v1.json".to_string(),
+    }
+}
+fn not_closed() -> Finding {
+    Finding::NotClosed {
+        schema: "rascal/probe-v1.json".to_string(),
+    }
+}
+fn missing_version() -> Finding {
+    Finding::MissingVersion {
+        schema: "rascal/probe-v1.json".to_string(),
+    }
 }
 
 #[test]
 fn a_registered_type_with_a_current_schema_passes() {
-    let (schemas, fixtures) = probe_world();
-    let findings = schema_drift::check(&probe_entry(), &SchemaDir::new(schemas), &fixtures);
+    let world = World::new();
+    let findings = world.check(&probe_entry());
     assert!(findings.is_empty(), "{findings:?}");
 }
 
 #[test]
 fn a_planted_schema_change_is_drift() {
-    let (schemas, fixtures) = probe_world();
-    let path = schemas.join("rascal/probe-v1.json");
-    let mut value: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let world = World::new();
+    let mut value = read_json(&world.schema_path());
     value["properties"]["extra"] = serde_json::json!({ "type": "string" });
-    std::fs::write(&path, schema_drift::render(&value)).unwrap();
-    let findings = schema_drift::check(&probe_entry(), &SchemaDir::new(schemas), &fixtures);
-    assert_eq!(
-        findings,
-        vec![Finding::Drift {
-            schema: "rascal/probe-v1.json".to_string()
-        }]
-    );
+    std::fs::write(world.schema_path(), schema_drift::render(&value)).unwrap();
+    assert_eq!(world.check(&probe_entry()), vec![drift()]);
+}
+
+#[test]
+fn formatting_is_not_drift_and_render_ends_with_one_newline() {
+    let world = World::new();
+    let rendered = schema_drift::render(&(probe_entry().generate)());
+    assert!(rendered.ends_with('}') || rendered.ends_with("}\n"));
+    assert!(rendered.ends_with('\n') && !rendered.ends_with("\n\n"));
+    let compact = serde_json::to_string(&read_json(&world.schema_path())).unwrap();
+    std::fs::write(world.schema_path(), compact.replace('\n', "\r\n")).unwrap();
+    assert!(world.check(&probe_entry()).is_empty());
 }
 
 #[test]
 fn a_missing_schema_file_is_reported() {
-    let (schemas, fixtures) = probe_world();
-    std::fs::remove_file(schemas.join("rascal/probe-v1.json")).unwrap();
-    let findings = schema_drift::check(&probe_entry(), &SchemaDir::new(schemas), &fixtures);
+    let world = World::new();
+    std::fs::remove_file(world.schema_path()).unwrap();
     assert_eq!(
-        findings,
+        world.check(&probe_entry()),
         vec![Finding::MissingSchema {
             schema: "rascal/probe-v1.json".to_string()
         }]
@@ -229,62 +397,219 @@ fn a_missing_schema_file_is_reported() {
 }
 
 #[test]
-fn a_type_without_a_version_field_is_reported() {
+fn an_unparseable_or_uncompilable_schema_is_unusable() {
+    let world = World::new();
+    std::fs::write(world.schema_path(), "{ not json").unwrap();
+    let findings = world.check(&probe_entry());
+    assert!(
+        matches!(&findings[..], [Finding::Unusable { message, .. }] if message.contains("JSON")),
+        "{findings:?}"
+    );
+    std::fs::write(world.schema_path(), r#"{"type": 5}"#).unwrap();
+    let findings = world.check(&probe_entry());
+    assert!(
+        findings
+            .iter()
+            .any(|f| matches!(f, Finding::Unusable { .. })),
+        "{findings:?}"
+    );
+}
+
+#[test]
+fn version_fields_by_shape() {
+    let world = World::new();
+    let cases: [(BoundaryType, Vec<Finding>); 6] = [
+        (
+            boundary_type!(
+                ProbeWithoutVersion,
+                "rascal/probe-v1.json",
+                Source::Generated,
+                []
+            ),
+            vec![missing_version()],
+        ),
+        (
+            boundary_type!(
+                ProbeBareVersion,
+                "rascal/probe-v1.json",
+                Source::Generated,
+                []
+            ),
+            vec![],
+        ),
+        (
+            boundary_type!(
+                ProbeOptionalVersion,
+                "rascal/probe-v1.json",
+                Source::Generated,
+                []
+            ),
+            vec![missing_version()],
+        ),
+        (
+            boundary_type!(TaggedClosed, "rascal/probe-v1.json", Source::Generated, []),
+            vec![],
+        ),
+        (
+            boundary_type!(TaggedOpen, "rascal/probe-v1.json", Source::Generated, []),
+            vec![not_closed()],
+        ),
+        (
+            boundary_type!(ExternalOpen, "rascal/probe-v1.json", Source::Generated, []),
+            vec![not_closed(), missing_version()],
+        ),
+    ];
+    for (entry, expected) in cases {
+        world.commit(&entry);
+        assert_eq!(world.check(&entry), expected, "{}", entry.name);
+    }
+}
+
+#[test]
+fn closedness_by_shape() {
+    let world = World::new();
+    let open = boundary_type!(ProbeOpen, "rascal/probe-v1.json", Source::Generated, []);
+    world.commit(&open);
+    assert_eq!(world.check(&open), vec![not_closed()]);
+
+    let nested = boundary_type!(ProbeNested, "rascal/probe-v1.json", Source::Generated, []);
+    world.commit(&nested);
+    assert!(
+        world.check(&nested).is_empty(),
+        "a map field is closed by construction"
+    );
+    let mut value = read_json(&world.schema_path());
+    value["$defs"]["Inner"]
+        .as_object_mut()
+        .unwrap()
+        .remove("additionalProperties");
+    std::fs::write(world.schema_path(), schema_drift::render(&value)).unwrap();
+    assert_eq!(world.check(&nested), vec![drift(), not_closed()]);
+}
+
+#[test]
+fn an_authored_schema_is_not_compared_but_is_still_checked() {
+    let world = World::new();
+    let authored = BoundaryType {
+        source: Source::Authored,
+        ..probe_entry()
+    };
+    // A committed schema that differs from the generated one: no drift for an authored entry.
+    std::fs::write(
+        world.schema_path(),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "type": "object", "additionalProperties": false,
+            "required": ["probe_version", "width"],
+            "properties": {
+                "probe_version": {"type": "integer"},
+                "width": {"type": "integer"},
+                "label": {"type": ["string", "null"]}
+            }
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(world.check(&authored).is_empty());
+    assert_eq!(world.check(&probe_entry()), vec![drift()]);
+    // Still closed and versioned.
+    let mut value = read_json(&world.schema_path());
+    value
+        .as_object_mut()
+        .unwrap()
+        .remove("additionalProperties");
+    value["required"] = serde_json::json!(["width"]);
+    std::fs::write(world.schema_path(), schema_drift::render(&value)).unwrap();
+    assert_eq!(
+        world.check(&authored),
+        vec![not_closed(), missing_version()]
+    );
+    // And its fixtures still validate.
+    world.commit(&probe_entry());
+    world.fixture(
+        "probe-v1/two.json",
+        r#"{"probe_version":1,"width":5,"colour":"red"}"#,
+    );
+    let findings = world.check(&authored);
+    assert!(
+        matches!(&findings[..], [Finding::FixtureInvalid { fixture, .. }, Finding::FixtureRoundTrip { .. }] if fixture == "probe-v1/two.json"),
+        "{findings:?}"
+    );
+}
+
+#[test]
+fn versioning_by_schema_id() {
+    let world = World::new();
+    let by_id = BoundaryType {
+        versioning: Versioning::SchemaId,
+        ..boundary_type!(
+            ProbeWithoutVersion,
+            "rascal/probe-v1.json",
+            Source::Authored,
+            []
+        )
+    };
+    let mut value = (by_id.generate)();
+    std::fs::write(world.schema_path(), schema_drift::render(&value)).unwrap();
+    assert_eq!(world.check(&by_id), vec![missing_version()], "no $id");
+    value["$id"] = serde_json::json!("urn:rascal:schemas:rascal:probe-v1");
+    std::fs::write(world.schema_path(), schema_drift::render(&value)).unwrap();
+    assert!(world.check(&by_id).is_empty());
+    value["$id"] = serde_json::json!("urn:rascal:schemas:rascal:probe-vx");
+    std::fs::write(world.schema_path(), schema_drift::render(&value)).unwrap();
+    assert_eq!(
+        world.check(&by_id),
+        vec![missing_version()],
+        "non-numeric suffix"
+    );
+}
+
+#[test]
+fn fixtures_are_validated_and_round_tripped() {
+    let world = World::new();
+    world.fixture(
+        "probe-v1/two.json",
+        r#"{"probe_version":1,"width":5,"colour":"red"}"#,
+    );
+    let findings = world.check(&probe_entry());
+    assert!(
+        matches!(&findings[..], [Finding::FixtureInvalid { fixture, .. }, Finding::FixtureRoundTrip { .. }] if fixture == "probe-v1/two.json"),
+        "{findings:?}"
+    );
+    // Valid but not in serialized form: the Option field is omitted.
+    world.fixture("probe-v1/two.json", r#"{"probe_version":1,"width":5}"#);
+    let findings = world.check(&probe_entry());
+    assert!(
+        matches!(&findings[..], [Finding::FixtureRoundTrip { fixture, .. }] if fixture == "probe-v1/two.json"),
+        "{findings:?}"
+    );
+    // Missing and unparseable fixtures.
+    std::fs::remove_file(world.fixtures().join("probe-v1/two.json")).unwrap();
+    world.fixture("probe-v1/one.json", "{ not json");
+    let findings = world.check(&probe_entry());
+    assert!(
+        matches!(
+            &findings[..],
+            [
+                Finding::FixtureUnreadable { .. },
+                Finding::FixtureUnreadable { .. }
+            ]
+        ),
+        "{findings:?}"
+    );
+}
+
+#[test]
+fn an_integer_valued_float_round_trips() {
+    let world = World::new();
     let entry = boundary_type!(
-        ProbeWithoutVersion,
+        ProbeWithFloat,
         "rascal/probe-v1.json",
         Source::Generated,
-        []
+        ["probe-v1/one.json"]
     );
-    let (schemas, fixtures) = probe_world();
-    std::fs::write(
-        schemas.join("rascal/probe-v1.json"),
-        schema_drift::render(&(entry.generate)()),
-    )
-    .unwrap();
-    let findings = schema_drift::check(&entry, &SchemaDir::new(schemas), &fixtures);
-    assert_eq!(
-        findings,
-        vec![Finding::MissingVersion {
-            schema: "rascal/probe-v1.json".to_string()
-        }]
-    );
-}
-
-#[test]
-fn a_type_that_accepts_unknown_fields_is_reported() {
-    let entry = boundary_type!(ProbeOpen, "rascal/probe-v1.json", Source::Generated, []);
-    let (schemas, fixtures) = probe_world();
-    std::fs::write(
-        schemas.join("rascal/probe-v1.json"),
-        schema_drift::render(&(entry.generate)()),
-    )
-    .unwrap();
-    let findings = schema_drift::check(&entry, &SchemaDir::new(schemas), &fixtures);
-    assert_eq!(
-        findings,
-        vec![Finding::NotClosed {
-            schema: "rascal/probe-v1.json".to_string()
-        }]
-    );
-}
-
-#[test]
-fn a_fixture_the_schema_rejects_is_reported() {
-    let (schemas, fixtures) = probe_world();
-    std::fs::write(
-        fixtures.join("probe-v1/two.json"),
-        r#"{"probe_version":1,"width":5,"colour":"red"}"#,
-    )
-    .unwrap();
-    let findings = schema_drift::check(&probe_entry(), &SchemaDir::new(schemas), &fixtures);
-    assert_eq!(findings.len(), 2, "{findings:?}");
-    assert!(
-        matches!(&findings[0], Finding::FixtureInvalid { fixture, .. } if fixture == "probe-v1/two.json")
-    );
-    assert!(
-        matches!(&findings[1], Finding::FixtureRoundTrip { fixture, .. } if fixture == "probe-v1/two.json")
-    );
+    world.commit(&entry);
+    world.fixture("probe-v1/one.json", r#"{"probe_version":1,"yaw":90}"#);
+    assert!(world.check(&entry).is_empty());
 }
 
 #[test]
@@ -300,15 +625,47 @@ pub struct Planted {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub(crate) enum PlantedKind { A, B }
 
+#[derive(
+    Debug,
+    Clone,
+    serde::Serialize,
+    serde::Deserialize,
+    schemars::JsonSchema,
+)]
+#[serde(deny_unknown_fields)]
+pub struct Wrapped {
+    pub wrapped_version: u32,
+}
+
+#[cfg_attr(feature = "schemas", derive(JsonSchema))]
+pub(super) struct Conditional;
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+/* a block comment between the derive and the item */
+pub(in crate::x) struct AfterComment;
+
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 struct Registered { x: u32 }
 
 #[derive(Debug, Clone)]
 pub struct NotABoundary;
+
+// #[derive(JsonSchema)] in a line comment
+/// `#[derive(JsonSchema)]` in a doc comment
+pub struct Commented;
+
+#[derive(Debug, MyJsonSchemaLike)]
+pub struct LookAlike;
 "#;
     assert_eq!(
         schema_drift::unregistered_types(planted, &["Registered"]),
-        vec!["Planted".to_string(), "PlantedKind".to_string()]
+        vec![
+            "Planted".to_string(),
+            "PlantedKind".to_string(),
+            "Wrapped".to_string(),
+            "Conditional".to_string(),
+            "AfterComment".to_string(),
+        ]
     );
 }
 
@@ -346,7 +703,7 @@ fn every_boundary_type_in_the_crates_is_registered_and_current() {
 }
 
 /// Every `.rs` file under `crates/*/src`, where boundary types live; test files are not
-/// boundary types and may carry probes.
+/// boundary types and may carry probes. An empty directory is tolerated.
 fn rust_sources(crates: &Path, out: &mut Vec<PathBuf>) {
     for krate in files(crates) {
         let src = krate.join("src");
@@ -368,21 +725,37 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
 
 // --- helpers ----------------------------------------------------------------------------------
 
-/// A fresh directory per call: tests run in parallel, so the name carries a counter as well
-/// as the process id and the clock.
-fn tempdir() -> PathBuf {
-    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let dir = std::env::temp_dir().join(format!(
-        "rascal-schemas-{}-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos(),
-        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+/// A scratch directory removed when dropped. Tests run in parallel, so the name carries a
+/// counter as well as the process id and the clock.
+struct Scratch(PathBuf);
+
+impl Scratch {
+    fn new() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "rascal-schemas-{}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        Scratch(dir)
+    }
+    fn path(&self) -> &Path {
+        &self.0
+    }
+    fn join(&self, rel: &str) -> PathBuf {
+        self.0.join(rel)
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 fn copy_dir(from: &Path, to: &Path) {

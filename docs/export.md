@@ -33,14 +33,27 @@ edits) is registered in `rascal_core::schema_drift::inventory()` with the `bound
 which compiles only for a type deriving `Serialize`, `Deserialize` and `JsonSchema`. For each
 registered type the test suite:
 
-- regenerates the schema and compares it to the committed file (`UPDATE_SCHEMAS=1 cargo test
-  -p rascal-core --test schemas` rewrites a drifted one);
-- asserts the schema is closed everywhere it describes an object (`deny_unknown_fields`) and
-  requires a `version` or `*_version` property;
+- compares the committed schema with the generated one as JSON (formatting is not drift;
+  `UPDATE_SCHEMAS=1 cargo test -p rascal-core --test schemas` rewrites a drifted file) for a
+  `Source::Generated` entry; a `Source::Authored` entry (one whose schema is written by hand
+  because it references a copied schema, such as the location) is not compared;
+- asserts the committed schema is closed everywhere it describes an object
+  (`deny_unknown_fields`; a map with a schema-valued `additionalProperties` and no
+  `properties` is closed by construction), for both sources;
+- asserts the type is versioned, for both sources: by field (every shape the schema can take,
+  through `oneOf`, `anyOf`, `allOf` and local `$ref`s, requires a `version` or `*_version`
+  property) or, for a type whose shape is shared with a copied schema that has none, by schema
+  id (`$id` ends in `-v<N>`; ADR 0009, refined 2026-10-28);
 - validates every serialized fixture against the committed schema and round-trips it through
-  the type.
+  the type. Fixtures are written in serialized form: an `Option` field that is `None` is
+  present as `null`, and an integer-valued float may be written either way.
 
-A type whose schema is written by hand because it references a copied schema (such as the
-location) is registered as `Source::Authored`: its fixtures are validated and round-tripped,
-and the generated schema is not compared. A grep over `crates/*/src` for the `JsonSchema`
-derive fails the suite on any type that is not registered.
+A grep over `crates/*/src` for the `JsonSchema` derive (across wrapped attribute lines and
+`cfg_attr`) fails the suite on any type that is not registered.
+
+## Where the schemas live
+
+`schemas/` is at the repository root so people find it. When the registry (M1 task 1.4) needs
+the schemas at run time it must embed them, and the packaging check refuses an `include_str!`
+that reaches outside a crate; that task decides between moving the directory under
+`crates/rascal-core/` with a root symlink and copying it in a build script.

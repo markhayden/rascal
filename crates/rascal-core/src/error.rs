@@ -32,6 +32,9 @@ pub enum Error {
     /// A `$ref` to a schema URI outside the `urn:rascal:schemas:<dir>:<name>` form.
     #[error("unknown schema reference {uri}")]
     UnknownSchemaUri { uri: String },
+    /// A file under `schemas/copied/` that `schemas/SOURCES.toml` does not list.
+    #[error("{path}: not listed in SOURCES.toml")]
+    UnlistedCopiedSchema { path: PathBuf },
     /// A copied schema whose bytes no longer match `schemas/SOURCES.toml`.
     #[error("{path}: sha256 is {actual}, SOURCES.toml records {expected}")]
     CopiedSchemaChanged {

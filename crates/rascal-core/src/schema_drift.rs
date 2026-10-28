@@ -3,10 +3,13 @@
 //! A **boundary type** is any type that is written to disk, sent over MCP or read from a file a
 //! person edits. Each one is registered here with the [`boundary_type!`] macro, which only
 //! compiles for a type that derives `Serialize`, `Deserialize` and `JsonSchema`. For each
-//! registered type the harness regenerates the schema and compares it to the committed file,
-//! asserts the schema is closed (`deny_unknown_fields`) and carries a version field, and
-//! validates every serialized fixture against the committed schema and round-trips it through
-//! the type. A test greps the crates for the derive and fails on any type not registered.
+//! registered type the harness compares the committed schema with the generated one (as JSON,
+//! so formatting is not drift), asserts the committed schema is closed everywhere it describes
+//! an object (`deny_unknown_fields`) and versioned (a required `version` or `*_version` field
+//! on every shape, or a `-v<N>` suffix on the schema's `$id` for a type versioned by its
+//! schema, ADR 0009), validates every serialized fixture against the committed schema and
+//! round-trips it through the type. A test greps the crates for the derive and fails on any
+//! type not registered.
 
 use std::path::Path;
 
@@ -15,11 +18,21 @@ use crate::schemas::SchemaDir;
 /// Where a boundary type's committed schema comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Source {
-    /// Generated from the type by `schemars` and compared byte for byte.
+    /// Generated from the type by `schemars` and compared with the committed file.
     Generated,
-    /// Written by hand (it references a copied schema); the type's generated schema is not
-    /// compared, but the fixtures must validate against the committed file and round-trip.
+    /// Written by hand (it references a copied schema); the generated schema is not compared.
+    /// The closed and version checks and the fixtures still apply to the committed file.
     Authored,
+}
+
+/// How a boundary type carries its version.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Versioning {
+    /// Every instance has a required `version` or `*_version` property.
+    Field,
+    /// The schema's `$id` ends in `-v<N>` and instances carry no version of their own, for a
+    /// type whose shape is shared with a copied schema that has none (the location, ADR 0009).
+    SchemaId,
 }
 
 /// One registered boundary type.
@@ -31,6 +44,8 @@ pub struct BoundaryType {
     pub schema: &'static str,
     /// Generated or authored.
     pub source: Source,
+    /// By field or by schema id.
+    pub versioning: Versioning,
     /// The schema `schemars` generates for the type.
     pub generate: fn() -> serde_json::Value,
     /// Deserializes a value as the type and serializes it again.
@@ -39,7 +54,8 @@ pub struct BoundaryType {
     pub fixtures: &'static [&'static str],
 }
 
-/// Registers a boundary type. Compiles only for a type with the three derives.
+/// Registers a boundary type, versioned by field. Compiles only for a type with the three
+/// derives. A type versioned by its schema id sets `versioning` on the result.
 #[macro_export]
 macro_rules! boundary_type {
     ($type:ty, $schema:expr, $source:expr, [$($fixture:expr),* $(,)?]) => {
@@ -47,6 +63,7 @@ macro_rules! boundary_type {
             name: stringify!($type),
             schema: $schema,
             source: $source,
+            versioning: $crate::schema_drift::Versioning::Field,
             generate: || ::schemars::schema_for!($type).to_value(),
             roundtrip: |value| {
                 let typed: $type =
@@ -72,9 +89,10 @@ pub enum Finding {
     Drift { schema: String },
     /// The schema accepts unknown fields somewhere it describes an object.
     NotClosed { schema: String },
-    /// No required property named `version` or ending in `_version`.
+    /// No version: by field, a shape without a required `version` or `*_version` property; by
+    /// schema id, an `$id` that does not end in `-v<N>`.
     MissingVersion { schema: String },
-    /// The committed schema cannot be compiled.
+    /// The committed schema cannot be read or compiled.
     Unusable { schema: String, message: String },
     /// A fixture does not validate against the committed schema.
     FixtureInvalid { fixture: String, message: String },
@@ -89,33 +107,42 @@ pub enum Finding {
 pub fn check(entry: &BoundaryType, schemas: &SchemaDir, fixtures: &Path) -> Vec<Finding> {
     let mut findings = Vec::new();
     let schema_name = entry.schema.to_string();
+    let path = schemas.path(entry.schema);
+    if !path.is_file() {
+        findings.push(Finding::MissingSchema {
+            schema: schema_name,
+        });
+        return findings;
+    }
     let committed = match schemas.read(entry.schema) {
         Ok(value) => value,
-        Err(_) => {
-            findings.push(Finding::MissingSchema {
+        Err(error) => {
+            findings.push(Finding::Unusable {
                 schema: schema_name,
+                message: error.to_string(),
             });
             return findings;
         }
     };
 
-    if entry.source == Source::Generated {
-        let generated = (entry.generate)();
-        if canonical(&generated) != canonical(&committed) {
-            findings.push(Finding::Drift {
-                schema: schema_name.clone(),
-            });
-        }
-        if !is_closed(&generated) {
-            findings.push(Finding::NotClosed {
-                schema: schema_name.clone(),
-            });
-        }
-        if !has_version(&generated) {
-            findings.push(Finding::MissingVersion {
-                schema: schema_name.clone(),
-            });
-        }
+    if entry.source == Source::Generated && !same_json(&(entry.generate)(), &committed) {
+        findings.push(Finding::Drift {
+            schema: schema_name.clone(),
+        });
+    }
+    if !is_closed(&committed) {
+        findings.push(Finding::NotClosed {
+            schema: schema_name.clone(),
+        });
+    }
+    let versioned = match entry.versioning {
+        Versioning::Field => has_version(&committed, &committed),
+        Versioning::SchemaId => id_is_versioned(&committed),
+    };
+    if !versioned {
+        findings.push(Finding::MissingVersion {
+            schema: schema_name.clone(),
+        });
     }
 
     let validator = match schemas.validator_for(&committed) {
@@ -150,7 +177,7 @@ pub fn check(entry: &BoundaryType, schemas: &SchemaDir, fixtures: &Path) -> Vec<
             });
         }
         match (entry.roundtrip)(&value) {
-            Ok(again) if again == value => {}
+            Ok(again) if same_json(&again, &value) => {}
             Ok(_) => findings.push(Finding::FixtureRoundTrip {
                 fixture: fixture.to_string(),
                 message: "serialized form differs".to_string(),
@@ -164,44 +191,78 @@ pub fn check(entry: &BoundaryType, schemas: &SchemaDir, fixtures: &Path) -> Vec<
     findings
 }
 
-/// The text a generated schema is committed as: pretty JSON with a trailing newline.
+/// The text a generated schema is committed as: pretty JSON with one trailing newline.
 pub fn render(schema: &serde_json::Value) -> String {
-    canonical(schema) + "\n"
+    serde_json::to_string_pretty(schema).unwrap_or_default() + "\n"
 }
 
-fn canonical(value: &serde_json::Value) -> String {
-    serde_json::to_string_pretty(value).unwrap_or_default()
+/// JSON equality where `90` and `90.0` are the same number.
+fn same_json(a: &serde_json::Value, b: &serde_json::Value) -> bool {
+    use serde_json::Value::{Array, Number, Object};
+    match (a, b) {
+        (Number(x), Number(y)) => x.as_f64() == y.as_f64(),
+        (Array(x), Array(y)) => x.len() == y.len() && x.iter().zip(y).all(|(p, q)| same_json(p, q)),
+        (Object(x), Object(y)) => {
+            x.len() == y.len()
+                && x.iter()
+                    .all(|(k, p)| y.get(k).is_some_and(|q| same_json(p, q)))
+        }
+        _ => a == b,
+    }
 }
 
-/// True when every object the schema describes refuses unknown properties.
+/// True when every object the schema describes refuses unknown properties. An object with no
+/// `properties` and a schema-valued `additionalProperties` is a map and closed by construction.
 fn is_closed(schema: &serde_json::Value) -> bool {
     let Some(object) = schema.as_object() else {
         return true;
     };
-    let is_object = object.get("type").and_then(|t| t.as_str()) == Some("object")
-        || object.contains_key("properties");
-    if is_object && object.get("additionalProperties") != Some(&serde_json::Value::Bool(false)) {
-        return false;
-    }
-    for key in ["oneOf", "anyOf", "allOf"] {
-        if let Some(variants) = object.get(key).and_then(|v| v.as_array())
-            && !variants.iter().all(is_closed)
-        {
+    let has_properties = object.contains_key("properties");
+    let is_object = object.get("type").and_then(|t| t.as_str()) == Some("object") || has_properties;
+    let additional = object.get("additionalProperties");
+    if is_object {
+        let is_map = !has_properties && additional.is_some_and(|a| a.is_object());
+        if !is_map && additional != Some(&serde_json::Value::Bool(false)) {
             return false;
         }
     }
-    if let Some(defs) = object.get("$defs").and_then(|d| d.as_object())
-        && !defs.values().all(is_closed)
-    {
-        return false;
-    }
-    true
+    let children = ["properties", "$defs"]
+        .into_iter()
+        .filter_map(|key| object.get(key).and_then(|v| v.as_object()))
+        .flat_map(|map| map.values());
+    let variants = ["oneOf", "anyOf", "allOf", "prefixItems"]
+        .into_iter()
+        .filter_map(|key| object.get(key).and_then(|v| v.as_array()))
+        .flatten();
+    let single = ["items", "additionalProperties"]
+        .into_iter()
+        .filter_map(|key| object.get(key))
+        .filter(|v| v.is_object());
+    children.chain(variants).chain(single).all(is_closed)
 }
 
-/// True when the schema's top-level object requires a property named `version` or ending in
-/// `_version`.
-fn has_version(schema: &serde_json::Value) -> bool {
-    schema
+/// True when every shape the schema can take requires a `version` or `*_version` property:
+/// an object by its `required`, a `oneOf`/`anyOf` by every branch, an `allOf` by any part, a
+/// local `$ref` by its target. A reference into another file cannot be inspected and fails.
+fn has_version(schema: &serde_json::Value, root: &serde_json::Value) -> bool {
+    let Some(object) = schema.as_object() else {
+        return false;
+    };
+    if let Some(reference) = object.get("$ref").and_then(|r| r.as_str()) {
+        return reference
+            .strip_prefix("#/$defs/")
+            .and_then(|name| root.get("$defs").and_then(|d| d.get(name)))
+            .is_some_and(|target| has_version(target, root));
+    }
+    for key in ["oneOf", "anyOf"] {
+        if let Some(branches) = object.get(key).and_then(|v| v.as_array()) {
+            return !branches.is_empty() && branches.iter().all(|b| has_version(b, root));
+        }
+    }
+    if let Some(parts) = object.get("allOf").and_then(|v| v.as_array()) {
+        return parts.iter().any(|p| has_version(p, root));
+    }
+    object
         .get("required")
         .and_then(|r| r.as_array())
         .is_some_and(|required| {
@@ -212,37 +273,113 @@ fn has_version(schema: &serde_json::Value) -> bool {
         })
 }
 
+/// True when the schema's `$id` ends in `-v<N>`.
+fn id_is_versioned(schema: &serde_json::Value) -> bool {
+    schema
+        .get("$id")
+        .and_then(|id| id.as_str())
+        .and_then(|id| id.rsplit_once("-v"))
+        .is_some_and(|(_, digits)| !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()))
+}
+
 /// Type names that derive `JsonSchema` in `source` but are not in `registered`. `source` is
-/// Rust text; a derive attribute naming `JsonSchema` is followed, possibly after further
-/// attributes and doc comments, by the `struct` or `enum` it decorates.
+/// Rust text. An attribute may span lines (as rustfmt writes a long derive list) and may be a
+/// `cfg_attr`; the `struct` or `enum` it decorates follows, possibly after further attributes,
+/// doc comments and block comments. Derive text inside `//` and `///` comments is ignored.
 pub fn unregistered_types(source: &str, registered: &[&str]) -> Vec<String> {
     let mut found = Vec::new();
     let mut pending = false;
-    for line in source.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("#[derive(") && trimmed.contains("JsonSchema") {
-            pending = true;
+    let mut attribute: Option<(String, i32)> = None;
+    let mut in_block_comment = false;
+    for raw in source.lines() {
+        let line = raw.trim();
+        if in_block_comment {
+            if line.contains("*/") {
+                in_block_comment = false;
+            }
+            continue;
+        }
+        if line.starts_with("/*") {
+            in_block_comment = !line.contains("*/");
+            continue;
+        }
+        if line.is_empty() || line.starts_with("//") {
+            continue;
+        }
+        if let Some((text, depth)) = attribute.as_mut() {
+            text.push(' ');
+            text.push_str(line);
+            *depth += bracket_depth(line);
+            if *depth <= 0 {
+                if is_json_schema_derive(text) {
+                    pending = true;
+                }
+                attribute = None;
+            }
+            continue;
+        }
+        if line.starts_with("#[") || line.starts_with("#![") {
+            let depth = bracket_depth(line);
+            if depth > 0 {
+                attribute = Some((line.to_string(), depth));
+            } else if is_json_schema_derive(line) {
+                pending = true;
+            }
             continue;
         }
         if !pending {
             continue;
         }
-        if trimmed.starts_with("#[") || trimmed.starts_with("///") || trimmed.is_empty() {
-            continue;
-        }
         pending = false;
-        let rest = trimmed
-            .trim_start_matches("pub(crate) ")
-            .trim_start_matches("pub ")
-            .trim_start_matches("struct ")
-            .trim_start_matches("enum ");
-        let name: String = rest
-            .chars()
-            .take_while(|c| c.is_alphanumeric() || *c == '_')
-            .collect();
-        if !name.is_empty() && !registered.contains(&name.as_str()) {
+        if let Some(name) = item_name(line)
+            && !registered.contains(&name.as_str())
+        {
             found.push(name);
         }
     }
     found
+}
+
+fn bracket_depth(line: &str) -> i32 {
+    line.chars().fold(0, |depth, c| match c {
+        '[' | '(' => depth + 1,
+        ']' | ')' => depth - 1,
+        _ => depth,
+    })
+}
+
+/// True when the attribute text has `derive(` and the token `JsonSchema` (not a longer name).
+fn is_json_schema_derive(text: &str) -> bool {
+    if !text.contains("derive(") {
+        return false;
+    }
+    let bytes = text.as_bytes();
+    text.match_indices("JsonSchema").any(|(start, token)| {
+        let end = start + token.len();
+        let before = start.checked_sub(1).map(|i| bytes[i] as char);
+        let after = bytes.get(end).map(|b| *b as char);
+        !before.is_some_and(|c| c.is_alphanumeric() || c == '_')
+            && !after.is_some_and(|c| c.is_alphanumeric() || c == '_')
+    })
+}
+
+/// The name of the `struct` or `enum` an item line declares, with any `pub(...)` stripped.
+fn item_name(line: &str) -> Option<String> {
+    let mut rest = line;
+    if let Some(after_pub) = rest.strip_prefix("pub") {
+        rest = if let Some(inner) = after_pub.strip_prefix('(') {
+            inner.split_once(')')?.1
+        } else {
+            after_pub
+        };
+    }
+    let rest = rest.trim_start();
+    let rest = rest
+        .strip_prefix("struct ")
+        .or_else(|| rest.strip_prefix("enum "))?;
+    let name: String = rest
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '_')
+        .collect();
+    (!name.is_empty()).then_some(name)
 }

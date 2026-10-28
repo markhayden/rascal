@@ -101,7 +101,7 @@ owner on 2026-10-25), and one **documentation-only bootstrap commit** on `main` 
 `docs/reviews/`, a README stub and `.gitignore` (`target/`, `lab/`, `run/`, `ws/`, `*.mask/`
 outside `fixtures/`, `.env`, `.venv/`). This is the one commit exempt from `just check`, since
 no `justfile` exists yet; it is tagged `m0-base` and `m0-scaffold` branches from it. The clean-room
-word list lives outside the tree at `RASCAL_FORBIDDEN_WORDS` (owner decision 5) and is applied to
+word list lives outside the tree at `RASCAL_FORBIDDEN_WORDS` (owner decision 2) and is applied to
 the bootstrap commit by hand.
 
 **Branches.** `main` holds only reviewed checkpoints. Each milestone is one branch `mN-<name>`
@@ -116,8 +116,9 @@ exactly: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets -
 and the same with `--features rascal-mask/testkit`; `cargo test --workspace` and the same with
 `--features rascal-mask/testkit`; `cargo deny check licenses bans sources`;
 `scripts/check-crate-graph.sh`; `scripts/check-packaging.sh`; `scripts/scan-clean-room.sh`
-(built in 0.1, passing trivially when `RASCAL_FORBIDDEN_WORDS` is unset, as in CI); from 1.9 on
-`scripts/check-docs.sh`. A commit that cannot is not made. `Cargo.lock` and
+(built in 0.1, passing trivially when `RASCAL_FORBIDDEN_WORDS` is unset, as in CI);
+`scripts/test-hooks.sh` and `scripts/test-checks.sh` (the self-tests of the hook and the
+checks); from 1.9 on `scripts/check-docs.sh`. A commit that cannot is not made. `Cargo.lock` and
 `tools/python/uv.lock` are committed. The spec, plan, todo, README and docs are updated in the
 same commit as the change they describe. Secrets, real photographs and corpus paths never enter
 a commit; the pre-commit hook (0.2) scans for credential-shaped values and for image files

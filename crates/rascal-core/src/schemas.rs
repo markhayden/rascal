@@ -84,9 +84,28 @@ impl SchemaDir {
         })
     }
 
-    /// Checks every copied file against the sha256 recorded in `SOURCES.toml`.
+    /// Checks every copied file against the sha256 recorded in `SOURCES.toml`, and that every
+    /// file under `copied/` is listed there.
     pub fn verify_copied(&self) -> Result<()> {
-        for file in self.sources()?.file {
+        let sources = self.sources()?;
+        let copied = self.root.join("copied");
+        let entries = std::fs::read_dir(&copied).map_err(|source| Error::Io {
+            path: copied.clone(),
+            source,
+        })?;
+        for entry in entries {
+            let path = entry
+                .map_err(|source| Error::Io {
+                    path: copied.clone(),
+                    source,
+                })?
+                .path();
+            let listed = sources.file.iter().any(|f| self.root.join(&f.path) == path);
+            if !listed {
+                return Err(Error::UnlistedCopiedSchema { path });
+            }
+        }
+        for file in sources.file {
             let path = self.root.join(&file.path);
             let bytes = std::fs::read(&path).map_err(|source| Error::Io {
                 path: path.clone(),

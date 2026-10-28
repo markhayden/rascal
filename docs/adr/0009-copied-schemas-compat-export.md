@@ -30,3 +30,14 @@ and compares it to the committed file.
 - Updating a copied schema is a deliberate commit that changes `SOURCES.toml` and reruns the
   harness.
 - The export is a projection, not the native truth; the native envelope is what a run stores.
+
+## Refined 2026-10-28
+
+The M0 review asked how a location carries the version field every boundary type must have.
+It cannot: the copied `Location` definition refuses unknown properties, so a `bbox` or `polygon`
+instance has no room for one. The rule is therefore refined, not reversed: a boundary type is
+versioned **by field** (a required `version` or `*_version` property on every shape) unless its
+shape is shared with a copied schema that has none, in which case it is versioned **by schema
+id** (the schema's `$id` ends in `-v<N>`, instances carry no version, and the record that
+embeds the instance carries its own). The location is the one such type in v1. The drift
+harness checks both forms and applies the closed and version checks to authored schemas too.

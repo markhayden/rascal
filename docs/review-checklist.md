@@ -15,7 +15,7 @@ recorded in `docs/reviews/mN-checkpoint.md` with the task that owns them.
   generation, journal); no `unwrap` outside tests; one `thiserror` enum per crate.
 - **Architecture.** Crate edges unchanged or changed with `scripts/crate-graph.txt`; every
   boundary type derives `Serialize`, `Deserialize` and `JsonSchema`, uses `deny_unknown_fields`,
-  carries a version field and is registered in the boundary-type inventory with a fixture; the
+  is versioned by field or by schema id (ADR 0009) and is registered in the boundary-type inventory with a fixture; the
   core has no IO it was not given and no runtime of its own; pixel code takes and returns
   buffers, never paths.
 - **Security.** No key in any output, journal line, envelope or page; the pack environment is
