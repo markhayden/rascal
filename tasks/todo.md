@@ -16,7 +16,9 @@ with green CI on both platforms, and then the tag.
 - [x] 0.3 Docs skeleton and ADRs 0001 to 0014 (owner reads at the checkpoint)
 - [x] 0.4 Copied schemas and the schema drift harness
 - [x] 0.5 Owner readiness (rows 1 and 2 made; 3 to 7 pending their tasks)
-- [ ] Checkpoint M0 → tag `m0`
+- [x] M0 review and test review, findings fixed or recorded (docs/reviews/m0-checkpoint.md)
+- [x] `just check` and `just ci-local` green on the final branch; hooks tested; schema harness green
+- [ ] Checkpoint M0: owner reads the ADRs → merge to `main` → push → CI green on both platforms → tag `m0`
 
 ## M1 Core
 - [ ] 1.1 Walking slice → tag `m1.1`
