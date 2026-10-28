@@ -1,0 +1,28 @@
+[package]
+name = "rascal-mask"
+description = "rascal: the find-and-mask step of an image pipeline (the `rascal` binary)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "rascal"
+path = "src/main.rs"
+
+[features]
+default = []
+# Enables the fake fillers and the fake pack behind the binary's test-only flags. Never enabled
+# in release builds.
+testkit = ["dep:rascal-testkit"]
+
+[dependencies]
+rascal-core = { workspace = true }
+rascal-ops = { workspace = true }
+rascal-mcp = { workspace = true }
+rascal-testkit = { workspace = true, optional = true }
+clap = { workspace = true }
+
+[lints]
+workspace = true

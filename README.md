@@ -12,3 +12,23 @@ Status: pre-release. The design is in [SPEC.md](SPEC.md) and the build order in
 [PLAN.md](PLAN.md). Nothing is built yet.
 
 Licence: Apache-2.0.
+
+## Developing
+
+One manual step, then everything is a `just` recipe:
+
+```
+cargo install just --version 1.59.0 --locked    # or: brew install just
+just bootstrap                                  # pinned cargo-deny and cargo-dist
+just check                                      # what every commit must pass
+```
+
+`just check` runs formatting, Clippy with warnings denied in both feature configurations,
+the tests in both, `cargo deny` for licences and sources, the crate-graph and packaging checks,
+the clean-room scan and the checks' own self-test. `just ci-local` runs the same inside a Linux
+container with the pinned toolchain (Docker). `just smoke <binary>` is the offline smoke against
+any built binary.
+
+The clean-room scan reads a forbidden-word list from the file named by `RASCAL_FORBIDDEN_WORDS`.
+The list lives outside the repository and is never committed; with the variable unset, as in
+CI, the scan passes and says so.

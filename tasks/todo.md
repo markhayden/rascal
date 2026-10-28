@@ -5,10 +5,10 @@ and the commit is on the milestone branch. Checkpoints need the owner's review, 
 with green CI on both platforms, and then the tag.
 
 ## Pre-M0
-- [ ] Owner confirms no conflicting obligation (dated in docs/owner-decisions.md)
-- [ ] Owner names the forbidden-word list location (`RASCAL_FORBIDDEN_WORDS`)
-- [ ] `git init`, remote added, bootstrap documentation commit on `main` → tag `m0-base`
-- [ ] Codex plan review, two or more rounds, under docs/reviews/plan-review-*.md
+- [x] Owner confirms no conflicting obligation (dated in docs/owner-decisions.md, 2026-10-28)
+- [x] Owner names the forbidden-word list location (`RASCAL_FORBIDDEN_WORDS`, 2026-10-28)
+- [x] `git init`, remote added, bootstrap documentation commit on `main` → tag `m0-base`
+- [x] Codex plan review, three rounds, under docs/reviews/plan-review-*.md
 
 ## M0 Scaffold
 - [ ] 0.1 Workspace, crate skeletons, checks (including the clean-room scan and `ci-local`)
