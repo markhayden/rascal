@@ -1,0 +1,20 @@
+# The utility recipe: a rectangle as a mask. `rascal run rect <image> --bbox x0,y0,x1,y1`
+# binds inputs.location to a new bbox location in the image's raw frame; the recipe adds no
+# step for it.
+version = 1
+name = "rect"
+use_case = "custom"
+
+[inputs]
+image = { type = "Image" }
+location = { type = "Location" }
+
+[[step]]
+id = "rasterize"
+op = "rasterize"
+inputs = { location = "inputs.location", image = "inputs.image" }
+
+[outputs]
+mask = "rasterize.mask"
+image = "inputs.image"
+render = [{ for = "grey", out = "rect-grey.png" }]

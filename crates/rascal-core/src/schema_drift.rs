@@ -77,8 +77,87 @@ macro_rules! boundary_type {
 
 /// Every boundary type in the core. Each task that adds one adds a line here.
 pub fn inventory() -> Vec<BoundaryType> {
-    Vec::new()
+    use crate::frame::Frame;
+    use crate::image::ImageRecord;
+    use crate::journal::JournalLine;
+    use crate::location::Location;
+    use crate::mask::MaskRecord;
+    use crate::op::Manifest;
+    vec![
+        boundary_type!(
+            Frame,
+            "rascal/frame-v1.json",
+            Source::Generated,
+            [
+                "frame-v1/raw-flat.json",
+                "frame-v1/raw-equirectangular.json"
+            ]
+        ),
+        boundary_type!(
+            ImageRecord,
+            "rascal/image-v1.json",
+            Source::Generated,
+            ["image-v1/canonical.json", "image-v1/rendering.json"]
+        ),
+        boundary_type!(
+            MaskRecord,
+            "rascal/mask-v1.json",
+            Source::Generated,
+            ["mask-v1/rect.json"]
+        ),
+        boundary_type!(
+            JournalLine,
+            "rascal/journal-v1.json",
+            Source::Generated,
+            ["journal-v1/op.json", "journal-v1/note.json"]
+        ),
+        boundary_type!(
+            Manifest,
+            "rascal/manifest-v1.json",
+            Source::Generated,
+            ["manifest-v1/rect.json"]
+        ),
+        BoundaryType {
+            versioning: Versioning::SchemaId,
+            ..boundary_type!(
+                Location,
+                "rascal/location-v1.json",
+                Source::Authored,
+                [
+                    "location-v1/valid/absent.json",
+                    "location-v1/valid/bbox.json",
+                    "location-v1/valid/line-column.json",
+                    "location-v1/valid/line-path.json",
+                    "location-v1/valid/polygon.json",
+                    "location-v1/valid/stroke.json",
+                    "location-v1/valid/view.json",
+                    "location-v1/valid/whole_image.json",
+                ]
+            )
+        },
+    ]
 }
+
+/// Types that derive `JsonSchema` only as parts of a registered type and have no schema file
+/// of their own. The schema test asserts each appears in the `$defs` of a committed schema,
+/// so a type cannot hide here.
+pub const COMPONENTS: &[&str] = &[
+    "Projection",
+    "Topology",
+    "FrameKind",
+    "Role",
+    "RenderingRole",
+    "UseCase",
+    "Zones",
+    "Source",
+    "ArtifactType",
+    "Port",
+    "Param",
+    "Status",
+    "ArtifactRef",
+    "Envelope",
+    "Event",
+];
 
 /// What the harness found wrong with one boundary type.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1,0 +1,1 @@
+{"name":"rect","version":"1.0.0","purpose":"A rectangle as a location, from four fractions of the image's frame.","inputs":[{"name":"image","artifact_type":"Image","required":true}],"outputs":[{"name":"location","artifact_type":"Location","required":true}],"params":[{"name":"bbox","purpose":"[x0, y0, x1, y1] as fractions of the frame; x0 < x1 and y0 < y1","required":true}]}

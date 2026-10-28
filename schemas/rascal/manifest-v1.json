@@ -1,0 +1,100 @@
+{
+  "$defs": {
+    "ArtifactType": {
+      "description": "The artifact types a port can declare.",
+      "enum": [
+        "Image",
+        "Location",
+        "Mask",
+        "BandProfile",
+        "Series",
+        "Plan"
+      ],
+      "type": "string"
+    },
+    "Param": {
+      "additionalProperties": false,
+      "description": "A parameter an op accepts in a recipe step.",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "purpose": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "purpose",
+        "required"
+      ],
+      "type": "object"
+    },
+    "Port": {
+      "additionalProperties": false,
+      "description": "A typed input or output of an op.",
+      "properties": {
+        "artifact_type": {
+          "$ref": "#/$defs/ArtifactType"
+        },
+        "name": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "artifact_type",
+        "required"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "What an op is and takes. REPLACED BY 1.4.",
+  "properties": {
+    "inputs": {
+      "items": {
+        "$ref": "#/$defs/Port"
+      },
+      "type": "array"
+    },
+    "name": {
+      "type": "string"
+    },
+    "outputs": {
+      "items": {
+        "$ref": "#/$defs/Port"
+      },
+      "type": "array"
+    },
+    "params": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Param"
+      },
+      "type": "array"
+    },
+    "purpose": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "version",
+    "purpose",
+    "inputs",
+    "outputs"
+  ],
+  "title": "Manifest",
+  "type": "object"
+}

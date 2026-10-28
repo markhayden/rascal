@@ -63,13 +63,13 @@ which parts exist; it is updated in the same commit as the code it describes.
 | Part | Crate | State | Arrives |
 |---|---|---|---|
 | schema drift harness and boundary-type inventory | rascal-core | done | M0 task 0.4 |
-| frames, images, locations, artifacts, identity | rascal-core | not started | M1 task 1.2 |
-| the mask record and effective weight | rascal-core | not started | M1 task 1.3 |
-| Op trait, manifest, envelope, registry | rascal-core | not started | M1 task 1.4 |
-| renderings | rascal-core, rascal-ops | not started | M1 task 1.5 |
-| recipes with typed bindings | rascal-core | not started | M1 task 1.6 |
-| workspace, journal, repair | rascal-core | not started | M1 tasks 1.7a, 1.7b |
-| primitives, `cut`, `put`, `line`, `rect`, `stroke`, `rasterize` | rascal-ops | not started | M1 tasks 1.8a, 1.8b |
+| frames, images, locations, artifacts, identity | rascal-core | minimal (walking slice: raw frames, canonical import, the seven location kinds parsed, hashes without canonical serialization) | M1 task 1.2 |
+| the mask record and effective weight | rascal-core | minimal (zones and source; the weight rule) | M1 task 1.3 |
+| Op trait, manifest, envelope, registry | rascal-core | minimal (trait, ports, params, status, artifacts extension; no schemas in the registry yet) | M1 task 1.4 |
+| renderings | rascal-core, rascal-ops | `grey` only | M1 task 1.5 |
+| recipes with typed bindings | rascal-core | minimal (parse, typed bindings for Image, Location and Mask, outputs, render; no schema, no defaults) | M1 task 1.6 |
+| workspace, journal, repair | rascal-core | journal only, written under `--out`; no workspace | M1 tasks 1.7a, 1.7b |
+| primitives, `cut`, `put`, `line`, `rect`, `stroke`, `rasterize` | rascal-ops | `rect`; `rasterize` for bbox and whole_image | M1 tasks 1.8a, 1.8b |
 | `inspect`, compatibility export | rascal-core, rascal-mask | not started | M1 task 1.9 |
 | the run page and tracing | rascal-mask | not started | M1 task 1.10 |
 | the seam ops and `heal` | rascal-ops, rascal-mask | not started | M2 |

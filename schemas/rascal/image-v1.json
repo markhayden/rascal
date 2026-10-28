@@ -1,0 +1,85 @@
+{
+  "$defs": {
+    "RenderingRole": {
+      "description": "Which filler field a rendering fills.",
+      "enum": [
+        "mask_input",
+        "image_input"
+      ],
+      "type": "string"
+    },
+    "Role": {
+      "description": "What an image is for.",
+      "enum": [
+        "canonical",
+        "working",
+        "fill",
+        "composite",
+        "rendering",
+        "plane",
+        "inspection"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "An image record: the pixels are in `file`, a PNG beside the record.",
+  "properties": {
+    "file": {
+      "description": "The PNG, relative to the record.",
+      "type": "string"
+    },
+    "frame": {
+      "description": "The frame id the pixels are in.",
+      "type": "string"
+    },
+    "frame_identity": {
+      "description": "The frame's identity.",
+      "type": "string"
+    },
+    "id": {
+      "description": "The local id.",
+      "type": "string"
+    },
+    "identity": {
+      "description": "`sha256:` over the pixel digest, the frame identity and the roles.",
+      "type": "string"
+    },
+    "image_version": {
+      "description": "The record's version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "pixel_digest": {
+      "description": "`sha256:` over width, height, channel count and the samples in row-major order.",
+      "type": "string"
+    },
+    "rendering_role": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RenderingRole"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "role": {
+      "$ref": "#/$defs/Role"
+    }
+  },
+  "required": [
+    "image_version",
+    "id",
+    "frame",
+    "frame_identity",
+    "role",
+    "pixel_digest",
+    "identity",
+    "file"
+  ],
+  "title": "ImageRecord",
+  "type": "object"
+}

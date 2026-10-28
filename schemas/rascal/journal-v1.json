@@ -1,0 +1,186 @@
+{
+  "$defs": {
+    "ArtifactRef": {
+      "additionalProperties": false,
+      "description": "A typed output by id and identity: rascal's extension to the envelope.",
+      "properties": {
+        "artifact_type": {
+          "$ref": "#/$defs/ArtifactType"
+        },
+        "id": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact_type",
+        "id",
+        "identity"
+      ],
+      "type": "object"
+    },
+    "ArtifactType": {
+      "description": "The artifact types a port can declare.",
+      "enum": [
+        "Image",
+        "Location",
+        "Mask",
+        "BandProfile",
+        "Series",
+        "Plan"
+      ],
+      "type": "string"
+    },
+    "Envelope": {
+      "additionalProperties": false,
+      "description": "What an op returns. REPLACED BY 1.4.",
+      "properties": {
+        "artifacts": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ArtifactRef"
+          },
+          "default": {},
+          "description": "The typed outputs by output name.",
+          "type": "object"
+        },
+        "reason": {
+          "description": "Why, when the status is not `ok`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/Status"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "Event": {
+      "description": "What a line records.",
+      "oneOf": [
+        {
+          "const": "op",
+          "description": "An op invocation.",
+          "type": "string"
+        },
+        {
+          "const": "note",
+          "description": "Something assumed or decided outside an op, such as a projection assumed from the\nimage's aspect.",
+          "type": "string"
+        }
+      ]
+    },
+    "Status": {
+      "description": "An invocation's outcome class. Ops never return a verdict.",
+      "enum": [
+        "ok",
+        "measured_nothing",
+        "not_applicable",
+        "invalid_args"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One journal line.",
+  "properties": {
+    "duration_ms": {
+      "description": "Wall time of the invocation; an observation, never part of an identity.",
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "envelope": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Envelope"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "event": {
+      "$ref": "#/$defs/Event"
+    },
+    "inputs": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {},
+      "description": "Input identities by port.",
+      "type": "object"
+    },
+    "journal_version": {
+      "description": "The line's version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "note": {
+      "description": "The text of a note.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "op": {
+      "description": "The op name and version, for an op.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "outputs": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {},
+      "description": "Output identities by port.",
+      "type": "object"
+    },
+    "params": {
+      "description": "The resolved parameters."
+    },
+    "seq": {
+      "description": "The line's position in this journal, from 1.",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "step": {
+      "description": "The step id, for an op.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "journal_version",
+    "seq",
+    "event"
+  ],
+  "title": "JournalLine",
+  "type": "object"
+}

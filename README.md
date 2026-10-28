@@ -75,7 +75,7 @@ exchange documents without translation; rascal is fully standalone and depends o
 
 ## Status
 
-Pre-release. M0 (scaffold) is in progress. The design is in [SPEC.md](SPEC.md), the build order
+Pre-release. M0 (scaffold) is done; M1 (core) is in progress, and `rascal run rect` works end to end. The design is in [SPEC.md](SPEC.md), the build order
 in [PLAN.md](PLAN.md), the decisions in [docs/adr/](docs/adr/README.md), and the current state
 of each part in [docs/architecture.md](docs/architecture.md#status).
 

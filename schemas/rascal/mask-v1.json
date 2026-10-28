@@ -1,0 +1,113 @@
+{
+  "$defs": {
+    "Source": {
+      "additionalProperties": false,
+      "description": "What the mask was made from.",
+      "properties": {
+        "instances": {
+          "default": [],
+          "description": "Identities of the finder instances.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "locations": {
+          "default": [],
+          "description": "Identities of the locations.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "UseCase": {
+      "description": "The use case a mask was made for.",
+      "enum": [
+        "seam",
+        "remove",
+        "repair",
+        "protect",
+        "custom"
+      ],
+      "type": "string"
+    },
+    "Zones": {
+      "additionalProperties": false,
+      "description": "The plane files, relative to `mask.toml`.",
+      "properties": {
+        "blend": {
+          "description": "8-bit fractional paste weights outside the core; 0 inside it and beyond the feather.",
+          "type": "string"
+        },
+        "core": {
+          "description": "Binary: 255 where a filler may paint; paste weight 1.",
+          "type": "string"
+        },
+        "protect": {
+          "description": "Binary: 255 where nothing may change; effective weight 0 wherever it is set.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "core",
+        "blend",
+        "protect"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "`mask.toml`.",
+  "properties": {
+    "frame": {
+      "description": "The frame id the planes are in.",
+      "type": "string"
+    },
+    "frame_identity": {
+      "description": "The frame's identity.",
+      "type": "string"
+    },
+    "id": {
+      "description": "The local id.",
+      "type": "string"
+    },
+    "identity": {
+      "description": "`sha256:` over the three planes' pixels, the use case, the frame identity and the\nsource identities.",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/Source",
+      "default": {
+        "instances": [],
+        "locations": []
+      }
+    },
+    "use_case": {
+      "$ref": "#/$defs/UseCase"
+    },
+    "version": {
+      "description": "The record's version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "zones": {
+      "$ref": "#/$defs/Zones"
+    }
+  },
+  "required": [
+    "version",
+    "id",
+    "frame",
+    "frame_identity",
+    "use_case",
+    "identity",
+    "zones"
+  ],
+  "title": "MaskRecord",
+  "type": "object"
+}

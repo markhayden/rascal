@@ -21,7 +21,7 @@ with green CI on both platforms, and then the tag.
 - [ ] Checkpoint M0: owner reads the ADRs → merge to `main` → push → CI green on both platforms → tag `m0`
 
 ## M1 Core
-- [ ] 1.1 Walking slice → tag `m1.1`
+- [x] 1.1 Walking slice → tag `m1.1`
 - [ ] 1.2 Frames, identity, canonical serialization, locations and mapping
 - [ ] 1.3 The mask record and effective weight
 - [ ] 1.4 Op contracts

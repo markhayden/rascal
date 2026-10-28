@@ -1,0 +1,94 @@
+{
+  "$defs": {
+    "FrameKind": {
+      "description": "The kinds of frame.",
+      "oneOf": [
+        {
+          "const": "raw",
+          "description": "A root: the frame of an imported image.",
+          "type": "string"
+        }
+      ]
+    },
+    "Projection": {
+      "description": "How an image's pixels map onto the world.",
+      "oneOf": [
+        {
+          "const": "flat",
+          "description": "An ordinary photograph.",
+          "type": "string"
+        },
+        {
+          "const": "equirectangular",
+          "description": "A full 360 by 180 panorama whose left and right edges meet.",
+          "type": "string"
+        }
+      ]
+    },
+    "Topology": {
+      "description": "Whether the frame's horizontal edges meet.",
+      "oneOf": [
+        {
+          "const": "wrap",
+          "description": "The left and right edges are the same column: a complete equirectangular frame.",
+          "type": "string"
+        },
+        {
+          "const": "bounded",
+          "description": "The edges are edges.",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A frame record, as written to `frames.json`.",
+  "properties": {
+    "frame_version": {
+      "description": "The record's version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "height": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "id": {
+      "description": "The semantic id: `raw:<W>x<H>:<projection>`.",
+      "type": "string"
+    },
+    "identity": {
+      "description": "`sha256:` over kind, width, height, projection and topology; no image is involved.",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/FrameKind"
+    },
+    "projection": {
+      "$ref": "#/$defs/Projection"
+    },
+    "topology": {
+      "$ref": "#/$defs/Topology"
+    },
+    "width": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "frame_version",
+    "id",
+    "kind",
+    "width",
+    "height",
+    "projection",
+    "topology",
+    "identity"
+  ],
+  "title": "Frame",
+  "type": "object"
+}

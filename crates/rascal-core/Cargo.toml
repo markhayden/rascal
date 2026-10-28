@@ -15,6 +15,7 @@ toml = { workspace = true }
 schemars = { workspace = true }
 jsonschema = { workspace = true }
 sha2 = { workspace = true }
+image = { workspace = true }
 
 [lints]
 workspace = true
