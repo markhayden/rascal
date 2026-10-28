@@ -15,7 +15,7 @@ with green CI on both platforms, and then the tag.
 - [x] 0.2 CI, hooks, ignore rules (CI run itself awaits the owner's first push)
 - [x] 0.3 Docs skeleton and ADRs 0001 to 0014 (owner reads at the checkpoint)
 - [x] 0.4 Copied schemas and the schema drift harness
-- [ ] 0.5 Owner readiness
+- [x] 0.5 Owner readiness (rows 1 and 2 made; 3 to 7 pending their tasks)
 - [ ] Checkpoint M0 → tag `m0`
 
 ## M1 Core

@@ -3,15 +3,15 @@
 Decisions only the owner can make, each dated when made and tied to the task that needs it.
 The plan's "Owner decisions" table is the index; this file holds the answers.
 
-| # | Decision | Needed before | Status |
-|---|---|---|---|
-| 1 | Confirmation of no conflicting obligation | the bootstrap commit | made 2026-10-28 |
-| 2 | The forbidden-word list location (`RASCAL_FORBIDDEN_WORDS`) | 0.1's first commit | made 2026-10-28 |
-| 3 | A real local filler and a real panorama on the owner's machine | 2.8's by-hand run | pending |
-| 4 | The MCP transport | 3.1 (by ADR) | pending |
-| 5 | The segmenter, its branch and the export's redistribution terms | 5.2 (decided in 4.5) | pending |
-| 6 | The private corpus location, contents and groups | 6.1 | pending |
-| 7 | The path fan before or after v1 | after M7 unless 4.3 shows the need | pending |
+| # | Decision | Needed before | The gate it must clear | Status |
+|---|---|---|---|---|
+| 1 | Confirmation of no conflicting obligation | the bootstrap commit (pre-M0) | no commit exists on `main` until the dated statement is in this file | made 2026-10-28 |
+| 2 | The forbidden-word list location (`RASCAL_FORBIDDEN_WORDS`) | task 0.1's first commit | the clean-room scan runs locally on every commit from 0.1 on; the list never enters the tree | made 2026-10-28 |
+| 3 | A real local filler and a real wrapped image on the owner's machine | task 2.8's by-hand run | M2's checkpoint needs one real heal through a real filler, viewed by the owner | pending |
+| 4 | The MCP transport (an MCP crate or an in-house JSON-RPC implementation) | task 3.1, by ADR 0015 | no MCP code is written until the ADR is accepted | pending |
+| 5 | The segmenter, its branch (A or B) and the export's redistribution terms | task 5.2, decided in task 4.5 by ADR 0016 | M5's `segment` task does not start, and success criterion 5 or 5b is not fixed, until the ADR is accepted | pending |
+| 6 | The private corpus: location, first contents, the sky and structured groups with at least `min_decided` images each | task 6.1 | no lab matrix is written until the corpus manifest verifies | pending |
+| 7 | The path fan before or after v1 | after M7, unless task 4.3 shows the need | v0.1.0 ships without it unless the owner decides otherwise during M4 | pending |
 
 ## 1. No conflicting obligation
 
