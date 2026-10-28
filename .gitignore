@@ -1,0 +1,17 @@
+# build and run outputs
+/target/
+/lab/
+/run/
+/ws/
+*.mask/
+!fixtures/**/*.mask/
+
+# never commit secrets, private material or environments
+.env
+.venv/
+__pycache__/
+*.pyc
+*.key
+
+# editors and OS
+.DS_Store
