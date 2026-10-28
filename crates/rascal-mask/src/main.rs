@@ -2,6 +2,7 @@
 //! brings `run` and `render`.
 
 mod exit;
+mod inspect;
 mod run;
 
 use std::path::PathBuf;
@@ -40,6 +41,14 @@ enum Command {
         /// Exit 1 when the recipe stops at a step that is not applicable.
         #[arg(long)]
         strict: bool,
+    },
+    /// Inspect a stored mask: with --json, the record, zone statistics and identity.
+    Inspect {
+        /// The mask directory (`<id>.mask/`).
+        mask: PathBuf,
+        /// Print JSON on stdout.
+        #[arg(long)]
+        json: bool,
     },
     /// Render a stored mask for one consumer.
     Render {
@@ -133,6 +142,25 @@ fn main() {
                 }
                 Err(error) => {
                     eprintln!("rascal run: {error}");
+                    exit::code_for(&error)
+                }
+            }
+        }
+        Command::Inspect { mask, json } => {
+            let result = if json {
+                inspect::inspect_json(&mask).map(|value| {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&value).unwrap_or_default()
+                    )
+                })
+            } else {
+                inspect::inspect_pages(&mask)
+            };
+            match result {
+                Ok(()) => exit::OK,
+                Err(error) => {
+                    eprintln!("rascal inspect: {error}");
                     exit::code_for(&error)
                 }
             }

@@ -1,0 +1,103 @@
+{
+  "$defs": {
+    "Windows": {
+      "additionalProperties": false,
+      "description": "The sampling windows `fan` resolved, in pixels of the frame.",
+      "properties": {
+        "gap_px": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "step_cols": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "texture_cols": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "gap_px",
+        "step_cols",
+        "texture_cols"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The band profile.",
+  "properties": {
+    "band_profile_version": {
+      "description": "The record's version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "column_px": {
+      "description": "The centre column `c`, in pixels.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "constants": {
+      "description": "The constant set that produced it, such as `fan-v1`.",
+      "type": "string"
+    },
+    "frame": {
+      "description": "The frame id.",
+      "type": "string"
+    },
+    "frame_identity": {
+      "description": "The frame's identity.",
+      "type": "string"
+    },
+    "half": {
+      "description": "The half-width per row, `height` entries, each at least `thin_px`.",
+      "items": {
+        "format": "double",
+        "type": "number"
+      },
+      "type": "array"
+    },
+    "id": {
+      "description": "The local id.",
+      "type": "string"
+    },
+    "identity": {
+      "description": "`sha256:` over the frame identity, the line identity, the column, `thin_px`, `half`,\nthe windows and the constants.",
+      "type": "string"
+    },
+    "line": {
+      "description": "The identity of the `line` location the band follows.",
+      "type": "string"
+    },
+    "thin_px": {
+      "description": "The minimum half-width `thin`, in pixels.",
+      "format": "double",
+      "type": "number"
+    },
+    "windows": {
+      "$ref": "#/$defs/Windows"
+    }
+  },
+  "required": [
+    "band_profile_version",
+    "id",
+    "frame",
+    "frame_identity",
+    "line",
+    "column_px",
+    "thin_px",
+    "half",
+    "windows",
+    "constants",
+    "identity"
+  ],
+  "title": "BandProfile",
+  "type": "object"
+}

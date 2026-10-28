@@ -49,3 +49,10 @@ ad hoc order; this record replaces that.
   substitute identities for them before hashing.
 - A change to canonical JSON or to the pixel digest is a format change: a new vectors file
   and a dated refinement here.
+
+## Amended 2026-10-28 (task 1.3)
+
+The mask payload gained `profile` (the line, band and sigma identities, or null) and
+`prescriptions` (each with its series replaced by the series' identity); the band profile and
+the series gained payloads of their own (`band_profile`, `series`). The committed vectors were
+regenerated once for this change.

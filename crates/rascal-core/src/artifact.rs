@@ -10,6 +10,8 @@ use crate::identity::Identity;
 use crate::image::Image;
 use crate::location::Location;
 use crate::mask::Mask;
+use crate::profile::BandProfile;
+use crate::series::Series;
 
 /// The artifact types a port can declare.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -44,6 +46,8 @@ pub enum Artifact {
         identity: Identity,
     },
     Mask(Arc<Mask>),
+    BandProfile(Arc<BandProfile>),
+    Series(Arc<Series>),
 }
 
 impl Artifact {
@@ -53,6 +57,8 @@ impl Artifact {
             Artifact::Image(_) => ArtifactType::Image,
             Artifact::Location { .. } => ArtifactType::Location,
             Artifact::Mask(_) => ArtifactType::Mask,
+            Artifact::BandProfile(_) => ArtifactType::BandProfile,
+            Artifact::Series(_) => ArtifactType::Series,
         }
     }
 
@@ -62,6 +68,8 @@ impl Artifact {
             Artifact::Image(image) => image.identity(),
             Artifact::Location { identity, .. } => identity.clone(),
             Artifact::Mask(mask) => mask.identity(),
+            Artifact::BandProfile(profile) => profile.identity(),
+            Artifact::Series(series) => series.identity(),
         }
     }
 
@@ -71,6 +79,8 @@ impl Artifact {
             Artifact::Image(image) => &image.record.frame,
             Artifact::Location { location, .. } => location.frame(),
             Artifact::Mask(mask) => &mask.record.frame,
+            Artifact::BandProfile(profile) => &profile.frame,
+            Artifact::Series(series) => &series.frame,
         }
     }
 }

@@ -323,6 +323,16 @@ impl Run {
             }
             Artifact::Image(image) => image.write(&self.dir.join("artifacts")).map(|_| ()),
             Artifact::Mask(mask) => mask.write(&self.dir.join("artifacts").join(mask.dir_name())),
+            Artifact::BandProfile(profile) => {
+                let dir = self.dir.join("artifacts");
+                std::fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
+                profile.write(&dir.join(format!("{}.profile.json", profile.identity().hex())))
+            }
+            Artifact::Series(series) => {
+                let dir = self.dir.join("artifacts");
+                std::fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
+                series.write(&dir.join(format!("{}.series.json", series.identity().hex())))
+            }
             Artifact::Location { location, identity } => {
                 if !self
                     .locations

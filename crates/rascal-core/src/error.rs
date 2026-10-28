@@ -61,6 +61,9 @@ pub enum Error {
         step: String,
         message: String,
     },
+    /// A mask that breaks one of its invariants, named. Exit 3.
+    #[error("mask {id}: invariant broken: {invariant}")]
+    MaskInvariant { id: String, invariant: String },
     /// An op was given an input it cannot take: a wrong artifact type, a frame mismatch, a
     /// location kind a later task implements. Exit 3.
     #[error("{op}: {message}")]

@@ -83,6 +83,8 @@ pub fn inventory() -> Vec<BoundaryType> {
     use crate::location::Location;
     use crate::mask::MaskRecord;
     use crate::op::Manifest;
+    use crate::profile::BandProfile;
+    use crate::series::Series;
     vec![
         boundary_type!(
             Frame,
@@ -105,7 +107,7 @@ pub fn inventory() -> Vec<BoundaryType> {
             MaskRecord,
             "rascal/mask-v1.json",
             Source::Generated,
-            ["mask-v1/rect.json"]
+            ["mask-v1/rect.json", "mask-v1/seam.json"]
         ),
         boundary_type!(
             JournalLine,
@@ -118,6 +120,18 @@ pub fn inventory() -> Vec<BoundaryType> {
             "rascal/manifest-v1.json",
             Source::Generated,
             ["manifest-v1/rect.json"]
+        ),
+        boundary_type!(
+            BandProfile,
+            "rascal/band-profile-v1.json",
+            Source::Generated,
+            ["band-profile-v1/seam.json"]
+        ),
+        boundary_type!(
+            Series,
+            "rascal/series-v1.json",
+            Source::Generated,
+            ["series-v1/sigma.json", "series-v1/step.json"]
         ),
         BoundaryType {
             versioning: Versioning::SchemaId,
@@ -153,6 +167,10 @@ pub const COMPONENTS: &[&str] = &[
     "UseCase",
     "Zones",
     "Source",
+    "ProfileSection",
+    "Prescription",
+    "ProvenanceNode",
+    "Windows",
     "ArtifactType",
     "Port",
     "Param",
@@ -294,7 +312,8 @@ fn same_json(a: &serde_json::Value, b: &serde_json::Value) -> bool {
 }
 
 /// True when every object the schema describes refuses unknown properties. An object with no
-/// `properties` and a schema-valued `additionalProperties` is a map and closed by construction.
+/// `properties` and a schema-valued (or `true`) `additionalProperties` is a map and closed by
+/// construction: it has no fields to misspell.
 fn is_closed(schema: &serde_json::Value) -> bool {
     let Some(object) = schema.as_object() else {
         return true;
@@ -303,7 +322,9 @@ fn is_closed(schema: &serde_json::Value) -> bool {
     let is_object = object.get("type").and_then(|t| t.as_str()) == Some("object") || has_properties;
     let additional = object.get("additionalProperties");
     if is_object {
-        let is_map = !has_properties && additional.is_some_and(|a| a.is_object());
+        // A map: no named properties, values described by a schema (or anything, `true`).
+        let is_map = !has_properties
+            && additional.is_some_and(|a| a.is_object() || *a == serde_json::Value::Bool(true));
         if !is_map && additional != Some(&serde_json::Value::Bool(false)) {
             return false;
         }

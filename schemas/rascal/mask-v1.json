@@ -1,5 +1,115 @@
 {
   "$defs": {
+    "Prescription": {
+      "description": "A pixel change that belongs with the mask; `apply` performs it.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "A per-row colour step carried across the band.",
+          "properties": {
+            "kind": {
+              "const": "tone_ramp",
+              "type": "string"
+            },
+            "share": {
+              "description": "The share of the step each side moves toward the other.",
+              "format": "double",
+              "type": "number"
+            },
+            "step": {
+              "description": "The step `Series` file (3 channels, levels), relative to `mask.toml`.",
+              "type": "string"
+            },
+            "version": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "version",
+            "step",
+            "share"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ProfileSection": {
+      "additionalProperties": false,
+      "description": "The `[profile]` section: present when the mask is a band along a line.",
+      "properties": {
+        "band": {
+          "description": "The `BandProfile` file, relative to `mask.toml`.",
+          "type": "string"
+        },
+        "line": {
+          "description": "The identity of the `line` location.",
+          "type": "string"
+        },
+        "sigma_px": {
+          "description": "The per-row feather sigma `Series` file, relative to `mask.toml`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "line",
+        "band",
+        "sigma_px"
+      ],
+      "type": "object"
+    },
+    "ProvenanceNode": {
+      "additionalProperties": false,
+      "description": "One step that made or changed the mask: a copy of the journal's node, not part of identity.",
+      "properties": {
+        "constants": {
+          "description": "The constant set, when the op used one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "inputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Input identities by port.",
+          "type": "object"
+        },
+        "op": {
+          "type": "string"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Output identities by port.",
+          "type": "object"
+        },
+        "params": {
+          "additionalProperties": true,
+          "default": {},
+          "description": "The resolved parameters.",
+          "type": "object"
+        },
+        "step": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "step",
+        "op",
+        "version"
+      ],
+      "type": "object"
+    },
     "Source": {
       "additionalProperties": false,
       "description": "What the mask was made from.",
@@ -39,7 +149,7 @@
       "description": "The plane files, relative to `mask.toml`.",
       "properties": {
         "blend": {
-          "description": "8-bit fractional paste weights outside the core; 0 inside it and beyond the feather.",
+          "description": "8-bit fractional paste weights outside the core; 0 inside it, under protect and beyond\nthe feather.",
           "type": "string"
         },
         "core": {
@@ -71,13 +181,40 @@
       "description": "The frame's identity.",
       "type": "string"
     },
+    "height": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
     "id": {
       "description": "The local id.",
       "type": "string"
     },
     "identity": {
-      "description": "`sha256:` over the three planes' pixels, the use case, the frame identity and the\nsource identities.",
+      "description": "`sha256:` over the three planes' pixels, the use case, the frame identity, the\nprofile's line, band and sigma identities, every prescription with its series replaced\nby the series' identity, and the source identities. Ids, file names and provenance are\nnot part of it.",
       "type": "string"
+    },
+    "prescriptions": {
+      "items": {
+        "$ref": "#/$defs/Prescription"
+      },
+      "type": "array"
+    },
+    "profile": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProfileSection"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "provenance": {
+      "items": {
+        "$ref": "#/$defs/ProvenanceNode"
+      },
+      "type": "array"
     },
     "source": {
       "$ref": "#/$defs/Source",
@@ -95,6 +232,12 @@
       "minimum": 0,
       "type": "integer"
     },
+    "width": {
+      "description": "The planes' size, which is the frame's.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
     "zones": {
       "$ref": "#/$defs/Zones"
     }
@@ -104,6 +247,8 @@
     "id",
     "frame",
     "frame_identity",
+    "width",
+    "height",
     "use_case",
     "identity",
     "zones"

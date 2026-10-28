@@ -17,9 +17,11 @@ pub mod mapping;
 pub mod mask;
 pub mod op;
 pub mod outdir;
+pub mod profile;
 pub mod recipe;
 pub mod registry;
 pub mod schema_drift;
 pub mod schemas;
+pub mod series;
 
 pub use error::Error;
