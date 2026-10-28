@@ -11,8 +11,8 @@ with green CI on both platforms, and then the tag.
 - [x] Codex plan review, three rounds, under docs/reviews/plan-review-*.md
 
 ## M0 Scaffold
-- [ ] 0.1 Workspace, crate skeletons, checks (including the clean-room scan and `ci-local`)
-- [ ] 0.2 CI, hooks, ignore rules
+- [x] 0.1 Workspace, crate skeletons, checks (including the clean-room scan and `ci-local`)
+- [x] 0.2 CI, hooks, ignore rules (CI run itself awaits the owner's first push)
 - [ ] 0.3 Docs skeleton and ADRs 0001 to 0014
 - [ ] 0.4 Copied schemas and the schema drift harness
 - [ ] 0.5 Owner readiness

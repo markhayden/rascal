@@ -1,0 +1,8 @@
+# Exact synthetic credential values that tests and documentation may contain. Nothing else that
+# matches a credential shape is allowed anywhere in the repository, whatever the file or path.
+# Every entry must contain SYNTHETIC, or the scanner refuses to trust this file at all.
+sk-ant-api03-SYNTHETIC-rascal-fixture-000000000000
+AIzaSYNTHETICrascalfixture0000000000000
+sk-proj-SYNTHETIC-rascal-fixture-00000000000000
+AKIASYNTHETICFIXTURE
+ghp_SYNTHETICrascalfixture00000000000000

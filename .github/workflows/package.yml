@@ -1,0 +1,29 @@
+name: package
+
+# Proves the crates package as crates.io would serve them: the packaging check, the generated
+# release workflow being current, and a workspace publish dry run (package, verify, no upload).
+# From M4 task 4.4 this workflow also runs scripts/acceptance.sh.
+on:
+  push:
+    branches: ["main", "m*"]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  registry:
+    name: publish dry run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the toolchain from rust-toolchain.toml
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Install dist (pinned in dist-workspace.toml)
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.33.1/cargo-dist-installer.sh | sh
+      - name: The generated release workflow is current
+        run: dist generate --check && dist plan
+      - run: scripts/check-packaging.sh
+      - run: scripts/publish.sh --dry-run
