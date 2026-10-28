@@ -90,7 +90,9 @@ pub fn inventory() -> Vec<BoundaryType> {
             Source::Generated,
             [
                 "frame-v1/raw-flat.json",
-                "frame-v1/raw-equirectangular.json"
+                "frame-v1/raw-equirectangular.json",
+                "frame-v1/cut.json",
+                "frame-v1/crop.json"
             ]
         ),
         boundary_type!(
@@ -145,6 +147,7 @@ pub const COMPONENTS: &[&str] = &[
     "Projection",
     "Topology",
     "FrameKind",
+    "Plan",
     "Role",
     "RenderingRole",
     "UseCase",

@@ -10,6 +10,7 @@ use image::GrayImage;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::canonical;
 use crate::error::{Error, Result};
 use crate::frame::Frame;
 use crate::identity::Identity;
@@ -127,8 +128,7 @@ impl Mask {
 
     /// The identity as a typed value.
     pub fn identity(&self) -> Identity {
-        Identity::parse(&self.record.identity)
-            .unwrap_or_else(|| Identity::of_parts(&[self.record.identity.as_bytes()]))
+        Identity::parse_or_hash(&self.record.identity)
     }
 
     /// Width and height.
@@ -214,6 +214,8 @@ impl Mask {
     }
 }
 
+/// The three planes' pixels (as pixel digests), the use case, the frame identity and the
+/// source identities.
 fn mask_identity(
     core: &GrayImage,
     blend: &GrayImage,
@@ -222,17 +224,18 @@ fn mask_identity(
     frame_identity: &str,
     source: &Source,
 ) -> Identity {
-    let use_case_name = serde_json::to_string(&use_case).unwrap_or_default();
-    let source_text = serde_json::to_string(source).unwrap_or_default();
-    Identity::of_parts(&[
-        b"mask",
-        &core.width().to_le_bytes(),
-        &core.height().to_le_bytes(),
-        core.as_raw(),
-        blend.as_raw(),
-        protect.as_raw(),
-        use_case_name.as_bytes(),
-        frame_identity.as_bytes(),
-        source_text.as_bytes(),
-    ])
+    let digest = |plane: &GrayImage| {
+        canonical::pixel_digest(plane.width(), plane.height(), 1, plane.as_raw())
+    };
+    canonical::identity_of(
+        "mask",
+        &serde_json::json!({
+            "core": digest(core).as_str(),
+            "blend": digest(blend).as_str(),
+            "protect": digest(protect).as_str(),
+            "use_case": use_case,
+            "frame": frame_identity,
+            "source": source,
+        }),
+    )
 }

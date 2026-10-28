@@ -15,7 +15,11 @@ rascal has no code dependency on the origin.
 
 ## rascal's schemas
 
-`schemas/rascal/` holds rascal's own versioned schemas. The first is `location-v1.json`: a
+`schemas/rascal/` holds rascal's own versioned schemas, generated from the boundary types by
+the drift harness except where noted: `frame-v1` (the three frame kinds; a derived frame's
+fields are optional rather than a tagged union, since `serde(flatten)` and
+`deny_unknown_fields` do not combine), `image-v1`, `mask-v1`, `journal-v1`, `manifest-v1`
+and the authored `location-v1.json`: a
 location is **one of** the copied `Location` definition (the kinds `bbox`, `polygon`, `view`,
 `whole_image`, `absent`, referenced by `$ref` and never redefined) or rascal's `line` (a column
 or a path with a full width in pixels) or `stroke` (a path with a radius in pixels). Inside a

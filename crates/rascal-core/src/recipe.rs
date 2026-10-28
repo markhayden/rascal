@@ -518,13 +518,7 @@ impl Recipe {
                 let output = run.invoke(&step_id, "render", registry, &render_inputs, &params)?;
                 if let Some(Artifact::Image(image)) = output.outputs.get("image") {
                     let path = run.dir.join(&render.out);
-                    image
-                        .pixels
-                        .save_with_format(&path, image::ImageFormat::Png)
-                        .map_err(|source| Error::Image {
-                            path: path.clone(),
-                            source,
-                        })?;
+                    crate::canonical::write_png(&path, &image.pixels)?;
                     outcome.renders.push((render.profile.clone(), path));
                 }
             }

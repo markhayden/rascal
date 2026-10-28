@@ -30,8 +30,9 @@ enum Command {
         /// The run directory: must be new or empty.
         #[arg(long)]
         out: PathBuf,
-        /// Bind inputs.location to a box: x0,y0,x1,y1 as fractions of the image.
-        #[arg(long)]
+        /// Bind inputs.location to a box: x0,y0,x1,y1 as fractions of the image. A value may
+        /// start with a minus sign (a box reaching past the left edge of a flat image).
+        #[arg(long, allow_hyphen_values = true)]
         bbox: Option<String>,
         /// The image's projection; without it an exactly 2:1 image is taken as equirectangular.
         #[arg(long)]

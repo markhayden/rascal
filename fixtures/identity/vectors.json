@@ -1,0 +1,12 @@
+{
+  "frame crop:1 [64,40,128,100] of raw:320x200:flat": "sha256:a8e504f79433134bb30b3aa9ca376d3f8f9f41602a49f9459b5f79ef88c63b78",
+  "frame cut of the panorama": "sha256:c8dc21413399225a9a9843878a42ac176bde61ace8941152650b81cdffb8bb38",
+  "frame raw:320x200:flat": "sha256:b99a8275191d807e2c331f13c90c23e421ebe211573b644b99fc613f5d30f95f",
+  "frame raw:4000x2000:equirectangular": "sha256:83bd396c2b02e9c66bfd83d8a7c1fc34f5fe83f48a8907015bef7d305117e49d",
+  "image canonical floor.png": "sha256:63fc6268361bc20df60724f58df61608ce0c3022278b22a4b6cba216d236354b",
+  "image grey rendering of that mask": "sha256:105d1b248cc7bc6368191a95397f0108dc02109f2b175cb8bd7cd4438c444406",
+  "location bbox 0.2,0.2,0.4,0.5 in raw:320x200:flat": "sha256:7d6eb27797b607d589bc44a923525dd64d1abe0469f015b263b87ba75ed3b8b2",
+  "mask rect of that bbox": "sha256:01673d0731b63ba4f064cf2478db806ede6975a807911ebdd62d89307f12b44c",
+  "pixel digest floor.png": "sha256:d77f5a67ba7ebb1b521e187d40dba70d8f0be1d0c25ae45b5b18affdb334ecd4",
+  "plan 4000x2000 strip 0.07": "sha256:dd841e7eff8c6df755050b0170a174149543c14ef8f9b08cc2a39de42e9433a8"
+}

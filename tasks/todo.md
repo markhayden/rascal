@@ -22,7 +22,7 @@ with green CI on both platforms, and then the tag.
 
 ## M1 Core
 - [x] 1.1 Walking slice → tag `m1.1`
-- [ ] 1.2 Frames, identity, canonical serialization, locations and mapping
+- [x] 1.2 Frames, identity, canonical serialization, locations and mapping
 - [ ] 1.3 The mask record and effective weight
 - [ ] 1.4 Op contracts
 - [ ] 1.5 Renderings and the `render` op

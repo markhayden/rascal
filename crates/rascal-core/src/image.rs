@@ -10,6 +10,7 @@ use image::{DynamicImage, GenericImageView};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::canonical;
 use crate::error::{Error, Result};
 use crate::frame::{Frame, Projection};
 use crate::identity::Identity;
@@ -81,14 +82,15 @@ impl Image {
             other => DynamicImage::ImageRgb8(other.to_rgb8()),
         };
         let pixel_digest = pixel_digest(&pixels);
-        let role_name = serde_json::to_string(&role).unwrap_or_default();
-        let rendering_name = serde_json::to_string(&rendering_role).unwrap_or_default();
-        let identity = Identity::of_parts(&[
-            pixel_digest.as_str().as_bytes(),
-            frame.identity.as_bytes(),
-            role_name.as_bytes(),
-            rendering_name.as_bytes(),
-        ]);
+        let identity = canonical::identity_of(
+            "image",
+            &serde_json::json!({
+                "pixels": pixel_digest.as_str(),
+                "frame": frame.identity,
+                "role": role,
+                "rendering_role": rendering_role,
+            }),
+        );
         Image {
             record: ImageRecord {
                 image_version: 1,
@@ -125,8 +127,7 @@ impl Image {
 
     /// The identity as a typed value.
     pub fn identity(&self) -> Identity {
-        Identity::parse(&self.record.identity)
-            .unwrap_or_else(|| Identity::of_parts(&[self.record.identity.as_bytes()]))
+        Identity::parse_or_hash(&self.record.identity)
     }
 
     /// Width and height.
@@ -157,11 +158,10 @@ impl Image {
 /// `sha256:` over width, height, channel count and the samples in row-major order.
 pub fn pixel_digest(pixels: &DynamicImage) -> Identity {
     let (width, height) = pixels.dimensions();
-    let channels = pixels.color().channel_count() as u32;
-    Identity::of_parts(&[
-        &width.to_le_bytes(),
-        &height.to_le_bytes(),
-        &channels.to_le_bytes(),
+    canonical::pixel_digest(
+        width,
+        height,
+        u32::from(pixels.color().channel_count()),
         pixels.as_bytes(),
-    ])
+    )
 }

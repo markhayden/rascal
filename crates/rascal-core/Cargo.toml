@@ -19,3 +19,8 @@ image = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# Path only, no version: the testkit may one day depend on this crate, and a dev-dependency
+# without a version is dropped from the published manifest, which breaks any publish cycle.
+rascal-testkit = { path = "../rascal-testkit" }

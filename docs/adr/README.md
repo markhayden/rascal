@@ -20,5 +20,6 @@ decision's shape without reversing it. Format: Context, Decision, Alternatives, 
 | 0012 | The Python tool pack ships in v1, with two branches for the segmenter | accepted 2026-10-28 |
 | 0013 | Measures are evidence; the lab decides under a frozen protocol | accepted 2026-10-28 |
 | 0014 | Apache-2.0 and the family's repository conventions | accepted 2026-10-28 |
+| 0016 | Canonical serialization and the identity order | accepted 2026-10-28 |
 
-Decisions still to be made by ADR: the MCP transport (M3 task 3.1); the segmenter (M4 task 4.5).
+Decisions still to be made by ADR: 0015 the MCP transport (M3 task 3.1); 0017 the segmenter (M4 task 4.5).

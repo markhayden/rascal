@@ -6,12 +6,14 @@
 //! (task 1.1) brought in a minimal form say which later task replaces them.
 
 pub mod artifact;
+pub mod canonical;
 pub mod error;
 pub mod frame;
 pub mod identity;
 pub mod image;
 pub mod journal;
 pub mod location;
+pub mod mapping;
 pub mod mask;
 pub mod op;
 pub mod outdir;

@@ -418,4 +418,41 @@ fn a_two_to_one_image_assumes_equirectangular_and_journals_it() {
     ]);
     assert!(out.status.success());
     assert_eq!(journal(&scratch.join("flat"))[0]["event"], "op");
+    // A box straddling x = 0 on the wrapped frame is refused naming the seam rule (64); the
+    // same box on the flat reading is clipped and accepted.
+    let pano_path = pano.to_str().unwrap();
+    let seam = scratch.s("seam");
+    let out = rascal(&[
+        "run",
+        "rect",
+        pano_path,
+        "--bbox",
+        "-0.05,0.1,0.1,0.2",
+        "--out",
+        &seam,
+    ]);
+    assert_eq!(
+        out.status.code(),
+        Some(64),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(String::from_utf8_lossy(&out.stderr).contains("seam rule"));
+    let seam_flat = scratch.s("seam-flat");
+    let out = rascal(&[
+        "run",
+        "rect",
+        pano_path,
+        "--bbox",
+        "-0.05,0.1,0.1,0.2",
+        "--out",
+        &seam_flat,
+        "--projection",
+        "flat",
+    ]);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }

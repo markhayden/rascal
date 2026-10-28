@@ -87,6 +87,7 @@ pub fn run(registry: &OpRegistry, args: &RunArgs) -> Result<RunReport> {
     inputs.insert("image".to_string(), Artifact::Image(Arc::new(image)));
     if let Some(bbox) = bbox {
         let location = Location::bbox(&frame.id, bbox)?;
+        location.validate(&frame)?;
         let identity = location.identity(&frame.identity);
         inputs.insert(
             "location".to_string(),

@@ -63,7 +63,7 @@ which parts exist; it is updated in the same commit as the code it describes.
 | Part | Crate | State | Arrives |
 |---|---|---|---|
 | schema drift harness and boundary-type inventory | rascal-core | done | M0 task 0.4 |
-| frames, images, locations, artifacts, identity | rascal-core | minimal (walking slice: raw frames, canonical import, the seven location kinds parsed, hashes without canonical serialization) | M1 task 1.2 |
+| frames, images, locations, artifacts, identity | rascal-core | done: the three frame kinds and the cut plan, canonical serialization and committed vectors (ADR 0016), the seven location kinds with their rules, mapping toward the root with parts and partial | M1 task 1.2 |
 | the mask record and effective weight | rascal-core | minimal (zones and source; the weight rule) | M1 task 1.3 |
 | Op trait, manifest, envelope, registry | rascal-core | minimal (trait, ports, params, status, artifacts extension; no schemas in the registry yet) | M1 task 1.4 |
 | renderings | rascal-core, rascal-ops | `grey` only | M1 task 1.5 |

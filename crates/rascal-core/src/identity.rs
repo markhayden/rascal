@@ -1,26 +1,14 @@
 //! Identity: the SHA-256 of an artifact's canonical payload, written `sha256:<lower hex>`.
-//!
-//! Task 1.1 hashes length-prefixed byte parts in a fixed order per type; task 1.2 replaces
-//! this with the spec's canonical serialization and committed test vectors.
-//! REPLACED BY 1.2 (canonical serialization, reference substitution, test vectors).
-
-use sha2::{Digest, Sha256};
+//! How each payload is built is in `canonical` (ADR 0016).
 
 /// A `sha256:<hex>` identity.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Identity(String);
 
 impl Identity {
-    /// The identity of a sequence of byte parts, each length-prefixed so the boundaries are
-    /// part of what is hashed.
-    pub fn of_parts(parts: &[&[u8]]) -> Self {
-        let mut hasher = Sha256::new();
-        for part in parts {
-            hasher.update((part.len() as u64).to_le_bytes());
-            hasher.update(part);
-        }
-        let digest = hasher.finalize();
-        Identity(format!("sha256:{}", hex(&digest)))
+    /// From a finished digest.
+    pub fn from_digest(digest: &[u8]) -> Self {
+        Identity(format!("sha256:{}", hex(digest)))
     }
 
     /// The identity as `sha256:<hex>`.
@@ -33,7 +21,7 @@ impl Identity {
         self.0.strip_prefix("sha256:").unwrap_or(&self.0)
     }
 
-    /// Parses `sha256:<64 hex>`; anything else is `None`.
+    /// Parses `sha256:<64 lower-case hex>`; anything else is `None`.
     pub fn parse(text: &str) -> Option<Self> {
         let hex = text.strip_prefix("sha256:")?;
         (hex.len() == 64
@@ -42,11 +30,28 @@ impl Identity {
                 .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()))
         .then(|| Identity(text.to_string()))
     }
+
+    /// Parses, or hashes the text itself when it is not an identity, so a caller holding an
+    /// identity string from a record always gets a value.
+    pub fn parse_or_hash(text: &str) -> Self {
+        Identity::parse(text).unwrap_or_else(|| {
+            crate::canonical::identity("text", &serde_json::Value::String(text.to_string()))
+        })
+    }
 }
 
 impl std::fmt::Display for Identity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
+    }
+}
+
+impl serde::Serialize for Identity {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
     }
 }
 
