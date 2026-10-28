@@ -1,0 +1,21 @@
+# A recipe whose rect step has a box with x0 > x1: the op reports invalid_args.
+version = 1
+name = "bad-box"
+use_case = "custom"
+
+[inputs]
+image = { type = "Image" }
+
+[[step]]
+id = "find"
+op = "rect"
+inputs = { image = "inputs.image" }
+bbox = [0.4, 0.2, 0.2, 0.5]
+
+[[step]]
+id = "mask"
+op = "rasterize"
+inputs = { location = "find.location", image = "inputs.image" }
+
+[outputs]
+mask = "mask.mask"

@@ -19,7 +19,7 @@ use crate::image::Image;
 use crate::journal::{Event, Journal, JournalLine};
 use crate::location::LocationEntry;
 use crate::mask::{Mask, UseCase};
-use crate::op::{self, Context, Envelope, Inputs, Params, Status};
+use crate::op::{self, Context, Envelope, Inputs, Params, Provenance, Status};
 use crate::registry::OpRegistry;
 
 /// A declared recipe input.
@@ -214,21 +214,9 @@ impl Recipe {
                     ));
                 }
             }
-            for name in step.params.keys() {
-                if !manifest.params.iter().any(|p| &p.name == name) {
-                    return Err(
-                        self.fail(&step.id, format!("op {} has no parameter {name}", step.op))
-                    );
-                }
-            }
-            for param in manifest.params.iter().filter(|p| p.required) {
-                if !step.params.contains_key(&param.name) {
-                    return Err(self.fail(
-                        &step.id,
-                        format!("parameter {} is required by {}", param.name, step.op),
-                    ));
-                }
-            }
+            manifest
+                .resolve_params(&step.params)
+                .map_err(|m| self.fail(&step.id, format!("op {}: {m}", step.op)))?;
         }
         let n = self.step.len();
         for (name, binding, expected) in [
@@ -281,6 +269,8 @@ pub struct Outcome {
     pub status: Status,
     /// The step that stopped the run, when the status is not `ok`.
     pub stopped_at: Option<String>,
+    /// Why, when the status is not `ok`.
+    pub reason: Option<String>,
     /// Every binding produced, `inputs.*` included.
     pub bindings: BTreeMap<String, Artifact>,
     /// The named outputs: `mask`, `image`, `plan`.
@@ -370,7 +360,10 @@ impl Run {
         Ok(())
     }
 
-    /// Runs one op, journals the invocation whatever happens, and returns its output.
+    /// Runs one op, journals the invocation whatever happens, and returns its output. Inputs
+    /// are validated against the manifest; parameters are resolved (defaults filled, kinds and
+    /// bounds checked) and a bad value is an `invalid_args` envelope, journaled, then a usage
+    /// error. The envelope is checked against the manifest before it is returned.
     pub fn invoke(
         &mut self,
         step_id: &str,
@@ -379,55 +372,125 @@ impl Run {
         inputs: &Inputs,
         params: &Params,
     ) -> Result<op::Output> {
-        let op = registry
-            .get(op_name)
-            .ok_or_else(|| Error::usage(format!("unknown op {op_name}")))?;
+        let op = registry.require(op_name)?;
         let manifest = op.manifest();
-        op::validate_inputs(&manifest, inputs, params)?;
-        let started = Instant::now();
-        let context = Context {
-            frames: &self.frames,
-        };
-        let result = op.run(&context, inputs, params);
-        let duration_ms = started.elapsed().as_millis() as u64;
+        op::validate_inputs(&manifest, inputs)?;
         let input_identities: BTreeMap<String, String> = inputs
             .iter()
             .map(|(k, a)| (k.clone(), a.identity().as_str().to_string()))
             .collect();
-        let (envelope, outputs) = match &result {
-            Ok(output) => (
-                Some(output.envelope.clone()),
-                output
-                    .outputs
-                    .iter()
-                    .map(|(k, a)| (k.clone(), a.identity().as_str().to_string()))
-                    .collect(),
-            ),
-            Err(error) => (
-                Some(Envelope {
-                    status: Status::InvalidArgs,
-                    summary: format!("failed: {error}"),
-                    reason: Some(error.to_string()),
-                    artifacts: BTreeMap::new(),
-                }),
-                BTreeMap::new(),
-            ),
+        let started = Instant::now();
+        let resolved = match manifest.resolve_params(params) {
+            Ok(resolved) => resolved,
+            Err(message) => {
+                let mut envelope = Envelope::invalid_args(message.clone());
+                envelope.provenance = Provenance {
+                    tool: manifest.name.clone(),
+                    version: manifest.version.clone(),
+                    duration_ms: 0,
+                };
+                self.journal_op(
+                    step_id,
+                    &manifest,
+                    params,
+                    input_identities,
+                    BTreeMap::new(),
+                    Some(envelope),
+                    0,
+                )?;
+                return Err(Error::usage(format!(
+                    "step {step_id}: {}: {message}",
+                    manifest.name
+                )));
+            }
         };
-        self.journal.append(JournalLine {
-            journal_version: 1,
-            seq: 0,
-            event: Event::Op,
-            step: Some(step_id.to_string()),
-            op: Some(manifest.name.clone()),
-            version: Some(manifest.version.clone()),
-            params: Some(serde_json::to_value(params).unwrap_or_default()),
-            inputs: input_identities,
+        let context = Context {
+            frames: &self.frames,
+        };
+        let result = op.run(&context, inputs, &resolved);
+        let duration_ms = started.elapsed().as_millis() as u64;
+        let (envelope, outputs) = match &result {
+            Ok(output) => {
+                let mut envelope = output.envelope.clone();
+                envelope.provenance = Provenance {
+                    tool: manifest.name.clone(),
+                    version: manifest.version.clone(),
+                    duration_ms,
+                };
+                (
+                    Some(envelope),
+                    output
+                        .outputs
+                        .iter()
+                        .map(|(k, a)| (k.clone(), a.identity().as_str().to_string()))
+                        .collect(),
+                )
+            }
+            Err(error) => {
+                let mut envelope = Envelope::invalid_args(error.to_string());
+                envelope.summary = format!("failed: {error}");
+                envelope.provenance = Provenance {
+                    tool: manifest.name.clone(),
+                    version: manifest.version.clone(),
+                    duration_ms,
+                };
+                (Some(envelope), BTreeMap::new())
+            }
+        };
+        self.journal_op(
+            step_id,
+            &manifest,
+            &resolved,
+            input_identities,
             outputs,
-            envelope,
-            duration_ms: Some(duration_ms),
-            note: None,
-        })?;
-        result
+            envelope.clone(),
+            duration_ms,
+        )?;
+        let mut output = result?;
+        if let Some(envelope) = envelope {
+            output.envelope = envelope;
+        }
+        output
+            .envelope
+            .check(&manifest)
+            .map_err(|m| Error::op(&manifest.name, format!("envelope rejected: {m}")))?;
+        if output.envelope.status == Status::InvalidArgs {
+            return Err(Error::usage(format!(
+                "step {step_id}: {}: {}",
+                manifest.name,
+                output.envelope.reason.clone().unwrap_or_default()
+            )));
+        }
+        Ok(output)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn journal_op(
+        &mut self,
+        step_id: &str,
+        manifest: &op::Manifest,
+        params: &Params,
+        inputs: BTreeMap<String, String>,
+        outputs: BTreeMap<String, String>,
+        envelope: Option<Envelope>,
+        duration_ms: u64,
+    ) -> Result<()> {
+        self.journal
+            .append(JournalLine {
+                journal_version: 1,
+                seq: 0,
+                event: Event::Op,
+                step: Some(step_id.to_string()),
+                op: Some(manifest.name.clone()),
+                version: Some(manifest.version.clone()),
+                params: Some(serde_json::to_value(params).unwrap_or_default()),
+                inputs,
+                outputs,
+                envelope,
+                duration_ms: Some(duration_ms),
+                note: None,
+            })
+            .map(|_| ())
     }
 }
 
@@ -468,29 +531,58 @@ impl Recipe {
         let mut outcome = Outcome {
             status: Status::Ok,
             stopped_at: None,
+            reason: None,
             bindings: BTreeMap::new(),
             outputs: BTreeMap::new(),
             renders: Vec::new(),
         };
+        let mut unmet: BTreeMap<String, String> = BTreeMap::new(); // step id -> reason
         for step in &self.step {
-            let step_inputs: Inputs = step
-                .inputs
-                .iter()
-                .map(|(port, binding)| {
-                    bindings
-                        .get(binding)
-                        .cloned()
-                        .map(|a| (port.clone(), a))
-                        .ok_or_else(|| {
-                            self.fail(&step.id, format!("binding {binding} is not available"))
-                        })
-                })
-                .collect::<Result<_>>()?;
+            let mut step_inputs: Inputs = BTreeMap::new();
+            let mut blocked: Option<String> = None;
+            for (port, binding) in &step.inputs {
+                match bindings.get(binding) {
+                    Some(a) => {
+                        step_inputs.insert(port.clone(), a.clone());
+                    }
+                    None => {
+                        let source = binding.split('.').next().unwrap_or_default();
+                        let why = unmet
+                            .get(source)
+                            .map(|r| format!("step {source} did not produce it ({r})"))
+                            .unwrap_or_else(|| "it was never produced".to_string());
+                        blocked = Some(format!("step {} requires {binding}, but {why}", step.id));
+                        break;
+                    }
+                }
+            }
+            if let Some(reason) = blocked {
+                run.note(reason.clone())?;
+                if outcome.status == Status::Ok {
+                    outcome.status = Status::NotApplicable;
+                    outcome.stopped_at = Some(step.id.clone());
+                    outcome.reason = Some(reason);
+                } else {
+                    outcome.reason = Some(format!(
+                        "{}; {reason}",
+                        outcome.reason.take().unwrap_or_default()
+                    ));
+                }
+                break;
+            }
             let output = run.invoke(&step.id, &step.op, registry, &step_inputs, &step.params)?;
             if output.envelope.status != Status::Ok {
-                outcome.status = output.envelope.status;
-                outcome.stopped_at = Some(step.id.clone());
-                break;
+                let reason = output.envelope.reason.clone().unwrap_or_default();
+                unmet.insert(
+                    step.id.clone(),
+                    format!("{:?}: {reason}", output.envelope.status).to_lowercase(),
+                );
+                if outcome.status == Status::Ok {
+                    outcome.status = output.envelope.status;
+                    outcome.stopped_at = Some(step.id.clone());
+                    outcome.reason = Some(reason);
+                }
+                continue;
             }
             for (name, artifact) in output.outputs {
                 let id = format!("{}.{name}", step.id);

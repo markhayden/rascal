@@ -152,9 +152,9 @@ pub enum LoadedPrescription {
     },
 }
 
-/// What a refinement reports about what it cleared. Enters the envelope with task 1.4, which
-/// gives it a schema.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// What a refinement reports about what it cleared; part of the envelope.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Refinement {
     pub blend_cleared: bool,
     pub profile_cleared: bool,

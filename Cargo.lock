@@ -706,6 +706,7 @@ version = "0.1.0"
 dependencies = [
  "image",
  "jsonschema",
+ "rascal-ops",
  "rascal-testkit",
  "schemars",
  "serde",

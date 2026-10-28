@@ -1,9 +1,10 @@
-//! The op registry: every op by name. The ops crate registers the catalogue; the binary and
-//! the server look ops up here. REPLACED BY 1.4 (manifest and envelope validation against the
-//! schemas at start and in tests).
+//! The op registry: every op by name, each manifest checked when it is registered, so a
+//! malformed manifest fails at start and in tests rather than at a client. The ops crate
+//! registers the catalogue; the binary and the server look ops up here.
 
 use std::collections::BTreeMap;
 
+use crate::error::{Error, Result};
 use crate::op::{Manifest, Op};
 
 /// The ops available to recipes and the command line.
@@ -18,14 +19,36 @@ impl OpRegistry {
         Self::default()
     }
 
-    /// Adds an op under its manifest's name, replacing any earlier op of that name.
-    pub fn register(&mut self, op: Box<dyn Op>) {
-        self.ops.insert(op.manifest().name.clone(), op);
+    /// Adds an op under its manifest's name after checking the manifest; a second op of the
+    /// same name is an error.
+    pub fn register(&mut self, op: Box<dyn Op>) -> Result<()> {
+        let manifest = op.manifest();
+        manifest
+            .check()
+            .map_err(|m| Error::usage(format!("manifest rejected: {m}")))?;
+        if self.ops.contains_key(&manifest.name) {
+            return Err(Error::usage(format!(
+                "op {} is registered twice",
+                manifest.name
+            )));
+        }
+        self.ops.insert(manifest.name, op);
+        Ok(())
     }
 
     /// The op with this name.
     pub fn get(&self, name: &str) -> Option<&dyn Op> {
         self.ops.get(name).map(|b| b.as_ref())
+    }
+
+    /// The op with this name, or a usage error naming the catalogue.
+    pub fn require(&self, name: &str) -> Result<&dyn Op> {
+        self.get(name).ok_or_else(|| {
+            Error::usage(format!(
+                "unknown op {name}; the catalogue is {}",
+                self.names().join(", ")
+            ))
+        })
     }
 
     /// Every manifest, by name.

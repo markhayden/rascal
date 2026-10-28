@@ -1,0 +1,22 @@
+# A recipe whose rect step has a box wholly outside the frame: the op reports not_applicable,
+# and the rasterize step that requires its location cannot run.
+version = 1
+name = "outside-box"
+use_case = "custom"
+
+[inputs]
+image = { type = "Image" }
+
+[[step]]
+id = "find"
+op = "rect"
+inputs = { image = "inputs.image" }
+bbox = [1.2, 1.2, 1.4, 1.5]
+
+[[step]]
+id = "mask"
+op = "rasterize"
+inputs = { location = "find.location", image = "inputs.image" }
+
+[outputs]
+mask = "mask.mask"

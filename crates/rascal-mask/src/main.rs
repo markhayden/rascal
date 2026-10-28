@@ -3,6 +3,7 @@
 
 mod exit;
 mod inspect;
+mod ops;
 mod run;
 
 use std::path::PathBuf;
@@ -42,6 +43,11 @@ enum Command {
         #[arg(long)]
         strict: bool,
     },
+    /// The op catalogue: every manifest as a client sees it.
+    Ops {
+        #[command(subcommand)]
+        command: OpsCommand,
+    },
     /// Inspect a stored mask: with --json, the record, zone statistics and identity.
     Inspect {
         /// The mask directory (`<id>.mask/`).
@@ -60,6 +66,21 @@ enum Command {
         /// The file to write; overwritten if it exists.
         #[arg(long)]
         out: PathBuf,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum OpsCommand {
+    /// Every op: name, version and purpose, or every manifest with --json.
+    List {
+        #[arg(long)]
+        json: bool,
+    },
+    /// One op's manifest.
+    Describe {
+        op: String,
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -96,7 +117,13 @@ fn main() {
             }
         },
     };
-    let registry = rascal_ops::registry();
+    let registry = match rascal_ops::registry() {
+        Ok(registry) => registry,
+        Err(error) => {
+            eprintln!("rascal: {error}");
+            std::process::exit(exit::OPERATIONAL);
+        }
+    };
     let code = match cli.command {
         Command::Run {
             recipe,
@@ -127,10 +154,11 @@ fn main() {
                         status => {
                             let step = report.stopped_at.unwrap_or_default();
                             eprintln!(
-                                "rascal run: step {step} reported {}; nothing published",
+                                "rascal run: step {step} reported {}: {}; nothing published by it",
                                 serde_json::to_string(&status)
                                     .unwrap_or_default()
-                                    .trim_matches('"')
+                                    .trim_matches('"'),
+                                report.reason.unwrap_or_default()
                             );
                             if args.strict {
                                 exit::NOT_APPLICABLE
@@ -146,6 +174,7 @@ fn main() {
                 }
             }
         }
+        Command::Ops { command } => ops::run(&registry, command),
         Command::Inspect { mask, json } => {
             let result = if json {
                 inspect::inspect_json(&mask).map(|value| {

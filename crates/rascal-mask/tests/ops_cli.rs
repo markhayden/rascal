@@ -1,0 +1,178 @@
+//! Task 1.4: `rascal ops list` and `rascal ops describe`, and the exit codes for `invalid_args`
+//! and `not_applicable` with and without `--strict`, driven through recipe files.
+#![allow(clippy::unwrap_used)]
+
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
+
+fn rascal(args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_rascal"))
+        .args(args)
+        .output()
+        .unwrap()
+}
+
+fn repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+fn scratch(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("rascal-opscli-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn journal(dir: &Path) -> Vec<serde_json::Value> {
+    std::fs::read_to_string(dir.join("journal.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect()
+}
+
+#[test]
+fn ops_list_names_the_catalogue_and_json_gives_every_manifest() {
+    let out = rascal(&["ops", "list"]);
+    assert!(out.status.success());
+    let text = String::from_utf8_lossy(&out.stdout);
+    for op in ["rect", "rasterize", "render"] {
+        assert!(text.lines().any(|l| l.starts_with(op)), "{text}");
+    }
+    let out = rascal(&["ops", "list", "--json"]);
+    let manifests: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(manifests.len(), 3);
+    for m in &manifests {
+        for field in [
+            "name",
+            "version",
+            "purpose",
+            "when_to_use",
+            "when_not_to_use",
+            "output_guidance",
+            "cost",
+            "inputs",
+            "outputs",
+            "params",
+            "returns",
+            "input_schema",
+            "output_schema",
+        ] {
+            assert!(!m[field].is_null(), "{} lacks {field}", m["name"]);
+        }
+    }
+}
+
+#[test]
+fn ops_describe_prints_the_full_manifest() {
+    let out = rascal(&["ops", "describe", "rasterize", "--json"]);
+    assert!(out.status.success());
+    let m: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(m["name"], "rasterize");
+    assert_eq!(m["inputs"][0]["name"], "location");
+    assert_eq!(m["inputs"][0]["artifact_type"], "Location");
+    assert_eq!(m["outputs"][0]["artifact_type"], "Mask");
+    assert_eq!(m["params"][0]["name"], "use_case");
+    assert_eq!(m["params"][0]["choices"][0], "seam");
+    assert_eq!(
+        m["input_schema"]["properties"]["use_case"]["enum"][4],
+        "custom"
+    );
+    assert_eq!(m["returns"]["max_regions"], 64);
+    let out = rascal(&["ops", "describe", "rasterize"]);
+    assert!(out.status.success());
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        text.contains("when to use:") && text.contains("location (Location, required)"),
+        "{text}"
+    );
+    let out = rascal(&["ops", "describe", "nope"]);
+    assert_eq!(out.status.code(), Some(64));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("unknown op nope"));
+}
+
+#[test]
+fn invalid_args_exits_64_with_and_without_strict_and_is_in_the_journal() {
+    let dir = scratch("invalid");
+    let floor = repo_root().join("fixtures/images/floor.png");
+    let recipe = repo_root().join("fixtures/recipes/bad-box.toml");
+    for (name, strict) in [("a", false), ("b", true)] {
+        let out_dir = dir.join(name);
+        let mut args = vec![
+            "run",
+            recipe.to_str().unwrap(),
+            floor.to_str().unwrap(),
+            "--out",
+            out_dir.to_str().unwrap(),
+        ];
+        if strict {
+            args.push("--strict");
+        }
+        let out = rascal(&args);
+        assert_eq!(
+            out.status.code(),
+            Some(64),
+            "strict {strict}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(String::from_utf8_lossy(&out.stderr).contains("x0 < x1"));
+        let lines = journal(&out_dir);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert_eq!(lines[0]["envelope"]["status"], "invalid_args");
+        assert_eq!(lines[0]["step"], "find");
+        assert!(
+            !out_dir.join("artifacts").exists()
+                || std::fs::read_dir(out_dir.join("artifacts"))
+                    .unwrap()
+                    .count()
+                    == 0
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn not_applicable_exits_1_under_strict_and_0_without_and_names_the_requirement() {
+    let dir = scratch("na");
+    let floor = repo_root().join("fixtures/images/floor.png");
+    let recipe = repo_root().join("fixtures/recipes/outside-box.toml");
+    for (name, strict, code) in [("a", false, 0), ("b", true, 1)] {
+        let out_dir = dir.join(name);
+        let mut args = vec![
+            "run",
+            recipe.to_str().unwrap(),
+            floor.to_str().unwrap(),
+            "--out",
+            out_dir.to_str().unwrap(),
+        ];
+        if strict {
+            args.push("--strict");
+        }
+        let out = rascal(&args);
+        assert_eq!(
+            out.status.code(),
+            Some(code),
+            "strict {strict}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(err.contains("step find reported not_applicable"), "{err}");
+        assert!(
+            err.contains("step mask requires find.location, but step find did not produce it"),
+            "{err}"
+        );
+        let lines = journal(&out_dir);
+        // One op line for find, one note for the blocked requirement, nothing for mask.
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        assert_eq!(lines[0]["envelope"]["status"], "not_applicable");
+        assert_eq!(lines[1]["event"], "note");
+        assert!(
+            !out_dir.join("artifacts").exists()
+                || std::fs::read_dir(out_dir.join("artifacts"))
+                    .unwrap()
+                    .count()
+                    == 0
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

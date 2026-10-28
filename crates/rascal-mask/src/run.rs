@@ -50,6 +50,7 @@ pub struct RunArgs {
 pub struct RunReport {
     pub status: Status,
     pub stopped_at: Option<String>,
+    pub reason: Option<String>,
     pub mask_dir: Option<PathBuf>,
     pub renders: Vec<(String, PathBuf)>,
 }
@@ -103,6 +104,7 @@ pub fn run(registry: &OpRegistry, args: &RunArgs) -> Result<RunReport> {
     Ok(RunReport {
         status: outcome.status,
         stopped_at: outcome.stopped_at,
+        reason: outcome.reason,
         mask_dir,
         renders: outcome.renders,
     })

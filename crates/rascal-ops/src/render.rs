@@ -12,7 +12,9 @@ use rascal_core::artifact::{Artifact, ArtifactType};
 use rascal_core::error::Result;
 use rascal_core::image::{Image, RenderingRole, Role};
 use rascal_core::mask::Mask;
-use rascal_core::op::{Context, Inputs, Manifest, Op, Output, Param, Params, Port};
+use rascal_core::op::{
+    Context, Cost, CostTier, Inputs, Manifest, Op, Output, Param, ParamKind, Params, Port,
+};
 use rascal_core::recipe::image_artifact;
 
 /// The op.
@@ -22,34 +24,40 @@ const NAME: &str = "render";
 
 impl Op for Render {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            name: NAME.to_string(),
-            version: "0.1.0".to_string(),
-            purpose: "A mask rendered for one consumer; the record stays the truth.".to_string(),
-            inputs: vec![
+        Manifest::new(
+            NAME,
+            "0.1.0",
+            "A mask rendered for one consumer; the record stays the truth.",
+            "When a filler, a viewer or a test needs to see a mask as pixels: a grey weight map, a binary at a threshold, the photo tinted or cut out.",
+            "When an op needs the mask itself: a rendering is an Image and is never accepted where a Mask is declared.",
+            "An Image with the rendering role. grey is 8-bit round(255 · w), 255 = paint. Task 1.5 adds binary, alpha, tinted and overlay.",
+            Cost {
+                tier: CostTier::Cheap,
+                seconds: 0.05,
+            },
+            vec![
                 Port {
                     name: "mask".to_string(),
                     artifact_type: ArtifactType::Mask,
                     required: true,
+                    purpose: "The mask to render.".to_string(),
                 },
                 Port {
                     name: "image".to_string(),
                     artifact_type: ArtifactType::Image,
                     required: false,
+                    purpose: "The image to draw on, for image_input profiles; in the mask's frame."
+                        .to_string(),
                 },
             ],
-            outputs: vec![Port {
+            vec![Port {
                 name: "image".to_string(),
                 artifact_type: ArtifactType::Image,
                 required: true,
+                purpose: "The rendering.".to_string(),
             }],
-            params: vec![Param {
-                name: "for".to_string(),
-                purpose: "the profile: grey (task 1.5 adds binary, alpha, tinted, overlay)"
-                    .to_string(),
-                required: true,
-            }],
-        }
+            vec![Param::required("for", "The profile.", ParamKind::Choice).choices(&["grey"])],
+        )
     }
 
     fn run(&self, context: &Context<'_>, inputs: &Inputs, params: &Params) -> Result<Output> {
@@ -60,10 +68,7 @@ impl Op for Render {
             .get("for")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::op(NAME, "parameter for is required"))?;
-        let frame = context
-            .frames
-            .get(&mask.record.frame)
-            .ok_or_else(|| Error::op(NAME, format!("frame {} is unknown", mask.record.frame)))?;
+        let frame = context.frames.require(&mask.record.frame)?;
         let pixels = match profile {
             "grey" => DynamicImage::ImageLuma8(grey(mask)),
             // REPLACED BY 1.5.
@@ -86,7 +91,6 @@ impl Op for Render {
         Ok(Output::ok(
             format!("{profile} rendering in {}", frame.id),
             outputs,
-            &BTreeMap::new(),
         ))
     }
 }

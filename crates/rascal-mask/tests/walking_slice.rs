@@ -212,7 +212,8 @@ fn render_overwrites_a_file_destination() {
     }
     let grey = image::open(&target).unwrap().to_luma8();
     assert_eq!(grey.get_pixel(100, 50)[0], 255);
-    // A profile a later task brings is an operational error, and names the task.
+    // A profile the manifest does not offer yet is a bad parameter: invalid_args, exit 64,
+    // naming the choices.
     let out = rascal(&[
         "render",
         mask.to_str().unwrap(),
@@ -221,8 +222,13 @@ fn render_overwrites_a_file_destination() {
         "--out",
         &target,
     ]);
-    assert_eq!(out.status.code(), Some(3));
-    assert!(String::from_utf8_lossy(&out.stderr).contains("1.5"));
+    assert_eq!(
+        out.status.code(),
+        Some(64),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(String::from_utf8_lossy(&out.stderr).contains("for must be one of grey"));
 }
 
 #[test]

@@ -1,1 +1,102 @@
-{"name":"rect","version":"1.0.0","purpose":"A rectangle as a location, from four fractions of the image's frame.","inputs":[{"name":"image","artifact_type":"Image","required":true}],"outputs":[{"name":"location","artifact_type":"Location","required":true}],"params":[{"name":"bbox","purpose":"[x0, y0, x1, y1] as fractions of the frame; x0 < x1 and y0 < y1","required":true}]}
+{
+  "manifest_version": 1,
+  "name": "rect",
+  "version": "1.0.0",
+  "purpose": "A rectangle as a location, from four fractions of the image's frame.",
+  "when_to_use": "When the region to mask is a known box: a caller's coordinates, a detector's bbox, a plain test shape.",
+  "when_not_to_use": "When the region has a shape (use a polygon or a stroke) or must be found (use a finder).",
+  "output_guidance": "A bbox location in the image's frame; `rasterize` makes it a mask. Not applicable when the box lies wholly outside the frame.",
+  "cost": {
+    "tier": "cheap",
+    "seconds": 0.01
+  },
+  "inputs": [
+    {
+      "name": "image",
+      "artifact_type": "Image",
+      "required": true,
+      "purpose": "The image whose frame the box is in."
+    }
+  ],
+  "outputs": [
+    {
+      "name": "location",
+      "artifact_type": "Location",
+      "required": true,
+      "purpose": "The box as a bbox location."
+    }
+  ],
+  "params": [
+    {
+      "name": "bbox",
+      "purpose": "[x0, y0, x1, y1] as fractions of the frame; x0 < x1 and y0 < y1",
+      "kind": "number_array",
+      "required": true,
+      "length": 4
+    }
+  ],
+  "returns": {
+    "max_images": 0,
+    "max_long_edge": 0,
+    "max_image_bytes": 0,
+    "max_summary_bytes": 1024,
+    "max_regions": 64,
+    "max_region_label_bytes": 64,
+    "max_measurements": 64,
+    "max_transforms": 8,
+    "max_envelope_bytes": 1048576
+  },
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "bbox": {
+        "description": "[x0, y0, x1, y1] as fractions of the frame; x0 < x1 and y0 < y1",
+        "items": {
+          "type": "number"
+        },
+        "maxItems": 4,
+        "minItems": 4,
+        "type": "array"
+      }
+    },
+    "required": [
+      "bbox"
+    ],
+    "title": "rect parameters",
+    "type": "object"
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "location": {
+        "additionalProperties": false,
+        "description": "The box as a bbox location.",
+        "properties": {
+          "artifact_type": {
+            "const": "Location"
+          },
+          "id": {
+            "type": "string"
+          },
+          "identity": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_type",
+          "id",
+          "identity"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "location"
+    ],
+    "title": "rect artifacts",
+    "type": "object"
+  }
+}

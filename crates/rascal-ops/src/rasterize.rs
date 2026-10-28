@@ -11,7 +11,9 @@ use rascal_core::artifact::{Artifact, ArtifactType};
 use rascal_core::error::Result;
 use rascal_core::location::Location;
 use rascal_core::mask::{Mask, Source, UseCase};
-use rascal_core::op::{Context, Inputs, Manifest, Op, Output, Param, Params, Port};
+use rascal_core::op::{
+    Context, Cost, CostTier, Inputs, Manifest, Op, Output, Param, ParamKind, Params, Port,
+};
 use rascal_core::recipe::mask_artifact;
 
 /// The op.
@@ -21,33 +23,47 @@ const NAME: &str = "rasterize";
 
 impl Op for Rasterize {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            name: NAME.to_string(),
-            version: "0.1.0".to_string(),
-            purpose: "A location's interior as the core of a new mask in its frame.".to_string(),
-            inputs: vec![
+        Manifest::new(
+            NAME,
+            "0.1.0",
+            "A location's interior as the core of a new mask in its frame.",
+            "When a location (a box, a polygon, a line, a stroke, the whole image) should become a mask as drawn, before any refinement.",
+            "When the mark is rough and should be tightened to the defect's edges (use tighten), or when the location is a view or absent, which have no interior.",
+            "A mask whose core is the interior; blend and protect are empty. Not applicable for view and absent locations, or a box that covers no pixel.",
+            Cost {
+                tier: CostTier::Cheap,
+                seconds: 0.05,
+            },
+            vec![
                 Port {
                     name: "location".to_string(),
                     artifact_type: ArtifactType::Location,
                     required: true,
+                    purpose: "The location to rasterize.".to_string(),
                 },
                 Port {
                     name: "image".to_string(),
                     artifact_type: ArtifactType::Image,
                     required: true,
+                    purpose: "An image in the location's frame, for the frame.".to_string(),
                 },
             ],
-            outputs: vec![Port {
+            vec![Port {
                 name: "mask".to_string(),
                 artifact_type: ArtifactType::Mask,
                 required: true,
+                purpose: "The mask with the interior as its core.".to_string(),
             }],
-            params: vec![Param {
-                name: "use_case".to_string(),
-                purpose: "seam | remove | repair | protect | custom (default custom)".to_string(),
-                required: false,
-            }],
-        }
+            vec![
+                Param::optional(
+                    "use_case",
+                    "The use case recorded on the mask.",
+                    ParamKind::Choice,
+                    serde_json::json!("custom"),
+                )
+                .choices(&["seam", "remove", "repair", "protect", "custom"]),
+            ],
+        )
     }
 
     fn run(&self, context: &Context<'_>, inputs: &Inputs, params: &Params) -> Result<Output> {
@@ -66,14 +82,14 @@ impl Op for Rasterize {
                 ),
             ));
         }
-        let frame = context
-            .frames
-            .get(&image.record.frame)
-            .ok_or_else(|| Error::op(NAME, format!("frame {} is unknown", image.record.frame)))?;
-        let use_case = match params.get("use_case").and_then(|v| v.as_str()) {
+        let frame = context.frames.require(&image.record.frame)?;
+        let use_case: UseCase = match params.get("use_case").and_then(|v| v.as_str()) {
             None => UseCase::Custom,
-            Some(text) => serde_json::from_value(serde_json::Value::String(text.to_string()))
-                .map_err(|_| Error::op(NAME, format!("unknown use_case {text}")))?,
+            Some(text) => match serde_json::from_value(serde_json::Value::String(text.to_string()))
+            {
+                Ok(use_case) => use_case,
+                Err(_) => return Ok(Output::invalid_args(format!("unknown use_case {text}"))),
+            },
         };
         let (width, height) = (frame.width, frame.height);
         let core = match location {
@@ -123,7 +139,6 @@ impl Op for Rasterize {
                 location.kind()
             ),
             outputs,
-            &BTreeMap::new(),
         ))
     }
 }

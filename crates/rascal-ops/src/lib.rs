@@ -10,18 +10,19 @@ pub mod render;
 
 use rascal_core::registry::OpRegistry;
 
-/// Registers every op this crate ships.
-pub fn register_all(registry: &mut OpRegistry) {
-    registry.register(Box::new(rect::Rect));
-    registry.register(Box::new(rasterize::Rasterize));
-    registry.register(Box::new(render::Render));
+/// Registers every op this crate ships; a manifest that fails its check is an error.
+pub fn register_all(registry: &mut OpRegistry) -> rascal_core::error::Result<()> {
+    registry.register(Box::new(rect::Rect))?;
+    registry.register(Box::new(rasterize::Rasterize))?;
+    registry.register(Box::new(render::Render))?;
+    Ok(())
 }
 
 /// A registry holding the whole catalogue.
-pub fn registry() -> OpRegistry {
+pub fn registry() -> rascal_core::error::Result<OpRegistry> {
     let mut registry = OpRegistry::new();
-    register_all(&mut registry);
-    registry
+    register_all(&mut registry)?;
+    Ok(registry)
 }
 
 /// Reads a parameter as a float array of fixed length.

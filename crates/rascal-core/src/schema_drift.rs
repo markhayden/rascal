@@ -82,7 +82,7 @@ pub fn inventory() -> Vec<BoundaryType> {
     use crate::journal::JournalLine;
     use crate::location::Location;
     use crate::mask::MaskRecord;
-    use crate::op::Manifest;
+    use crate::op::{Envelope, Manifest};
     use crate::profile::BandProfile;
     use crate::series::Series;
     vec![
@@ -120,6 +120,12 @@ pub fn inventory() -> Vec<BoundaryType> {
             "rascal/manifest-v1.json",
             Source::Generated,
             ["manifest-v1/rect.json"]
+        ),
+        boundary_type!(
+            Envelope,
+            "rascal/envelope-v1.json",
+            Source::Generated,
+            ["envelope-v1/ok.json", "envelope-v1/not-applicable.json"]
         ),
         boundary_type!(
             BandProfile,
@@ -171,12 +177,21 @@ pub const COMPONENTS: &[&str] = &[
     "Prescription",
     "ProvenanceNode",
     "Windows",
+    "Refinement",
+    "ParamKind",
+    "CostTier",
+    "Cost",
+    "Bounds",
+    "Measurement",
+    "Region",
+    "EnvelopeImage",
+    "Transform",
+    "Provenance",
     "ArtifactType",
     "Port",
     "Param",
     "Status",
     "ArtifactRef",
-    "Envelope",
     "Event",
 ];
 
