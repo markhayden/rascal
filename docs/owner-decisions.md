@@ -30,3 +30,10 @@ The owner also asks for breadth of framing. Wrapped images and 360 panoramas are
 case among many, not the project's identity. Examples, fixtures and docs draw on varied subjects
 (stitched scans, product shots, archival prints, interiors, landscapes, screens and signs) rather
 than any single industry.
+
+## 8. Merging and pushing at checkpoints
+
+2026-10-28, at the M0 checkpoint. After the owner has reviewed and approved a milestone, the
+agent merges it into `main`, runs `just check` on the merge commit, pushes `main` and the tags,
+waits for CI on both platforms, and tags the checkpoint. `main` is never force pushed, and no
+milestone is merged without the owner's approval.
