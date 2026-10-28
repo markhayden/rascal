@@ -1,0 +1,368 @@
+{
+  "$defs": {
+    "EnvelopeImage": {
+      "additionalProperties": false,
+      "description": "An image a tool returned: a new `crop` frame with its parent and mapping.",
+      "properties": {
+        "base64": {
+          "description": "The bytes, inline for built-ins and MCP content blocks alike; stored as an artifact later.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "frame": {
+          "type": "string"
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mapping": {
+          "$ref": "#/$defs/Mapping"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "parent": {
+          "type": "string"
+        },
+        "width": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "frame",
+        "parent",
+        "mapping",
+        "media_type",
+        "width",
+        "height"
+      ],
+      "type": "object"
+    },
+    "Location": {
+      "additionalProperties": false,
+      "description": "A location as a tagged record with nullable fields (see SPEC \"Frames and locations\"). The\nfields `kind` needs are set; every other field is null.",
+      "properties": {
+        "bbox": {
+          "description": "`[left, top, right, bottom]` as fractions of the frame's width and height, each between 0 and 1 (never pixels).",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "fov": {
+          "description": "Degrees, 10 to 120, for `view`.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "frame": {
+          "description": "A frame id as given in the conversation, for example `raw:candidate` or a crop a tool returned.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/LocationKind",
+          "description": "`bbox` and `polygon` take coordinates; `view` takes yaw, pitch and fov; `whole_image` and `absent` take nothing."
+        },
+        "pitch": {
+          "description": "Degrees, -90 to 90, for `view`.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "polygon": {
+          "description": "Three to sixty-four `[x, y]` points as fractions of the frame's width and height, between 0 and 1.",
+          "items": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "yaw": {
+          "description": "Degrees, -180 to 180, for `view` on an equirectangular frame.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "frame",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "LocationKind": {
+      "enum": [
+        "bbox",
+        "polygon",
+        "view",
+        "whole_image",
+        "absent"
+      ],
+      "type": "string"
+    },
+    "Mapping": {
+      "description": "How a derived frame sits inside its parent.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "The frame covers this normalised box of the parent (may extend past the parent's edges).",
+          "properties": {
+            "bbox": {
+              "items": {
+                "format": "double",
+                "type": "number"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            }
+          },
+          "required": [
+            "bbox"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A square perspective view of an equirectangular parent (mapping maths in task 4.2a).",
+          "properties": {
+            "view": {
+              "properties": {
+                "fov": {
+                  "format": "double",
+                  "type": "number"
+                },
+                "pitch": {
+                  "format": "double",
+                  "type": "number"
+                },
+                "yaw": {
+                  "format": "double",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "yaw",
+                "pitch",
+                "fov"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "view"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Measurement": {
+      "additionalProperties": false,
+      "properties": {
+        "frame": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "value": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "value",
+        "unit"
+      ],
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "duration_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lock_digest": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tool": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool",
+        "version",
+        "duration_ms"
+      ],
+      "type": "object"
+    },
+    "Region": {
+      "additionalProperties": false,
+      "description": "A region a tool points at. Becomes an evidence item on the checklist.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "score": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "location",
+        "label",
+        "score"
+      ],
+      "type": "object"
+    },
+    "Status": {
+      "enum": [
+        "ok",
+        "measured_nothing",
+        "not_applicable",
+        "invalid_args"
+      ],
+      "type": "string"
+    },
+    "Transform": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "params": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "quality": {
+          "default": null
+        },
+        "to": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "from",
+        "to",
+        "kind",
+        "params"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "envelope_version": {
+      "default": 1,
+      "description": "The envelope schema version (`ENVELOPE_VERSION`); absent means the current one.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "images": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/EnvelopeImage"
+      },
+      "type": "array"
+    },
+    "measurements": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Measurement"
+      },
+      "type": "array"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "regions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Region"
+      },
+      "type": "array"
+    },
+    "status": {
+      "$ref": "#/$defs/Status"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "transforms": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Transform"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "status",
+    "summary",
+    "provenance"
+  ],
+  "title": "Envelope",
+  "type": "object"
+}

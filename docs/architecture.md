@@ -77,4 +77,4 @@ which parts exist; it is updated in the same commit as the code it describes.
 | the Python pack | tools/python | not started | M5 |
 | the lab | rascal-mask | not started | M6 |
 | the Poisson paste | rascal-ops | not started | M7 |
-| schema drift harness and boundary-type inventory | rascal-core | not started | M0 task 0.4 |
+| schema drift harness and boundary-type inventory | rascal-core | done | M0 task 0.4 |

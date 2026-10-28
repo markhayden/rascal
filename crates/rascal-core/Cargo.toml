@@ -8,6 +8,13 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+schemars = { workspace = true }
+jsonschema = { workspace = true }
+sha2 = { workspace = true }
 
 [lints]
 workspace = true

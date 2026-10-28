@@ -1,0 +1,207 @@
+{
+  "$defs": {
+    "Bounds": {
+      "additionalProperties": false,
+      "description": "Upper bounds on everything a tool may return. The harness refuses an envelope over any bound.",
+      "properties": {
+        "max_envelope_bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_image_bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_images": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_long_edge": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_measurements": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_region_label_bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_regions": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_summary_bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_transforms": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_images",
+        "max_long_edge",
+        "max_image_bytes",
+        "max_summary_bytes",
+        "max_regions",
+        "max_region_label_bytes",
+        "max_measurements",
+        "max_transforms",
+        "max_envelope_bytes"
+      ],
+      "type": "object"
+    },
+    "Cost": {
+      "additionalProperties": false,
+      "properties": {
+        "seconds": {
+          "description": "Rough duration of one call, in seconds.",
+          "format": "double",
+          "type": "number"
+        },
+        "tier": {
+          "$ref": "#/$defs/CostTier"
+        }
+      },
+      "required": [
+        "tier",
+        "seconds"
+      ],
+      "type": "object"
+    },
+    "CostTier": {
+      "enum": [
+        "cheap",
+        "moderate",
+        "expensive"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A tool's self-description. `model_schema` is what the provider receives; `input_schema` is\n`model_schema` plus the required `_dejaview` context; `output_schema` names the measurements\nthe tool may return (the envelope shape itself is fixed).",
+  "properties": {
+    "accepts_hints": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "concurrent": {
+      "default": false,
+      "type": "boolean"
+    },
+    "cost": {
+      "$ref": "#/$defs/Cost"
+    },
+    "evidence_kind": {
+      "default": null,
+      "description": "What its regions are evidence of; obligations bind to kinds, never to tools.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "frame_args": {
+      "default": [],
+      "description": "Arguments that take frame ids.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "frames_out": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "image_args": {
+      "default": [],
+      "description": "Arguments that take image ids.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "input_schema": true,
+    "manifest_version": {
+      "default": 1,
+      "description": "The manifest schema version (`MANIFEST_VERSION`); absent means the current one.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "model_schema": true,
+    "name": {
+      "type": "string"
+    },
+    "output_guidance": {
+      "type": "string"
+    },
+    "output_schema": true,
+    "pairs_with": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "preconditions": {
+      "default": "",
+      "type": "string"
+    },
+    "purpose": {
+      "type": "string"
+    },
+    "requires": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "returns": {
+      "$ref": "#/$defs/Bounds"
+    },
+    "version": {
+      "type": "string"
+    },
+    "when_not_to_use": {
+      "type": "string"
+    },
+    "when_to_use": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "version",
+    "purpose",
+    "when_to_use",
+    "when_not_to_use",
+    "output_guidance",
+    "cost",
+    "returns",
+    "model_schema",
+    "input_schema",
+    "output_schema"
+  ],
+  "title": "Manifest",
+  "type": "object"
+}
