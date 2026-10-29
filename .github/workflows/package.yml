@@ -2,8 +2,9 @@ name: package
 
 # Proves the crates package as crates.io would serve them: the packaging check, the generated
 # release workflow being current, and a workspace publish dry run (package, verify, no upload).
-# It also runs scripts/acceptance.sh: the six recipes, serve with the independent client and
-# the docs coverage, all against a `rascal` installed from the packages.
+# It also runs scripts/acceptance.sh: the six recipes, serve with the independent client, the
+# docs coverage and the Python pack's bundle installed with no network, all against a `rascal`
+# installed from the packages; the bundle step runs again on macOS arm64 against a debug build.
 on:
   push:
     branches: ["main", "m*"]
@@ -29,7 +30,33 @@ jobs:
         run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.33.1/cargo-dist-installer.sh | sh
       - name: The generated release workflow is current
         run: dist generate --check && dist plan
+      - name: Install uv and the pack's Python (the bundle step's prerequisites)
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.23"
+          python-version: "3.12"
+      - name: Sync the Python pack's environment (the pytest bundle test runs in it)
+        run: uv sync --frozen --project tools/python
       - run: scripts/check-packaging.sh
       - run: scripts/publish.sh --dry-run
       - name: Release acceptance from the packaged crates
         run: scripts/acceptance.sh
+
+  bundle-macos:
+    name: bundle on macOS arm64
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the toolchain from rust-toolchain.toml
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Install uv and the pack's Python
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.23"
+          python-version: "3.12"
+      - name: Sync the Python pack's environment
+        run: uv sync --frozen --project tools/python
+      - run: cargo build -p rascal-mask
+      - name: The bundle, installed and called with no network
+        run: scripts/bundle-acceptance.sh target/debug/rascal

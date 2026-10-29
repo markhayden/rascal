@@ -8,6 +8,9 @@
 # 3. Start `serve` and drive it with the independent client through the seam ops; read the same
 #    workspace back with the CLI.
 # 4. The docs name every op, profile, panel and measure in the registry and nothing else.
+# 5. The Python pack's bundle: built for this machine, installed by `rascal tools setup` with
+#    no network and empty caches, called, and a tampered copy refused
+#    (scripts/bundle-acceptance.sh; skipped without uv outside CI).
 #
 # Needs the toolchain, python3 on PATH, and a warm registry cache (no network is used when the
 # cache holds every dependency; CI's cache does). The install is locked to the workspace's
@@ -93,6 +96,9 @@ inspected "$runs/served/artifacts/$served_dir"
 
 step "docs coverage, read from the installed binary"
 RASCAL_BIN="$rascal" scripts/check-docs.sh
+
+step "the Python pack's bundle, installed and called with no network"
+scripts/bundle-acceptance.sh "$rascal" "$scratch/bundle"
 
 echo
 echo "acceptance ok: rascal $version"

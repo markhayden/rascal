@@ -231,6 +231,30 @@ Launch is `tools/python/.venv/bin/rascal-tools serve` after `uv sync --frozen` t
 `crates/rascal-mask/tests/packs_real.rs` drives it through rascal's client. `segment` arrives
 with the owner's segmenter decision (`tools/python/MODEL.md`).
 
+**The bundle and offline setup.** A release ships one bundle per platform (`macos-arm64`,
+`linux-x86_64`), built by `scripts/build-bundle.sh <platform> <dir>` on a connected machine:
+the directory is the provisioning project itself (`pyproject.toml` pinning the pack wheel by
+relative path for that platform only, and its `uv.lock`, resolved against the wheelhouse and
+nothing else), `wheel/` (the pack from `uv build`), `wheelhouse/` (every locked dependency as
+a wheel for the platform and Python 3.12), `MODEL.md`, `artifacts.toml`, and `bundle.toml`
+naming the pack, its version, the Python version, the platform and the SHA-256 of every file
+(the model artifacts' bytes join it with `segment`). On the target machine the prerequisites
+are `uv` and a Python 3.12 it can find without downloading one (`uv python install 3.12` on a
+connected machine). `rascal tools setup --bundle <dir> --into <dir>` (or `--config rascal.toml`,
+installing where the pack entry's `command` points, `<dir>/.venv/bin/rascal-tools`) checks the
+platform, verifies every digest (a mismatch or a missing file is refused with exit 3 naming the
+file, before anything is written), copies exactly the listed files, runs `uv sync --frozen
+--no-dev --offline --no-index --find-links wheelhouse --no-cache` with interpreter downloads
+forbidden, smokes the launcher's `--version`, and prints the `command` line for the pack
+entry; an earlier install in the same directory (one holding a `bundle.toml`) is replaced
+whole, any other non-empty directory is refused. The SHA-256 of `bundle.toml` is the bundle
+digest the lab records. Launch never touches the network. `scripts/bundle-acceptance.sh`
+(part of `scripts/acceptance.sh`, and a macOS job in the package workflow) builds this
+machine's bundle, installs it with the network disabled where the kernel allows (`unshare
+-rn`) and the caches empty, calls `echo_region` through the install, refuses a tampered copy,
+and runs the pytest bundle test (`tools/python/tests/test_bundle.py`, which checks the build's
+output when `RASCAL_BUNDLE` names one and skips otherwise).
+
 **The fake pack** (`rascal fake-pack <behaviour>` with the `testkit` feature, or the testkit's
 `fake-pack` binary) serves `segment` with one selectable behaviour: `exact`, `bad-schema`,
 `over-bounds`, `block-mismatch`, `foreign-frame`, `wrong-size`, `non-png`, `slow`,
