@@ -48,14 +48,15 @@ pub fn sobel_magnitude(plane: &[f32], width: u32, height: u32) -> Vec<f32> {
     let mut out = vec![0.0f32; plane.len()];
     for y in 0..h {
         for x in 0..w {
-            let gx = -at(x - 1, y - 1) - 2.0 * at(x - 1, y) - at(x - 1, y + 1)
-                + at(x + 1, y - 1)
-                + 2.0 * at(x + 1, y)
-                + at(x + 1, y + 1);
-            let gy = -at(x - 1, y - 1) - 2.0 * at(x, y - 1) - at(x + 1, y - 1)
-                + at(x - 1, y + 1)
-                + 2.0 * at(x, y + 1)
-                + at(x + 1, y + 1);
+            // Differences first, so a constant neighbourhood gives exactly zero (a sum of
+            // signed terms would leave floating noise, and a zero gradient is a case the
+            // measures test for).
+            let gx = (at(x + 1, y - 1) - at(x - 1, y - 1))
+                + 2.0 * (at(x + 1, y) - at(x - 1, y))
+                + (at(x + 1, y + 1) - at(x - 1, y + 1));
+            let gy = (at(x - 1, y + 1) - at(x - 1, y - 1))
+                + 2.0 * (at(x, y + 1) - at(x, y - 1))
+                + (at(x + 1, y + 1) - at(x + 1, y - 1));
             out[(y * w + x) as usize] = (gx * gx + gy * gy).sqrt() / 8.0;
         }
     }

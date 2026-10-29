@@ -85,12 +85,13 @@ fn band_mask(f: &Frame, half: f64) -> Mask {
     mask
 }
 
-/// Left and right halves of two flat colours, with optional texture (a checker of `amp`)
-/// everywhere.
+/// Left and right halves of two flat colours, with optional texture everywhere: a
+/// deterministic pattern of amplitude `amp` whose Sobel gradient is nowhere zero (a checker's
+/// would be, since the 3x3 operator sees identical columns).
 fn halves(left: [u8; 3], right: [u8; 3], amp: i16) -> RgbImage {
     RgbImage::from_fn(W, H, |x, y| {
         let base = if x < C { left } else { right };
-        let t = if (x + y) % 2 == 0 { amp } else { -amp };
+        let t = (((x * 7 + y * 13) % 5) as i16 - 2) * amp;
         Rgb([
             (i16::from(base[0]) + t).clamp(0, 255) as u8,
             (i16::from(base[1]) + t).clamp(0, 255) as u8,
