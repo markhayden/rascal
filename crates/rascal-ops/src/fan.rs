@@ -389,9 +389,14 @@ pub fn fan_profile(
         scaled(s.texture_cols),
     );
     let wins = windows(column_px, thin, gap, step_cols, texture_cols, w);
-    for (name, lo, hi) in wins {
-        if hi - lo < 2 {
-            return Err(Clipped(name, (hi - lo).max(0) as u32));
+    // A window keeps at least two columns after clipping to the frame, or all of its columns
+    // when the scaled geometry asked for fewer (a step window is one column on a small
+    // canvas); otherwise the line is too near an edge for this width.
+    for (i, (name, lo, hi)) in wins.into_iter().enumerate() {
+        let asked = if i < 2 { step_cols } else { texture_cols };
+        let left = (hi - lo).max(0) as u32;
+        if left < asked.min(2) {
+            return Err(Clipped(name, left));
         }
     }
     let [(_, sl0, sl1), (_, sr0, sr1), (_, tl0, tl1), (_, tr0, tr1)] = wins;

@@ -68,3 +68,28 @@ pub fn measure(registry: &OpRegistry, args: &MeasureArgs) -> Result<Envelope> {
 pub fn list() -> String {
     rascal_ops::measure::MEASURES.join("\n")
 }
+
+/// The workspace form: `after`, `before` and `mask` are ids (or identities) in `workspace`,
+/// and the invocation is journaled there like any op's.
+pub fn measure_in_workspace(
+    registry: &OpRegistry,
+    workspace: &std::path::Path,
+    after: &str,
+    before: Option<&str>,
+    mask: &str,
+    set: Option<&str>,
+) -> Result<Envelope> {
+    let ws = rascal_core::workspace::Workspace::open(workspace)?;
+    let mut inputs = BTreeMap::new();
+    inputs.insert("after".to_string(), ws.load(after)?);
+    if let Some(before) = before {
+        inputs.insert("before".to_string(), ws.load(before)?);
+    }
+    inputs.insert("mask".to_string(), ws.load(mask)?);
+    let mut params = Params::new();
+    if let Some(set) = set {
+        params.insert("set".to_string(), toml::Value::String(set.to_string()));
+    }
+    let invocation = ws.invoke("measure", "measure", registry, &inputs, &params)?;
+    Ok(invocation.output.envelope)
+}

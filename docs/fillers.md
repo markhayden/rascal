@@ -49,6 +49,32 @@ bytes, the duration, the exit code or HTTP status, and the outcome. The key is h
 `Authorization` header and appears in no file, message or span; a wrong key is reported as the
 server's status, and an unset `key_env` as a usage error naming the variable.
 
+## `heal`: the typed graph
+
+```
+rascal heal seam pano.jpg --filler local-inpaint --config rascal.toml --out run/
+rascal heal seam pano.jpg --filler local-inpaint --config rascal.toml --out run2/ --replay run/ --no-dash
+```
+
+`heal` runs the recipe and then the fixed graph of SPEC.md "Recipes" over its declared outputs
+(`mask`, `image`, and `plan` when the mask's frame is a `cut:`), every step an op invocation in
+the journal: `apply` (the prescriptions; a mask without one leaves the image as is), `window`
+when the filler has `max_side` (a support larger than it is not applicable), `render` with the
+filler's profile (and `grey` when `send_mask`), the filler call (a journal note, never the
+key), `paste` with the filler's mode, `unwindow` when windowed, `put` back onto the panorama
+when the frame was a cut, the preservation check, and `measure` in the mask's frame with the
+cut canvas as `before` and the composite as `after`. It writes `result.png`, the recipe's
+renders, `frames.json` and `locations.json`, and the run page (`--no-dash` skips it).
+
+The preservation check is in raw coordinates: every raw pixel the mask never reaches
+(`w = 0`, mapped through the crop bbox and the cut plan) and every protected pixel must equal
+this invocation's input image, or the heal is an operational error (exit 3). A filler's
+failure, timeout, mis-sized or non-PNG answer is the same.
+
+The fill is stored as an artifact with a `fill stored:` note carrying the request's identity
+(a hash of the bytes sent), so `--replay <previous run>` reuses it when the request is the same
+and makes no call: a healed run replays with the filler absent (G4).
+
 ## The fake fillers
 
 The testkit's fake filler is one implementation with six behaviours, reachable as a command

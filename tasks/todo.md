@@ -43,7 +43,7 @@ with green CI on both platforms, and then the tag.
 - [x] 2.5 `paste` (feather and hard)
 - [x] 2.6 `measure` v1
 - [x] 2.7 Fillers and the fake fillers
-- [ ] 2.8 `heal`'s typed graph and the shipped `seam` recipe → tag `m2.1`
+- [x] 2.8 `heal`'s typed graph and the shipped `seam` recipe → tag `m2.1`
 - [ ] Checkpoint M2 → tag `m2`
 
 ## M3 MCP

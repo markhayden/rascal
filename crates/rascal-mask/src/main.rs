@@ -4,6 +4,7 @@
 mod dash;
 mod exit;
 mod export;
+mod heal;
 mod inspect;
 mod measure;
 mod ops;
@@ -71,6 +72,56 @@ enum Command {
         #[arg(long)]
         strict: bool,
     },
+    /// Run a recipe and heal through a configured filler: the fixed graph with the
+    /// preservation check and the measures; writes result.png and the run page.
+    Heal {
+        /// A shipped recipe by name (seam, rect) or a recipe file.
+        recipe: String,
+        /// The image (JPEG or PNG).
+        image: PathBuf,
+        /// The filler entry in the configuration.
+        #[arg(long)]
+        filler: String,
+        /// The configuration file (rascal.toml) naming the filler.
+        #[arg(long)]
+        config: PathBuf,
+        /// The run directory: must be new or empty.
+        #[arg(long)]
+        out: PathBuf,
+        /// Bind inputs.location to a box: x0,y0,x1,y1 as fractions of the image.
+        #[arg(long, allow_hyphen_values = true, conflicts_with = "location")]
+        bbox: Option<String>,
+        /// Bind inputs.location to a location JSON file.
+        #[arg(long)]
+        location: Option<PathBuf>,
+        /// Bind inputs.stroke to a stroke location JSON file.
+        #[arg(long)]
+        stroke: Option<PathBuf>,
+        /// Bind inputs.protect to a stored mask directory.
+        #[arg(long)]
+        protect: Option<PathBuf>,
+        /// Bind inputs.mask to a stored mask directory.
+        #[arg(long)]
+        mask: Option<PathBuf>,
+        /// The prompt for the filler, when it takes one.
+        #[arg(long)]
+        prompt: Option<String>,
+        /// Keep artifacts and the journal in this workspace instead of a private one under --out.
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// The image's projection; without it an exactly 2:1 image is taken as equirectangular.
+        #[arg(long)]
+        projection: Option<ProjectionArg>,
+        /// Do not write the run page beside the journal.
+        #[arg(long)]
+        no_dash: bool,
+        /// Reuse the filler output a previous run recorded for the same request (no filler call).
+        #[arg(long)]
+        replay: Option<PathBuf>,
+        /// Exit 1 when a step is not applicable.
+        #[arg(long)]
+        strict: bool,
+    },
     /// A workspace: list what it holds, or import an image into it.
     Workspace {
         #[command(subcommand)]
@@ -133,15 +184,18 @@ enum Command {
     },
     /// The measures of a composite: continuity, tone step, transition, texture match, drift.
     Measure {
-        /// The image to measure (the composite).
+        /// The image to measure (the composite): a file, or an id with --workspace.
         #[arg(long, required_unless_present = "list")]
-        after: Option<PathBuf>,
-        /// The image before, for drift.
+        after: Option<String>,
+        /// The image before, for drift: a file, or an id with --workspace.
         #[arg(long)]
-        before: Option<PathBuf>,
-        /// The mask directory (`<id>.mask/`), with its profile for the band measures.
+        before: Option<String>,
+        /// The mask: a directory (`<id>.mask/`), or an id with --workspace.
         #[arg(long, required_unless_present = "list")]
-        mask: Option<PathBuf>,
+        mask: Option<String>,
+        /// Measure artifacts of this workspace by id, journaling the invocation there.
+        #[arg(long)]
+        workspace: Option<PathBuf>,
         /// The measures to run, comma-separated (default: all five).
         #[arg(long)]
         set: Option<String>,
@@ -265,6 +319,7 @@ impl From<ProjectionArg> for Projection {
 /// Built-in command names that an op may not shadow.
 const RESERVED: &[&str] = &[
     "run",
+    "heal",
     "render",
     "inspect",
     "export",
@@ -400,6 +455,80 @@ fn main() {
                 }
             }
         }
+        Command::Heal {
+            recipe,
+            image,
+            filler,
+            config,
+            out,
+            bbox,
+            location,
+            stroke,
+            protect,
+            mask,
+            prompt,
+            workspace,
+            projection,
+            no_dash,
+            replay,
+            strict,
+        } => {
+            let args = heal::HealArgs {
+                run: run::RunArgs {
+                    recipe,
+                    image,
+                    out,
+                    bbox,
+                    location,
+                    stroke,
+                    protect,
+                    mask,
+                    prompt,
+                    config: Some(config),
+                    workspace,
+                    projection: projection.map(Into::into),
+                    strict,
+                },
+                filler,
+                no_dash,
+                replay,
+            };
+            match heal::heal(&registry, &args) {
+                Ok(report) => {
+                    for (profile, path) in &report.renders {
+                        println!("{profile}: {}", path.display());
+                    }
+                    if let Some(result) = &report.result {
+                        println!("result: {}", result.display());
+                    }
+                    if let Some(dash) = &report.dash {
+                        println!("dash: {}", dash.display());
+                    }
+                    match report.status {
+                        Status::Ok => exit::OK,
+                        status => {
+                            eprintln!(
+                                "rascal heal: step {} reported {}: {}; nothing healed",
+                                report.stopped_at.unwrap_or_default(),
+                                serde_json::to_string(&status)
+                                    .unwrap_or_default()
+                                    .trim_matches('"'),
+                                report.reason.unwrap_or_default()
+                            );
+                            if args.run.strict {
+                                exit::NOT_APPLICABLE
+                            } else {
+                                exit::OK
+                            }
+                        }
+                    }
+                }
+                Err(error) => {
+                    eprintln!("rascal heal: {error}");
+                    exit::code_for(&error)
+                }
+            }
+        }
         Command::Workspace { command } => {
             let result = match command {
                 WorkspaceCommand::List {
@@ -521,6 +650,7 @@ fn main() {
             after,
             before,
             mask,
+            workspace,
             set,
             json,
             strict,
@@ -530,13 +660,26 @@ fn main() {
                 println!("{}", measure::list());
                 exit::OK
             } else {
-                let args = measure::MeasureArgs {
-                    before,
-                    after: after.unwrap_or_default(),
-                    mask: mask.unwrap_or_default(),
-                    set,
+                let result = match &workspace {
+                    Some(ws) => measure::measure_in_workspace(
+                        &registry,
+                        ws,
+                        after.as_deref().unwrap_or_default(),
+                        before.as_deref(),
+                        mask.as_deref().unwrap_or_default(),
+                        set.as_deref(),
+                    ),
+                    None => measure::measure(
+                        &registry,
+                        &measure::MeasureArgs {
+                            before: before.map(PathBuf::from),
+                            after: PathBuf::from(after.unwrap_or_default()),
+                            mask: PathBuf::from(mask.unwrap_or_default()),
+                            set,
+                        },
+                    ),
                 };
-                match measure::measure(&registry, &args) {
+                match result {
                     Ok(envelope) => {
                         if json {
                             println!(

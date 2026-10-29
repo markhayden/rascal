@@ -83,7 +83,7 @@ without. A bad parameter value is `invalid_args` in the journal and exit 64.
 | recipe | since | steps |
 |---|---|---|
 | `rect` | 1.1 | `inputs.location` → `rasterize`; renders `grey` |
-| `seam` | M2 | `cut` → `line` → `fan` → `profile` → `ramp` |
+| `seam` | 2.8 | `cut` → `line` → `fan` → `profile` → `ramp`; outputs the band mask, the cut canvas and the plan; `heal seam` consumes them (`docs/fillers.md`) |
 | `remove`, `repair`, `repair-area`, `protect` | M4 | see SPEC.md "Recipes" |
 
 ## The configuration file

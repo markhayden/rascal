@@ -457,10 +457,7 @@ pub fn build(root: &Path) -> Result<String> {
         )
         .replace("{{SUMMARY}}", &panel::escape(&summary))
         .replace("{{WATERFALL_ROWS}}", &rows.join("\n"))
-        .replace(
-            "{{CALLS}}",
-            "<p class=\"empty\" data-calls=\"0\">No filler or pack calls in this journal.</p>",
-        )
+        .replace("{{CALLS}}", &calls_table(&lines))
         .replace("{{STEPS}}", &steps.join("\n"))
         .replace(
             "{{ASSETS}}",
@@ -533,4 +530,45 @@ fn read_request_head(stream: &mut std::net::TcpStream) -> bool {
             return false;
         }
     }
+}
+
+/// The filler and pack call rows, from the journal's `filler call:` notes.
+fn calls_table(lines: &[JournalLine]) -> String {
+    let calls: Vec<(u64, serde_json::Value)> = lines
+        .iter()
+        .filter_map(|l| {
+            let text = l.note.as_deref()?.strip_prefix("filler call: ")?;
+            serde_json::from_str::<serde_json::Value>(text)
+                .ok()
+                .map(|v| (l.seq, v))
+        })
+        .collect();
+    if calls.is_empty() {
+        return "<p class=\"empty\" data-calls=\"0\">No filler or pack calls in this journal.</p>"
+            .to_string();
+    }
+    let rows: Vec<String> = calls
+        .iter()
+        .map(|(seq, c)| {
+            let s = |k: &str| panel::escape(c.get(k).and_then(|v| v.as_str()).unwrap_or(""));
+            let n = |k: &str| c.get(k).and_then(|v| v.as_i64()).unwrap_or(0);
+            format!(
+                "<tr data-call-seq=\"{seq}\"><td>{seq}</td><td>filler</td><td>{}</td><td>{}</td><td>{}x{}</td><td>{} / {} bytes</td><td>{} ms</td><td>{}</td><td>{}</td></tr>",
+                s("filler"),
+                s("target"),
+                n("request_width"),
+                n("request_height"),
+                n("request_bytes"),
+                n("response_bytes"),
+                n("duration_ms"),
+                n("status"),
+                s("outcome")
+            )
+        })
+        .collect();
+    format!(
+        "<table data-calls=\"{}\"><thead><tr><th>#</th><th>kind</th><th>name</th><th>target</th><th>request</th><th>bytes</th><th>duration</th><th>status</th><th>outcome</th></tr></thead><tbody>{}</tbody></table>",
+        calls.len(),
+        rows.join("")
+    )
 }

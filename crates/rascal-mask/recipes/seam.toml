@@ -1,0 +1,47 @@
+# The seam recipe (SPEC.md "Recipes"): the wrap edge of an equirectangular image. cut makes the
+# canvas whose centre column is the wrap edge; line names it; fan measures the band; profile
+# makes the mask; ramp prescribes the tone step. heal takes the outputs from here.
+version = 1
+name = "seam"
+use_case = "seam"
+projection = "equirectangular"
+
+[inputs]
+image = { type = "Image" }
+
+[[step]]
+id = "cut"
+op = "cut"
+inputs = { image = "inputs.image" }
+strip = 0.07
+
+[[step]]
+id = "line"
+op = "line"
+inputs = { image = "cut.image" }
+column = 0.5
+width_px = 2.0
+
+[[step]]
+id = "fan"
+op = "fan"
+inputs = { image = "cut.image", line = "line.location" }
+constants = "fan-v1"
+
+[[step]]
+id = "band"
+op = "profile"
+inputs = { band = "fan.band" }
+constants = "profile-v1"
+
+[[step]]
+id = "ramp"
+op = "ramp"
+inputs = { image = "cut.image", mask = "band.mask" }
+constants = "ramp-v1"
+
+[outputs]
+mask = "ramp.mask"
+image = "cut.image"
+plan = "cut.plan"
+render = [{ for = "grey", out = "seam-grey.png" }]
