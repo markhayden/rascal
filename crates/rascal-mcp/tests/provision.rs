@@ -6,7 +6,9 @@
 
 use std::path::{Path, PathBuf};
 
-use rascal_mcp::provision::{Bundle, host_platform, install_dir_of, sha256_bytes};
+use rascal_mcp::provision::{
+    Bundle, Destination, Prerequisites, host_platform, install_dir_of, sha256_bytes,
+};
 
 fn scratch(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("rascal-provision-{name}-{}", std::process::id()));
@@ -57,9 +59,11 @@ fn a_sound_bundle_verifies_and_a_changed_byte_or_a_missing_file_is_refused_by_na
     assert_eq!(bundle.manifest.pack, "rascal-tools");
     assert!(bundle.digest.starts_with("sha256:"));
     bundle.verify().unwrap();
-    // The manifest's own digest is the bundle digest: the same bytes, the same digest.
-    let again = Bundle::open(&dir).unwrap();
-    assert_eq!(again.digest, bundle.digest);
+    // The manifest's own digest is the bundle digest.
+    assert_eq!(
+        bundle.digest,
+        sha256_bytes(&std::fs::read(dir.join("bundle.toml")).unwrap())
+    );
     // One byte of a wheel changes.
     let wheel = dir.join("wheelhouse/dep-1.0-py3-none-any.whl");
     std::fs::write(&wheel, [0x50, 0x4b, 8]).unwrap();
@@ -154,4 +158,136 @@ fn the_platform_check_and_the_install_directory_of_a_pack_entry() {
         None
     );
     assert_eq!(install_dir_of(&[], "rascal-tools"), None);
+    assert_eq!(
+        install_dir_of(&command(".venv/bin/rascal-tools"), "rascal-tools"),
+        None,
+        "a bare .venv names no directory"
+    );
+    assert_eq!(
+        install_dir_of(&command("tools/.venv/bin/rascal-tools"), "rascal-tools"),
+        Some(PathBuf::from("tools"))
+    );
+}
+
+/// Prerequisites that cannot run uv: the install's copy and refusals happen before it.
+fn no_uv() -> Prerequisites {
+    Prerequisites {
+        uv: PathBuf::from("/nonexistent/uv"),
+        uv_version: "none".into(),
+        python: PathBuf::from("/nonexistent/python"),
+    }
+}
+
+fn walk(root: &Path) -> Vec<String> {
+    fn go(root: &Path, dir: &Path, out: &mut Vec<String>) {
+        for entry in std::fs::read_dir(dir).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                go(root, &path, out);
+            } else {
+                out.push(
+                    path.strip_prefix(root)
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                );
+            }
+        }
+    }
+    let mut out = Vec::new();
+    go(root, root, &mut out);
+    out.sort();
+    out
+}
+
+#[test]
+fn the_destination_is_checked_before_anything_is_written_and_exactly_the_listed_files_are_copied() {
+    let dir = scratch("destination");
+    let platform = host_platform().unwrap_or("linux-x86_64");
+    let bundle_dir = dir.join("bundle");
+    let files = synthetic(&bundle_dir, platform);
+    std::fs::write(bundle_dir.join("stray.txt"), "not listed").unwrap();
+    let bundle = Bundle::open(&bundle_dir).unwrap();
+    // An empty path, a non-empty directory without a bundle.toml, another pack's install,
+    // and an install with other files beside it: each refused by name, nothing written.
+    let err = bundle
+        .check_destination(Path::new(""))
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("install directory is empty"), "{err}");
+    let busy = dir.join("busy");
+    std::fs::create_dir_all(&busy).unwrap();
+    std::fs::write(busy.join("notes.txt"), "mine").unwrap();
+    let err = bundle.check_destination(&busy).unwrap_err().to_string();
+    assert!(err.contains("not an earlier install"), "{err}");
+    let err = bundle.install(&busy, &no_uv()).unwrap_err().to_string();
+    assert!(err.contains("not an earlier install"), "{err}");
+    assert_eq!(
+        walk(&busy),
+        vec!["notes.txt".to_string()],
+        "nothing was written"
+    );
+    let other = dir.join("other-pack");
+    synthetic(&other, platform);
+    let text = std::fs::read_to_string(other.join("bundle.toml")).unwrap();
+    std::fs::write(
+        other.join("bundle.toml"),
+        text.replace("pack = \"rascal-tools\"", "pack = \"other-tools\""),
+    )
+    .unwrap();
+    let err = bundle.check_destination(&other).unwrap_err().to_string();
+    assert!(
+        err.contains("install of other-tools, not rascal-tools"),
+        "{err}"
+    );
+    let beside = dir.join("beside");
+    synthetic(&beside, platform);
+    std::fs::create_dir_all(beside.join("models")).unwrap();
+    std::fs::write(beside.join("models/weights.bin"), "precious").unwrap();
+    let err = bundle.check_destination(&beside).unwrap_err().to_string();
+    assert!(err.contains("and also models"), "{err}");
+    assert!(beside.join("models/weights.bin").is_file(), "untouched");
+    // A fresh directory: the listed files and bundle.toml are copied, the stray file is not,
+    // and only then does uv fail to start.
+    let fresh = dir.join("fresh");
+    assert_eq!(
+        bundle.check_destination(&fresh).unwrap(),
+        Destination::Fresh
+    );
+    let err = bundle.install(&fresh, &no_uv()).unwrap_err().to_string();
+    assert!(err.contains("uv sync could not start"), "{err}");
+    let mut expected: Vec<String> = files.iter().map(|(rel, _)| rel.clone()).collect();
+    expected.push("bundle.toml".into());
+    expected.sort();
+    assert_eq!(walk(&fresh), expected);
+    // An earlier install of this pack with a stale listed file and an environment: those go,
+    // the new files come, and nothing else is touched.
+    let earlier = dir.join("earlier");
+    synthetic(&earlier, platform);
+    std::fs::write(earlier.join("wheelhouse/old-0.1-py3-none-any.whl"), "old").unwrap();
+    let text = std::fs::read_to_string(earlier.join("bundle.toml")).unwrap();
+    std::fs::write(
+        earlier.join("bundle.toml"),
+        text + "\"wheelhouse/old-0.1-py3-none-any.whl\" = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(earlier.join(".venv/bin")).unwrap();
+    std::fs::write(earlier.join(".venv/bin/rascal-tools"), "#!/bin/sh").unwrap();
+    assert!(matches!(
+        bundle.check_destination(&earlier).unwrap(),
+        Destination::Replace(_)
+    ));
+    let err = bundle.install(&earlier, &no_uv()).unwrap_err().to_string();
+    assert!(err.contains("uv sync could not start"), "{err}");
+    assert_eq!(
+        walk(&earlier),
+        expected,
+        "the old wheel and the environment are gone, the new files are there"
+    );
+    // In place: nothing copied, the stray file stays.
+    assert_eq!(
+        bundle.check_destination(&bundle_dir).unwrap(),
+        Destination::InPlace
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }

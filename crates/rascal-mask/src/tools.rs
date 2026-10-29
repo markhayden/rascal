@@ -13,7 +13,7 @@ use rascal_core::config::Config;
 use rascal_core::error::Result;
 use rascal_core::workspace::Workspace;
 use rascal_mcp::client::Pack;
-use rascal_mcp::provision::{Bundle, install_dir_of, prerequisites};
+use rascal_mcp::provision::{Bundle, install_dir_of, prerequisites, same_dir};
 
 /// Prints every configured pack's tools: the op view (name, version, purpose, ports,
 /// parameters, bounds) or, with `--json`, the native manifests by pack.
@@ -151,10 +151,11 @@ pub fn call(
 }
 
 /// `rascal tools setup --bundle <dir> [--into <dir>] [--config rascal.toml [--pack <name>]]`:
-/// the bundle verified, the platform checked, uv and the interpreter found, the files copied,
-/// the environment synced offline, the launcher smoked, and the pack entry to write printed.
-/// With `--config` and no `--into`, the install directory is the one the entry's command
-/// points at (`<dir>/.venv/bin/rascal-tools`).
+/// the bundle verified, the platform checked, the destination checked, uv and the interpreter
+/// found, the files copied, the environment synced offline, the launcher smoked, and the pack
+/// entry to write printed. With `--config` and no `--into`, the install directory is the one
+/// the entry's command points at (`<dir>/.venv/bin/rascal-tools`, a relative `<dir>` taken
+/// from the configuration file's directory).
 pub fn setup(
     bundle: &Path,
     into: Option<&Path>,
@@ -199,10 +200,18 @@ pub fn setup(
             };
             let dir = install_dir_of(&entry.command, &bundle.manifest.pack).ok_or_else(|| {
                 Error::usage(format!(
-                    "[packs.{name}]: command[0] is not <dir>/.venv/bin/{}; give --into",
+                    "[packs.{name}]: command[0] is not <dir>/.venv/bin/{} with a directory before .venv; give --into",
                     bundle.manifest.pack
                 ))
             })?;
+            let dir = if dir.is_absolute() {
+                dir
+            } else {
+                path.parent()
+                    .map(Path::to_path_buf)
+                    .unwrap_or_default()
+                    .join(dir)
+            };
             Some((name.clone(), dir))
         }
         None => None,
@@ -212,6 +221,7 @@ pub fn setup(
         (None, Some((_, dir))) => dir.clone(),
         (None, None) => return Err(Error::usage("give --into <dir> or --config rascal.toml")),
     };
+    bundle.check_destination(&into)?;
     bundle.verify()?;
     println!(
         "bundle: {} {} for {}, Python {}, {} files verified, digest {}",
@@ -239,7 +249,9 @@ pub fn setup(
         installed.launcher.display().to_string()
     );
     match configured {
-        Some((name, dir)) if dir == into => println!("[packs.{name}] already points here"),
+        Some((name, dir)) if same_dir(&dir, &into) => {
+            println!("[packs.{name}] already points here")
+        }
         Some((name, _)) => println!("[packs.{name}]: set {command}"),
         None => println!("[packs.{}]: {command}", bundle.manifest.pack),
     }

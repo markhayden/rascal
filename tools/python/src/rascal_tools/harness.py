@@ -52,13 +52,11 @@ def parse(arguments: dict[str, Any]) -> Harness:
         raise HarnessError(f"context_version {raw.get('context_version')!r} is not 1")
     images = []
     for entry in raw.get("images", []):
+        for key in ("port", "id", "identity", "frame", "width", "height"):
+            if key not in entry:
+                raise HarnessError(f"image {entry.get('id')!r} lacks {key}")
         pixels = _decode(entry)
         height, width = pixels.shape[:2]
-        if (width, height) != (entry.get("width"), entry.get("height")):
-            raise HarnessError(
-                f"image {entry.get('id')} is {width}x{height} but the context says "
-                f"{entry.get('width')}x{entry.get('height')}"
-            )
         images.append(
             ContextImage(
                 port=str(entry["port"]),
@@ -80,12 +78,26 @@ def parse(arguments: dict[str, Any]) -> Harness:
 
 
 def _decode(entry: dict[str, Any]) -> np.ndarray:
+    """The image's pixels: the declared size is checked against the header before any sample
+    is decoded, so a wrong or oversized image never costs its decode."""
     path = entry.get("path")
     data = entry.get("base64")
     if path:
-        with Image.open(path) as im:
+        source: Any = path
+    elif data:
+        try:
+            source = io.BytesIO(base64.b64decode(data, validate=True))
+        except (ValueError, TypeError) as error:
+            raise HarnessError(f"image {entry.get('id')}: base64 is malformed ({error})") from error
+    else:
+        raise HarnessError(f"image {entry.get('id')} has neither path nor base64")
+    try:
+        with Image.open(source) as im:
+            if im.size != (entry["width"], entry["height"]):
+                raise HarnessError(
+                    f"image {entry.get('id')} is {im.size[0]}x{im.size[1]} but the context "
+                    f"says {entry['width']}x{entry['height']}"
+                )
             return np.asarray(im.convert("RGB"))
-    if data:
-        with Image.open(io.BytesIO(base64.b64decode(data))) as im:
-            return np.asarray(im.convert("RGB"))
-    raise HarnessError(f"image {entry.get('id')} has neither path nor base64")
+    except (OSError, Image.DecompressionBombError) as error:
+        raise HarnessError(f"image {entry.get('id')} cannot be decoded ({error})") from error

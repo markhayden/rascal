@@ -1167,7 +1167,8 @@ release acceptance, run by the release workflow and by hand.
   in no file.
 - **Python** (`pytest`, offline): per-tool tests on arrays; `segmenter`-marked tests run only
   when the artifact is fetched and check parity with stored outputs; a bundle build test checks
-  digests and installs the bundle into a clean directory offline.
+  the build's output (every file listed with its digest, the lock naming only the wheelhouse),
+  and the Rust install test installs the bundle into a clean directory offline.
 - **Acceptance** (`scripts/acceptance.sh`): install `rascal-mask` from the packaged crates into
   a clean directory; run the six shipped recipes by name on the fixtures with no config file;
   run `serve` and drive it with the independent client; make a mask from the CLI in a workspace

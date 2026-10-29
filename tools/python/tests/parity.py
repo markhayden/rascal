@@ -52,6 +52,8 @@ def assert_parity(tool: str, case: str, result: types.CallToolResult, tolerance:
     planes = _planes(result)
     if os.environ.get("UPDATE_PARITY"):
         directory.mkdir(parents=True, exist_ok=True)
+        for stale in directory.glob("plane_*.png"):
+            stale.unlink()
         (directory / "envelope.json").write_text(
             json.dumps(envelope, indent=2, sort_keys=True) + "\n"
         )

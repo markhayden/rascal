@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The Python pack's bundle manifest, `bundle.toml` (SPEC.md \"The Python pack and its\nbundle\"): what `rascal tools setup` verifies before it installs. Every file in the bundle\nis listed with its digest; nothing else is installed.",
+  "properties": {
+    "bundle_version": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "files": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Every file in the bundle by relative path, with its `sha256:<hex>` digest.",
+      "type": "object"
+    },
+    "pack": {
+      "description": "The pack's distribution name (`rascal-tools`).",
+      "type": "string"
+    },
+    "pack_version": {
+      "type": "string"
+    },
+    "platform": {
+      "description": "`macos-arm64` or `linux-x86_64`.",
+      "type": "string"
+    },
+    "python": {
+      "description": "The interpreter line the bundle was built for (`3.12`).",
+      "type": "string"
+    },
+    "wheel": {
+      "description": "The pack wheel's path inside the bundle.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "bundle_version",
+    "pack",
+    "pack_version",
+    "python",
+    "platform",
+    "wheel",
+    "files"
+  ],
+  "title": "BundleManifest",
+  "type": "object"
+}

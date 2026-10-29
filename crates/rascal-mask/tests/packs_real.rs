@@ -21,6 +21,11 @@ fn pack_binary() -> Option<PathBuf> {
     if path.is_file() {
         Some(path)
     } else {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "{} is absent in CI; uv sync --frozen --project tools/python first",
+            path.display()
+        );
         eprintln!(
             "packs_real: {} is absent (run `uv sync --frozen` in tools/python); skipping",
             path.display()
