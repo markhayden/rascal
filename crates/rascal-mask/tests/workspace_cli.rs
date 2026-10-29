@@ -405,3 +405,156 @@ fn cut_then_put_from_the_command_line_round_trips_the_samples() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn line_and_stroke_from_the_command_line_rasterize_as_the_spec_says() {
+    let dir = scratch("linestroke");
+    let ws = dir.join("ws");
+    let pano = dir.join("pano.png");
+    rascal_testkit::images::flat(400, 200, 120)
+        .save(&pano)
+        .unwrap();
+    // cut the panorama, then a column line at the centre of the canvas, then rasterize.
+    let out = rascal(&[
+        "cut",
+        "--workspace",
+        ws.to_str().unwrap(),
+        "--image",
+        pano.to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let out = rascal(&[
+        "line",
+        "--workspace",
+        ws.to_str().unwrap(),
+        "--image",
+        "img-2",
+        "--column",
+        "0.5",
+        "--width_px",
+        "6",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(String::from_utf8_lossy(&out.stdout).contains("location: loc-4"));
+    let out = rascal(&[
+        "rasterize",
+        "--workspace",
+        ws.to_str().unwrap(),
+        "--image",
+        "img-2",
+        "--location",
+        "loc-4",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mask_id = text
+        .lines()
+        .find(|l| l.starts_with("mask: "))
+        .unwrap()
+        .split_whitespace()
+        .nth(1)
+        .unwrap()
+        .to_string();
+    let out = rascal(&[
+        "inspect",
+        &format!(
+            "{}/artifacts/{}.mask",
+            ws.display(),
+            text.lines()
+                .find(|l| l.starts_with("mask: "))
+                .unwrap()
+                .split_whitespace()
+                .nth(2)
+                .unwrap()
+                .trim_start_matches("sha256:")
+        ),
+        "--json",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    // The canvas is 2s = 56 wide (s = 28 of 400), 200 high; a band 6 wide at the centre.
+    assert_eq!(value["zones"]["width"], 56);
+    assert_eq!(value["zones"]["core"], 6 * 200);
+    assert_eq!(
+        value["zones"]["support"],
+        serde_json::json!([25, 0, 31, 200])
+    );
+    assert!(mask_id.starts_with("mask-"));
+    // A stroke on the flat floor, rasterized: the dilated path.
+    let floor = repo_root().join("fixtures/images/floor.png");
+    let out = rascal(&[
+        "stroke",
+        "--workspace",
+        ws.to_str().unwrap(),
+        "--image",
+        floor.to_str().unwrap(),
+        "--path",
+        "0.1,0.5;0.9,0.5",
+        "--radius_px",
+        "4",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8_lossy(&out.stdout);
+    let loc = text
+        .lines()
+        .find(|l| l.starts_with("location: "))
+        .unwrap()
+        .split_whitespace()
+        .nth(1)
+        .unwrap()
+        .to_string();
+    let img = "img-6";
+    let out = rascal(&[
+        "rasterize",
+        "--workspace",
+        ws.to_str().unwrap(),
+        "--image",
+        img,
+        "--location",
+        &loc,
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // A bad path is a usage error.
+    let out = rascal(&[
+        "stroke",
+        "--workspace",
+        ws.to_str().unwrap(),
+        "--image",
+        img,
+        "--path",
+        "0.1,0.5",
+        "--radius_px",
+        "4",
+    ]);
+    assert_eq!(
+        out.status.code(),
+        Some(64),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

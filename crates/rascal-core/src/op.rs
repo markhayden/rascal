@@ -37,6 +37,8 @@ pub enum ParamKind {
     NumberArray,
     /// One of `choices`.
     Choice,
+    /// Two or more `[x, y]` points as fractions of the frame.
+    PointList,
 }
 
 /// A parameter an op accepts in a recipe step or on the command line.
@@ -90,6 +92,15 @@ impl Param {
         Param {
             required: false,
             default: Some(default),
+            ..Param::required(name, purpose, kind)
+        }
+    }
+
+    /// An optional parameter with no default: absent when not given (one of two forms).
+    pub fn absent(name: &str, purpose: &str, kind: ParamKind) -> Param {
+        Param {
+            required: false,
+            default: None,
             ..Param::required(name, purpose, kind)
         }
     }
@@ -152,6 +163,14 @@ impl Param {
             ParamKind::Choice => {
                 schema.insert("type".into(), "string".into());
                 schema.insert("enum".into(), self.choices.clone().into());
+            }
+            ParamKind::PointList => {
+                schema.insert("type".into(), "array".into());
+                schema.insert("minItems".into(), 2.into());
+                schema.insert(
+                    "items".into(),
+                    serde_json::json!({ "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 }),
+                );
             }
         }
         if let Some(default) = &self.default {
@@ -225,6 +244,32 @@ impl Param {
                         "{name} must be one of {}, got {s}",
                         self.choices.join(", ")
                     ));
+                }
+            }
+            ParamKind::PointList => {
+                let points = value
+                    .as_array()
+                    .ok_or_else(|| format!("{name} must be a list of [x, y] points"))?;
+                if points.len() < 2 {
+                    return Err(format!(
+                        "{name} needs at least 2 points, got {}",
+                        points.len()
+                    ));
+                }
+                for point in points {
+                    let pair = point
+                        .as_array()
+                        .filter(|p| p.len() == 2)
+                        .ok_or_else(|| format!("{name} must be a list of [x, y] points"))?;
+                    for v in pair {
+                        let n = v
+                            .as_float()
+                            .or_else(|| v.as_integer().map(|i| i as f64))
+                            .ok_or_else(|| format!("{name} must hold numbers"))?;
+                        if !n.is_finite() {
+                            return Err(format!("{name} must hold finite numbers"));
+                        }
+                    }
                 }
             }
         }
@@ -491,12 +536,6 @@ impl Manifest {
                     param.name
                 ));
             }
-            if !param.required && param.default.is_none() {
-                return Err(format!(
-                    "{name}: optional parameter {} needs a default",
-                    param.name
-                ));
-            }
             if param.kind == ParamKind::Choice && param.choices.is_empty() {
                 return Err(format!(
                     "{name}: choice parameter {} needs choices",
@@ -544,12 +583,16 @@ impl Manifest {
                     return Err(format!("parameter {} is required", param.name));
                 }
                 None => {
-                    let default = param.default.clone().unwrap_or(serde_json::Value::Null);
-                    let value: toml::Value = serde_json::from_value::<toml::Value>(default)
+                    // An optional parameter without a default stays absent.
+                    if let Some(default) = &param.default {
+                        let value: toml::Value = serde_json::from_value::<toml::Value>(
+                            default.clone(),
+                        )
                         .map_err(|e| {
                             format!("parameter {}: default is not a TOML value: {e}", param.name)
                         })?;
-                    resolved.insert(param.name.clone(), value);
+                        resolved.insert(param.name.clone(), value);
+                    }
                 }
             }
         }

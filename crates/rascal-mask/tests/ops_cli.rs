@@ -36,12 +36,24 @@ fn ops_list_names_the_catalogue_and_json_gives_every_manifest() {
     let out = rascal(&["ops", "list"]);
     assert!(out.status.success());
     let text = String::from_utf8_lossy(&out.stdout);
-    for op in ["rect", "rasterize", "render", "cut", "put"] {
+    for op in [
+        "rect",
+        "rasterize",
+        "render",
+        "cut",
+        "put",
+        "line",
+        "stroke",
+    ] {
         assert!(text.lines().any(|l| l.starts_with(op)), "{text}");
     }
     let out = rascal(&["ops", "list", "--json"]);
     let manifests: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(manifests.len(), 5, "rect, rasterize, render, cut, put");
+    assert_eq!(
+        manifests.len(),
+        7,
+        "rect, rasterize, render, cut, put, line, stroke"
+    );
     for m in &manifests {
         for field in [
             "name",

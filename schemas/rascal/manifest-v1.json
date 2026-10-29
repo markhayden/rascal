@@ -184,6 +184,11 @@
           "const": "choice",
           "description": "One of `choices`.",
           "type": "string"
+        },
+        {
+          "const": "point_list",
+          "description": "Two or more `[x, y]` points as fractions of the frame.",
+          "type": "string"
         }
       ]
     },

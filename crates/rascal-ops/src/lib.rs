@@ -5,11 +5,13 @@
 //! primitives arrive in 1.8a and the rest of the catalogue from M2 on.
 
 pub mod cut;
+pub mod line;
 pub mod primitives;
 pub mod put;
 pub mod rasterize;
 pub mod rect;
 pub mod render;
+pub mod stroke;
 
 use rascal_core::registry::OpRegistry;
 
@@ -20,6 +22,8 @@ pub fn register_all(registry: &mut OpRegistry) -> rascal_core::error::Result<()>
     registry.register(Box::new(render::Render))?;
     registry.register(Box::new(cut::Cut))?;
     registry.register(Box::new(put::Put))?;
+    registry.register(Box::new(line::Line))?;
+    registry.register(Box::new(stroke::Stroke))?;
     Ok(())
 }
 
@@ -28,6 +32,43 @@ pub fn registry() -> rascal_core::error::Result<OpRegistry> {
     let mut registry = OpRegistry::new();
     register_all(&mut registry)?;
     Ok(registry)
+}
+
+/// Reads a point-list parameter.
+pub(crate) fn points(
+    params: &toml::Table,
+    name: &str,
+    op: &str,
+) -> rascal_core::error::Result<Vec<[f64; 2]>> {
+    let bad = || {
+        rascal_core::Error::op(
+            op,
+            format!("parameter {name} must be a list of [x, y] points"),
+        )
+    };
+    let items = params
+        .get(name)
+        .and_then(|v| v.as_array())
+        .ok_or_else(bad)?;
+    items
+        .iter()
+        .map(|p| {
+            let pair = p.as_array().filter(|a| a.len() == 2).ok_or_else(bad)?;
+            let n = |v: &toml::Value| {
+                v.as_float()
+                    .or_else(|| v.as_integer().map(|i| i as f64))
+                    .ok_or_else(bad)
+            };
+            Ok([n(&pair[0])?, n(&pair[1])?])
+        })
+        .collect()
+}
+
+/// Reads an optional float parameter.
+pub(crate) fn float(params: &toml::Table, name: &str) -> Option<f64> {
+    params
+        .get(name)
+        .and_then(|v| v.as_float().or_else(|| v.as_integer().map(|i| i as f64)))
 }
 
 /// Reads a parameter as a float array of fixed length.

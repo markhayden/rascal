@@ -30,7 +30,7 @@ with green CI on both platforms, and then the tag.
 - [x] 1.7a Workspace generations and the commit protocol
 - [x] 1.7b Repair, recovery and the journal projection
 - [x] 1.8a Primitives, `cut`/`put` and the Plan
-- [ ] 1.8b `line`, `stroke` and the full `rasterize`
+- [x] 1.8b `line`, `stroke` and the full `rasterize`
 - [ ] 1.9 `inspect`, compatibility export, self-contained runs, docs coverage
 - [ ] 1.10 The run page and tracing → tag `m1.2`
 - [ ] Checkpoint M1 → tag `m1`

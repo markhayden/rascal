@@ -302,6 +302,25 @@ fn parse_param(kind: ParamKind, text: &str) -> Result<toml::Value> {
             toml::Value::Boolean(text.parse::<bool>().map_err(|_| bad("true or false"))?)
         }
         ParamKind::String | ParamKind::Choice => toml::Value::String(text.to_string()),
+        ParamKind::PointList => toml::Value::Array(
+            text.split(';')
+                .map(|point| {
+                    let pair: Vec<toml::Value> = point
+                        .split(',')
+                        .map(|p| {
+                            p.trim()
+                                .parse::<f64>()
+                                .map(toml::Value::Float)
+                                .map_err(|_| bad("a list of x,y points separated by ';'"))
+                        })
+                        .collect::<Result<_>>()?;
+                    if pair.len() != 2 {
+                        return Err(bad("a list of x,y points separated by ';'"));
+                    }
+                    Ok(toml::Value::Array(pair))
+                })
+                .collect::<Result<_>>()?,
+        ),
         ParamKind::NumberArray => toml::Value::Array(
             text.split(',')
                 .map(|p| {

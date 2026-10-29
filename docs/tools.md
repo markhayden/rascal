@@ -52,7 +52,9 @@ before accepting it.
 | op | group | in | out | since |
 |---|---|---|---|---|
 | `rect` | find | Image; `bbox` | Location (`bbox`) | 1.1 |
-| `rasterize` | refine | Location, Image; `use_case` | Mask (bbox and whole_image; the rest in 1.8b) | 1.1 |
+| `line` | find | Image; `column` or `path`, `width_px` | Location (`line`) | 1.8b |
+| `stroke` | find | Image; `path`, `radius_px` | Location (`stroke`) | 1.8b |
+| `rasterize` | refine | Location, Image; `use_case` | Mask: `bbox` and `polygon` as drawn, `whole_image` all, a column `line` as a band `width_px` wide, a path `line` dilated by `width_px / 2`, a `stroke` dilated by `radius_px`; `view` and `absent` are `not_applicable` | 1.1, 1.8b |
 | `render` | out | Mask [, Image]; `for`, `threshold`, `colour`, `strength` | Image: `grey`, `binary` (`mask_input`), `alpha`, `tinted` (`image_input`), `overlay` (inspection) | 1.1, 1.5 |
 | `cut` | prep | Image (wrapped raw); `strip` | Image in a new `cut:` frame (the two edge strips side by side, the wrap edge at the centre) and the Plan | 1.8a |
 | `put` | prep | Image (parent), Image (canvas), Plan | Image in the parent frame with the canvas's halves on the edge strips; cut then put is byte-identical | 1.8a |
@@ -66,7 +68,9 @@ An op subcommand's image port takes a workspace id or a path (a path is imported
 port takes an id or a mask directory, and `--out <file>` also writes a lone image output as a
 PNG.
 
-The remaining ops arrive with their tasks (PLAN.md): `line` and `stroke` in M1;
+A point-list parameter is written `[[x, y], …]` in a recipe and `x,y;x,y` on the command line.
+
+The remaining ops arrive with their tasks (PLAN.md):
 `fan`, `profile`, `feather`, `ramp`, `apply`, `window`, `unwindow`, `paste`, `measure` in M2;
 `grow`, `shrink`, `close`, `subtract`, `select`, `invert`, `tighten` in M4; `segment` from the
 Python pack in M5.

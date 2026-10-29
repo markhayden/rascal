@@ -255,11 +255,6 @@ fn a_malformed_manifest_is_refused_at_registration() {
             .contains("declared twice")
     );
     assert!(
-        with(|m| m.params[1].default = None)
-            .unwrap_err()
-            .contains("needs a default")
-    );
-    assert!(
         with(|m| m.params[1].choices.clear())
             .unwrap_err()
             .contains("needs choices")

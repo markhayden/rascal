@@ -302,8 +302,7 @@ mask = "m.mask"
         r#"{"kind":"stroke","path":[[0.1,0.1],[0.3,0.3]],"radius_px":4}"#,
     )
     .unwrap();
-    // Rasterizing a stroke arrives with 1.8b, so the op refuses operationally today (3); the
-    // binding itself worked, which the journal shows.
+    // The stroke binds and rasterizes to the dilated path.
     let out = rascal(&[
         "run",
         recipe2.to_str().unwrap(),
@@ -313,13 +312,23 @@ mask = "m.mask"
         "--out",
         dir.join("s2").to_str().unwrap(),
     ]);
-    assert_eq!(
-        out.status.code(),
-        Some(3),
+    assert!(
+        out.status.success(),
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(String::from_utf8_lossy(&out.stderr).contains("1.8b"));
+    let mask = std::fs::read_dir(dir.join("s2/artifacts"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .find(|p| p.extension().is_some_and(|e| e == "mask"))
+        .unwrap();
+    let core = image::open(mask.join("core.png")).unwrap().to_luma8();
+    assert_eq!(
+        core.get_pixel(64, 40)[0],
+        255,
+        "on the path: (0.2, 0.2) of 320x200"
+    );
+    assert_eq!(core.get_pixel(200, 40)[0], 0, "far from it");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
