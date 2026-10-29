@@ -20,6 +20,7 @@ pub mod outdir;
 pub mod profile;
 pub mod recipe;
 pub mod registry;
+pub mod rendering;
 pub mod schema_drift;
 pub mod schemas;
 pub mod series;

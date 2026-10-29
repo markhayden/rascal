@@ -11,8 +11,7 @@ use rascal_core::error::Result;
 use rascal_core::frame::Projection;
 use rascal_core::image::Image;
 use rascal_core::location::Location;
-use rascal_core::mask::Mask;
-use rascal_core::op::{Params, Status};
+use rascal_core::op::Status;
 use rascal_core::outdir::{self, OutKind};
 use rascal_core::recipe::{Recipe, Run};
 use rascal_core::registry::OpRegistry;
@@ -108,56 +107,4 @@ pub fn run(registry: &OpRegistry, args: &RunArgs) -> Result<RunReport> {
         mask_dir,
         renders: outcome.renders,
     })
-}
-
-/// Renders a stored mask to a file destination, which is overwritten.
-pub fn render(
-    registry: &OpRegistry,
-    mask_dir: &Path,
-    profile: &str,
-    out: &Path,
-) -> Result<PathBuf> {
-    let mask = Mask::read(mask_dir)?;
-    let out = outdir::prepare(out, OutKind::File)?;
-    // A throwaway run beside nothing: the render op needs a frame table and a journal, and a
-    // file destination has no run directory. REPLACED BY 1.7a (a private workspace).
-    let scratch = std::env::temp_dir().join(format!(
-        "rascal-render-{}-{}",
-        std::process::id(),
-        mask.identity().hex()
-    ));
-    std::fs::create_dir_all(&scratch).map_err(|e| Error::io(&scratch, e))?;
-    let result = (|| {
-        let mut run = Run::open(&scratch)?;
-        run.frames.insert(frame_of(&mask));
-        let mut inputs = BTreeMap::new();
-        inputs.insert("mask".to_string(), Artifact::Mask(Arc::new(mask.clone())));
-        let mut params = Params::new();
-        params.insert("for".to_string(), toml::Value::String(profile.to_string()));
-        let output = run.invoke("render", "render", registry, &inputs, &params)?;
-        match output.outputs.get("image") {
-            Some(Artifact::Image(image)) => image
-                .pixels
-                .save_with_format(&out, image::ImageFormat::Png)
-                .map_err(|source| Error::Image {
-                    path: out.clone(),
-                    source,
-                }),
-            _ => Err(Error::op("render", output.envelope.summary)),
-        }
-    })();
-    let _ = std::fs::remove_dir_all(&scratch);
-    result.map(|()| out)
-}
-
-/// The frame a stored mask is in, rebuilt from its record. REPLACED BY 1.7a (frames come from
-/// the workspace registry, not from the mask).
-fn frame_of(mask: &Mask) -> rascal_core::frame::Frame {
-    let (width, height) = mask.dimensions();
-    let projection = if mask.record.frame.ends_with(":equirectangular") {
-        Projection::Equirectangular
-    } else {
-        Projection::Flat
-    };
-    rascal_core::frame::Frame::raw(width, height, projection)
 }

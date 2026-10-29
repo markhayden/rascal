@@ -4,6 +4,7 @@
 mod exit;
 mod inspect;
 mod ops;
+mod render;
 mod run;
 
 use std::path::PathBuf;
@@ -60,10 +61,22 @@ enum Command {
     Render {
         /// The mask directory (`<id>.mask/`).
         mask: PathBuf,
-        /// The profile: grey.
+        /// The profile: grey, binary, alpha, tinted, overlay.
         #[arg(long = "for")]
         profile: String,
-        /// The file to write; overwritten if it exists.
+        /// The image to draw on (alpha, tinted, overlay); must be in the mask's frame.
+        #[arg(long)]
+        image: Option<PathBuf>,
+        /// binary: 255 where w >= threshold / 255 (1 to 255, default 127).
+        #[arg(long)]
+        threshold: Option<i64>,
+        /// tinted and overlay: the tint as #rrggbb (default #ff00ff).
+        #[arg(long)]
+        colour: Option<String>,
+        /// tinted: how far the core moves toward the colour (0 to 1, default 0.7).
+        #[arg(long)]
+        strength: Option<f64>,
+        /// The file to write; overwritten if it exists. PNG, or JPEG for .jpg.
         #[arg(long)]
         out: PathBuf,
     },
@@ -194,8 +207,25 @@ fn main() {
                 }
             }
         }
-        Command::Render { mask, profile, out } => {
-            match run::render(&registry, &mask, &profile, &out) {
+        Command::Render {
+            mask,
+            profile,
+            image,
+            threshold,
+            colour,
+            strength,
+            out,
+        } => {
+            let args = render::RenderArgs {
+                mask,
+                profile,
+                image,
+                threshold,
+                colour,
+                strength,
+                out,
+            };
+            match render::render(&registry, &args) {
                 Ok(path) => {
                     println!("{}", path.display());
                     exit::OK

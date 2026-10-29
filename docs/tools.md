@@ -53,7 +53,7 @@ before accepting it.
 |---|---|---|---|---|
 | `rect` | find | Image; `bbox` | Location (`bbox`) | 1.1 |
 | `rasterize` | refine | Location, Image; `use_case` | Mask (bbox and whole_image; the rest in 1.8b) | 1.1 |
-| `render` | out | Mask [, Image]; `for` | Image (`grey`; the rest in 1.5) | 1.1 |
+| `render` | out | Mask [, Image]; `for`, `threshold`, `colour`, `strength` | Image: `grey`, `binary` (`mask_input`), `alpha`, `tinted` (`image_input`), `overlay` (inspection) | 1.1, 1.5 |
 
 The remaining ops arrive with their tasks (PLAN.md): `line`, `stroke`, `cut`, `put` in M1;
 `fan`, `profile`, `feather`, `ramp`, `apply`, `window`, `unwindow`, `paste`, `measure` in M2;

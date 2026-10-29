@@ -66,7 +66,7 @@ which parts exist; it is updated in the same commit as the code it describes.
 | frames, images, locations, artifacts, identity | rascal-core | done: the three frame kinds and the cut plan, canonical serialization and committed vectors (ADR 0016), the seven location kinds with their rules, mapping toward the root with parts and partial | M1 task 1.2 |
 | the mask record and effective weight | rascal-core | done: the full record with profile, prescriptions, source and provenance; invariants named on load; refinement helpers; BandProfile and Series; `inspect --json` | M1 task 1.3 |
 | Op trait, manifest, envelope, registry | rascal-core | done: the full manifest with derived schemas and bounds, parameter resolution, the native envelope, registry checks at registration, shared input validation, `ops list` and `ops describe` | M1 task 1.4 |
-| renderings | rascal-core, rascal-ops | `grey` only | M1 task 1.5 |
+| renderings | rascal-core, rascal-ops | done: the five profiles with roles, polarity and parameters; `render` with `--image`, `--threshold`, `--colour`, `--strength` | M1 task 1.5 |
 | recipes with typed bindings | rascal-core | minimal (parse, typed bindings for Image, Location and Mask, outputs, render; no schema, no defaults) | M1 task 1.6 |
 | workspace, journal, repair | rascal-core | journal only, written under `--out`; no workspace | M1 tasks 1.7a, 1.7b |
 | primitives, `cut`, `put`, `line`, `rect`, `stroke`, `rasterize` | rascal-ops | `rect`; `rasterize` for bbox and whole_image | M1 tasks 1.8a, 1.8b |

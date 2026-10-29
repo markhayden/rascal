@@ -85,3 +85,19 @@ it (ADR 0016).
 `rascal inspect <dir> --json` prints the record, the zone counts (core, blend, protect, painted,
 the support bbox, the weight sum) and the identity. The overlay and the per-row chart arrive
 with task 1.9.
+
+## Renderings
+
+A rendering is an `Image` projected from the record for one consumer; it is never read back as
+a mask. `rascal render <dir> --for <profile> [--image <path>] --out <file>`:
+
+| profile | role | output | polarity |
+|---|---|---|---|
+| `grey` | `mask_input` | 8-bit `round(255 · w)` | 255 = paint |
+| `binary` | `mask_input` | 8-bit, 255 where `w ≥ threshold / 255` (`--threshold` 1 to 255, default 127); protected pixels are 0 whatever the threshold | 255 = paint |
+| `alpha` | `image_input` | RGBA of the image, alpha 0 where the core is set and not protected | transparent = paint |
+| `tinted` | `image_input` | RGB of the image with the unprotected core blended toward `--colour` (default `#ff00ff`) by `--strength` (default 0.7) | tint = paint |
+| `overlay` | inspection | the image, the tint by `w` at half strength, the core's edge as a white line; a `.jpg` destination gets a JPEG | for the eye |
+
+The image must be in the mask's frame. There is no `protect` rendering: a second pass uses the
+`invert` op, which produces a real mask that governs both rendering and paste.

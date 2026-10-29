@@ -25,7 +25,7 @@ with green CI on both platforms, and then the tag.
 - [x] 1.2 Frames, identity, canonical serialization, locations and mapping
 - [x] 1.3 The mask record and effective weight
 - [x] 1.4 Op contracts
-- [ ] 1.5 Renderings and the `render` op
+- [x] 1.5 Renderings and the `render` op
 - [ ] 1.6 Recipes with typed bindings
 - [ ] 1.7a Workspace generations and the commit protocol
 - [ ] 1.7b Repair, recovery and the journal projection

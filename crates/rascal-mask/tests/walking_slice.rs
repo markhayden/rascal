@@ -212,13 +212,13 @@ fn render_overwrites_a_file_destination() {
     }
     let grey = image::open(&target).unwrap().to_luma8();
     assert_eq!(grey.get_pixel(100, 50)[0], 255);
-    // A profile the manifest does not offer yet is a bad parameter: invalid_args, exit 64,
-    // naming the choices.
+    // A profile the manifest does not offer is a bad parameter: invalid_args, exit 64, naming
+    // the choices.
     let out = rascal(&[
         "render",
         mask.to_str().unwrap(),
         "--for",
-        "binary",
+        "sepia",
         "--out",
         &target,
     ]);
@@ -228,7 +228,10 @@ fn render_overwrites_a_file_destination() {
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(String::from_utf8_lossy(&out.stderr).contains("for must be one of grey"));
+    assert!(
+        String::from_utf8_lossy(&out.stderr)
+            .contains("for must be one of grey, binary, alpha, tinted, overlay")
+    );
 }
 
 #[test]
