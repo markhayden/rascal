@@ -227,6 +227,22 @@ fn replay_is_empty_on_an_untouched_run_names_a_tampered_plane_and_survives_reloc
     assert_eq!(report.differing_planes.get("core"), Some(&2));
     assert!(!report.differing_planes.contains_key("blend"));
     assert_eq!(report.status_summary(), "core differs on 2 pixels");
+    // The planes restored and the record edited instead: the identity string in mask.toml is
+    // untouched, so only recomputing it tells, and the report says the record differs.
+    stored.core.save(&core_path).unwrap();
+    let toml_path = elsewhere.join(&entry.path).join("mask.toml");
+    let text = std::fs::read_to_string(&toml_path).unwrap();
+    assert!(text.contains("use_case = \"custom\""), "{text}");
+    std::fs::write(
+        &toml_path,
+        text.replace("use_case = \"custom\"", "use_case = \"seam\""),
+    )
+    .unwrap();
+    let edited = replay::read_untrusted(&elsewhere.join(&entry.path)).unwrap();
+    let report = replay::replay_mask(&moved, &registry, &edited).unwrap();
+    assert!(report.record_differs, "{report:?}");
+    assert!(report.differing_planes.is_empty(), "{report:?}");
+    assert!(!report.is_clean());
     let _ = std::fs::remove_dir_all(&elsewhere);
 }
 

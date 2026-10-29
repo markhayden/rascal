@@ -375,7 +375,14 @@ fn each_parameter_rule_rejects_and_defaults_resolve() {
     assert_eq!(resolved["flag"].as_bool(), Some(false));
     assert_eq!(resolved["label"].as_str(), Some("x"));
     assert_eq!(resolved["pair"].as_array().unwrap().len(), 2);
-    assert_eq!(resolved["amount"].as_integer(), Some(3));
+    // A number given as a TOML integer resolves as a float: `amount = 3` and `amount = 3.0`
+    // are the same parameters, so they serialize and hash the same.
+    assert_eq!(resolved["amount"].as_float(), Some(3.0));
+    assert_eq!(resolved, m.resolve_params(&p("amount = 3.0")).unwrap());
+    assert_eq!(
+        serde_json::to_string(&resolved).unwrap(),
+        serde_json::to_string(&m.resolve_params(&p("amount = 3.0")).unwrap()).unwrap()
+    );
     let err = |text: &str| m.resolve_params(&p(text)).unwrap_err();
     assert!(err("").contains("amount is required"));
     assert!(err("amount = 3\nbogus = 1").contains("unknown parameter bogus"));

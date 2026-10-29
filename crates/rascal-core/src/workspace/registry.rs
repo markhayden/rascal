@@ -48,10 +48,23 @@ pub struct Generation {
     pub frames: Vec<Frame>,
     pub locations: Vec<LocationEntry>,
     pub artifacts: Vec<ArtifactEntry>,
-    #[serde(default)]
     pub plans: Vec<PlanEntry>,
-    /// The identities of every committed operation record, in commit order.
-    pub records: Vec<String>,
+    /// Every committed operation record, in commit order. The record file under `ops/` is
+    /// content-addressed, so an invocation identical to an earlier one shares its file; the
+    /// observations that differ between them, the sequence number and the duration, live here.
+    pub records: Vec<RecordEntry>,
+}
+
+/// One committed invocation in a generation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RecordEntry {
+    /// The operation record's identity (`ops/<hex>.json`).
+    pub identity: String,
+    /// The workspace sequence number the invocation committed at.
+    pub seq: u64,
+    /// Wall time of the invocation, in milliseconds.
+    pub duration_ms: u64,
 }
 
 impl Generation {

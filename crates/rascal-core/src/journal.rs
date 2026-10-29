@@ -59,44 +59,77 @@ pub struct JournalLine {
     pub note: Option<String>,
 }
 
-/// An append-only `journal.jsonl`.
+/// An append-only `journal.jsonl`. Several processes may append to one journal (the spec's
+/// two-shells scenario), so every append takes the file's own lock, assigns the sequence
+/// number from what is in the file, and writes the line in one call.
 pub struct Journal {
     path: std::path::PathBuf,
+    /// How much of the file has been scanned for line counting.
+    scanned_bytes: u64,
+    /// The sequence number of the next line, as of `scanned_bytes`.
     next_seq: u64,
 }
 
 impl Journal {
     /// Opens (creating) the journal at `path`, continuing its sequence.
     pub fn open(path: &Path) -> Result<Journal> {
-        let next_seq = match std::fs::read_to_string(path) {
-            Ok(text) => text.lines().filter(|l| !l.trim().is_empty()).count() as u64 + 1,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => 1,
-            Err(e) => return Err(Error::io(path, e)),
-        };
-        Ok(Journal {
+        let mut journal = Journal {
             path: path.to_path_buf(),
-            next_seq,
-        })
+            scanned_bytes: 0,
+            next_seq: 1,
+        };
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .read(true)
+            .open(path)
+            .map_err(|e| Error::io(path, e))?;
+        journal.catch_up(&file)?;
+        Ok(journal)
+    }
+
+    /// Counts the lines appended since the last scan, by this or any other process.
+    fn catch_up(&mut self, mut file: &std::fs::File) -> Result<()> {
+        use std::io::{Read, Seek, SeekFrom};
+        file.seek(SeekFrom::Start(self.scanned_bytes))
+            .map_err(|e| Error::io(&self.path, e))?;
+        let mut tail = Vec::new();
+        file.read_to_end(&mut tail)
+            .map_err(|e| Error::io(&self.path, e))?;
+        self.next_seq += tail.iter().filter(|b| **b == b'\n').count() as u64;
+        self.scanned_bytes += tail.len() as u64;
+        Ok(())
     }
 
     /// Appends a line, assigning its sequence number, and returns it.
     pub fn append(&mut self, mut line: JournalLine) -> Result<JournalLine> {
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .read(true)
+            .open(&self.path)
+            .map_err(|e| Error::io(&self.path, e))?;
+        file.lock().map_err(|e| Error::io(&self.path, e))?;
+        let result = self.append_locked(&file, &mut line);
+        let _ = file.unlock();
+        result?;
+        Ok(line)
+    }
+
+    fn append_locked(&mut self, mut file: &std::fs::File, line: &mut JournalLine) -> Result<()> {
+        self.catch_up(file)?;
         line.seq = self.next_seq;
         line.journal_version = 1;
-        let text = serde_json::to_string(&line).map_err(|source| Error::Json {
+        let mut text = serde_json::to_string(line).map_err(|source| Error::Json {
             path: self.path.clone(),
             source,
         })?;
-        let mut file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.path)
-            .map_err(|e| Error::io(&self.path, e))?;
+        text.push('\n');
         file.write_all(text.as_bytes())
-            .and_then(|()| file.write_all(b"\n"))
             .map_err(|e| Error::io(&self.path, e))?;
         self.next_seq += 1;
-        Ok(line)
+        self.scanned_bytes += text.len() as u64;
+        Ok(())
     }
 
     /// A note line.
@@ -117,10 +150,17 @@ impl Journal {
         })
     }
 
-    /// Reads every line of a journal.
+    /// Reads every line of a journal. A complete line always ends with a newline, so an
+    /// unterminated tail is the torn last line a crash mid-append leaves: it is skipped, and
+    /// `repair` rebuilds the journal from the records.
     pub fn read(path: &Path) -> Result<Vec<JournalLine>> {
         let text = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
-        text.lines()
+        let complete = match text.rfind('\n') {
+            Some(at) => &text[..=at],
+            None => "",
+        };
+        complete
+            .lines()
             .filter(|l| !l.trim().is_empty())
             .map(|l| {
                 serde_json::from_str(l).map_err(|source| Error::Json {

@@ -90,10 +90,24 @@ pub fn inventory() -> Vec<BoundaryType> {
     use crate::op::{Envelope, Manifest};
     use crate::profile::BandProfile;
     use crate::recipe::Recipe;
+    use crate::replay::ReplayReport;
     use crate::series::Series;
     use crate::workspace::record::OperationRecord;
     use crate::workspace::registry::Generation;
+    use crate::workspace::repair::Report;
     vec![
+        boundary_type!(
+            Report,
+            "rascal/repair-v1.json",
+            Source::Generated,
+            ["repair-v1/after-crash.json"]
+        ),
+        boundary_type!(
+            ReplayReport,
+            "rascal/replay-v1.json",
+            Source::Generated,
+            ["replay-v1/tampered-core.json"]
+        ),
         boundary_type!(
             Frame,
             "rascal/frame-v1.json",
@@ -227,6 +241,7 @@ pub const COMPONENTS: &[&str] = &[
     "Step",
     "ArtifactEntry",
     "LocationEntry",
+    "RecordEntry",
     "Refinement",
     "ParamKind",
     "CostTier",

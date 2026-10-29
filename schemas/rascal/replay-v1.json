@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "What a replay found.",
+  "properties": {
+    "differing_planes": {
+      "additionalProperties": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "description": "Planes that differ, with the count of differing pixels: empty when identical.",
+      "type": "object"
+    },
+    "op": {
+      "type": "string"
+    },
+    "rebuilt_identity": {
+      "type": "string"
+    },
+    "record": {
+      "description": "The record that produced the mask.",
+      "type": "string"
+    },
+    "record_differs": {
+      "description": "The stored record's identity, recomputed from its content, is not the identity it\ncarries: the record was edited.",
+      "type": "boolean"
+    },
+    "replay_version": {
+      "description": "The report's version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "step": {
+      "type": "string"
+    },
+    "stored_identity": {
+      "description": "The stored mask's identity and the rebuilt one.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "replay_version",
+    "record",
+    "op",
+    "step",
+    "stored_identity",
+    "rebuilt_identity",
+    "differing_planes",
+    "record_differs"
+  ],
+  "title": "ReplayReport",
+  "type": "object"
+}

@@ -9,6 +9,7 @@ use image::{DynamicImage, GenericImageView};
 use rascal_core::Error;
 use rascal_core::artifact::{Artifact, ArtifactType};
 use rascal_core::error::Result;
+use rascal_core::frame::Frame;
 use rascal_core::image::{Image, Role};
 use rascal_core::op::{Context, Cost, CostTier, Inputs, Manifest, Op, Output, Params, Port};
 
@@ -84,6 +85,15 @@ impl Op for Put {
                 plan.parent, plan.width, plan.height, frame.id
             )));
         }
+        // The cut frame's id names the image and the plan it was cut from; a canvas of the
+        // right size from another panorama of the same geometry is in another frame.
+        let expected = Frame::cut(frame, &parent.identity().hex()[..12], plan)?;
+        if canvas.record.frame != expected.id {
+            return Ok(Output::invalid_args(format!(
+                "the canvas is in frame {}, not the cut frame of this image and plan ({})",
+                canvas.record.frame, expected.id
+            )));
+        }
         if canvas.dimensions() != (2 * plan.strip, plan.height) {
             return Ok(Output::invalid_args(format!(
                 "the canvas is {}x{} but the plan's canvas is {}x{}",
@@ -120,6 +130,15 @@ pub fn put_pixels(parent: &DynamicImage, canvas: &DynamicImage, s: u32) -> Dynam
                 for x in 0..s {
                     dst.put_pixel(w - s + x, y, *canvas_rgba.get_pixel(x, y));
                     dst.put_pixel(x, y, *canvas_rgba.get_pixel(s + x, y));
+                }
+            }
+        }
+        DynamicImage::ImageLuma8(dst) if matches!(canvas, DynamicImage::ImageLuma8(_)) => {
+            let canvas_luma = canvas.to_luma8();
+            for y in 0..h {
+                for x in 0..s {
+                    dst.put_pixel(w - s + x, y, *canvas_luma.get_pixel(x, y));
+                    dst.put_pixel(x, y, *canvas_luma.get_pixel(s + x, y));
                 }
             }
         }

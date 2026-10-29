@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "What repair did: the value `rascal workspace repair --json` prints, a boundary type with a\nschema (`schemas/rascal/repair-v1.json`).",
+  "properties": {
+    "abandoned_staging_removed": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "journal_lines": {
+      "description": "Lines in the rebuilt journal.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "missing_dropped": {
+      "description": "Entries dropped because their payload was missing: `id (identity)`.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "orphans_removed": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "repair_version": {
+      "description": "The report's version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "repaired_generation": {
+      "description": "The generation written when entries were dropped.",
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "repair_version",
+    "abandoned_staging_removed",
+    "orphans_removed",
+    "missing_dropped",
+    "journal_lines"
+  ],
+  "title": "Report",
+  "type": "object"
+}

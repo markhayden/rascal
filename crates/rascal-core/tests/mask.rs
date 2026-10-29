@@ -456,3 +456,44 @@ fn a_mask_round_trips_through_its_directory_with_profile_and_prescription() {
     assert!(e.contains("stored identity does not match"), "{e}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A file name in `mask.toml` that leaves the directory is refused before anything is read,
+/// by the checked and the unchecked reader alike.
+#[test]
+fn a_record_naming_a_file_outside_the_mask_is_refused() {
+    let dir = scratch("escape");
+    let m = rect_mask();
+    m.write(&dir).unwrap();
+    let toml_path = dir.join("mask.toml");
+    let text = std::fs::read_to_string(&toml_path).unwrap();
+    for (bad, role) in [
+        ("../outside.png", "zones.core"),
+        ("/etc/passwd", "zones.core"),
+        ("..", "zones.core"),
+        (".hidden.png", "zones.core"),
+    ] {
+        std::fs::write(
+            &toml_path,
+            text.replace("core = \"core.png\"", &format!("core = \"{bad}\"")),
+        )
+        .unwrap();
+        for result in [Mask::read(&dir), Mask::read_unchecked(&dir)] {
+            let err = result.expect_err(bad).to_string();
+            assert!(
+                err.contains(role) && err.contains("plain file name"),
+                "{bad}: {err}"
+            );
+        }
+    }
+    std::fs::write(&toml_path, &text).unwrap();
+    Mask::read(&dir).unwrap();
+    // The writer refuses the same record.
+    let mut tampered = Mask::read(&dir).unwrap();
+    tampered.record.zones.blend = "sub/blend.png".to_string();
+    let err = tampered.write(&dir).unwrap_err().to_string();
+    assert!(
+        err.contains("zones.blend") && err.contains("plain file name"),
+        "{err}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

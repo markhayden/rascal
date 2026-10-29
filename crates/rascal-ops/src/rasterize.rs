@@ -167,16 +167,21 @@ impl Op for Rasterize {
 }
 
 /// The integer pixel rectangle `[x0, x1) × [y0, y1)` a normalised box covers, clipped to the
-/// frame: the start column is the floor and the end column the ceiling of the fraction times
-/// the size, so a box always covers the pixels it touches. `None` when it covers nothing.
+/// frame, by the same pixel-centre rule as [`fill_polygon`]: pixel `i` is covered when its
+/// centre `(i + 0.5) / size` lies in `[v0, v1)`. The rule is exact at multiples of a pixel and
+/// immune to the floating noise of `v * size` (`0.55 * 100` is not `55`). `None` when the box
+/// covers no pixel centre.
 pub fn bbox_pixels(bbox: [f64; 4], width: u32, height: u32) -> Option<(u32, u32, u32, u32)> {
     let [x0, y0, x1, y1] = bbox;
-    let clamp = |v: f64, size: u32| v.clamp(0.0, 1.0) * f64::from(size);
-    let px0 = clamp(x0, width).floor() as u32;
-    let px1 = clamp(x1, width).ceil() as u32;
-    let py0 = clamp(y0, height).floor() as u32;
-    let py1 = clamp(y1, height).ceil() as u32;
-    (px1 > px0 && py1 > py0).then_some((px0, py0, px1.min(width), py1.min(height)))
+    // The first pixel whose centre is at or past `v`.
+    let first_at = |v: f64, size: u32| {
+        ((v.clamp(0.0, 1.0) * f64::from(size) - 0.5).ceil().max(0.0) as u32).min(size)
+    };
+    let px0 = first_at(x0, width);
+    let px1 = first_at(x1, width);
+    let py0 = first_at(y0, height);
+    let py1 = first_at(y1, height);
+    (px1 > px0 && py1 > py0).then_some((px0, py0, px1, py1))
 }
 
 /// A simple polygon filled by scanline with the even-odd rule, vertices in fractions of the

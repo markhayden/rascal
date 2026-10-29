@@ -109,10 +109,7 @@ impl Image {
     /// Decodes a job image (JPEG or PNG) as a canonical image in its raw frame. Without a
     /// projection an image exactly 2:1 is assumed equirectangular; the second value says so.
     pub fn import(path: &Path, projection: Option<Projection>) -> Result<(Image, Frame, bool)> {
-        let decoded = image::open(path).map_err(|source| Error::Image {
-            path: path.to_path_buf(),
-            source,
-        })?;
+        let decoded = decode_limited(path)?;
         let (width, height) = decoded.dimensions();
         let (projection, assumed) = match projection {
             Some(p) => (p, false),
@@ -163,4 +160,29 @@ pub fn pixel_digest(pixels: &DynamicImage) -> Identity {
         u32::from(pixels.color().channel_count()),
         pixels.as_bytes(),
     )
+}
+
+/// The largest image rascal decodes: 32768 pixels a side and 2 GiB of pixel memory, bounds
+/// that hold every supported input (a 16k by 8k panorama is 400 MB as RGBA) and refuse a
+/// decompression bomb before it is allocated.
+pub const MAX_SIDE: u32 = 32_768;
+const MAX_ALLOC: u64 = 2 << 30;
+
+/// Decodes an image file within [`MAX_SIDE`] and the memory bound; every decode of a file
+/// rascal did not write itself goes through here.
+pub fn decode_limited(path: &Path) -> Result<DynamicImage> {
+    let fail = |source| Error::Image {
+        path: path.to_path_buf(),
+        source,
+    };
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_SIDE);
+    limits.max_image_height = Some(MAX_SIDE);
+    limits.max_alloc = Some(MAX_ALLOC);
+    let mut reader = image::ImageReader::open(path)
+        .map_err(|e| Error::io(path, e))?
+        .with_guessed_format()
+        .map_err(|e| Error::io(path, e))?;
+    reader.limits(limits);
+    reader.decode().map_err(fail)
 }

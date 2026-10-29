@@ -22,6 +22,7 @@ use crate::image::Image;
 use crate::mask::{Mask, UseCase};
 use crate::op::{self, Inputs, Params, Status};
 use crate::registry::OpRegistry;
+use crate::rendering::Profile;
 use crate::workspace::Workspace;
 
 /// A declared recipe input.
@@ -351,6 +352,12 @@ impl Recipe {
                         format!("render out '{}' must be a plain file name", r.out),
                     ));
                 }
+                if RESERVED_RUN_FILES.contains(&r.out.as_str()) {
+                    return Err(self.fail(
+                        "outputs",
+                        format!("render out '{}' is a file the run directory owns", r.out),
+                    ));
+                }
                 if let Some(profiles) = render_manifest
                     .as_ref()
                     .and_then(|m| m.param("for"))
@@ -366,7 +373,9 @@ impl Recipe {
                         ),
                     ));
                 }
-                if r.profile != "grey" && r.profile != "binary" && self.outputs.image.is_none() {
+                if Profile::parse(&r.profile).is_some_and(Profile::needs_image)
+                    && self.outputs.image.is_none()
+                {
                     return Err(self.fail(
                         "outputs",
                         format!(
@@ -478,10 +487,23 @@ impl Run {
     }
 }
 
+/// Files a run directory writes itself; a render may not take their names.
+const RESERVED_RUN_FILES: &[&str] = &[
+    "journal.jsonl",
+    "CURRENT",
+    "CURRENT.tmp",
+    "lock",
+    "frames.json",
+    "locations.json",
+    "dash.html",
+    "rascal.toml",
+];
+
 impl Recipe {
     /// Runs the validated recipe with the given `inputs.*` artifacts (by declared name) in a
-    /// run directory. Every step's outputs are stored and journaled; the first step that is
-    /// not `ok` stops the run and publishes nothing of its own.
+    /// run directory. Every step's outputs are stored and journaled. A step that is not `ok`
+    /// publishes nothing of its own; the steps that require its outputs are skipped with a
+    /// journal note, independent steps still run, and the outcome reports the first such step.
     pub fn run(
         &self,
         registry: &OpRegistry,

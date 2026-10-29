@@ -524,6 +524,34 @@
         }
       ]
     },
+    "RecordEntry": {
+      "additionalProperties": false,
+      "description": "One committed invocation in a generation.",
+      "properties": {
+        "duration_ms": {
+          "description": "Wall time of the invocation, in milliseconds.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "identity": {
+          "description": "The operation record's identity (`ops/<hex>.json`).",
+          "type": "string"
+        },
+        "seq": {
+          "description": "The workspace sequence number the invocation committed at.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "identity",
+        "seq",
+        "duration_ms"
+      ],
+      "type": "object"
+    },
     "Topology": {
       "description": "Whether the frame's horizontal edges meet.",
       "oneOf": [
@@ -581,16 +609,15 @@
       "type": "integer"
     },
     "plans": {
-      "default": [],
       "items": {
         "$ref": "#/$defs/PlanEntry"
       },
       "type": "array"
     },
     "records": {
-      "description": "The identities of every committed operation record, in commit order.",
+      "description": "Every committed operation record, in commit order. The record file under `ops/` is\ncontent-addressed, so an invocation identical to an earlier one shares its file; the\nobservations that differ between them, the sequence number and the duration, live here.",
       "items": {
-        "type": "string"
+        "$ref": "#/$defs/RecordEntry"
       },
       "type": "array"
     }
@@ -602,6 +629,7 @@
     "frames",
     "locations",
     "artifacts",
+    "plans",
     "records"
   ],
   "title": "Generation",

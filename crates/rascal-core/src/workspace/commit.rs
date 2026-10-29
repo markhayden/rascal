@@ -238,7 +238,13 @@ fn commit_locked(
     generation.locations.extend(new_locations);
     generation.plans.extend(new_plans);
     generation.artifacts.extend(new_entries);
-    generation.records.push(record.identity.clone());
+    generation
+        .records
+        .push(crate::workspace::registry::RecordEntry {
+            identity: record.identity.clone(),
+            seq: record.seq,
+            duration_ms: record.duration_ms,
+        });
     let generation_path = ws
         .root
         .join("registry")

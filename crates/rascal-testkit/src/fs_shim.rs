@@ -3,7 +3,7 @@
 //! chosen point: from then on every call fails, and what was written or renamed but never
 //! synced is dropped, as a power loss would drop it.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -59,6 +59,9 @@ struct State {
     events: Vec<Event>,
     /// Files written or appended since their last sync.
     dirty_files: BTreeSet<PathBuf>,
+    /// Files appended since their last sync, with their length before the first unsynced
+    /// append: a crash truncates to it rather than removing the file.
+    dirty_appends: BTreeMap<PathBuf, u64>,
     /// Renames whose containing directory has not been synced since: `(from, to)`.
     dirty_renames: Vec<(PathBuf, PathBuf, Option<Vec<u8>>)>,
     crash_at: Option<usize>,
@@ -112,6 +115,7 @@ impl RecordingFs {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.events.clear();
         state.dirty_files.clear();
+        state.dirty_appends.clear();
         state.dirty_renames.clear();
     }
 
@@ -124,7 +128,18 @@ impl RecordingFs {
         }
         if state.crash_at == Some(state.events.len()) {
             state.crashed = true;
-            let dirty: Vec<PathBuf> = state.dirty_files.iter().cloned().collect();
+            let appends = std::mem::take(&mut state.dirty_appends);
+            for (path, len) in &appends {
+                if let Ok(file) = std::fs::OpenOptions::new().write(true).open(path) {
+                    let _ = file.set_len(*len);
+                }
+            }
+            let dirty: Vec<PathBuf> = state
+                .dirty_files
+                .iter()
+                .filter(|p| !appends.contains_key(*p))
+                .cloned()
+                .collect();
             for path in dirty {
                 let _ = std::fs::remove_file(&path);
             }
@@ -141,11 +156,19 @@ impl RecordingFs {
             )));
         }
         match &event {
-            Event::Write(p) | Event::Append(p) => {
+            Event::Write(p) => {
+                state.dirty_files.insert(p.clone());
+            }
+            Event::Append(p) => {
+                if !state.dirty_files.contains(p) {
+                    let len = std::fs::metadata(p).map(|m| m.len()).unwrap_or(0);
+                    state.dirty_appends.insert(p.clone(), len);
+                }
                 state.dirty_files.insert(p.clone());
             }
             Event::SyncFile(p) => {
                 state.dirty_files.remove(p);
+                state.dirty_appends.remove(p);
             }
             Event::SyncDir(dir) => {
                 let dir = dir.clone();

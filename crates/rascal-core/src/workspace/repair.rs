@@ -8,6 +8,7 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
@@ -15,9 +16,13 @@ use crate::journal::{Event, Journal, JournalLine};
 use crate::workspace::sync::Fs;
 use crate::workspace::{Workspace, staging};
 
-/// What repair did.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// What repair did: the value `rascal workspace repair --json` prints, a boundary type with a
+/// schema (`schemas/rascal/repair-v1.json`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Report {
+    /// The report's version.
+    pub repair_version: u32,
     pub abandoned_staging_removed: Vec<String>,
     pub orphans_removed: Vec<String>,
     /// Entries dropped because their payload was missing: `id (identity)`.
@@ -35,9 +40,26 @@ impl Workspace {
         ws.repair_in_place()
     }
 
-    /// Repairs this workspace.
+    /// Repairs this workspace under the writer lock, so no commit is in flight while orphans
+    /// are judged and the generation rewritten.
     pub fn repair_in_place(&self) -> Result<Report> {
-        let mut report = Report::default();
+        let lock_path = self.root.join("lock");
+        let lock = std::fs::File::create(&lock_path).map_err(|e| Error::io(&lock_path, e))?;
+        lock.lock().map_err(|e| Error::io(&lock_path, e))?;
+        let result = self.repair_locked();
+        let _ = lock.unlock();
+        result
+    }
+
+    fn repair_locked(&self) -> Result<Report> {
+        let mut report = Report {
+            repair_version: 1,
+            abandoned_staging_removed: Vec::new(),
+            orphans_removed: Vec::new(),
+            missing_dropped: Vec::new(),
+            repaired_generation: None,
+            journal_lines: 0,
+        };
 
         // Abandoned staging.
         let staging_root = self.root.join("staging");
@@ -101,7 +123,7 @@ impl Workspace {
                 self.root.join(&a.path).display()
             )));
         }
-        for identity in &generation.records {
+        for identity in generation.records.iter().map(|r| &r.identity) {
             let hex = identity.strip_prefix("sha256:").unwrap_or(identity);
             named.insert(self.root.join("ops").join(format!("{hex}.json")));
         }

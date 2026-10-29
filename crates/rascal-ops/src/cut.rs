@@ -107,6 +107,16 @@ pub fn cut_pixels(pixels: &DynamicImage, s: u32) -> DynamicImage {
             }
             DynamicImage::ImageRgba8(out)
         }
+        DynamicImage::ImageLuma8(src) => {
+            let mut out = image::GrayImage::new(2 * s, h);
+            for y in 0..h {
+                for x in 0..s {
+                    out.put_pixel(x, y, *src.get_pixel(w - s + x, y));
+                    out.put_pixel(s + x, y, *src.get_pixel(x, y));
+                }
+            }
+            DynamicImage::ImageLuma8(out)
+        }
         other => {
             let src = other.to_rgb8();
             let mut out = RgbImage::new(2 * s, h);

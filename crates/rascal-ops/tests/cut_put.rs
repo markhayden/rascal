@@ -135,6 +135,43 @@ fn the_ops_carry_the_plan_and_the_frame_and_refuse_what_they_must() {
     assert_eq!(result.pixels.as_bytes(), image.pixels.as_bytes());
     assert_eq!(result.record.role, Role::Composite);
     assert_eq!(result.record.frame, parent.id);
+    // A canvas of the right size from another panorama's cut (another plan, another frame)
+    // is refused by its frame, before its size is even looked at.
+    let twin = Frame::raw(5760, 6, Projection::Equirectangular);
+    let mut twin_inputs: Inputs = BTreeMap::new();
+    // Another panorama of the same size: other pixels, so another image identity and another
+    // cut frame.
+    let twin_pixels = DynamicImage::ImageRgb8(RgbImage::from_fn(5760, 6, |x, y| {
+        Rgb([((x + 1) % 256) as u8, (y % 256) as u8, 0])
+    }));
+    let twin_image = Image::new("t", twin_pixels, &twin, Role::Canonical, None);
+    twin_inputs.insert("image".into(), Artifact::Image(Arc::new(twin_image)));
+    let twin_cut = cut.run(&context, &twin_inputs, &params).unwrap();
+    assert_ne!(
+        twin_cut.frames[0].id, canvas_frame.id,
+        "a different image, a different cut frame"
+    );
+    let mut table_with_twin = table.clone();
+    table_with_twin.insert(twin_cut.frames[0].clone());
+    let context_with_twin = Context {
+        frames: &table_with_twin,
+    };
+    inputs.insert("canvas".into(), twin_cut.outputs["image"].clone());
+    let refused = put
+        .run(&context_with_twin, &inputs, &Params::new())
+        .unwrap();
+    assert_eq!(refused.envelope.status, Status::InvalidArgs);
+    assert!(
+        refused
+            .envelope
+            .reason
+            .as_deref()
+            .unwrap()
+            .contains("not the cut frame of this image and plan"),
+        "{:?}",
+        refused.envelope.reason
+    );
+    inputs.insert("canvas".into(), out.outputs["image"].clone());
     // A plan for another frame is refused; a canvas of the wrong size is refused.
     let other = Frame::raw(4000, 6, Projection::Equirectangular);
     let other_plan = Plan::new(&other, 0.07).unwrap();
@@ -190,4 +227,17 @@ fn the_ops_carry_the_plan_and_the_frame_and_refuse_what_they_must() {
             .unwrap_err()
             .contains("strip must be in")
     );
+}
+
+/// A grey image is cut and put as grey: no silent conversion to colour.
+#[test]
+fn a_grey_image_stays_grey_through_cut_and_put() {
+    let grey = DynamicImage::ImageLuma8(image::GrayImage::from_fn(20, 4, |x, y| {
+        image::Luma([(x * 11 + y * 3) as u8])
+    }));
+    let canvas = cut_pixels(&grey, 2);
+    assert!(matches!(canvas, DynamicImage::ImageLuma8(_)), "{canvas:?}");
+    let back = put_pixels(&grey, &canvas, 2);
+    assert!(matches!(back, DynamicImage::ImageLuma8(_)), "{back:?}");
+    assert_eq!(back.as_bytes(), grey.as_bytes());
 }

@@ -84,7 +84,8 @@ fn sobel_matches_brute_force_with_edge_replication() {
         "edge replication: no false edge at the border"
     );
     assert!(
-        luminance(&image::RgbImage::from_pixel(2, 1, image::Rgb([255, 0, 0])))[0] - 76.245 < 0.01
+        (luminance(&image::RgbImage::from_pixel(2, 1, image::Rgb([255, 0, 0])))[0] - 76.245).abs()
+            < 0.01
     );
 }
 

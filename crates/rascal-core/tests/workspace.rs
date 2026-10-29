@@ -267,7 +267,7 @@ fn a_crash_after_staging_publishes_nothing() {
     assert_eq!(generation.n, 2);
     assert_eq!(generation.locations.len(), 1);
     for identity in &generation.records {
-        after.read_record(identity).unwrap();
+        after.read_record(&identity.identity).unwrap();
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -390,6 +390,27 @@ fn the_same_artifact_committed_twice_keeps_one_copy_and_one_id() {
     let generation = ws.snapshot().unwrap();
     assert_eq!(generation.artifacts.len(), 1);
     assert_eq!(generation.records.len(), 2, "both imports are recorded");
+    // The two imports differ only in their source name, so their records differ; an identical
+    // invocation shares its record file but keeps its own sequence number and duration.
+    let (c, _) = ws.add_canonical(canonical(&f), &f, "flat-again").unwrap();
+    assert_eq!(a, c);
+    let generation = ws.snapshot().unwrap();
+    assert_eq!(generation.records.len(), 3);
+    assert_eq!(
+        generation.records[1].identity,
+        generation.records[2].identity
+    );
+    let records = ws.records().unwrap();
+    assert_eq!(
+        records.iter().map(|r| r.seq).collect::<Vec<_>>(),
+        vec![1, 2, 3],
+        "the sequence numbers come from the generation, not the shared file"
+    );
+    assert_eq!(
+        std::fs::read_dir(dir.join("ops")).unwrap().count(),
+        2,
+        "two record files for three invocations"
+    );
     assert_eq!(
         std::fs::read_dir(dir.join("images")).unwrap().count(),
         2,
@@ -398,4 +419,58 @@ fn the_same_artifact_committed_twice_keeps_one_copy_and_one_id() {
     let loaded = ws.load(&a).unwrap();
     assert!(matches!(loaded, Artifact::Image(_)));
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Identities never depend on local ids: two workspaces whose id counters differ agree on the
+/// location and the mask a rect run produces.
+#[test]
+fn workspaces_with_different_allocation_histories_agree_on_identities() {
+    let registry = rascal_ops::registry().unwrap();
+    let f = frame();
+    let run = |name: &str, extra_imports: u32| {
+        let dir = scratch(name);
+        let ws = Workspace::open(&dir).unwrap();
+        for i in 0..extra_imports {
+            let other = Frame::raw(12 + i, 9, Projection::Flat);
+            ws.add_canonical(canonical(&other), &other, "other")
+                .unwrap();
+        }
+        let (image_id, _) = ws.add_canonical(canonical(&f), &f, "flat").unwrap();
+        let mut inputs: Inputs = BTreeMap::new();
+        inputs.insert("image".into(), ws.load(&image_id).unwrap());
+        let mut params = Params::new();
+        params.insert(
+            "bbox".into(),
+            toml::Value::Array(
+                vec![0.1, 0.1, 0.5, 0.5]
+                    .into_iter()
+                    .map(toml::Value::Float)
+                    .collect(),
+            ),
+        );
+        let found = ws
+            .invoke("find", "rect", &registry, &inputs, &params)
+            .unwrap();
+        inputs.insert("location".into(), ws.load(&found.ids["location"]).unwrap());
+        let masked = ws
+            .invoke("mask", "rasterize", &registry, &inputs, &Params::new())
+            .unwrap();
+        let ids = (found.ids["location"].clone(), masked.ids["mask"].clone());
+        let identities = (
+            found.output.outputs["location"]
+                .identity()
+                .as_str()
+                .to_string(),
+            masked.output.outputs["mask"]
+                .identity()
+                .as_str()
+                .to_string(),
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        (ids, identities)
+    };
+    let (ids_a, identities_a) = run("history-a", 0);
+    let (ids_b, identities_b) = run("history-b", 3);
+    assert_ne!(ids_a, ids_b, "the local ids differ");
+    assert_eq!(identities_a, identities_b, "the identities agree");
 }

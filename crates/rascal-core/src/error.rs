@@ -82,6 +82,13 @@ impl Error {
     }
 
     /// An op error from a message.
+    /// A usage error about one op: the caller's arguments, not the op, are wrong.
+    pub fn usage_for(op: &str, message: impl Into<String>) -> Self {
+        Error::Usage {
+            message: format!("{op}: {}", message.into()),
+        }
+    }
+
     pub fn op(op: &str, message: impl Into<String>) -> Self {
         Error::Op {
             op: op.to_string(),

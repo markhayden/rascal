@@ -496,6 +496,7 @@ impl Mask {
 
     /// Every invariant of a mask in memory. Named so a refusal says which one.
     pub fn check(&self) -> Result<()> {
+        check_file_names(&self.record)?;
         let (w, h) = self.dimensions();
         let fail = |invariant: &str| Error::MaskInvariant {
             id: self.record.id.clone(),
@@ -618,17 +619,25 @@ impl Mask {
 
     /// Reads a mask directory and checks every invariant, naming the one that fails.
     pub fn read(dir: &Path) -> Result<Mask> {
+        let mask = Mask::read_unchecked(dir)?;
+        mask.check()?;
+        Ok(mask)
+    }
+
+    /// Reads a mask directory without checking the invariants or the identity, for replaying
+    /// a mask that may have been tampered with: nothing read this way is trusted. The file
+    /// names in `mask.toml` are still required to be plain, so a read never leaves the
+    /// directory.
+    pub fn read_unchecked(dir: &Path) -> Result<Mask> {
         let path = dir.join("mask.toml");
         let text = std::fs::read_to_string(&path).map_err(|e| Error::io(&path, e))?;
         let record: MaskRecord = toml::from_str(&text).map_err(|source| Error::Toml {
             path: path.clone(),
             source: Box::new(source),
         })?;
+        check_file_names(&record)?;
         let plane = |name: &str| -> Result<GrayImage> {
-            let p = dir.join(name);
-            Ok(image::open(&p)
-                .map_err(|source| Error::Image { path: p, source })?
-                .to_luma8())
+            Ok(crate::image::decode_limited(&dir.join(name))?.to_luma8())
         };
         let core = plane(&record.zones.core)?;
         let blend = plane(&record.zones.blend)?;
@@ -655,17 +664,49 @@ impl Mask {
                 }),
             }
         }
-        let mask = Mask {
+        Ok(Mask {
             record,
             core,
             blend,
             protect,
             profile,
             prescriptions,
-        };
-        mask.check()?;
-        Ok(mask)
+        })
     }
+}
+
+/// Every file `mask.toml` names must be a plain name inside the mask directory: no separator,
+/// not `.` or `..`, not empty. A hand-edited record can otherwise read, or on a later write
+/// overwrite, a file outside the mask.
+fn check_file_names(record: &MaskRecord) -> Result<()> {
+    let mut names = vec![
+        ("zones.core", record.zones.core.as_str()),
+        ("zones.blend", record.zones.blend.as_str()),
+        ("zones.protect", record.zones.protect.as_str()),
+    ];
+    if let Some(profile) = &record.profile {
+        names.push(("profile.band", profile.band.as_str()));
+        names.push(("profile.sigma_px", profile.sigma_px.as_str()));
+    }
+    for prescription in &record.prescriptions {
+        match prescription {
+            Prescription::ToneRamp { step, .. } => names.push(("prescriptions.step", step)),
+        }
+    }
+    for (role, name) in names {
+        let plain = !name.is_empty()
+            && name != "."
+            && name != ".."
+            && !name.contains(['/', '\\'])
+            && !name.starts_with('.');
+        if !plain {
+            return Err(Error::MaskInvariant {
+                id: record.id.clone(),
+                invariant: format!("{role} names '{name}', which is not a plain file name"),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Counts per zone, for `inspect --json`; task 1.9 gives the inspect output its schema.

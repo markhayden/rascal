@@ -4,6 +4,7 @@
 
 use std::collections::BTreeMap;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::artifact::Artifact;
@@ -14,8 +15,11 @@ use crate::workspace::Workspace;
 use crate::workspace::record::OperationRecord;
 
 /// What a replay found.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ReplayReport {
+    /// The report's version.
+    pub replay_version: u32,
     /// The record that produced the mask.
     pub record: String,
     pub op: String,
@@ -25,12 +29,17 @@ pub struct ReplayReport {
     pub rebuilt_identity: String,
     /// Planes that differ, with the count of differing pixels: empty when identical.
     pub differing_planes: BTreeMap<String, u64>,
+    /// The stored record's identity, recomputed from its content, is not the identity it
+    /// carries: the record was edited.
+    pub record_differs: bool,
 }
 
 impl ReplayReport {
     /// True when the rebuilt mask equals the stored one.
     pub fn is_clean(&self) -> bool {
-        self.differing_planes.is_empty() && self.stored_identity == self.rebuilt_identity
+        self.differing_planes.is_empty()
+            && !self.record_differs
+            && self.stored_identity == self.rebuilt_identity
     }
 }
 
@@ -99,36 +108,19 @@ pub fn replay_mask(ws: &Workspace, registry: &OpRegistry, stored: &Mask) -> Resu
         }
     }
     Ok(ReplayReport {
+        replay_version: 1,
         record: record.identity.clone(),
         op: record.op.clone(),
         step: record.step.clone(),
         stored_identity: stored.record.identity.clone(),
         rebuilt_identity: rebuilt.record.identity.clone(),
         differing_planes,
+        record_differs: stored.compute_identity().as_str() != stored.record.identity,
     })
 }
 
 /// Reads a stored mask without the identity check, for replaying a tampered one; the planes
-/// are compared, not trusted.
+/// and the record are compared, not trusted.
 pub fn read_untrusted(dir: &std::path::Path) -> Result<Mask> {
-    let path = dir.join("mask.toml");
-    let text = std::fs::read_to_string(&path).map_err(|e| Error::io(&path, e))?;
-    let record: crate::mask::MaskRecord = toml::from_str(&text).map_err(|source| Error::Toml {
-        path: path.clone(),
-        source: Box::new(source),
-    })?;
-    let plane = |name: &str| -> Result<image::GrayImage> {
-        let p = dir.join(name);
-        Ok(image::open(&p)
-            .map_err(|source| Error::Image { path: p, source })?
-            .to_luma8())
-    };
-    Ok(Mask {
-        core: plane(&record.zones.core)?,
-        blend: plane(&record.zones.blend)?,
-        protect: plane(&record.zones.protect)?,
-        record,
-        profile: None,
-        prescriptions: Vec::new(),
-    })
+    Mask::read_unchecked(dir)
 }

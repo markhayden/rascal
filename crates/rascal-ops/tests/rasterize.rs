@@ -11,7 +11,7 @@ use rascal_core::image::{Image, Role};
 use rascal_core::location::Location;
 use rascal_core::op::{Context, Inputs, Op, Params, Status};
 use rascal_ops::line::Line;
-use rascal_ops::rasterize::{Rasterize, dilate_path, fill_polygon};
+use rascal_ops::rasterize::{Rasterize, bbox_pixels, dilate_path, fill_polygon};
 use rascal_ops::stroke::Stroke;
 
 const W: u32 = 60;
@@ -353,4 +353,47 @@ fn the_line_and_stroke_ops_make_validated_locations() {
     let out = rasterize(location.clone(), &table, &image);
     assert_eq!(out.envelope.status, Status::Ok);
     assert!(count(&core_of(&out)) > 50);
+}
+
+/// A box covers the pixels whose centres it contains, the rule the polygon filler uses, and
+/// the floating noise of `v * size` never adds a column.
+#[test]
+fn a_box_covers_pixel_centres_and_agrees_with_the_same_box_as_a_polygon() {
+    assert_eq!(
+        bbox_pixels([0.0, 0.0, 0.55, 1.0], 100, 1),
+        Some((0, 0, 55, 1))
+    );
+    assert_eq!(
+        bbox_pixels([0.2, 0.2, 0.6, 0.6], 320, 200),
+        Some((64, 40, 192, 120))
+    );
+    assert_eq!(
+        bbox_pixels([0.0, 0.0, 0.004, 1.0], 100, 1),
+        None,
+        "no centre inside"
+    );
+    assert_eq!(
+        bbox_pixels([0.0, 0.0, 0.006, 1.0], 100, 1),
+        Some((0, 0, 1, 1))
+    );
+    assert_eq!(bbox_pixels([0.3, 0.0, 0.2, 1.0], 100, 1), None, "empty box");
+    for bbox in [
+        [0.11, 0.07, 0.55, 0.93],
+        [0.0, 0.0, 1.0, 1.0],
+        [0.333, 0.25, 0.666, 0.5],
+    ] {
+        let (x0, y0, x1, y1) = bbox_pixels(bbox, W, H).unwrap();
+        let [bx0, by0, bx1, by1] = bbox;
+        let polygon = fill_polygon(&[[bx0, by0], [bx1, by0], [bx1, by1], [bx0, by1]], W, H);
+        for y in 0..H {
+            for x in 0..W {
+                let inside = x >= x0 && x < x1 && y >= y0 && y < y1;
+                assert_eq!(
+                    polygon.get_pixel(x, y)[0] == 255,
+                    inside,
+                    "{bbox:?} at {x},{y}"
+                );
+            }
+        }
+    }
 }

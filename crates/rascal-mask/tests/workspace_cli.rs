@@ -106,6 +106,16 @@ fn import_then_rect_from_two_shells_fifty_times_each() {
     assert_eq!(generation["records"].as_array().unwrap().len(), 101);
     let journal = std::fs::read_to_string(ws.join("journal.jsonl")).unwrap();
     assert_eq!(journal.lines().count(), 101, "one line per invocation");
+    // Appends from two processes never interleave and never share a sequence number.
+    let seqs: std::collections::BTreeSet<u64> = journal
+        .lines()
+        .map(|l| {
+            serde_json::from_str::<serde_json::Value>(l).unwrap()["seq"]
+                .as_u64()
+                .unwrap()
+        })
+        .collect();
+    assert_eq!(seqs, (1..=101).collect());
     // The plain listing names the image too.
     let out = rascal(&["workspace", "list", ws.to_str().unwrap()]);
     assert!(String::from_utf8_lossy(&out.stdout).contains("img-1"));
@@ -170,6 +180,27 @@ fn an_op_subcommand_takes_ports_by_id_and_parameters_by_kind() {
         "img-1",
     ]);
     assert_eq!(out.status.code(), Some(64));
+    // An artifact of the wrong type on a port is the caller's mistake: 64, naming the port.
+    let out = rascal(&[
+        "rasterize",
+        "--workspace",
+        ws.to_str().unwrap(),
+        "--image",
+        "img-1",
+        "--location",
+        "img-1",
+    ]);
+    assert_eq!(
+        out.status.code(),
+        Some(64),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("input location must be a Location"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let out = rascal(&[
         "rect",
         "--workspace",

@@ -197,6 +197,12 @@ fn every_validation_error_names_its_step() {
         ),
         (
             &format!(
+                "{RASTERIZE}[outputs]\nmask = \"mask.mask\"\nrender = [{{ for = \"grey\", out = \"journal.jsonl\" }}]\n"
+            ),
+            "step outputs: render out 'journal.jsonl' is a file the run directory owns",
+        ),
+        (
+            &format!(
                 "{RASTERIZE}[outputs]\nmask = \"mask.mask\"\nrender = [{{ for = \"sepia\", out = \"g.png\" }}]\n"
             ),
             "step outputs: render profile 'sepia' is not one of grey, binary, alpha, tinted, overlay",
@@ -303,7 +309,11 @@ fn resolved_defaults_and_the_constant_set_appear_in_the_journal() {
         "tuned-v1",
         "the first constant set is the default"
     );
-    assert_eq!(by_step("u")["gain"], 1);
+    assert_eq!(
+        by_step("u")["gain"],
+        1.0,
+        "a number default is recorded as a number"
+    );
     assert_eq!(by_step("u")["constants"], "tuned-v2");
     let _ = std::fs::remove_dir_all(&dir);
 }

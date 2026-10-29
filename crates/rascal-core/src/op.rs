@@ -180,6 +180,22 @@ impl Param {
     }
 
     /// Checks one value; the message names the parameter.
+    /// A checked value in its canonical TOML type: a number given as an integer becomes a
+    /// float, so `width = 1` and `width = 1.0` resolve, serialize and hash the same.
+    pub fn coerce(&self, value: &toml::Value) -> toml::Value {
+        let to_float = |v: &toml::Value| match v {
+            toml::Value::Integer(i) => toml::Value::Float(*i as f64),
+            other => other.clone(),
+        };
+        match (self.kind, value) {
+            (ParamKind::Number, v) => to_float(v),
+            (ParamKind::NumberArray, toml::Value::Array(items)) => {
+                toml::Value::Array(items.iter().map(to_float).collect())
+            }
+            _ => value.clone(),
+        }
+    }
+
     pub fn check(&self, value: &toml::Value) -> std::result::Result<(), String> {
         let name = &self.name;
         let number = || {
@@ -577,7 +593,7 @@ impl Manifest {
             match given.get(&param.name) {
                 Some(value) => {
                     param.check(value)?;
-                    resolved.insert(param.name.clone(), value.clone());
+                    resolved.insert(param.name.clone(), param.coerce(value));
                 }
                 None if param.required => {
                     return Err(format!("parameter {} is required", param.name));
@@ -591,7 +607,7 @@ impl Manifest {
                         .map_err(|e| {
                             format!("parameter {}: default is not a TOML value: {e}", param.name)
                         })?;
-                        resolved.insert(param.name.clone(), value);
+                        resolved.insert(param.name.clone(), param.coerce(&value));
                     }
                 }
             }
@@ -960,7 +976,7 @@ pub fn validate_inputs(manifest: &Manifest, inputs: &Inputs) -> Result<()> {
                     }
                     _ => String::new(),
                 };
-                return Err(Error::op(
+                return Err(Error::usage_for(
                     &manifest.name,
                     format!(
                         "input {} must be a {}, got a {}{role}",
@@ -971,7 +987,7 @@ pub fn validate_inputs(manifest: &Manifest, inputs: &Inputs) -> Result<()> {
                 ));
             }
             None if port.required => {
-                return Err(Error::op(
+                return Err(Error::usage_for(
                     &manifest.name,
                     format!("input {} is required", port.name),
                 ));
@@ -981,7 +997,10 @@ pub fn validate_inputs(manifest: &Manifest, inputs: &Inputs) -> Result<()> {
     }
     for name in inputs.keys() {
         if manifest.input(name).is_none() {
-            return Err(Error::op(&manifest.name, format!("unknown input {name}")));
+            return Err(Error::usage_for(
+                &manifest.name,
+                format!("unknown input {name}"),
+            ));
         }
     }
     // A mask and an image in one invocation share a frame; images among themselves need not
@@ -998,7 +1017,7 @@ pub fn validate_inputs(manifest: &Manifest, inputs: &Inputs) -> Result<()> {
             .map(|(k, a)| (k.as_str(), a.frame()))
             .find(|(_, f)| *f != first.1)
     {
-        return Err(Error::op(
+        return Err(Error::usage_for(
             &manifest.name,
             format!(
                 "inputs {} (frame {}) and {} (frame {}) must be in one frame",

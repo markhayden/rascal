@@ -188,7 +188,12 @@ impl Workspace {
         generation
             .records
             .iter()
-            .map(|identity| self.read_record(identity))
+            .map(|entry| {
+                let mut record = self.read_record(&entry.identity)?;
+                record.seq = entry.seq;
+                record.duration_ms = entry.duration_ms;
+                Ok(record)
+            })
             .collect()
     }
 
@@ -245,7 +250,7 @@ impl Workspace {
                         path: record_path,
                         source,
                     })?;
-                let pixels = image::open(&path).map_err(|source| Error::Image { path, source })?;
+                let pixels = crate::image::decode_limited(&path)?;
                 Ok(Artifact::Image(Arc::new(Image { record, pixels })))
             }
             ArtifactType::Mask => Ok(Artifact::Mask(Arc::new(Mask::read(&path)?))),
