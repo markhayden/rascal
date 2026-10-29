@@ -895,7 +895,10 @@ is untightened and the mask equals `rasterize`.
 **Verification.** `cargo test -p rascal-ops -- tighten`.
 
 **Dependencies.** 1.8b, 2.2. **Files.** `crates/rascal-ops/src/tighten.rs`, constants, `fixtures/images/scratch-*.png`.
-**Size.** M.
+**Size.** M. Landed 2026-10-29: the textured fixture draws its scratch 140 levels deep so its
+edges outrank the planks' joins (about 100), which is what the scoring rule requires of a
+real scratch on a textured ground; the crossing reversion cannot fire under one smoothing
+kernel and is tested as a guard.
 
 ### Task 4.4: The `remove`, `repair`, `repair-area`, `protect` recipes and the acceptance script
 

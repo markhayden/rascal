@@ -73,6 +73,7 @@ before accepting it.
 | `subtract` | refine | Mask, Mask (`subtract`) or Location; `grow_px` | the same mask with protect enlarged by the second mask's support (core or blend) or the location's interior, dilated by `grow_px`; core and blend cleared there; the profile and prescriptions kept, since `apply` honours protect; exactly one of the two second inputs | 4.2 |
 | `select` | refine | Image[] (`plane`, the instance planes of a finder, a `many` port); `keep`, `drop`, `exclude` | a new Mask in the planes' frame: the union of the kept instances (`keep` names them, else all but `drop`), cleared inside every `exclude` box; blend and protect empty; not applicable when nothing is left | 4.2 |
 | `invert` | refine | Mask; `to` | a new Mask in the target frame (`to`: a frame id on the mask's chain, or `raw` for its root, the default): protect = the old support and protect mapped through the chain (a `cut:` mask lands on the two edge spans, a `crop:` mask on its bbox), core = every other pixel, blend empty | 4.2 |
+| `tighten` | refine | Location (`stroke`), Image | a Mask whose core follows the defect's edges: at each path sample (`sample_spacing_px`) the best pair of opposite-signed luminance edges inside `[−r, r]` (`min_contrast`, `min_defect_px`, `max_defect_factor · r`), extents smoothed along the path (`path_sigma`), a crossing reverting; samples without a pair keep the full radius, so an untightened stroke equals `rasterize`'s; plus a Series `tightened` (per sample: tightened, a, b); `tighten-v1` | 4.3 |
 | `close` | refine | Mask; `radius_px` | the same mask with its core closed (dilated then eroded) by a disc of `radius_px`, so gaps and notches narrower than the disc fill; cleared under protect; blend cleared, profile and prescriptions removed | 4.1 |
 
 The pixel primitives every op is built from live in `rascal_ops::primitives`: row smoothing
@@ -94,7 +95,7 @@ produced; on the command line `--plane` is repeated, in order; over MCP it is an
 the binary and fails when an op or profile is missing from these pages, or when a documented
 name no longer exists.
 
-The remaining ops arrive with their tasks (PLAN.md): `tighten` in M4; `segment` from the Python pack in M5 (the client that runs
+The remaining op arrives with its task (PLAN.md): `segment` from the Python pack in M5 (the client that runs
 it, and a fake pack that serves it, are below).
 
 ## The server

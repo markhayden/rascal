@@ -528,7 +528,8 @@ max_defect_px`; its score is `|g(a)| + |g(b)|`; ties break toward the pair whose
 nearest `t = 0`, then toward the narrower pair. A sample with no admissible pair is
 **untightened**: its extent is `[−r, r]` and it is excluded from smoothing. Over each maximal run
 of tightened samples, `a` and `b` are smoothed separately with `smooth_rows(·, path_sigma)`; if
-after smoothing `a ≥ b` at a sample, that sample reverts to untightened. The core is the union of
+after smoothing `a ≥ b` at a sample, that sample reverts to untightened (with one kernel on
+both, proper extents cannot cross by smoothing alone; the reversion is a guard, kept). The core is the union of
 the quadrilaterals between consecutive samples' `[a, b]` extents, with round joins between them
 and round caps of the local half-extent at both ends; untightened samples contribute their full
 `[−r, r]`, so an entirely untightened stroke gives exactly the mask `rasterize` gives the same

@@ -27,6 +27,7 @@ pub mod select;
 pub mod shrink;
 pub mod stroke;
 pub mod subtract;
+pub mod tighten;
 pub mod unwindow;
 pub mod window;
 
@@ -57,6 +58,7 @@ pub fn register_all(registry: &mut OpRegistry) -> rascal_core::error::Result<()>
     registry.register(Box::new(subtract::Subtract))?;
     registry.register(Box::new(select::Select))?;
     registry.register(Box::new(invert::Invert))?;
+    registry.register(Box::new(tighten::Tighten))?;
     Ok(())
 }
 

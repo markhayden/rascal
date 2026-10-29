@@ -165,3 +165,77 @@ pub fn chair_blob(width: u32, height: u32) -> RgbImage {
     }
     out
 }
+
+/// The scratch's path, as fractions of the canvas: a gentle S from left to right. The
+/// fixtures draw the scratch along it; a test strokes along it and expects `tighten` to find
+/// the scratch's two edges.
+pub fn scratch_path() -> Vec<[f64; 2]> {
+    (0..=24)
+        .map(|i| {
+            let t = i as f64 / 24.0;
+            [
+                0.15 + 0.7 * t,
+                0.5 + 0.12 * (t * std::f64::consts::PI * 2.0).sin(),
+            ]
+        })
+        .collect()
+}
+
+/// How wide the drawn scratch is, in pixels: its two edges are this far apart.
+pub const SCRATCH_WIDTH_PX: f64 = 3.0;
+
+/// Darkens the pixels within half the scratch's width of the path by `depth` levels.
+fn draw_scratch(canvas: &mut RgbImage, depth: u8) {
+    let (w, h) = (canvas.width() as f64, canvas.height() as f64);
+    let pts: Vec<(f64, f64)> = scratch_path()
+        .iter()
+        .map(|p| (p[0] * w, p[1] * h))
+        .collect();
+    let half = SCRATCH_WIDTH_PX / 2.0;
+    for y in 0..canvas.height() {
+        for x in 0..canvas.width() {
+            let (cx, cy) = (x as f64 + 0.5, y as f64 + 0.5);
+            let near = pts.windows(2).any(|seg| {
+                let (ax, ay) = seg[0];
+                let (bx, by) = seg[1];
+                let (dx, dy) = (bx - ax, by - ay);
+                let len2 = dx * dx + dy * dy;
+                let t = (((cx - ax) * dx + (cy - ay) * dy) / len2).clamp(0.0, 1.0);
+                let (px, py) = (ax + t * dx, ay + t * dy);
+                (cx - px).powi(2) + (cy - py).powi(2) <= half * half
+            });
+            if near {
+                let p = canvas.get_pixel(x, y);
+                canvas.put_pixel(
+                    x,
+                    y,
+                    Rgb([
+                        p[0].saturating_sub(depth),
+                        p[1].saturating_sub(depth),
+                        p[2].saturating_sub(depth),
+                    ]),
+                );
+            }
+        }
+    }
+}
+
+/// A scratch on a smooth ground: a soft vertical gradient (a wall) with the scratch drawn
+/// along `scratch_path`, 70 levels deep. The only edges in the image are the scratch's own.
+pub fn scratch_smooth(width: u32, height: u32) -> RgbImage {
+    let mut out = RgbImage::from_fn(width, height, |_, y| {
+        let v = 150.0 + 40.0 * (y as f32 / height.max(1) as f32);
+        Rgb([v as u8, (v - 6.0) as u8, (v - 14.0) as u8])
+    });
+    draw_scratch(&mut out, 70);
+    out
+}
+
+/// The same scratch on the textured floor, where the planks' joins compete with it: drawn
+/// 140 levels deep, so its edges outrank a join's (about 100 levels), as a scratch on a
+/// textured ground must for its edges to be the strongest pair inside the stroke.
+pub fn scratch_textured(width: u32, height: u32) -> RgbImage {
+    let mut out = floor(width, height);
+    draw_scratch(&mut out, 140);
+    out
+}

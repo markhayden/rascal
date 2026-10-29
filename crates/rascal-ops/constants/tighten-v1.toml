@@ -1,0 +1,6 @@
+# tighten-v1 (SPEC.md "Constant sets"). A change to a value is a new set version.
+min_contrast = 12.0
+min_defect_px = 1.0
+max_defect_factor = 2.0
+path_sigma = 4.0
+sample_spacing_px = 1.0

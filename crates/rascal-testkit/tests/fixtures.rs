@@ -66,3 +66,31 @@ fn chair_blob_fixture_matches_its_builder() {
         "fixtures/images/chair-blob.png differs from images::chair_blob(480, 320); UPDATE_FIXTURES=1 regenerates it"
     );
 }
+
+#[test]
+fn scratch_smooth_fixture_matches_its_builder() {
+    let built = rascal_testkit::images::scratch_smooth(400, 300);
+    let path = fixture("scratch-smooth.png");
+    if std::env::var_os("UPDATE_FIXTURES").is_some() {
+        built.save(&path).unwrap();
+    }
+    let committed = image::open(&path).unwrap().to_rgb8();
+    assert!(
+        committed.as_raw() == built.as_raw(),
+        "fixtures/images/scratch-smooth.png differs from images::scratch_smooth(400, 300); UPDATE_FIXTURES=1 regenerates it"
+    );
+}
+
+#[test]
+fn scratch_textured_fixture_matches_its_builder() {
+    let built = rascal_testkit::images::scratch_textured(400, 300);
+    let path = fixture("scratch-textured.png");
+    if std::env::var_os("UPDATE_FIXTURES").is_some() {
+        built.save(&path).unwrap();
+    }
+    let committed = image::open(&path).unwrap().to_rgb8();
+    assert!(
+        committed.as_raw() == built.as_raw(),
+        "fixtures/images/scratch-textured.png differs from images::scratch_textured(400, 300); UPDATE_FIXTURES=1 regenerates it"
+    );
+}
