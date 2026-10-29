@@ -168,6 +168,24 @@ pub fn pixel_digest(pixels: &DynamicImage) -> Identity {
 pub const MAX_SIDE: u32 = 32_768;
 const MAX_ALLOC: u64 = 2 << 30;
 
+/// Decodes PNG (or JPEG) bytes within the same limits as [`decode_limited`]: a filler's or a
+/// pack's answer.
+pub fn decode_limited_bytes(bytes: &[u8]) -> Result<DynamicImage> {
+    let fail = |source| Error::Image {
+        path: "<bytes>".into(),
+        source,
+    };
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_SIDE);
+    limits.max_image_height = Some(MAX_SIDE);
+    limits.max_alloc = Some(MAX_ALLOC);
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|e| Error::io(Path::new("<bytes>"), e))?;
+    reader.limits(limits);
+    reader.decode().map_err(fail)
+}
+
 /// Decodes an image file within [`MAX_SIDE`] and the memory bound; every decode of a file
 /// rascal did not write itself goes through here.
 pub fn decode_limited(path: &Path) -> Result<DynamicImage> {

@@ -80,6 +80,7 @@ which parts exist; it is updated in the same commit as the code it describes.
 | `window` and `unwindow` | rascal-ops | done: the window contract (support, context, square, caps, slide), the `crop:` frame reused by identity, the cropped planes, exact unwindow | M2 task 2.4 |
 | `paste` (feather and hard) | rascal-ops, rascal-mask | done: the paste contract on pixels, both modes, alpha rules, poisson registered as not applicable until M7, `rascal paste` on files | M2 task 2.5 |
 | `measure` v1 | rascal-ops, rascal-mask | done: the five measures with `measures-v1`, series with row indices and units, summaries, skipped rows, `measured_nothing`, circular hue, `rascal measure` on files, the measures panel, the docs check | M2 task 2.6 |
+| the fillers and the fake fillers | rascal-core, rascal-mask, rascal-testkit | done: `[fillers.*]` with its checks, the command filler (placeholders, timeout, exit handling), the HTTP filler (multipart, bearer from `key_env`, timeout), the request-field matrix, the dimension assertion, the journal record without the key, six fake behaviours as a command and a local server | M2 task 2.7 |
 | the refine ops and the remove, repair, protect recipes | rascal-ops, rascal-mask | not started | M4 |
 | the Python pack | tools/python | not started | M5 |
 | the lab | rascal-mask | not started | M6 |

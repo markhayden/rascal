@@ -2,7 +2,9 @@
 //! fillers (exact, mis-sized, re-encoding, slow, failing), the fake pack, the independent
 //! minimal MCP client, a filesystem shim and synthetic image builders.
 //!
-//! Builders arrive with the tasks that need them; at task 1.1 the synthetic images.
+//! Builders arrive with the tasks that need them: the synthetic images (1.1), the filesystem
+//! shim (1.7b), the fake fillers (2.7).
 
+pub mod fake_filler;
 pub mod fs_shim;
 pub mod images;

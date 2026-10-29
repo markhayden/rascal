@@ -14,6 +14,77 @@
       },
       "type": "object"
     },
+    "FillerConfig": {
+      "additionalProperties": false,
+      "description": "One filler entry under `[fillers.<name>]`: a command with placeholders or an HTTP endpoint,\nthe rendering profile it takes, the paste mode its result is composited with, a timeout,\nand for the lab a revision string. `key_env` names the environment variable holding a\nbearer key, which is read at call time and never stored, logged or journaled.",
+      "properties": {
+        "command": {
+          "description": "The command and its arguments; `{image}`, `{mask}`, `{out}` and `{prompt}` are\nsubstituted. Exactly one of `command` and `url`.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "key_env": {
+          "description": "The environment variable holding the bearer key for `url`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "max_side": {
+          "description": "The filler's largest side; the heal graph windows to it. Unset: no window.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "paste": {
+          "default": "feather",
+          "description": "The paste mode for its result: `feather`, `hard` or `poisson`.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The rendering profile the filler takes: `grey` or `binary` (mask input), `alpha` or\n`tinted` (image input).",
+          "type": "string"
+        },
+        "revision": {
+          "description": "Free text the lab hashes into a cell's identity; required for lab use.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "send_mask": {
+          "default": false,
+          "description": "For an image-input profile: also send the `grey` rendering as `mask`.",
+          "type": "boolean"
+        },
+        "timeout_s": {
+          "default": 120,
+          "description": "Seconds before the call is abandoned as an operational error.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "url": {
+          "description": "The endpoint of a multipart POST (`image`, `mask` when the profile has one, `prompt`\nwhen given) that answers with a PNG.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
     "WorkspaceConfig": {
       "additionalProperties": false,
       "description": "Where runs keep their workspace when `--workspace` is not given.",
@@ -48,6 +119,13 @@
           "type": "null"
         }
       ]
+    },
+    "fillers": {
+      "additionalProperties": {
+        "$ref": "#/$defs/FillerConfig"
+      },
+      "description": "The fillers by name.",
+      "type": "object"
     },
     "workspace": {
       "anyOf": [

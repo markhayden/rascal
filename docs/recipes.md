@@ -89,7 +89,8 @@ without. A bad parameter value is `invalid_args` in the journal and exit 64.
 ## The configuration file
 
 `--config rascal.toml` names the file a pipeline gives rascal. Its general sections are here;
-`[fillers]` arrives with M2 and `[packs]` with M3. The schema is `schemas/rascal/config-v1.json`.
+`[fillers.*]` is on `docs/fillers.md` and `[packs]` arrives with M3. The schema is
+`schemas/rascal/config-v1.json`; `examples/rascal.toml` is a complete file.
 
 ```toml
 config_version = 1

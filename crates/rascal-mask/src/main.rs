@@ -155,6 +155,13 @@ enum Command {
         #[arg(long, conflicts_with_all = ["after", "before", "mask", "set", "json"])]
         list: bool,
     },
+    /// The testkit's fake filler as a command (test builds only): `<behaviour> <image> [<mask>] <out>`.
+    #[cfg(feature = "testkit")]
+    #[command(hide = true)]
+    FakeFiller {
+        behaviour: String,
+        paths: Vec<PathBuf>,
+    },
     /// Composite a fill onto a base through a stored mask (feather, hard; poisson with M7).
     Paste {
         /// The base image, in the mask's frame.
@@ -263,6 +270,7 @@ const RESERVED: &[&str] = &[
     "export",
     "paste",
     "measure",
+    "fake-filler",
     "dash",
     "ops",
     "workspace",
@@ -551,6 +559,22 @@ fn main() {
                         eprintln!("rascal measure: {error}");
                         exit::code_for(&error)
                     }
+                }
+            }
+        }
+        #[cfg(feature = "testkit")]
+        Command::FakeFiller { behaviour, paths } => {
+            use rascal_testkit::fake_filler::{Behaviour, run_command};
+            let Some(behaviour) = Behaviour::parse(&behaviour) else {
+                eprintln!("rascal fake-filler: unknown behaviour {behaviour}");
+                std::process::exit(exit::USAGE);
+            };
+            match paths.as_slice() {
+                [image, out] => run_command(behaviour, image, None, out),
+                [image, mask, out] => run_command(behaviour, image, Some(mask), out),
+                _ => {
+                    eprintln!("rascal fake-filler: <behaviour> <image> [<mask>] <out>");
+                    exit::USAGE
                 }
             }
         }
