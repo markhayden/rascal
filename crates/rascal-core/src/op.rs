@@ -668,6 +668,21 @@ impl Manifest {
                 return Err(format!("{name}: output {} is declared twice", port.name));
             }
         }
+        // A port's name may not read as another port's numbered artifact (`plane_3` beside a
+        // many `plane`): the lookup would be ambiguous.
+        for ports in [&self.inputs, &self.outputs] {
+            for many in ports.iter().filter(|p| p.many) {
+                if let Some(other) = ports
+                    .iter()
+                    .find(|p| p.name != many.name && many.index_of(&p.name).is_some())
+                {
+                    return Err(format!(
+                        "{name}: port {} reads as an artifact of the many port {}",
+                        other.name, many.name
+                    ));
+                }
+            }
+        }
         seen.clear();
         for param in &self.params {
             if param.name.trim().is_empty() || param.purpose.trim().is_empty() {

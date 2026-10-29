@@ -87,7 +87,7 @@ impl Op for Subtract {
         };
         let grow_px = crate::float(params, "grow_px").unwrap_or(0.0);
         let (width, height) = mask.dimensions();
-        let shape: GrayImage = match (inputs.get("subtract"), inputs.get("location")) {
+        let shape: Option<GrayImage> = match (inputs.get("subtract"), inputs.get("location")) {
             (Some(Artifact::Mask(other)), None) => {
                 if other.record.frame != mask.record.frame {
                     return Ok(Output::invalid_args(format!(
@@ -95,11 +95,11 @@ impl Op for Subtract {
                         other.record.frame, mask.record.frame
                     )));
                 }
-                GrayImage::from_fn(width, height, |x, y| {
+                Some(GrayImage::from_fn(width, height, |x, y| {
                     let on =
                         other.core.get_pixel(x, y)[0] != 0 || other.blend.get_pixel(x, y)[0] != 0;
                     Luma([if on { 255 } else { 0 }])
-                })
+                }))
             }
             (None, Some(Artifact::Location { location, .. })) => {
                 if location.frame() != mask.record.frame {
@@ -111,7 +111,7 @@ impl Op for Subtract {
                 }
                 let frame: &Frame = context.frames.require(&mask.record.frame)?;
                 match location_core(location, frame) {
-                    Ok(Some(core)) => core,
+                    Ok(Some(core)) => Some(core),
                     Ok(None) => {
                         return Ok(Output::not_applicable(format!(
                             "a {} location has no interior to protect",
@@ -124,51 +124,35 @@ impl Op for Subtract {
             (Some(_), Some(_)) => {
                 return Ok(Output::invalid_args("give subtract or location, not both"));
             }
-            _ => {
-                // Nothing to protect (an optional input the caller left out): the mask passes
-                // through under the step's name, so the recipe reads the same either way.
-                let mut out = (**mask).clone();
-                out.record.id = "subtract.mask".to_string();
-                let frame = mask.record.frame.clone();
-                let protected = count(&out.protect);
-                let mut outputs = BTreeMap::new();
-                outputs.insert("mask".to_string(), Artifact::Mask(Arc::new(out)));
-                return Ok(Output::ok(
-                    "nothing to protect: no second input; the mask passes through",
-                    outputs,
-                )
-                .with_measurement("grow_px", grow_px, "px", Some(&frame))
-                .with_measurement("protect_px_before", protected as f64, "px", Some(&frame))
-                .with_measurement(
-                    "protect_px_after",
-                    protected as f64,
-                    "px",
-                    Some(&frame),
-                ));
-            }
-        };
-        let grown = if grow_px > 0.0 {
-            dilate(&shape, grow_px)
-        } else {
-            shape
+            // Nothing to protect (an optional input the caller left out): the mask passes
+            // through under the step's name, so the recipe reads the same either way.
+            _ => None,
         };
         let before = count(&mask.protect);
         let mut out = (**mask).clone();
         out.record.id = "subtract.mask".to_string();
-        out.protect_union(&grown)?;
+        let summary = match shape {
+            Some(shape) => {
+                let grown = if grow_px > 0.0 {
+                    dilate(&shape, grow_px)
+                } else {
+                    shape
+                };
+                out.protect_union(&grown)?;
+                format!(
+                    "protected {} more pixels (grown by {grow_px} px)",
+                    count(&out.protect).saturating_sub(before)
+                )
+            }
+            None => "nothing to protect: no second input; the mask passes through".to_string(),
+        };
         let after = count(&out.protect);
         let frame = mask.record.frame.clone();
         let mut outputs = BTreeMap::new();
         outputs.insert("mask".to_string(), Artifact::Mask(Arc::new(out)));
-        Ok(Output::ok(
-            format!(
-                "protected {} more pixels (grown by {grow_px} px)",
-                after.saturating_sub(before)
-            ),
-            outputs,
-        )
-        .with_measurement("grow_px", grow_px, "px", Some(&frame))
-        .with_measurement("protect_px_before", before as f64, "px", Some(&frame))
-        .with_measurement("protect_px_after", after as f64, "px", Some(&frame)))
+        Ok(Output::ok(summary, outputs)
+            .with_measurement("grow_px", grow_px, "px", Some(&frame))
+            .with_measurement("protect_px_before", before as f64, "px", Some(&frame))
+            .with_measurement("protect_px_after", after as f64, "px", Some(&frame)))
     }
 }

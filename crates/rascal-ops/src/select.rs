@@ -23,6 +23,9 @@ pub struct Select;
 
 const NAME: &str = "select";
 
+/// The many input port's name.
+const PLANE: &str = "plane";
+
 impl Op for Select {
     fn manifest(&self) -> Manifest {
         Manifest::new(
@@ -37,7 +40,7 @@ impl Op for Select {
                 seconds: 0.1,
             },
             vec![Port {
-                name: "plane".to_string(),
+                name: PLANE.to_string(),
                 artifact_type: ArtifactType::Image,
                 required: true,
                 purpose: "The instance planes (plane role), in one frame: plane_0, plane_1, …"
@@ -82,13 +85,12 @@ impl Op for Select {
     }
 
     fn run(&self, context: &Context<'_>, inputs: &Inputs, params: &Params) -> Result<Output> {
-        let port = Port {
-            name: "plane".to_string(),
-            artifact_type: ArtifactType::Image,
-            required: true,
-            purpose: String::new(),
-            many: true,
-        };
+        let manifest = self.manifest();
+        let port = manifest
+            .inputs
+            .iter()
+            .find(|p| p.name == PLANE)
+            .ok_or_else(|| Error::op(NAME, "the manifest declares the plane port"))?;
         let mut planes: Vec<(usize, &Image)> = inputs
             .iter()
             .filter_map(|(name, artifact)| match (port.index_of(name), artifact) {
@@ -98,7 +100,7 @@ impl Op for Select {
             .collect();
         planes.sort_by_key(|(i, _)| *i);
         if planes.is_empty() {
-            return Err(Error::op(NAME, "at least plane_0 is required"));
+            return Err(Error::usage_for(NAME, "input plane needs at least plane_0"));
         }
         let frame_id = planes[0].1.record.frame.clone();
         for (i, plane) in &planes {
@@ -144,13 +146,11 @@ impl Op for Select {
         for (_, plane) in &kept {
             let grey = plane.pixels.to_luma8();
             if grey.dimensions() != (width, height) {
-                return Err(Error::op(
-                    NAME,
-                    format!(
-                        "a plane is {:?}, the frame {width}x{height}",
-                        grey.dimensions()
-                    ),
-                ));
+                return Ok(Output::invalid_args(format!(
+                    "a plane is {}x{}, the frame {width}x{height}",
+                    grey.width(),
+                    grey.height()
+                )));
             }
             for (x, y, p) in grey.enumerate_pixels() {
                 if p[0] != 0 {
@@ -189,7 +189,7 @@ impl Op for Select {
                 .map(|(_, p)| p.record.identity.clone())
                 .collect(),
         };
-        let mask = Mask::from_core("mask", frame, use_case, core, source)?;
+        let mask = Mask::from_core("select.mask", frame, use_case, core, source)?;
         let mut outputs = BTreeMap::new();
         outputs.insert("mask".to_string(), mask_artifact(mask));
         Ok(Output::ok(

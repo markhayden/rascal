@@ -118,7 +118,7 @@ impl Op for Invert {
             ));
         }
         let mut out = Mask::from_core(
-            "mask",
+            "invert.mask",
             target,
             UseCase::Protect,
             core,

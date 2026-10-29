@@ -605,22 +605,30 @@ impl Recipe {
         };
         let mut unmet: BTreeMap<String, String> = BTreeMap::new(); // step id -> reason
         for step in &self.step {
+            let manifest = registry.require(&step.op)?.manifest();
             let mut step_inputs: Inputs = BTreeMap::new();
             let mut blocked: Option<String> = None;
             for (port, binding) in &step.inputs {
-                // A many input binds every `<binding>_<n>` of an earlier step's many output,
-                // renamed to `<port>_<n>`.
-                let expanded: Vec<(String, Artifact)> = bindings
-                    .iter()
-                    .filter_map(|(name, a)| {
-                        let n: usize = name
-                            .strip_prefix(binding)?
-                            .strip_prefix('_')?
-                            .parse()
-                            .ok()?;
-                        Some((format!("{port}_{n}"), a.clone()))
-                    })
-                    .collect();
+                // A many input binds every `<step>.<port>_<n>` of an earlier step's many
+                // output, renamed to `<port>_<n>`; only a many port expands, and only from a
+                // step's output (a declared input is never many).
+                let declared_many = manifest.inputs.iter().any(|p| &p.name == port && p.many);
+                let expanded: Vec<(String, Artifact)> =
+                    if declared_many && !binding.starts_with("inputs.") {
+                        bindings
+                            .iter()
+                            .filter_map(|(name, a)| {
+                                let n: usize = name
+                                    .strip_prefix(binding)?
+                                    .strip_prefix('_')?
+                                    .parse()
+                                    .ok()?;
+                                Some((format!("{port}_{n}"), a.clone()))
+                            })
+                            .collect()
+                    } else {
+                        Vec::new()
+                    };
                 if !expanded.is_empty() && !bindings.contains_key(binding) {
                     step_inputs.extend(expanded);
                     continue;

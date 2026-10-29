@@ -9,7 +9,7 @@ use rascal_core::op::{
     Context, Cost, CostTier, Inputs, Manifest, Op, Output, Param, ParamKind, Params, Port,
 };
 
-use crate::primitives::{dilate, erode};
+use crate::primitives::{dilate, erode_within};
 use crate::refine::replaced_core;
 
 /// The op.
@@ -25,7 +25,7 @@ impl Op for Close {
             "Closes the core: dilation then erosion by one disc, so gaps and notches narrower than the disc fill in.",
             "On a blob with holes or ragged bites (a segmenter's instance through a chair back, a stroke that skipped).",
             "To make the core larger overall (use grow) or smaller (use shrink).",
-            "The same mask with its core closed by a disc of radius radius_px and cleared under protect; the outer extent is unchanged except where a notch filled. The blend is cleared and the profile and prescriptions removed: feather it afterwards.",
+            "The same mask with its core closed by a disc of radius radius_px and cleared under protect; the outer extent is unchanged except where a notch filled, at the image border too. The blend is cleared and the profile and prescriptions removed: feather it afterwards.",
             Cost {
                 tier: CostTier::Cheap,
                 seconds: 0.1,
@@ -61,7 +61,9 @@ impl Op for Close {
         };
         let radius = crate::float(params, "radius_px")
             .ok_or_else(|| Error::op(NAME, "parameter radius_px"))?;
-        let core = erode(&dilate(&mask.core, radius), radius);
+        // Outside the image counts as set for the erosion, so a shape against the border keeps
+        // its edge: closing changes nothing but gaps and notches.
+        let core = erode_within(&dilate(&mask.core, radius), radius);
         Ok(replaced_core(
             mask,
             core,

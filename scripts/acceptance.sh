@@ -9,8 +9,11 @@
 #    workspace back with the CLI.
 # 4. The docs name every op, profile, panel and measure in the registry and nothing else.
 #
-# Needs the toolchain and a warm registry cache (no network is used when the cache holds every
-# dependency; CI's cache does). `ACCEPTANCE_KEEP=1` keeps the scratch directory.
+# Needs the toolchain, python3 on PATH, and a warm registry cache (no network is used when the
+# cache holds every dependency; CI's cache does). The install is locked to the workspace's
+# Cargo.lock, copied beside the extracted crate. Step 3's client is built from the checkout's
+# testkit (a test tool, not something a user installs). `ACCEPTANCE_KEEP=1` keeps the scratch
+# directory.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 root="$PWD"
@@ -34,6 +37,7 @@ patch=()
 for crate in rascal-core rascal-testkit rascal-ops rascal-mcp; do
   patch+=(--config "patch.crates-io.$crate.path=\"$scratch/crates/$crate-$version\"")
 done
+cp Cargo.lock "$scratch/crates/rascal-mask-$version/Cargo.lock"
 cargo install --quiet --path "$scratch/crates/rascal-mask-$version" --root "$scratch/install" --locked "${patch[@]}"
 rascal="$scratch/install/bin/rascal"
 [ "$("$rascal" --version)" = "rascal $version" ]
@@ -50,36 +54,45 @@ expect_outputs() { # <run dir> <render file> [journal dir: the workspace when --
   [ -s "$1/frames.json" ] && [ -s "$1/locations.json" ] || { echo "no tables in $1" >&2; exit 1; }
 }
 mask_of() { grep '^mask: ' | cut -d' ' -f2; }
-"$rascal" run rect "$images/floor.png" --bbox 0.2,0.2,0.6,0.6 --out "$runs/rect" | mask_of >/dev/null
+inspected() { # <mask dir>: the mask reads back as a record
+  "$rascal" inspect "$1" --json >/dev/null
+}
+inspected "$("$rascal" run rect "$images/floor.png" --bbox 0.2,0.2,0.6,0.6 --out "$runs/rect" | mask_of)"
 expect_outputs "$runs/rect" rect-grey.png
-"$rascal" run seam "$images/step-pano.png" --out "$runs/seam" --workspace "$runs/ws" | tee "$scratch/seam.out" | mask_of >/dev/null
+seam_mask="$("$rascal" run seam "$images/step-pano.png" --out "$runs/seam" --workspace "$runs/ws" | mask_of)"
+inspected "$seam_mask"
 expect_outputs "$runs/seam" seam-grey.png "$runs/ws"
-"$rascal" run remove "$images/chair-blob.png" --location "$locations/chairs.json" --out "$runs/remove" | mask_of >/dev/null
+inspected "$("$rascal" run remove "$images/chair-blob.png" --location "$locations/chairs.json" --out "$runs/remove" | mask_of)"
 expect_outputs "$runs/remove" remove-grey.png
-"$rascal" run repair "$images/scratch-smooth.png" --stroke "$locations/scratch-stroke.json" --out "$runs/repair" | mask_of >/dev/null
+inspected "$("$rascal" run repair "$images/scratch-smooth.png" --stroke "$locations/scratch-stroke.json" --out "$runs/repair" | mask_of)"
 expect_outputs "$runs/repair" repair-grey.png
-"$rascal" run repair-area "$images/chair-blob.png" --bbox 0.6,0.7,0.8,0.9 --out "$runs/repair-area" | mask_of >/dev/null
+inspected "$("$rascal" run repair-area "$images/chair-blob.png" --bbox 0.6,0.7,0.8,0.9 --out "$runs/repair-area" | mask_of)"
 expect_outputs "$runs/repair-area" repair-area-grey.png
-seam_mask="$(mask_of < "$scratch/seam.out")"
-"$rascal" run protect "$images/step-pano.png" --mask "$seam_mask" --workspace "$runs/ws" --out "$runs/protect" | mask_of >/dev/null
+inspected "$("$rascal" run protect "$images/step-pano.png" --mask "$seam_mask" --workspace "$runs/ws" --out "$runs/protect" | mask_of)"
 expect_outputs "$runs/protect" protect-grey.png "$runs/ws"
 echo "six recipes ran"
 
 step "serve, driven by the independent client, and the CLI reading the same workspace"
 cargo run --quiet -p rascal-testkit --bin independent-walk -- "$rascal" "$runs/served" "$images/step-pano.png" | tee "$scratch/walk.out"
 served_mask="$(mask_of < "$scratch/walk.out")"
-"$rascal" workspace list "$runs/served" --type Mask --json | python3 -I -c "
+"$rascal" workspace list "$runs/served" --type Mask --json > "$scratch/served-masks.json"
+python3 -I -c '
 import json, sys
-rows = json.load(sys.stdin)
-assert any(r['id'] == '$served_mask' for r in rows), rows
-print('the CLI sees the served mask')"
-"$rascal" inspect "$runs/served/artifacts/$("$rascal" workspace list "$runs/served" --type Mask --json | python3 -I -c "
+wanted, listing = sys.argv[1], sys.argv[2]
+rows = json.load(open(listing))
+assert any(r["id"] == wanted for r in rows), rows
+print("the CLI sees the served mask")
+' "$served_mask" "$scratch/served-masks.json"
+served_dir="$(python3 -I -c '
 import json, sys
-rows = json.load(sys.stdin)
-print(next(r['identity'] for r in rows if r['id'] == '$served_mask').split(':')[1] + '.mask')")" --json >/dev/null
+wanted, listing = sys.argv[1], sys.argv[2]
+rows = json.load(open(listing))
+print(next(r["identity"] for r in rows if r["id"] == wanted).split(":")[1] + ".mask")
+' "$served_mask" "$scratch/served-masks.json")"
+inspected "$runs/served/artifacts/$served_dir"
 
-step "docs coverage"
-scripts/check-docs.sh
+step "docs coverage, read from the installed binary"
+RASCAL_BIN="$rascal" scripts/check-docs.sh
 
 echo
 echo "acceptance ok: rascal $version"

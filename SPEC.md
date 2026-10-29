@@ -430,8 +430,8 @@ the standard normal CDF):
 | find | `segment` (pack) | Image; text prompt or points; `max_instances` | Location(`polygon`)[] with scores, plus one `plane` Image per instance |
 | refine | `rasterize` | Location, Image (for the frame) | Mask: core = the interior; `bbox`, `polygon` as drawn; `whole_image` all; `line` column form = a band `width_px` wide centred on the column, path form = the path dilated by `width_px / 2`; `stroke` = the path dilated by `radius_px`; `view` and `absent` → `not_applicable` |
 | refine | `tighten` | Location(`stroke`), Image | Mask (algorithm below) with `tightened` per sample in the envelope |
-| refine | `grow` / `shrink` | Mask; `px`; `grow` also `down_px` | Mask: core dilated or eroded by a disc of radius `px`, `grow` then also shifted-union downward by `down_px` (a shadow), minus protect; blend cleared |
-| refine | `close` | Mask; `radius_px` | Mask: core closed (dilate then erode); blend cleared |
+| refine | `grow` / `shrink` | Mask; `px`; `grow` also `down_px` | Mask: core dilated or eroded by a disc of radius `px` (outside the image unset, so `shrink` erodes from the border), `grow` then also shifted-union downward by `down_px` (a shadow), minus protect; blend cleared |
+| refine | `close` | Mask; `radius_px` | Mask: core closed (dilate then erode, outside the image counting as set so a shape against the border keeps its edge); blend cleared |
 | refine | `subtract` | Mask; Mask or Location; `grow_px` | Mask: protect ∪= the second input (rasterized if a location) dilated by `grow_px`; core and blend cleared there |
 | refine | `select` | Image[] (`plane` role); keep or drop lists; exclude boxes | Mask: the union of the kept instances as core |
 | refine | `invert` | Mask; optional target frame (default the mask's root raw frame) | Mask in the target frame: the old mask's nonzero support and protect are mapped into the target through the frame chain (a `cut:` mask lands on the panorama's two edge spans; a `crop:` mask on its bbox); pixels outside the mapped extent count as untouched; core = untouched and unprotected pixels; blend = 0; protect = mapped support ∪ mapped protect |
@@ -521,8 +521,8 @@ interpolation; the local direction at a sample is the central difference of its 
 (one-sided at the ends); a sample whose central difference is zero (the path turns back on
 itself) takes the previous sample's direction, the first such sample takes the next nonzero one,
 and a path with no nonzero direction is `not_applicable`. For each sample, `L` is read by bilinear interpolation along the
-perpendicular over `[−r, r]` at 1 px steps, and its **signed** first derivative `g(t)` is taken
-by central differences. A boundary pair is an index pair `(a, b)` with `a < b`, `g(a)` and
+perpendicular over `[−r, r]` at `⌈2r⌉` equal steps (about 1 px, symmetric about the path), and
+its **signed** first derivative `g(t)` per pixel is taken by central differences. A boundary pair is an index pair `(a, b)` with `a < b`, `g(a)` and
 `g(b)` of opposite sign, `|g(a)|, |g(b)| ≥ min_contrast`, and `min_defect_px ≤ b − a ≤
 max_defect_px`; its score is `|g(a)| + |g(b)|`; ties break toward the pair whose midpoint is
 nearest `t = 0`, then toward the narrower pair. A sample with no admissible pair is

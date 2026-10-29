@@ -434,3 +434,176 @@ fn invert_from_a_crop_mask_lands_protect_on_its_bbox() {
     );
     assert_eq!(out.envelope.status, Status::NotApplicable);
 }
+
+#[test]
+fn apply_honours_the_protect_subtract_added_and_the_ramp_still_moves_the_rest() {
+    use rascal_core::image::{Image, Role};
+    use rascal_ops::apply::Apply;
+    use rascal_ops::ramp::Ramp;
+    let f = Frame::raw(W, H, Projection::Flat);
+    let table = FrameTable {
+        frames: vec![f.clone()],
+    };
+    // A stepped canvas: left 120, right 132, and the band mask with a profile about x = 50.
+    let image = image::RgbImage::from_fn(W, H, |x, _| {
+        let v = if x < 50 { 120 } else { 132 };
+        image::Rgb([v, v, v])
+    });
+    let image_artifact = Artifact::Image(Arc::new(Image::new(
+        "i",
+        DynamicImage::ImageRgb8(image.clone()),
+        &f,
+        Role::Canonical,
+        None,
+    )));
+    let run_with = |op: &dyn Op, inputs: &Inputs, params: Params| {
+        let manifest = op.manifest();
+        let mut given = params;
+        if let Some(first) = manifest.constants.first() {
+            for (k, v) in op.constant_set(first) {
+                given.entry(k).or_insert(v);
+            }
+        }
+        let resolved = manifest.resolve_params(&given).unwrap();
+        op.run(&Context { frames: &table }, inputs, &resolved)
+            .unwrap()
+    };
+    let mut inputs: Inputs = BTreeMap::new();
+    inputs.insert("image".into(), image_artifact.clone());
+    inputs.insert("mask".into(), Artifact::Mask(Arc::new(band_mask(&f))));
+    let ramped = mask_out(&run_with(&Ramp, &inputs, Params::new()));
+    assert!(!ramped.prescriptions.is_empty());
+    // subtract a box inside the band: those pixels are protected; the prescription stays.
+    let mut inputs: Inputs = BTreeMap::new();
+    inputs.insert("mask".into(), Artifact::Mask(ramped));
+    let location = Location::bbox(&f.id, [0.44, 0.2, 0.56, 0.4]).unwrap();
+    let identity = location.identity(&f.identity);
+    inputs.insert("location".into(), Artifact::Location { location, identity });
+    let protected = mask_out(&run_with(&Subtract, &inputs, Params::new()));
+    assert!(!protected.prescriptions.is_empty() && protected.profile.is_some());
+    // apply: inside the protected box the pixels are the input's; in the band outside it the
+    // ramp moved them.
+    let mut inputs: Inputs = BTreeMap::new();
+    inputs.insert("image".into(), image_artifact);
+    inputs.insert("mask".into(), Artifact::Mask(protected.clone()));
+    let out = run_with(&Apply, &inputs, Params::new());
+    assert_eq!(out.envelope.status, Status::Ok, "{:?}", out.envelope.reason);
+    let Some(Artifact::Image(applied)) = out.outputs.get("image") else {
+        panic!()
+    };
+    let applied = applied.pixels.to_rgb8();
+    for (x, y, p) in protected.protect.enumerate_pixels() {
+        if p[0] != 0 {
+            assert_eq!(
+                applied.get_pixel(x, y),
+                image.get_pixel(x, y),
+                "protected at {x},{y}"
+            );
+        }
+    }
+    let moved = (0..H)
+        .flat_map(|y| (42..58).map(move |x| (x, y)))
+        .filter(|&(x, y)| protected.protect.get_pixel(x, y)[0] == 0)
+        .filter(|&(x, y)| applied.get_pixel(x, y) != image.get_pixel(x, y))
+        .count();
+    assert!(moved > 100, "{moved} band pixels moved");
+}
+
+#[test]
+fn subtract_refuses_another_frame_and_a_grown_box_clips_at_the_edge() {
+    let f = Frame::raw(W, H, Projection::Flat);
+    let g = Frame::raw(W, H, Projection::Equirectangular);
+    let table = FrameTable {
+        frames: vec![f.clone(), g.clone()],
+    };
+    let mask = Mask::from_core(
+        "m",
+        &f,
+        UseCase::Remove,
+        plane(W, H, |_, _| true),
+        Source::default(),
+    )
+    .unwrap();
+    let other = Mask::from_core(
+        "o",
+        &g,
+        UseCase::Remove,
+        plane(W, H, |x, _| x < 10),
+        Source::default(),
+    )
+    .unwrap();
+    let mut inputs: Inputs = BTreeMap::new();
+    inputs.insert("mask".into(), Artifact::Mask(Arc::new(mask.clone())));
+    inputs.insert("subtract".into(), Artifact::Mask(Arc::new(other)));
+    let out = run(&Subtract, &table, &inputs, Params::new());
+    assert_eq!(out.envelope.status, Status::InvalidArgs);
+    assert!(out.envelope.reason.as_deref().unwrap().contains(&g.id));
+    // A box against the right edge, grown by 3: protect reaches the last column and no further.
+    let mut inputs: Inputs = BTreeMap::new();
+    inputs.insert("mask".into(), Artifact::Mask(Arc::new(mask)));
+    let location = Location::bbox(&f.id, [0.9, 0.4, 1.0, 0.6]).unwrap();
+    let identity = location.identity(&f.identity);
+    inputs.insert("location".into(), Artifact::Location { location, identity });
+    let mut params = Params::new();
+    params.insert("grow_px".into(), toml::Value::Float(3.0));
+    let m = mask_out(&run(&Subtract, &table, &inputs, params));
+    assert_ne!(m.protect.get_pixel(W - 1, 30)[0], 0);
+    assert_ne!(m.protect.get_pixel(87, 30)[0], 0, "3 px left of the box");
+    assert_eq!(m.protect.get_pixel(86, 30)[0], 0);
+    m.check().unwrap();
+}
+
+#[test]
+fn invert_walks_a_crop_of_a_cut_to_the_raw_frame_and_to_the_cut() {
+    let raw = Frame::raw(W, H, Projection::Equirectangular);
+    let plan = Plan::new(&raw, 0.1).unwrap();
+    let s = plan.strip;
+    let cut = Frame::cut(&raw, "img-1", &plan).unwrap();
+    // A crop of the canvas: columns [4, 16) of the 20-wide canvas, rows [10, 30).
+    let crop = Frame::crop(&cut, 1, [4, 10, 16, 30]).unwrap();
+    let table = FrameTable {
+        frames: vec![raw.clone(), cut.clone(), crop.clone()],
+    };
+    let mask = Mask::from_core(
+        "m",
+        &crop,
+        UseCase::Seam,
+        plane(12, 20, |_, _| true),
+        Source::default(),
+    )
+    .unwrap();
+    let mut inputs: Inputs = BTreeMap::new();
+    inputs.insert("mask".into(), Artifact::Mask(Arc::new(mask)));
+    // To raw: the crop's columns 4..16 of the canvas map onto the edge spans, rows 10..30.
+    let m = mask_out(&run(&Invert, &table, &inputs, Params::new()));
+    assert_eq!(m.record.frame, raw.id);
+    for y in 0..H {
+        for x in 0..W {
+            let canvas_x = if x >= W - s {
+                Some(x - (W - s))
+            } else if x < s {
+                Some(x + s)
+            } else {
+                None
+            };
+            let expect = canvas_x.is_some_and(|cx| (4..16).contains(&cx)) && (10..30).contains(&y);
+            assert_eq!(
+                m.protect.get_pixel(x, y)[0] != 0,
+                expect,
+                "protect at {x},{y}"
+            );
+        }
+    }
+    // To the cut: one hop, protect on the crop's bbox in canvas coordinates.
+    let mut params = Params::new();
+    params.insert("to".into(), toml::Value::String(cut.id.clone()));
+    let m = mask_out(&run(&Invert, &table, &inputs, params));
+    assert_eq!(m.record.frame, cut.id);
+    for (x, y, p) in m.protect.enumerate_pixels() {
+        assert_eq!(
+            p[0] != 0,
+            (4..16).contains(&x) && (10..30).contains(&y),
+            "{x},{y}"
+        );
+    }
+}

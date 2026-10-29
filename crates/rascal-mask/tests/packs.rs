@@ -1015,3 +1015,127 @@ fn a_relocated_run_replays_with_the_pack_absent_and_no_call_made() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn select_over_twelve_real_planes_through_the_cli_orders_plane_10_after_plane_1() {
+    let dir = scratch("select-cli");
+    let cfg = config(&dir, "exact", 30, "");
+    let ws = dir.join("ws");
+    // Two segment calls of six instances each: twelve plane ids, in call order.
+    let mut planes: Vec<String> = Vec::new();
+    let floor_path = floor();
+    for call in 0..2 {
+        let image_arg = if call == 0 {
+            floor_path.to_str().unwrap()
+        } else {
+            "img-1"
+        };
+        let out = rascal(&[
+            "tools",
+            "call",
+            "fake",
+            "segment",
+            "--config",
+            cfg.to_str().unwrap(),
+            "--workspace",
+            ws.to_str().unwrap(),
+            "--image",
+            image_arg,
+            "--max_instances",
+            "6",
+        ]);
+        assert!(out.status.success(), "{}", text(&out.stderr));
+        for line in text(&out.stdout).lines() {
+            if let Some(rest) = line.strip_prefix("plane_") {
+                planes.push(
+                    rest.split(": ")
+                        .nth(1)
+                        .unwrap()
+                        .split(' ')
+                        .next()
+                        .unwrap()
+                        .to_string(),
+                );
+            }
+        }
+    }
+    assert_eq!(planes.len(), 12);
+    let mut args: Vec<String> = vec![
+        "select".into(),
+        "--workspace".into(),
+        ws.display().to_string(),
+    ];
+    for id in &planes {
+        args.push("--plane".into());
+        args.push(id.clone());
+    }
+    // keep 1 and 10: instance 1 is the fake's second box (rows 0.3..0.45 of the left column),
+    // instance 10 is the fifth of the second call (the same box as instance 4: rows 0.9..);
+    // exclude the top of the frame, which clips instance 1 partly.
+    args.extend([
+        "--keep".into(),
+        "1,10".into(),
+        "--exclude".into(),
+        "0,0,1,0.35".into(),
+        "--json".into(),
+    ]);
+    let argv: Vec<&str> = args.iter().map(String::as_str).collect();
+    let out = rascal(&argv);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let envelope = first_json(&text(&out.stdout));
+    assert_eq!(envelope["status"], "ok");
+    let kept = envelope["measurements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["name"] == "kept")
+        .unwrap()["value"]
+        .as_f64()
+        .unwrap();
+    assert_eq!(kept, 2.0);
+    let mask_id = text(&out.stdout)
+        .lines()
+        .find_map(|l| l.strip_prefix("mask: "))
+        .unwrap()
+        .split(' ')
+        .next()
+        .unwrap()
+        .to_string();
+    let rows: Vec<serde_json::Value> = serde_json::from_slice(
+        &rascal(&[
+            "workspace",
+            "list",
+            ws.to_str().unwrap(),
+            "--type",
+            "Mask",
+            "--json",
+        ])
+        .stdout,
+    )
+    .unwrap();
+    let identity = rows.iter().find(|r| r["id"] == mask_id).unwrap()["identity"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let mask = rascal_core::mask::Mask::read(
+        &ws.join("artifacts")
+            .join(format!("{}.mask", identity.trim_start_matches("sha256:"))),
+    )
+    .unwrap();
+    // The fake's instance 1 box is x 0.1..0.35, y 0.3..0.45 (320x200 floor): its lower part
+    // survives the exclude; instance 10 (the fifth of a 6-instance call: i = 4 → x 0.5..0.75,
+    // y 0.1..0.25) is wholly excluded; instance 0 (kept out) is empty.
+    assert_ne!(
+        mask.core.get_pixel(60, 80)[0],
+        0,
+        "instance 1 below the exclude line"
+    );
+    assert_eq!(
+        mask.core.get_pixel(60, 62)[0],
+        0,
+        "instance 1 above the exclude line"
+    );
+    assert_eq!(mask.core.get_pixel(60, 30)[0], 0, "instance 0 was not kept");
+    assert_eq!(mask.record.source.instances.len(), 2);
+    let _ = std::fs::remove_dir_all(&dir);
+}

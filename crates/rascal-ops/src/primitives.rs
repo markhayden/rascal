@@ -78,36 +78,70 @@ pub fn disc(radius: f64) -> Vec<(i64, i64)> {
     offsets
 }
 
-/// Binary dilation by a disc: a pixel is set when any pixel within the disc was set.
+/// Binary dilation by a disc of radius `r`: a pixel is set when a set pixel lies within `r`
+/// of it (centre to centre, `dx² + dy² ≤ r²`). Through the exact distance transform, so the
+/// cost is linear in the plane whatever the radius.
 pub fn dilate(plane: &GrayImage, radius: f64) -> GrayImage {
-    morph(plane, radius, true)
-}
-
-/// Binary erosion by a disc: a pixel stays set only when every pixel within the disc (inside
-/// the image) was set.
-pub fn erode(plane: &GrayImage, radius: f64) -> GrayImage {
-    morph(plane, radius, false)
-}
-
-fn morph(plane: &GrayImage, radius: f64, dilate: bool) -> GrayImage {
-    let (w, h) = (plane.width() as i64, plane.height() as i64);
-    let offsets = disc(radius);
-    let set = |x: i64, y: i64| {
-        x >= 0 && y >= 0 && x < w && y < h && plane.get_pixel(x as u32, y as u32)[0] != 0
-    };
-    GrayImage::from_fn(plane.width(), plane.height(), |x, y| {
-        let (xi, yi) = (i64::from(x), i64::from(y));
-        let hit = if dilate {
-            offsets.iter().any(|(dx, dy)| set(xi + dx, yi + dy))
+    let (w, h) = plane.dimensions();
+    let distance = distance_transform(plane);
+    let r2 = radius.max(0.0).powi(2);
+    GrayImage::from_fn(w, h, |x, y| {
+        Luma([if within(distance[(y * w + x) as usize], r2) {
+            255
         } else {
-            offsets.iter().all(|(dx, dy)| {
-                let (px, py) = (xi + dx, yi + dy);
-                // Outside the image counts as unset: erosion shrinks from the border too.
-                px >= 0 && py >= 0 && px < w && py < h && set(px, py)
-            })
-        };
-        Luma([if hit { 255 } else { 0 }])
+            0
+        }])
     })
+}
+
+/// Binary erosion by a disc: a pixel stays set only when every pixel within the disc was
+/// set. Outside the image counts as unset, so a core touching the border shrinks from the
+/// border too; `erode_within` is the other convention.
+pub fn erode(plane: &GrayImage, radius: f64) -> GrayImage {
+    erode_with(plane, radius, false)
+}
+
+/// Binary erosion by a disc where outside the image counts as set: only unset pixels inside
+/// the image erode. The erosion of a closing, so a shape against the border keeps its edge.
+pub fn erode_within(plane: &GrayImage, radius: f64) -> GrayImage {
+    erode_with(plane, radius, true)
+}
+
+fn erode_with(plane: &GrayImage, radius: f64, outside_is_set: bool) -> GrayImage {
+    let (w, h) = plane.dimensions();
+    let complement = GrayImage::from_fn(w, h, |x, y| {
+        Luma([if plane.get_pixel(x, y)[0] == 0 {
+            255
+        } else {
+            0
+        }])
+    });
+    let distance = distance_transform(&complement);
+    let r = radius.max(0.0);
+    let r2 = r * r;
+    // The disc's reach along an axis: the same floor `disc` uses.
+    let reach = r.floor() as i64;
+    GrayImage::from_fn(w, h, |x, y| {
+        let set = plane.get_pixel(x, y)[0] != 0;
+        let clear_inside = !within(distance[(y * w + x) as usize], r2);
+        let fits = outside_is_set
+            || (i64::from(x) >= reach
+                && i64::from(y) >= reach
+                && i64::from(x) + reach < i64::from(w)
+                && i64::from(y) + reach < i64::from(h));
+        Luma([if set && clear_inside && fits { 255 } else { 0 }])
+    })
+}
+
+/// Whether a distance between pixel centres (the square root of an integer, as the transform
+/// returns it) is within `r²`: the squared distance is recovered exactly by rounding, so the
+/// test is the integer one `disc` makes.
+fn within(distance: f32, r2: f64) -> bool {
+    if !distance.is_finite() {
+        return false;
+    }
+    let squared = f64::from(distance).powi(2).round();
+    squared <= r2 + 1e-9
 }
 
 /// The exact Euclidean distance transform of a binary plane: for every pixel, the distance in

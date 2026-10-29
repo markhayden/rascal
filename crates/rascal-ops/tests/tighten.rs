@@ -313,3 +313,118 @@ fn smoothing_runs_separately_and_the_crossing_guard_reverts() {
     smooth_extents(&mut same, 0.2, 5.0);
     assert_eq!(same, vec![t(-1.0, 1.0), t(-3.0, 0.5)]);
 }
+
+#[test]
+fn the_worst_tightened_extent_is_within_two_pixels_and_equals_the_rasterize_op_when_untightened() {
+    use rascal_ops::rasterize::Rasterize;
+    let out = run_tighten(scratch_smooth(W, H), scratch_path(), 8.0);
+    let (_, series) = outputs(&out);
+    let half = SCRATCH_WIDTH_PX / 2.0;
+    let worst = rows(&series)
+        .iter()
+        .filter(|r| r.0)
+        .map(|(_, a, b)| (a + half).abs().max((b - half).abs()))
+        .fold(0.0_f64, f64::max);
+    assert!(
+        worst <= 2.0,
+        "the worst tightened extent is {worst} px off the edge"
+    );
+    // An untightened stroke through the op equals the rasterize op's mask, not only the
+    // dilation function's.
+    let path = vec![[0.2, 0.15], [0.5, 0.22], [0.8, 0.12]];
+    let out = run_tighten(scratch_smooth(W, H), path.clone(), 6.0);
+    let (tightened, _) = outputs(&out);
+    let f = Frame::raw(W, H, Projection::Flat);
+    let table = FrameTable {
+        frames: vec![f.clone()],
+    };
+    let location = Location::Stroke {
+        frame: f.id.clone(),
+        path,
+        radius_px: 6.0,
+        group: None,
+    };
+    let identity = location.identity(&f.identity);
+    let mut inputs: Inputs = BTreeMap::new();
+    inputs.insert("location".into(), Artifact::Location { location, identity });
+    inputs.insert(
+        "image".into(),
+        Artifact::Image(Arc::new(Image::new(
+            "i",
+            DynamicImage::ImageRgb8(scratch_smooth(W, H)),
+            &f,
+            Role::Canonical,
+            None,
+        ))),
+    );
+    let mut params = Params::new();
+    params.insert("use_case".into(), toml::Value::String("repair".into()));
+    let resolved = Rasterize.manifest().resolve_params(&params).unwrap();
+    let drawn = Rasterize
+        .run(&Context { frames: &table }, &inputs, &resolved)
+        .unwrap();
+    let Some(Artifact::Mask(drawn)) = drawn.outputs.get("mask") else {
+        panic!()
+    };
+    assert_eq!(tightened.core.as_raw(), drawn.core.as_raw());
+}
+
+#[test]
+fn a_stroke_partly_outside_the_frame_and_an_oversized_radius_are_bounded() {
+    // Half the stroke is off the left edge: the reads clamp, the core is what is inside.
+    let path = vec![[-0.3, 0.5], [0.3, 0.5]];
+    let out = run_tighten(scratch_smooth(W, H), path, 5.0);
+    assert_eq!(out.envelope.status, Status::Ok, "{:?}", out.envelope.reason);
+    let (mask, _) = outputs(&out);
+    assert!(mask.core.get_pixel(0, 150)[0] != 0 && mask.core.get_pixel(119, 150)[0] != 0);
+    assert_eq!(mask.core.get_pixel(130, 150)[0], 0);
+    // Wholly outside: nothing to paint.
+    let out = run_tighten(scratch_smooth(W, H), vec![[-0.5, 0.5], [-0.2, 0.5]], 5.0);
+    assert_eq!(out.envelope.status, Status::NotApplicable);
+    // A radius far beyond the frame is clamped to the diagonal by the op, and refused at the
+    // front door by the location's validation against the frame.
+    let started = std::time::Instant::now();
+    let out = run_tighten(scratch_smooth(W, H), vec![[0.3, 0.5], [0.7, 0.5]], 1e9);
+    assert_eq!(out.envelope.status, Status::Ok, "{:?}", out.envelope.reason);
+    assert!(started.elapsed() < std::time::Duration::from_secs(20));
+    let m = |n: &str| {
+        out.envelope
+            .measurements
+            .iter()
+            .find(|m| m.name == n)
+            .unwrap()
+            .value
+    };
+    assert!(
+        m("radius_px") < 1000.0,
+        "clamped to the diagonal: {}",
+        m("radius_px")
+    );
+    let f = Frame::raw(W, H, Projection::Flat);
+    let huge = Location::Stroke {
+        frame: f.id.clone(),
+        path: vec![[0.3, 0.5], [0.7, 0.5]],
+        radius_px: 1e9,
+        group: None,
+    };
+    let e = huge.validate(&f).unwrap_err().to_string();
+    assert!(e.contains("larger than the frame's diagonal"), "{e}");
+}
+
+#[test]
+fn the_tighten_v1_constants_are_pinned() {
+    let set: toml::Table = rascal_ops::tighten::TIGHTEN_V1.parse().unwrap();
+    let v = |k: &str| set[k].as_float().unwrap();
+    assert_eq!(
+        (
+            v("min_contrast"),
+            v("min_defect_px"),
+            v("max_defect_factor"),
+            v("path_sigma"),
+            v("sample_spacing_px")
+        ),
+        (12.0, 1.0, 2.0, 4.0, 1.0),
+        "a changed value is a new set version and a golden update in the same commit"
+    );
+    assert_eq!(Tighten.manifest().constants, vec!["tighten-v1".to_string()]);
+}

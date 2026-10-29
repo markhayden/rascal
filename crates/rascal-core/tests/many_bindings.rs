@@ -232,3 +232,110 @@ fn a_many_output_binds_to_a_many_input_by_prefix_and_expands_at_run_time() {
     assert_eq!(ports, vec!["plane_0", "plane_1", "plane_2"]);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn an_optional_input_binds_only_an_optional_port_and_never_expands_into_a_single_one() {
+    /// A consumer with a required `mask` port and an optional `extra` port.
+    struct Consume;
+    impl Op for Consume {
+        fn manifest(&self) -> Manifest {
+            let mut extra = port("extra", ArtifactType::Image, false);
+            extra.required = false;
+            manifest(
+                "consume",
+                vec![port("image", ArtifactType::Image, false), extra],
+                vec![port("image", ArtifactType::Image, false)],
+            )
+        }
+        fn run(&self, context: &Context<'_>, inputs: &Inputs, _: &Params) -> Result<Output> {
+            let Some(Artifact::Image(image)) = inputs.get("image") else {
+                unreachable!()
+            };
+            let frame = context.frames.require(&image.record.frame)?;
+            let seen: Vec<&String> = inputs.keys().collect();
+            let mut outputs = BTreeMap::new();
+            outputs.insert(
+                "image".to_string(),
+                Artifact::Image(std::sync::Arc::new(Image::new(
+                    "consumed",
+                    DynamicImage::ImageLuma8(GrayImage::from_pixel(
+                        frame.width,
+                        frame.height,
+                        Luma([inputs.len() as u8]),
+                    )),
+                    frame,
+                    Role::Working,
+                    None,
+                ))),
+            );
+            Ok(Output::ok(format!("{seen:?}"), outputs))
+        }
+    }
+    let mut registry = OpRegistry::new();
+    registry.register(Box::new(Consume)).unwrap();
+    let parse = |inputs: &str, bindings: &str| {
+        Recipe::parse(
+            &format!(
+                r#"version = 1
+name = "opt"
+use_case = "custom"
+[inputs]
+{inputs}
+[[step]]
+id = "consume"
+op = "consume"
+inputs = {{ {bindings} }}
+[outputs]
+image = "consume.image"
+"#
+            ),
+            "test",
+        )
+        .unwrap()
+    };
+    // A required port may not bind an optional input; an optional port may.
+    let bad = parse(
+        "image = { type = \"Image\", optional = true }",
+        "image = \"inputs.image\"",
+    );
+    let e = bad.validate(&registry).unwrap_err().to_string();
+    assert!(
+        e.contains("is required by consume, but inputs.image is an optional input"),
+        "{e}"
+    );
+    let good = parse(
+        "image = { type = \"Image\" }\nextra = { type = \"Image\", optional = true }",
+        "image = \"inputs.image\", extra = \"inputs.extra\"",
+    );
+    good.validate(&registry).unwrap();
+    // A hostile recipe declares `extra_0` beside the optional `extra`: the single port must
+    // not pick it up when `extra` is left out; the op runs with `image` alone.
+    let hostile = parse(
+        "image = { type = \"Image\" }\nextra = { type = \"Image\", optional = true }\nextra_0 = { type = \"Image\" }",
+        "image = \"inputs.image\", extra = \"inputs.extra\"",
+    );
+    hostile.validate(&registry).unwrap();
+    let dir = scratch("optional");
+    let floor = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/images/floor.png");
+    let run = Run::open(&dir).unwrap();
+    let (_, _, image) = run.workspace.import(&floor, None).unwrap();
+    let mut inputs = BTreeMap::new();
+    inputs.insert("image".to_string(), image.clone());
+    inputs.insert("extra_0".to_string(), image);
+    let outcome = hostile.run(&registry, inputs, &run).unwrap();
+    assert_eq!(
+        outcome.status,
+        rascal_core::op::Status::Ok,
+        "{:?}",
+        outcome.reason
+    );
+    let Some(Artifact::Image(consumed)) = outcome.outputs.get("image") else {
+        panic!()
+    };
+    assert_eq!(
+        consumed.pixels.to_luma8().get_pixel(0, 0)[0],
+        1,
+        "only `image` arrived"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

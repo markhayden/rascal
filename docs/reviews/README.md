@@ -30,3 +30,4 @@ findings plus new findings, most severe first.
 | M1 | [m1-checkpoint.md](m1-checkpoint.md) | two reviews; the must-fix and every should-fix landed in two commits; four nits recorded with owners |
 | M2 | [m2-checkpoint.md](m2-checkpoint.md) | two reviews; no must-fix; six should-fix and the eight proposed tests landed in one commit; three nits recorded |
 | M3 | [m3-checkpoint.md](m3-checkpoint.md) | two reviews; two must-fix (the transport's line limit, a byte-index panic) and twelve should-fix landed in one commit with the proposed tests; three items recorded |
+| M4 | [m4-checkpoint.md](m4-checkpoint.md) | two reviews; one must-fix (closing eroded from the image border) and seven should-fix landed in one commit with the proposed tests; three items recorded |

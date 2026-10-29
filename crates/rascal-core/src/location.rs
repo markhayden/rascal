@@ -248,6 +248,21 @@ impl Location {
             )));
         }
         let wraps = frame.topology == Topology::Wrap;
+        // A pixel width or radius is bounded by the frame: beyond its diagonal it means
+        // nothing, and the ops that walk it would walk for ever.
+        let diagonal = (f64::from(frame.width).powi(2) + f64::from(frame.height).powi(2)).sqrt();
+        let (kind, px) = match self {
+            Location::Line { width_px, .. } => ("line: width_px", Some(*width_px)),
+            Location::Stroke { radius_px, .. } => ("stroke: radius_px", Some(*radius_px)),
+            _ => ("", None),
+        };
+        if let Some(px) = px
+            && px > diagonal
+        {
+            return Err(Error::usage(format!(
+                "{kind} {px} is larger than the frame's diagonal ({diagonal:.1} px)"
+            )));
+        }
         match self {
             Location::View { .. } if !wraps => {
                 return Err(Error::usage(format!(

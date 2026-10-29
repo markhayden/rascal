@@ -75,7 +75,9 @@ The positional image binds `inputs.image`. `--bbox` is sugar that binds `inputs.
 new bbox location in the image's frame; `--location` binds any location kind from a JSON file
 (the `frame` may be omitted; if named it must be the image's frame); `--stroke` binds a stroke
 location to `inputs.stroke`; `--protect` and `--mask` bind stored mask directories in the
-image's frame, or (for `protect`) in a frame derived from it that the workspace knows. A flag
+image's frame, or (for `protect`) in a frame derived from it that the workspace knows (frames
+carry sizes and projections, not images, so the check is on the frame chain: give the mask the
+run that made it). A flag
 without its declared input, or a declared input without its flag, is a usage error, except an
 input the recipe marks `optional`. `--prompt` arrives with the Python pack (M5).
 

@@ -391,3 +391,56 @@ fn ramp_shrink_feather_apply_changes_no_pixel_because_the_refinement_dropped_the
         }
     }
 }
+
+#[test]
+fn close_keeps_the_extent_at_the_image_border_and_shrink_erodes_from_it() {
+    // A box in the top-left corner: closing changes nothing (no gap, no notch), border included.
+    let corner = plane(|x, y| x < 50 && y < 40);
+    let out = run(&Close, mask_of(corner.clone()), &[("radius_px", 3.0)]);
+    assert_eq!(
+        set(&mask_out(&out).core),
+        set(&corner),
+        "closing a corner box keeps every pixel"
+    );
+    let m = |n: &str| {
+        out.envelope
+            .measurements
+            .iter()
+            .find(|m| m.name == n)
+            .unwrap()
+            .value
+    };
+    assert_eq!(m("core_px_before"), m("core_px_after"));
+    // A 2 px strip along the top edge survives closing by 3: outside the image counts as set.
+    let strip = plane(|_, y| y < 2);
+    let out = run(&Close, mask_of(strip.clone()), &[("radius_px", 3.0)]);
+    assert_eq!(set(&mask_out(&out).core), set(&strip));
+    // Shrink is the other convention: the same strip erodes to nothing, and a border box
+    // loses a margin along the border too.
+    let out = run(&Shrink, mask_of(strip), &[("px", 3.0)]);
+    assert_eq!(out.envelope.status, Status::NotApplicable);
+    let out = run(&Shrink, mask_of(corner), &[("px", 3.0)]);
+    let shrunk = mask_out(&out);
+    assert_eq!(
+        shrunk.core.get_pixel(0, 20)[0],
+        0,
+        "eroded from the left border"
+    );
+    assert_eq!(shrunk.core.get_pixel(3, 20)[0], 255);
+    assert_eq!(shrunk.core.get_pixel(46, 20)[0], 255);
+    assert_eq!(
+        shrunk.core.get_pixel(47, 20)[0],
+        0,
+        "eroded from the box's own edge"
+    );
+    // The distance-transform morphology agrees with the offset disc at every radius tried,
+    // including a non-integer one and a large one.
+    let blob = plane(|x, y| (x as i64 - 60).pow(2) + (y as i64 - 40).pow(2) <= 10 * 10);
+    for r in [0.0, 1.0, 2.5, 7.0, 200.0] {
+        assert_eq!(
+            set(&dilate(&blob, r)),
+            set(&brute_dilate(&blob, r)),
+            "r = {r}"
+        );
+    }
+}

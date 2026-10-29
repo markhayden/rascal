@@ -62,7 +62,7 @@ with green CI on both platforms, and then the tag.
 - [x] 4.3 `tighten`
 - [x] 4.4 The `remove`, `repair`, `repair-area`, `protect` recipes and the acceptance script → tag `m4.1`
 - [~] 4.5 The segmenter decision (survey drafted; owner signs)
-- [ ] Checkpoint M4 → tag `m4`
+- [x] Checkpoint M4 → tag `m4`
 
 ## M5 Pack
 - [ ] 5.1 The pack skeleton, `echo_region`, `fetch` and the harness

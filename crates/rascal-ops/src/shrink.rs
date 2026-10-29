@@ -25,7 +25,7 @@ impl Op for Shrink {
             "Shrinks the core by a disc.",
             "On a mask whose core reaches past what should be repainted: a loose segmentation, a box drawn generously.",
             "To keep pixels for good (use subtract, which protects them) or to soften an edge (use feather).",
-            "The same mask with its core eroded by a disc of radius px, cleared under protect; not applicable when nothing of the core survives. The blend is cleared and the profile and prescriptions removed: feather it afterwards.",
+            "The same mask with its core eroded by a disc of radius px, cleared under protect; outside the image counts as unset, so a core touching the border shrinks from the border too; not applicable when nothing of the core survives. The blend is cleared and the profile and prescriptions removed: feather it afterwards.",
             Cost {
                 tier: CostTier::Cheap,
                 seconds: 0.1,

@@ -685,3 +685,169 @@ fn window_on_a_full_height_band_is_full_height_and_a_small_max_side_is_not_appli
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn grow_through_the_cli_journals_the_refinement_and_inspect_shows_no_profile() {
+    let dir = scratch("grow");
+    let ws = dir.join("ws");
+    let chair = repo_root().join("fixtures/images/chair-blob.png");
+    let out = rascal(&[
+        "run",
+        "rect",
+        chair.to_str().unwrap(),
+        "--bbox",
+        "0.27,0.21,0.53,0.79",
+        "--out",
+        dir.join("run").to_str().unwrap(),
+        "--workspace",
+        ws.to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let mask = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .find_map(|l| l.strip_prefix("mask: ").map(str::to_string))
+        .unwrap();
+    // The plan's scenario: grow 4 px and 20 px down.
+    let out = rascal(&[
+        "grow",
+        "--workspace",
+        ws.to_str().unwrap(),
+        "--mask",
+        &mask,
+        "--px",
+        "4",
+        "--down_px",
+        "20",
+        "--json",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    let grown_id = stdout
+        .lines()
+        .find_map(|l| l.strip_prefix("mask: "))
+        .unwrap()
+        .split(' ')
+        .next()
+        .unwrap()
+        .to_string();
+    let lines = journal(&ws);
+    let grow = lines.iter().find(|l| l["op"] == "grow").unwrap();
+    assert_eq!(grow["envelope"]["refinement"]["blend_cleared"], true);
+    assert_eq!(
+        grow["envelope"]["refinement"]["profile_cleared"], false,
+        "a rect mask had no profile"
+    );
+    assert_eq!(grow["params"]["down_px"], 20.0);
+    // inspect --json on the grown mask: no profile, and the core reaches below the box.
+    let rows: Vec<serde_json::Value> = serde_json::from_slice(
+        &rascal(&[
+            "workspace",
+            "list",
+            ws.to_str().unwrap(),
+            "--type",
+            "Mask",
+            "--json",
+        ])
+        .stdout,
+    )
+    .unwrap();
+    let identity = rows.iter().find(|r| r["id"] == grown_id).unwrap()["identity"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let dir_name = format!("{}.mask", identity.trim_start_matches("sha256:"));
+    let out = rascal(&[
+        "inspect",
+        ws.join("artifacts").join(&dir_name).to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(report["profile"].is_null(), "{report}");
+    // On the seam mask, which has a profile, profile_cleared is true.
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let out = rascal(&[
+        "run",
+        "seam",
+        pano.to_str().unwrap(),
+        "--out",
+        dir.join("seam").to_str().unwrap(),
+        "--workspace",
+        ws.to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let seam_mask = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .find_map(|l| l.strip_prefix("mask: ").map(str::to_string))
+        .unwrap();
+    let out = rascal(&[
+        "shrink",
+        "--workspace",
+        ws.to_str().unwrap(),
+        "--mask",
+        &seam_mask,
+        "--px",
+        "2",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let shrink = journal(&ws)
+        .into_iter()
+        .rfind(|l| l["op"] == "shrink")
+        .unwrap();
+    assert_eq!(shrink["envelope"]["refinement"]["profile_cleared"], true);
+    // A mask from another raw frame is refused by root, not only by an unknown frame.
+    let small = dir.join("small.png");
+    image::RgbImage::from_pixel(400, 200, image::Rgb([9, 9, 9]))
+        .save(&small)
+        .unwrap();
+    let out = rascal(&[
+        "run",
+        "rect",
+        small.to_str().unwrap(),
+        "--bbox",
+        "0.1,0.1,0.5,0.5",
+        "--out",
+        dir.join("small-run").to_str().unwrap(),
+        "--workspace",
+        ws.to_str().unwrap(),
+    ]);
+    assert!(out.status.success());
+    let small_mask = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .find_map(|l| l.strip_prefix("mask: ").map(str::to_string))
+        .unwrap();
+    let out = rascal(&[
+        "run",
+        "protect",
+        pano.to_str().unwrap(),
+        "--mask",
+        &small_mask,
+        "--workspace",
+        ws.to_str().unwrap(),
+        "--out",
+        dir.join("wrong-root").to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(64));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("the mask is in frame raw:400x200:"));
+    let _ = std::fs::remove_dir_all(&dir);
+}

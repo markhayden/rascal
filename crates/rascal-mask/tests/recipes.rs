@@ -54,6 +54,10 @@ fn copy_tree(from: &Path, to: &Path) {
 /// `UPDATE_FIXTURES=1` rewrites it.
 fn assert_golden(mask_dir: &Path, name: &str) {
     let golden = repo_root().join(format!("fixtures/masks/{name}.mask"));
+    assert!(
+        std::env::var_os("UPDATE_FIXTURES").is_none() || std::env::var_os("CI").is_none(),
+        "UPDATE_FIXTURES must not be set in CI: a rewrite would pass unseen"
+    );
     if std::env::var_os("UPDATE_FIXTURES").is_some() {
         let _ = std::fs::remove_dir_all(&golden);
         copy_tree(mask_dir, &golden);
@@ -361,5 +365,95 @@ fn heal_seam_then_heal_protect_preserves_the_first_edit_and_may_change_the_middl
         .filter(|&(x, y)| a.get_pixel(x, y) != b.get_pixel(x, y))
         .count();
     assert!(changed > 1000, "{changed} middle pixels changed");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn heal_remove_with_a_location_through_the_exact_fake_and_a_jpeg_input() {
+    let dir = scratch("heal-remove");
+    let images = repo_root().join("fixtures/images");
+    let cfg = dir.join("rascal.toml");
+    std::fs::write(
+        &cfg,
+        format!(
+            "config_version = 1\n[fillers.fake]\ncommand = [{:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\npaste = \"feather\"\nrevision = \"fake\"\n",
+            env!("CARGO_BIN_EXE_rascal")
+        ),
+    )
+    .unwrap();
+    // The chair blob as a JPEG: the first half of the plan's scenario and the JPEG path at once.
+    let jpeg = dir.join("chair-blob.jpg");
+    image::open(images.join("chair-blob.png"))
+        .unwrap()
+        .to_rgb8()
+        .save_with_format(&jpeg, image::ImageFormat::Jpeg)
+        .unwrap();
+    let out = rascal(&[
+        "heal",
+        "remove",
+        jpeg.to_str().unwrap(),
+        "--location",
+        repo_root()
+            .join("fixtures/locations/chairs.json")
+            .to_str()
+            .unwrap(),
+        "--filler",
+        "fake",
+        "--config",
+        cfg.to_str().unwrap(),
+        "--out",
+        dir.join("run").to_str().unwrap(),
+        "--no-dash",
+    ]);
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    let result = image::open(dir.join("run/result.png")).unwrap().to_rgb8();
+    let input = image::open(&jpeg).unwrap().to_rgb8();
+    // heal prints the result and the renders; the recipe's mask is the run's one raw-frame
+    // mask (the fake filler adds none).
+    let rows: Vec<serde_json::Value> = serde_json::from_slice(
+        &rascal(&[
+            "workspace",
+            "list",
+            dir.join("run").to_str().unwrap(),
+            "--type",
+            "Mask",
+            "--json",
+        ])
+        .stdout,
+    )
+    .unwrap();
+    let identity = rows.last().unwrap()["identity"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let mask = rascal_core::mask::Mask::read(
+        &dir.join("run/artifacts")
+            .join(format!("{}.mask", identity.trim_start_matches("sha256:"))),
+    )
+    .unwrap();
+    // Outside the mask's support every pixel is the input's; under the shadow rows the fake
+    // repainted.
+    let mut outside = 0usize;
+    for y in 0..input.height() {
+        for x in 0..input.width() {
+            if mask.weight(x, y) == 0.0 {
+                assert_eq!(result.get_pixel(x, y), input.get_pixel(x, y), "{x},{y}");
+                outside += 1;
+            }
+        }
+    }
+    assert!(outside > 100_000);
+    let changed = (255..266)
+        .filter(|&y| result.get_pixel(190, y) != input.get_pixel(190, y))
+        .count();
+    assert!(
+        changed > 5,
+        "the shadow rows below the box were repainted ({changed})"
+    );
+    assert!(
+        std::fs::read_to_string(dir.join("run/journal.jsonl"))
+            .unwrap()
+            .contains("filler call: ")
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

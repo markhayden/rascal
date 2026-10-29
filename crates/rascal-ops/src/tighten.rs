@@ -10,6 +10,11 @@
 //! the lower sample index; the direction at an end is one-sided and the path is never extended
 //! beyond its ends; a zero central difference takes the previous sample's direction, the first
 //! such sample the next nonzero one, and a path with no nonzero direction is not applicable.
+//! The perpendicular is read at `⌈2r⌉` equal steps over `[−r, r]` (about a pixel each), so
+//! the profile is symmetric about the path. A cap is centred along its sample's own normal
+//! while the tube between two samples interpolates along the segment's normal; at a sharp
+//! bend the two differ by the extent's offset times the sine of half the turn, under a pixel
+//! on any stroke a brush draws.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
@@ -45,27 +50,38 @@ fn set() -> &'static toml::Table {
     })
 }
 
-/// The tunables a step may override, with `tighten-v1`'s values as the defaults.
-const TUNABLES: [(&str, &str); 5] = [
+/// The tunables a step may override, with `tighten-v1`'s values as the defaults and their
+/// bounds.
+const TUNABLES: [(&str, &str, f64, f64); 5] = [
     (
         "min_contrast",
         "The least |g| (luminance levels per pixel) an edge must have to count.",
+        0.0,
+        255.0,
     ),
     (
         "min_defect_px",
         "The narrowest defect, in pixels between its two edges.",
+        0.0,
+        1e4,
     ),
     (
         "max_defect_factor",
         "The widest defect, as a multiple of the stroke's radius (2 means the whole stroke).",
+        0.01,
+        10.0,
     ),
     (
         "path_sigma",
         "The sigma, in samples, of the smoothing of the tightened extents along the path.",
+        0.0,
+        1e3,
     ),
     (
         "sample_spacing_px",
         "The spacing of the samples along the path, in pixels.",
+        0.25,
+        1e3,
     ),
 ];
 
@@ -78,20 +94,8 @@ impl Op for Tighten {
                 .map(serde_json::Value::from)
                 .unwrap_or(serde_json::Value::Null)
         };
-        let param = |key: &str, purpose: &str| match key {
-            "min_contrast" => {
-                Param::optional(key, purpose, ParamKind::Number, number(key)).bounded(0.0, 255.0)
-            }
-            "min_defect_px" => {
-                Param::optional(key, purpose, ParamKind::Number, number(key)).bounded(0.0, 1e4)
-            }
-            "max_defect_factor" => {
-                Param::optional(key, purpose, ParamKind::Number, number(key)).bounded(0.01, 10.0)
-            }
-            "path_sigma" => {
-                Param::optional(key, purpose, ParamKind::Number, number(key)).bounded(0.0, 1e3)
-            }
-            _ => Param::optional(key, purpose, ParamKind::Number, number(key)).bounded(0.25, 1e3),
+        let param = |key: &str, purpose: &str, lo: f64, hi: f64| {
+            Param::optional(key, purpose, ParamKind::Number, number(key)).bounded(lo, hi)
         };
         Manifest::new(
             NAME,
@@ -136,7 +140,10 @@ impl Op for Tighten {
                     many: false,
                 },
             ],
-            TUNABLES.iter().map(|(k, p)| param(k, p)).collect(),
+            TUNABLES
+                .iter()
+                .map(|(k, p, lo, hi)| param(k, p, *lo, *hi))
+                .collect(),
         )
         .with_constants(&["tighten-v1"])
     }
@@ -147,7 +154,7 @@ impl Op for Tighten {
         }
         set()
             .iter()
-            .filter(|(k, _)| TUNABLES.iter().any(|(t, _)| t == k))
+            .filter(|(k, _)| TUNABLES.iter().any(|(t, _, _, _)| t == k))
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect()
     }
@@ -168,16 +175,17 @@ impl Op for Tighten {
             )));
         };
         if location.frame() != image.record.frame {
-            return Err(Error::op(
-                NAME,
-                format!(
-                    "the stroke is in frame {} but the image is in {}",
-                    location.frame(),
-                    image.record.frame
-                ),
-            ));
+            return Ok(Output::invalid_args(format!(
+                "the stroke is in frame {} but the image is in {}",
+                location.frame(),
+                image.record.frame
+            )));
         }
         let frame = context.frames.require(&image.record.frame)?;
+        // The radius is bounded by the frame's diagonal (Location::validate says so for a
+        // location that came through the front door); the op holds the line itself.
+        let diagonal = (f64::from(frame.width).powi(2) + f64::from(frame.height).powi(2)).sqrt();
+        let radius_px = &radius_px.min(diagonal);
         let number = |key: &str| {
             crate::float(params, key).ok_or_else(|| Error::op(NAME, format!("parameter {key}")))
         };
@@ -185,7 +193,7 @@ impl Op for Tighten {
             radius: *radius_px,
             min_contrast: number("min_contrast")?,
             min_defect: number("min_defect_px")?,
-            max_defect: number("max_defect_factor")? * radius_px,
+            max_defect: number("max_defect_factor")? * *radius_px,
             path_sigma: number("path_sigma")?,
             spacing: number("sample_spacing_px")?,
         };
@@ -209,7 +217,7 @@ impl Op for Tighten {
             .map(|(p, d)| {
                 let n = [-d[1], d[0]];
                 let profile = perpendicular_profile(&read, *p, n, settings.radius);
-                let g = derivative(&profile.values);
+                let g = derivative(&profile.values, profile.step);
                 match best_pair(&g, &profile.offsets, &settings) {
                     Some((a, b)) => Extent {
                         a: profile.offsets[a],
@@ -246,7 +254,7 @@ impl Op for Tighten {
             values,
         )?;
         let mask = Mask::from_core(
-            "mask",
+            "tighten.mask",
             frame,
             UseCase::Repair,
             core,
@@ -400,47 +408,50 @@ pub fn bilinear(plane: &[f32], width: u32, height: u32, x: f64, y: f64) -> f64 {
 
 /// A sample's luminance along its perpendicular.
 pub struct Profile {
-    /// The offsets from the path, `−r … r` at 1 px steps (the last one may be `r` itself).
+    /// The offsets from the path: `⌈2r⌉ + 1` equal steps from `−r` to `r`, about a pixel each.
     pub offsets: Vec<f64>,
     pub values: Vec<f64>,
+    /// The step between offsets, in pixels.
+    pub step: f64,
 }
 
-/// Reads `L` along the perpendicular `n` through `p` over `[−r, r]` at 1 px steps.
+/// Reads `L` along the perpendicular `n` through `p` over `[−r, r]` at `⌈2r⌉` equal steps,
+/// symmetric about the path.
 pub fn perpendicular_profile(
     read: &impl Fn(f64, f64) -> f64,
     p: [f64; 2],
     n: [f64; 2],
     radius: f64,
 ) -> Profile {
-    let mut offsets = Vec::new();
-    let mut t = -radius;
-    while t <= radius + 1e-9 {
-        offsets.push(t);
-        t += 1.0;
-    }
-    if offsets.last().is_some_and(|last| radius - last > 1e-9) {
-        offsets.push(radius);
-    }
+    let steps = (2.0 * radius).ceil().max(1.0) as usize;
+    let step = 2.0 * radius / steps as f64;
+    let offsets: Vec<f64> = (0..=steps).map(|k| -radius + k as f64 * step).collect();
     let values = offsets
         .iter()
         .map(|t| read(p[0] + t * n[0], p[1] + t * n[1]))
         .collect();
-    Profile { offsets, values }
+    Profile {
+        offsets,
+        values,
+        step,
+    }
 }
 
-/// The signed first derivative by central differences, one-sided at the ends.
-pub fn derivative(values: &[f64]) -> Vec<f64> {
+/// The signed first derivative per pixel by central differences over samples `step` apart,
+/// one-sided at the ends.
+pub fn derivative(values: &[f64], step: f64) -> Vec<f64> {
     let n = values.len();
+    let step = if step > 0.0 { step } else { 1.0 };
     (0..n)
         .map(|i| {
             if n < 2 {
                 0.0
             } else if i == 0 {
-                values[1] - values[0]
+                (values[1] - values[0]) / step
             } else if i == n - 1 {
-                values[n - 1] - values[n - 2]
+                (values[n - 1] - values[n - 2]) / step
             } else {
-                (values[i + 1] - values[i - 1]) / 2.0
+                (values[i + 1] - values[i - 1]) / (2.0 * step)
             }
         })
         .collect()
