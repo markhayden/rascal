@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::artifact::{Artifact, ArtifactType};
 use crate::error::{Error, Result};
-use crate::frame::FrameTable;
+use crate::frame::{Frame, FrameTable};
 use crate::location::Location;
 use crate::mask::Refinement;
 
@@ -818,6 +818,8 @@ pub struct Context<'a> {
 pub struct Output {
     pub envelope: Envelope,
     pub outputs: BTreeMap<String, Artifact>,
+    /// Frames the op introduced (a `cut:` canvas, a `crop:` window) that its outputs are in.
+    pub frames: Vec<Frame>,
 }
 
 impl Output {
@@ -834,7 +836,17 @@ impl Output {
                 },
             );
         }
-        Output { envelope, outputs }
+        Output {
+            envelope,
+            outputs,
+            frames: Vec::new(),
+        }
+    }
+
+    /// With a frame the op introduced.
+    pub fn with_frame(mut self, frame: Frame) -> Output {
+        self.frames.push(frame);
+        self
     }
 
     /// With a refinement report.
@@ -865,6 +877,7 @@ impl Output {
         Output {
             envelope: Envelope::not_applicable(reason),
             outputs: BTreeMap::new(),
+            frames: Vec::new(),
         }
     }
 
@@ -873,6 +886,7 @@ impl Output {
         Output {
             envelope: Envelope::invalid_args(reason),
             outputs: BTreeMap::new(),
+            frames: Vec::new(),
         }
     }
 }
@@ -891,8 +905,8 @@ pub trait Op: Send + Sync {
 }
 
 /// The registry's shared input validation: every required port bound, every bound port of the
-/// declared type (a rendering is an `Image` and is never a `Mask`), no unknown port, and a
-/// mask and an image in the same invocation in the same frame.
+/// declared type (a rendering is an `Image` and is never a `Mask`), no unknown port, and every
+/// mask and image in the same invocation in the mask's frame.
 pub fn validate_inputs(manifest: &Manifest, inputs: &Inputs) -> Result<()> {
     for port in &manifest.inputs {
         match inputs.get(&port.name) {
@@ -927,13 +941,19 @@ pub fn validate_inputs(manifest: &Manifest, inputs: &Inputs) -> Result<()> {
             return Err(Error::op(&manifest.name, format!("unknown input {name}")));
         }
     }
-    let frames: Vec<(&str, &str)> = inputs
+    // A mask and an image in one invocation share a frame; images among themselves need not
+    // (put takes a parent and its canvas, unwindow a parent and its crop).
+    let mask_frames: Vec<(&str, &str)> = inputs
         .iter()
-        .filter(|(_, a)| matches!(a, Artifact::Mask(_) | Artifact::Image(_)))
+        .filter(|(_, a)| matches!(a, Artifact::Mask(_)))
         .map(|(k, a)| (k.as_str(), a.frame()))
         .collect();
-    if let Some(first) = frames.first()
-        && let Some(other) = frames.iter().find(|(_, f)| *f != first.1)
+    if let Some(first) = mask_frames.first()
+        && let Some(other) = inputs
+            .iter()
+            .filter(|(_, a)| matches!(a, Artifact::Mask(_) | Artifact::Image(_)))
+            .map(|(k, a)| (k.as_str(), a.frame()))
+            .find(|(_, f)| *f != first.1)
     {
         return Err(Error::op(
             &manifest.name,

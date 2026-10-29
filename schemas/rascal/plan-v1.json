@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The cut plan: how a `cut:` canvas was taken from its parent and how `put` returns it.",
+  "properties": {
+    "height": {
+      "description": "The parent's height.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "identity": {
+      "description": "`sha256:` over the parent frame's identity, width, height, strip and the spans.",
+      "type": "string"
+    },
+    "left_span": {
+      "description": "The parent columns `[start, end)` the canvas's left half came from: the rightmost `s`.",
+      "items": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+    },
+    "parent": {
+      "description": "The parent frame id.",
+      "type": "string"
+    },
+    "parent_identity": {
+      "description": "The parent frame's identity.",
+      "type": "string"
+    },
+    "plan_version": {
+      "description": "The record's version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "right_span": {
+      "description": "The parent columns the canvas's right half came from: the leftmost `s`.",
+      "items": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+    },
+    "strip": {
+      "description": "The strip width: even, at least 2, `2s <= width`.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "width": {
+      "description": "The parent's width.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "plan_version",
+    "parent",
+    "parent_identity",
+    "width",
+    "height",
+    "strip",
+    "left_span",
+    "right_span",
+    "identity"
+  ],
+  "title": "Plan",
+  "type": "object"
+}

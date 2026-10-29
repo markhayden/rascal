@@ -6,6 +6,7 @@ use std::sync::Arc;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::frame::Plan;
 use crate::identity::Identity;
 use crate::image::Image;
 use crate::location::Location;
@@ -48,6 +49,7 @@ pub enum Artifact {
     Mask(Arc<Mask>),
     BandProfile(Arc<BandProfile>),
     Series(Arc<Series>),
+    Plan(Arc<Plan>),
 }
 
 impl Artifact {
@@ -59,6 +61,7 @@ impl Artifact {
             Artifact::Mask(_) => ArtifactType::Mask,
             Artifact::BandProfile(_) => ArtifactType::BandProfile,
             Artifact::Series(_) => ArtifactType::Series,
+            Artifact::Plan(_) => ArtifactType::Plan,
         }
     }
 
@@ -70,6 +73,7 @@ impl Artifact {
             Artifact::Mask(mask) => mask.identity(),
             Artifact::BandProfile(profile) => profile.identity(),
             Artifact::Series(series) => series.identity(),
+            Artifact::Plan(plan) => Identity::parse_or_hash(&plan.identity),
         }
     }
 
@@ -81,6 +85,7 @@ impl Artifact {
             Artifact::Mask(mask) => &mask.record.frame,
             Artifact::BandProfile(profile) => &profile.frame,
             Artifact::Series(series) => &series.frame,
+            Artifact::Plan(plan) => &plan.parent,
         }
     }
 }

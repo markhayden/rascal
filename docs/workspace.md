@@ -18,7 +18,8 @@ lock                    the writer lock, held only across a commit
 ## Ids and identities
 
 Every artifact has an identity (`sha256:…`, ADR 0016) and a short local id for the command
-line: `img-1`, `loc-2`, `mask-3`, `band-4`, `series-5`. Ids are allocated under the writer lock
+line: `img-1`, `loc-2`, `mask-3`, `band-4`, `series-5`, `plan-6`. Locations and plans are
+registry entries; the rest are files under `images/` or `artifacts/`. Ids are allocated under the writer lock
 from the generation's counter, so two concurrent ops never take the same one. Records and
 identities never use ids; a command accepts either.
 

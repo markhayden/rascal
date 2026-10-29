@@ -7,8 +7,10 @@ use std::path::{Path, PathBuf};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use rascal_core::Error;
+use rascal_core::artifact::{Artifact, ArtifactType};
 use rascal_core::error::Result;
 use rascal_core::frame::Projection;
+use rascal_core::mask::Mask;
 use rascal_core::op::{Inputs, ParamKind, Params};
 use rascal_core::registry::OpRegistry;
 use rascal_core::workspace::Workspace;
@@ -140,12 +142,26 @@ pub fn op_commands(registry: &OpRegistry, reserved: &[&str]) -> Vec<Command> {
                         )),
                 );
             }
-            command = command.arg(
-                Arg::new("strict")
-                    .long("strict")
-                    .action(ArgAction::SetTrue)
-                    .help("Exit 1 when the op reports not_applicable or measured_nothing."),
-            );
+            command = command
+                .arg(
+                    Arg::new("strict")
+                        .long("strict")
+                        .action(ArgAction::SetTrue)
+                        .help("Exit 1 when the op reports not_applicable or measured_nothing."),
+                )
+                .arg(
+                    Arg::new("out")
+                        .long("out")
+                        .value_name("FILE")
+                        .value_parser(clap::value_parser!(PathBuf))
+                        .help("Also write the op's image output to this file (PNG), overwriting it."),
+                )
+                .arg(
+                    Arg::new("projection")
+                        .long("projection")
+                        .value_name("flat|equirectangular")
+                        .help("How an image given as a path is read; without it an exactly 2:1 image is equirectangular."),
+                );
             command
         })
         .collect()
@@ -171,7 +187,24 @@ fn run_op_inner(registry: &OpRegistry, name: &str, matches: &ArgMatches) -> Resu
     let mut inputs: Inputs = BTreeMap::new();
     for port in &manifest.inputs {
         if let Some(id) = matches.get_one::<String>(&format!("port:{}", port.name)) {
-            inputs.insert(port.name.clone(), ws.load(id)?);
+            let path = Path::new(id);
+            let artifact = if port.artifact_type == ArtifactType::Image && path.is_file() {
+                // A path names an image to import first; the import is journaled like any other.
+                let projection =
+                    matches
+                        .get_one::<String>("projection")
+                        .and_then(|p| match p.as_str() {
+                            "flat" => Some(Projection::Flat),
+                            "equirectangular" => Some(Projection::Equirectangular),
+                            _ => None,
+                        });
+                ws.import(path, projection)?.2
+            } else if port.artifact_type == ArtifactType::Mask && path.join("mask.toml").is_file() {
+                Artifact::Mask(std::sync::Arc::new(Mask::read(path)?))
+            } else {
+                ws.load(id)?
+            };
+            inputs.insert(port.name.clone(), artifact);
         }
     }
     let mut params = Params::new();
@@ -202,6 +235,34 @@ fn run_op_inner(registry: &OpRegistry, name: &str, matches: &ArgMatches) -> Resu
     }
     if let Some(c) = &invocation.committed {
         println!("committed: generation {} seq {}", c.generation, c.seq);
+    }
+    if let Some(out) = matches.get_one::<PathBuf>("out") {
+        let images: Vec<_> = invocation
+            .output
+            .outputs
+            .values()
+            .filter_map(|a| match a {
+                Artifact::Image(image) => Some(image.clone()),
+                _ => None,
+            })
+            .collect();
+        match images.as_slice() {
+            [image] => {
+                let out = rascal_core::outdir::prepare(out, rascal_core::outdir::OutKind::File)?;
+                rascal_core::canonical::write_png(&out, &image.pixels)?;
+                println!("{}", out.display());
+            }
+            [] => {
+                return Err(Error::usage(format!(
+                    "{name} produced no image to write to --out"
+                )));
+            }
+            _ => {
+                return Err(Error::usage(format!(
+                    "{name} produced several images; --out takes one"
+                )));
+            }
+        }
     }
     match status {
         rascal_core::op::Status::Ok => Ok(exit::OK),

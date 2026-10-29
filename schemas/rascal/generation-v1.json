@@ -431,6 +431,20 @@
           "minItems": 2,
           "type": "array"
         },
+        "parent": {
+          "description": "The parent frame id.",
+          "type": "string"
+        },
+        "parent_identity": {
+          "description": "The parent frame's identity.",
+          "type": "string"
+        },
+        "plan_version": {
+          "description": "The record's version.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
         "right_span": {
           "description": "The parent columns the canvas's right half came from: the leftmost `s`.",
           "items": {
@@ -456,12 +470,42 @@
         }
       },
       "required": [
+        "plan_version",
+        "parent",
+        "parent_identity",
         "width",
         "height",
         "strip",
         "left_span",
         "right_span",
         "identity"
+      ],
+      "type": "object"
+    },
+    "PlanEntry": {
+      "additionalProperties": false,
+      "description": "A stored plan: a registry entry, not a file.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "plan": {
+          "$ref": "#/$defs/Plan"
+        },
+        "seq": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "identity",
+        "plan",
+        "seq"
       ],
       "type": "object"
     },
@@ -535,6 +579,13 @@
       "format": "uint64",
       "minimum": 0,
       "type": "integer"
+    },
+    "plans": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PlanEntry"
+      },
+      "type": "array"
     },
     "records": {
       "description": "The identities of every committed operation record, in commit order.",

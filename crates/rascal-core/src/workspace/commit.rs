@@ -24,11 +24,11 @@ use std::path::{Path, PathBuf};
 
 use crate::artifact::ArtifactType;
 use crate::error::{Error, Result};
-use crate::frame::Frame;
+use crate::frame::{Frame, Plan};
 use crate::location::{Location, LocationEntry};
 use crate::workspace::Workspace;
 use crate::workspace::record::OperationRecord;
-use crate::workspace::registry::{ArtifactEntry, Generation};
+use crate::workspace::registry::{ArtifactEntry, Generation, PlanEntry};
 use crate::workspace::sync::{Fs, sync_tree};
 
 /// One output waiting to be published.
@@ -48,6 +48,8 @@ pub struct Pending {
     pub sidecar: Option<(PathBuf, String)>,
     /// The location, for a location.
     pub location: Option<Location>,
+    /// The plan, for a plan.
+    pub plan: Option<Plan>,
 }
 
 /// The outcome of a commit.
@@ -129,6 +131,7 @@ fn commit_locked(
     let mut ids: BTreeMap<String, String> = BTreeMap::new();
     let mut new_entries: Vec<ArtifactEntry> = Vec::new();
     let mut new_locations: Vec<LocationEntry> = Vec::new();
+    let mut new_plans: Vec<PlanEntry> = Vec::new();
     let mut touched_dirs: Vec<PathBuf> = Vec::new();
     let mut touch = |dir: &Path| {
         if !touched_dirs.iter().any(|d| d == dir) {
@@ -146,6 +149,23 @@ fn commit_locked(
                         id: id.clone(),
                         identity: item.identity.clone(),
                         location: location.clone(),
+                    });
+                    id
+                }
+            };
+            ids.insert(item.port.clone(), id);
+            continue;
+        }
+        if let Some(plan) = &item.plan {
+            let id = match generation.plan(&item.identity) {
+                Some(existing) => existing.id.clone(),
+                None => {
+                    let id = generation.allocate(item.prefix);
+                    new_plans.push(PlanEntry {
+                        id: id.clone(),
+                        identity: item.identity.clone(),
+                        plan: plan.clone(),
+                        seq,
                     });
                     id
                 }
@@ -216,6 +236,7 @@ fn commit_locked(
         }
     }
     generation.locations.extend(new_locations);
+    generation.plans.extend(new_plans);
     generation.artifacts.extend(new_entries);
     generation.records.push(record.identity.clone());
     let generation_path = ws

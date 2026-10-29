@@ -6,7 +6,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::artifact::ArtifactType;
-use crate::frame::Frame;
+use crate::frame::{Frame, Plan};
 use crate::location::LocationEntry;
 
 /// A stored artifact: where it is and what it is.
@@ -25,6 +25,16 @@ pub struct ArtifactEntry {
     pub seq: u64,
 }
 
+/// A stored plan: a registry entry, not a file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PlanEntry {
+    pub id: String,
+    pub identity: String,
+    pub plan: Plan,
+    pub seq: u64,
+}
+
 /// One generation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -38,6 +48,8 @@ pub struct Generation {
     pub frames: Vec<Frame>,
     pub locations: Vec<LocationEntry>,
     pub artifacts: Vec<ArtifactEntry>,
+    #[serde(default)]
+    pub plans: Vec<PlanEntry>,
     /// The identities of every committed operation record, in commit order.
     pub records: Vec<String>,
 }
@@ -52,6 +64,7 @@ impl Generation {
             frames: Vec::new(),
             locations: Vec::new(),
             artifacts: Vec::new(),
+            plans: Vec::new(),
             records: Vec::new(),
         }
     }
@@ -75,6 +88,13 @@ impl Generation {
         self.locations
             .iter()
             .find(|l| l.id == id_or_identity || l.identity == id_or_identity)
+    }
+
+    /// The plan entry with this local id or identity.
+    pub fn plan(&self, id_or_identity: &str) -> Option<&PlanEntry> {
+        self.plans
+            .iter()
+            .find(|p| p.id == id_or_identity || p.identity == id_or_identity)
     }
 
     /// The frame with this id.

@@ -49,6 +49,12 @@ pub enum Topology {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Plan {
+    /// The record's version.
+    pub plan_version: u32,
+    /// The parent frame id.
+    pub parent: String,
+    /// The parent frame's identity.
+    pub parent_identity: String,
     /// The parent's width.
     pub width: u32,
     /// The parent's height.
@@ -90,6 +96,9 @@ impl Plan {
         }
         let s = Plan::strip_width(parent.width, fraction);
         let mut plan = Plan {
+            plan_version: 1,
+            parent: parent.id.clone(),
+            parent_identity: parent.identity.clone(),
             width: parent.width,
             height: parent.height,
             strip: s,
@@ -187,6 +196,7 @@ impl Frame {
     }
 
     /// The `cut:` frame of a parent image under a plan. The canvas is `2s × H`, bounded, flat.
+    /// `image_id` names the image on the command line; the identity is independent of it.
     pub fn cut(parent: &Frame, image_id: &str, plan: &Plan) -> Result<Frame> {
         if parent.topology != Topology::Wrap {
             return Err(Error::op(

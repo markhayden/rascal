@@ -54,8 +54,19 @@ before accepting it.
 | `rect` | find | Image; `bbox` | Location (`bbox`) | 1.1 |
 | `rasterize` | refine | Location, Image; `use_case` | Mask (bbox and whole_image; the rest in 1.8b) | 1.1 |
 | `render` | out | Mask [, Image]; `for`, `threshold`, `colour`, `strength` | Image: `grey`, `binary` (`mask_input`), `alpha`, `tinted` (`image_input`), `overlay` (inspection) | 1.1, 1.5 |
+| `cut` | prep | Image (wrapped raw); `strip` | Image in a new `cut:` frame (the two edge strips side by side, the wrap edge at the centre) and the Plan | 1.8a |
+| `put` | prep | Image (parent), Image (canvas), Plan | Image in the parent frame with the canvas's halves on the edge strips; cut then put is byte-identical | 1.8a |
 
-The remaining ops arrive with their tasks (PLAN.md): `line`, `stroke`, `cut`, `put` in M1;
+The pixel primitives every op is built from live in `rascal_ops::primitives`: row smoothing
+(a Gaussian truncated at 3σ, renormalised at the edges), the 3×3 Sobel magnitude with edge
+replication, disc dilation and erosion, the exact Euclidean distance transform, sRGB to CIE Lab
+under D65, and the standard normal CDF; each is tested against brute force or tabulated values.
+
+An op subcommand's image port takes a workspace id or a path (a path is imported first), a mask
+port takes an id or a mask directory, and `--out <file>` also writes a lone image output as a
+PNG.
+
+The remaining ops arrive with their tasks (PLAN.md): `line` and `stroke` in M1;
 `fan`, `profile`, `feather`, `ramp`, `apply`, `window`, `unwindow`, `paste`, `measure` in M2;
 `grow`, `shrink`, `close`, `subtract`, `select`, `invert`, `tighten` in M4; `segment` from the
 Python pack in M5.

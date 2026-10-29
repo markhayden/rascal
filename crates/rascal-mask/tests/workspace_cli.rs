@@ -341,3 +341,67 @@ fn workspace_repair_reports_what_it_did() {
     assert!(String::from_utf8_lossy(&out.stdout).contains("0 orphans removed"));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn cut_then_put_from_the_command_line_round_trips_the_samples() {
+    let dir = scratch("cutput");
+    let ws = dir.join("ws");
+    let pano = dir.join("pano.png");
+    let image = image::RgbImage::from_fn(400, 200, |x, y| {
+        image::Rgb([(x % 256) as u8, (y % 256) as u8, ((x + y) % 256) as u8])
+    });
+    image.save(&pano).unwrap();
+    // The image port takes a path: it is imported first.
+    let out = rascal(&[
+        "cut",
+        "--workspace",
+        ws.to_str().unwrap(),
+        "--image",
+        pano.to_str().unwrap(),
+        "--strip",
+        "0.07",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        text.contains("image: img-2") && text.contains("plan: plan-3"),
+        "{text}"
+    );
+    let back = dir.join("back.png");
+    let out = rascal(&[
+        "put",
+        "--workspace",
+        ws.to_str().unwrap(),
+        "--image",
+        "img-1",
+        "--canvas",
+        "img-2",
+        "--plan",
+        "plan-3",
+        "--out",
+        back.to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let decoded = image::open(&back).unwrap().to_rgb8();
+    assert_eq!(
+        decoded.as_raw(),
+        image.as_raw(),
+        "the decoded samples of back.png equal those of pano.png"
+    );
+    let out = rascal(&["workspace", "list", ws.to_str().unwrap(), "--type", "Plan"]);
+    assert!(String::from_utf8_lossy(&out.stdout).contains("plan-3"));
+    let out = rascal(&["workspace", "list", ws.to_str().unwrap(), "--type", "Frame"]);
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("cut:"),
+        "the canvas frame is registered"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

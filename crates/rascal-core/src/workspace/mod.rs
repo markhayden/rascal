@@ -215,6 +215,9 @@ impl Workspace {
     /// Loads an artifact by local id or identity from the snapshot.
     pub fn load(&self, id_or_identity: &str) -> Result<Artifact> {
         let generation = self.snapshot()?;
+        if let Some(plan) = generation.plan(id_or_identity) {
+            return Ok(Artifact::Plan(Arc::new(plan.plan.clone())));
+        }
         if let Some(location) = generation.location(id_or_identity) {
             return Ok(Artifact::Location {
                 location: location.location.clone(),
@@ -560,7 +563,7 @@ impl Workspace {
         );
         // New frames an op introduced (cut, window) are those its outputs are in and the
         // snapshot does not know.
-        let new_frames: Vec<Frame> = Vec::new();
+        let new_frames: Vec<Frame> = output.frames.clone();
         let published =
             self.publish_cancellable(&output.outputs, new_frames, &mut record, started, cancel)?;
         let cancelled = cancel.is_some_and(|c| c.load(std::sync::atomic::Ordering::SeqCst));
@@ -702,6 +705,7 @@ impl Workspace {
                     staged: None,
                     sidecar: None,
                     location: None,
+                    plan: None,
                 };
                 let item = match artifact {
                     Artifact::Image(image) => {
@@ -754,6 +758,11 @@ impl Workspace {
                         location: Some(location.clone()),
                         ..base
                     },
+                    Artifact::Plan(plan) => Pending {
+                        prefix: "plan",
+                        plan: Some((**plan).clone()),
+                        ..base
+                    },
                 };
                 pending.push(item);
             }
@@ -799,6 +808,14 @@ impl Workspace {
                 l.id.clone(),
                 l.identity.clone(),
                 l.location.frame().to_string(),
+            ));
+        }
+        for p in &generation.plans {
+            rows.push((
+                "Plan".to_string(),
+                p.id.clone(),
+                p.identity.clone(),
+                p.plan.parent.clone(),
             ));
         }
         for a in &generation.artifacts {

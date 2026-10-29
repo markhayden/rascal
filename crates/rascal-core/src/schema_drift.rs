@@ -82,7 +82,7 @@ macro_rules! boundary_type {
 /// Every boundary type in the core. Each task that adds one adds a line here.
 pub fn inventory() -> Vec<BoundaryType> {
     use crate::config::Config;
-    use crate::frame::Frame;
+    use crate::frame::{Frame, Plan};
     use crate::image::ImageRecord;
     use crate::journal::JournalLine;
     use crate::location::Location;
@@ -104,6 +104,12 @@ pub fn inventory() -> Vec<BoundaryType> {
                 "frame-v1/cut.json",
                 "frame-v1/crop.json"
             ]
+        ),
+        boundary_type!(
+            Plan,
+            "rascal/plan-v1.json",
+            Source::Generated,
+            ["plan-v1/strip.json"]
         ),
         boundary_type!(
             ImageRecord,
@@ -203,7 +209,7 @@ pub const COMPONENTS: &[&str] = &[
     "Projection",
     "Topology",
     "FrameKind",
-    "Plan",
+    "PlanEntry",
     "Role",
     "RenderingRole",
     "UseCase",
