@@ -7,9 +7,9 @@ The plan's "Owner decisions" table is the index; this file holds the answers.
 |---|---|---|---|---|
 | 1 | Confirmation of no conflicting obligation | the bootstrap commit (pre-M0) | no commit exists on `main` until the dated statement is in this file | made 2026-10-28 |
 | 2 | The forbidden-word list location (`RASCAL_FORBIDDEN_WORDS`) | task 0.1's first commit | the clean-room scan runs locally on every commit from 0.1 on; the list never enters the tree | made 2026-10-28 |
-| 3 | A real local filler and a real wrapped image on the owner's machine | task 2.8's by-hand run | M2's checkpoint needs one real heal through a real filler, viewed by the owner | pending |
-| 4 | The MCP transport (an MCP crate or an in-house JSON-RPC implementation) | task 3.1, by ADR 0015 | no MCP code is written until the ADR is accepted | pending |
-| 5 | The segmenter, its branch (A or B) and the export's redistribution terms | task 5.2, decided in task 4.5 by ADR 0018 | M5's `segment` task does not start, and success criterion 5 or 5b is not fixed, until the ADR is accepted | pending |
+| 3 | A real local filler and a real wrapped image on the owner's machine | task 2.8's by-hand run | M2's checkpoint needs one real heal through a real filler, viewed by the owner | made 2026-10-29 |
+| 4 | The MCP transport (an MCP crate or an in-house JSON-RPC implementation) | task 3.1, by ADR 0015 | no MCP code is written until the ADR is accepted | made 2026-10-29 (ADR 0015) |
+| 5 | The segmenter, its branch (A or B) and the export's redistribution terms | task 5.2, decided in task 4.5 by ADR 0018 | M5's `segment` task does not start, and success criterion 5 or 5b is not fixed, until the ADR is accepted | survey drafted 2026-10-29 (`tools/python/MODEL.md`); awaiting the owner's signature |
 | 6 | The private corpus: location, first contents, the sky and structured groups with at least `min_decided` images each | task 6.1 | no lab matrix is written until the corpus manifest verifies | pending |
 | 7 | The path fan before or after v1 | after M7, unless task 4.3 shows the need | v0.1.0 ships without it unless the owner decides otherwise during M4 | pending |
 
@@ -37,3 +37,23 @@ than any single industry.
 agent merges it into `main`, runs `just check` on the merge commit, pushes `main` and the tags,
 waits for CI on both platforms, and tags the checkpoint. `main` is never force pushed, and no
 milestone is merged without the owner's approval.
+
+## 3. A real filler and a real image
+
+2026-10-29. Three of the owner's own 360 panoramas (5760×2880) went through `heal seam` with
+Bria Eraser on fal as a command filler and with LaMa run locally on Metal; the owner judged the
+results by eye ("10 out of 10"). The setup lives outside the repository. Two observations were
+recorded in `tasks/todo.md`: output writing dominates a run's time, and LaMa wants a narrower
+band in smooth sky (`wide_max = 0.05`), a per-filler constant set for the lab.
+
+## 4. The MCP transport
+
+2026-10-29. ADR 0015: the official `rmcp` crate pinned at 3.8.0, revision 2025-11-25 only, with
+the independent minimal client as the in-house check on it.
+
+## 5. The segmenter (awaiting signature)
+
+The survey is `tools/python/MODEL.md`. Its recommendation is branch A with OWLv2 base
+(Apache-2.0) for text to boxes and MobileSAM (Apache-2.0) for boxes to planes, both exported to
+ONNX for the bundle, with SAM 2.1 Hiera-Tiny as the drop-in if MobileSAM's masks prove loose.
+The owner signs here with the branch, the model pair and the date; ADR 0018 follows.
