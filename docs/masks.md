@@ -80,6 +80,17 @@ blend = round(255 · exp(−D² / (2σ²)))      for 0 < D ≤ support · σ,   
 The weight tends to 1 at the core's boundary, the 50% contour is `1.1774 σ` outside the core,
 and the support (`feather-v1`: 3 sigmas) is finite. Protected pixels get `blend = 0`.
 
+## Prescriptions
+
+A prescription describes a change `apply` will make to the canvas; the mask stays a
+description until then. `ramp` adds a `tone_ramp`: a 3-channel series `Δ[y]` (right minus
+left on the band profile's step windows, row-smoothed) and a `share`. `apply` performs every
+prescription once, in order: a pixel with effective weight `w > 0` at distance `d = |x + 0.5 −
+c|` from the line moves by `sign · share · Δ[y] · max(0, 1 − d / half[y])`, the left side toward
+the right and the right toward the left, rounded and clamped; a pixel with `w = 0` (protected,
+or outside the mask's support) is byte-identical. The ramp is zero at and beyond the band's
+half-width.
+
 ## Identity
 
 `sha256:` over the three planes' pixel digests, the use case, the frame identity, the profile's

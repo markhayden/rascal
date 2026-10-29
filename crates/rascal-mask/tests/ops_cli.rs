@@ -435,3 +435,138 @@ fn profile_after_fan_writes_the_band_mask_that_inspect_describes() {
     assert!(pages.join("overlay.jpg").exists() && pages.join("chart.svg").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Task 2.3's CLI scenario: `rascal ramp --image <canvas> --mask <band>` then `rascal apply`
+/// yields a canvas whose two sides meet in colour at the line on the step-sky fixture;
+/// pixels beyond the half-width and protected pixels are byte-identical.
+#[test]
+fn ramp_then_apply_meets_the_sides_of_the_step_sky_canvas_at_the_line() {
+    let dir = scratch("ramp");
+    let ws = dir.join("ws");
+    let sky = repo_root().join("fixtures/images/step-sky.png");
+    let out = rascal(&[
+        "workspace",
+        "import",
+        ws.to_str().unwrap(),
+        sky.to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let port = |out: &std::process::Output, name: &str| -> String {
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .find_map(|l| {
+                l.strip_prefix(&format!("{name}: "))
+                    .map(|r| r.split_whitespace().next().unwrap().to_string())
+            })
+            .unwrap_or_else(|| panic!("no {name} in {}", String::from_utf8_lossy(&out.stdout)))
+    };
+    let w = ws.to_str().unwrap();
+    let out = rascal(&[
+        "line",
+        "--workspace",
+        w,
+        "--image",
+        "img-1",
+        "--column",
+        "0.5",
+        "--width_px",
+        "2",
+    ]);
+    let line_id = port(&out, "location");
+    let out = rascal(&[
+        "fan",
+        "--workspace",
+        w,
+        "--image",
+        "img-1",
+        "--line",
+        &line_id,
+    ]);
+    let band_id = port(&out, "band");
+    let out = rascal(&["profile", "--workspace", w, "--band", &band_id]);
+    let mask_id = port(&out, "mask");
+    let out = rascal(&[
+        "ramp",
+        "--workspace",
+        w,
+        "--image",
+        "img-1",
+        "--mask",
+        &mask_id,
+        "--json",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let ramped = port(&out, "mask");
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    let json = &stdout[stdout.find('{').unwrap()..=stdout.rfind('}').unwrap()];
+    let envelope: serde_json::Value = serde_json::from_str(json).unwrap();
+    let step_max = envelope["measurements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["name"] == "step_max_levels")
+        .unwrap()["value"]
+        .as_f64()
+        .unwrap();
+    // The sky rows carry the fixture's 10-level step; the floor rows' planks give the step
+    // windows larger local differences, so the maximum over rows is at least the sky's.
+    assert!(step_max >= 9.0, "the fixture's 10-level step: {step_max}");
+    let canvas = dir.join("canvas.png");
+    let out = rascal(&[
+        "apply",
+        "--workspace",
+        w,
+        "--image",
+        "img-1",
+        "--mask",
+        &ramped,
+        "--out",
+        canvas.to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let before = image::open(&sky).unwrap().to_rgb8();
+    let after = image::open(&canvas).unwrap().to_rgb8();
+    let (width, height) = before.dimensions();
+    assert_eq!(after.dimensions(), (width, height));
+    // On the sky rows the two sides meet at the line (the fixture's step is 10 levels).
+    for y in [20, 60, 100, 140] {
+        let l = after.get_pixel(width / 2 - 1, y);
+        let r = after.get_pixel(width / 2, y);
+        let bl = before.get_pixel(width / 2 - 1, y);
+        let br = before.get_pixel(width / 2, y);
+        for ch in 0..3 {
+            assert!(
+                bl[ch].abs_diff(br[ch]) >= 9,
+                "the step is there before: {bl:?} {br:?}"
+            );
+            assert!(
+                l[ch].abs_diff(r[ch]) <= 2,
+                "row {y} ch {ch}: {l:?} vs {r:?}"
+            );
+        }
+    }
+    // Beyond the band (the widest half is 0.15 · width = 60 px) every pixel is byte-identical.
+    let reach = (0.15 * f64::from(width)).ceil() as u32 + 1;
+    for y in 0..height {
+        for x in (0..width / 2 - reach).chain(width / 2 + reach..width) {
+            assert_eq!(
+                after.get_pixel(x, y),
+                before.get_pixel(x, y),
+                "{x},{y} beyond the band"
+            );
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

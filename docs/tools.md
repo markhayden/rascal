@@ -61,6 +61,8 @@ before accepting it.
 | `fan` | refine | Image, Location | a BandProfile: the half-width per row along a column line, wide where the surface is smooth and the sides differ in tone, `thin` where it is detailed, with the sampling windows it resolved; constant sets `fan-v1` and `fan-thin-v1` (`--constants`) | 2.1 |
 | `profile` | refine | BandProfile | a seam Mask: the core at each row's half-width about the line, the blend a feather whose sigma is `feather_ratio` of the row's half-width (`profile-v1`), the profile and its `sigma_px` series stored | 2.2 |
 | `feather` | refine | Mask | the same mask with its blend replaced by the feather of the core's edge outward with one `sigma_px`, zero beyond `support` sigmas (`feather-v1`); protect, the profile and the prescriptions kept | 2.2 |
+| `ramp` | refine | Image, Mask | the same mask with a `tone_ramp` prescription: the per-row colour step `Δ[y]` (right minus left on the profile's step windows, row-smoothed by `ramp_sigma`) and the `share` each side moves (`ramp-v1`); nothing is painted | 2.3 |
+| `apply` | prep | Image, Mask | an Image in the mask's frame with every prescription performed once in order: a tone ramp moves each pixel with `w > 0` toward the other side by `share · Δ[y] · max(0, 1 − d / half[y])`; `w = 0` pixels are byte-identical; not applicable without a prescription | 2.3 |
 | `inspect` | inspect | Mask, Image | the overlay (an inspection Image) and a Series of the core's width per row; `rascal inspect` adds `--json`, `--out` and `--replay` | 1.9 |
 
 The pixel primitives every op is built from live in `rascal_ops::primitives`: row smoothing
