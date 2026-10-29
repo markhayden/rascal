@@ -6,6 +6,7 @@ mod exit;
 mod export;
 mod heal;
 mod inspect;
+mod lab_run;
 use rascal_mask::lab;
 mod measure;
 mod ops;
@@ -162,6 +163,11 @@ enum Command {
     Corpus {
         #[command(subcommand)]
         command: CorpusCommand,
+    },
+    /// The lab: run a matrix of arms over corpus images, each cell healed once.
+    Lab {
+        #[command(subcommand)]
+        command: LabCommand,
     },
     /// The op catalogue: every manifest as a client sees it.
     Ops {
@@ -362,6 +368,31 @@ enum CorpusCommand {
         /// The corpus root; default RASCAL_CORPUS, else ~/rascal/corpus.
         #[arg(long)]
         root: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum LabCommand {
+    /// Run every cell of a matrix (one arm on one image) through heal; a cell already
+    /// complete in the lab directory is reused and makes no external call.
+    Run {
+        /// The matrix (matrix.toml); its corpus and protocol are beside it.
+        matrix: PathBuf,
+        /// The configuration file (rascal.toml) naming the fillers and packs.
+        #[arg(long)]
+        config: PathBuf,
+        /// The lab directory: new, or an earlier run of this lab to resume.
+        #[arg(long)]
+        out: PathBuf,
+        /// The corpus root; default RASCAL_CORPUS, else ~/rascal/corpus.
+        #[arg(long)]
+        corpus_root: Option<PathBuf>,
+        /// Add an attempt to every cell of this arm, keeping the earlier ones.
+        #[arg(long)]
+        redo: Option<String>,
+        /// Do not write the run page in each cell's run directory.
+        #[arg(long)]
+        no_dash: bool,
     },
 }
 
@@ -686,6 +717,33 @@ fn main() {
                 Ok(code) => code,
                 Err(error) => {
                     eprintln!("rascal corpus: {error}");
+                    exit::code_for(&error)
+                }
+            }
+        }
+        Command::Lab { command } => {
+            let result = match command {
+                LabCommand::Run {
+                    matrix,
+                    config,
+                    out,
+                    corpus_root,
+                    redo,
+                    no_dash,
+                } => lab_run::lab_run(&lab_run::LabRunArgs {
+                    matrix,
+                    config,
+                    out,
+                    corpus_root,
+                    redo,
+                    no_dash,
+                })
+                .map(|_| exit::OK),
+            };
+            match result {
+                Ok(code) => code,
+                Err(error) => {
+                    eprintln!("rascal lab: {error}");
                     exit::code_for(&error)
                 }
             }

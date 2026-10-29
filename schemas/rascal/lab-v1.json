@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "`lab.json` at the lab's root: what every later invocation must agree with.",
+  "properties": {
+    "lab_version": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "matrix": {
+      "description": "The matrix file, as given.",
+      "type": "string"
+    },
+    "name": {
+      "description": "The lab's name, from the matrix and the protocol.",
+      "type": "string"
+    },
+    "protocol_digest": {
+      "description": "`sha256:<hex>` of the protocol file's bytes.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "lab_version",
+    "name",
+    "protocol_digest",
+    "matrix"
+  ],
+  "title": "LabRecord",
+  "type": "object"
+}

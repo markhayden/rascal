@@ -1,0 +1,12 @@
+{
+  "ledger_version": 1,
+  "cell": "sha256:405d982a5d70bb1396f47035d6a7321821999cab453e6c3374de90114f7fd45a",
+  "attempt": 1,
+  "arm": "thin",
+  "image": "sky-01",
+  "kind": "filler",
+  "target": "fake",
+  "outcome": "ok",
+  "duration_ms": 26,
+  "spend_usd": 0.0
+}

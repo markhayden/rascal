@@ -1,0 +1,177 @@
+{
+  "$defs": {
+    "CellComponents": {
+      "additionalProperties": false,
+      "description": "Everything a cell's identity covers.",
+      "properties": {
+        "constants": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The constant set each step selects, by step id.",
+          "type": "object"
+        },
+        "filler": {
+          "$ref": "#/$defs/FillerEntry"
+        },
+        "finders": {
+          "description": "One per finder step, in recipe order.",
+          "items": {
+            "$ref": "#/$defs/FinderDescriptor"
+          },
+          "type": "array"
+        },
+        "image": {
+          "description": "The corpus image's digest.",
+          "type": "string"
+        },
+        "inputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Every bound input artifact by recipe input name: the file's digest.",
+          "type": "object"
+        },
+        "op_versions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The version of every op the recipe runs, by op name.",
+          "type": "object"
+        },
+        "overrides": {
+          "additionalProperties": true,
+          "description": "The arm's and the image's overrides, as applied (`\"<step>.<param>\"`: value).",
+          "type": "object"
+        },
+        "recipe": {
+          "description": "The recipe as it runs, overrides applied, as canonical JSON."
+        }
+      },
+      "required": [
+        "image",
+        "recipe",
+        "op_versions",
+        "filler"
+      ],
+      "type": "object"
+    },
+    "FillerEntry": {
+      "additionalProperties": false,
+      "description": "The filler entry as the identity sees it: never the key.",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "paste": {
+          "type": "string"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "target": {
+          "description": "The command as configured, or the URL.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "target",
+        "profile",
+        "paste",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "FinderDescriptor": {
+      "additionalProperties": false,
+      "description": "A finder's invocation descriptor, computed before any finder runs.",
+      "properties": {
+        "arguments": {
+          "description": "The resolved arguments (the step's parameters over the tool's defaults)."
+        },
+        "bundle_digest": {
+          "description": "`sha256:<hex>` of the pack's `bundle.toml`, when it was installed from a bundle.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "env": {
+          "description": "The pack entry's declared environment variable names.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "inputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The semantic identity of each input by port: an initial input's digest, or the\nbinding (`<step>.<port>`) of a deterministic op over the initial inputs.",
+          "type": "object"
+        },
+        "pack": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "step": {
+          "type": "string"
+        },
+        "tool": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "step",
+        "pack",
+        "revision",
+        "tool",
+        "arguments",
+        "inputs"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "`cells/<identity>/cell.json`.",
+  "properties": {
+    "arm": {
+      "type": "string"
+    },
+    "cell_version": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "components": {
+      "$ref": "#/$defs/CellComponents"
+    },
+    "identity": {
+      "description": "`sha256:<hex>` over `components`.",
+      "type": "string"
+    },
+    "image": {
+      "type": "string"
+    },
+    "protocol_digest": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "cell_version",
+    "identity",
+    "arm",
+    "image",
+    "protocol_digest",
+    "components"
+  ],
+  "title": "CellRecord",
+  "type": "object"
+}

@@ -1,0 +1,13 @@
+# The configuration the example lab runs under (docs/lab.md): `rascal lab run
+# examples/lab/matrix.toml --config examples/lab/rascal.toml --out lab/demo/ --corpus-root
+# fixtures/images`. The arms name the `fake` filler, the testkit's deterministic blur, so the
+# whole lab runs offline: build `rascal` with `--features testkit` and put it on PATH, or edit
+# `command` to point at such a build. A real lab names a real filler (docs/fillers.md) and a
+# `revision` the owner bumps when it changes; the lab hashes the revision into every cell.
+config_version = 1
+
+[fillers.fake]
+command = ["rascal", "fake-filler", "exact", "{image}", "{mask}", "{out}"]
+profile = "grey"
+paste = "feather"
+revision = "fake exact"

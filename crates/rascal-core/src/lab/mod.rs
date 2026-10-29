@@ -2,8 +2,10 @@
 //! a run, and the matrix of images and arms. Each is a boundary type with a generated schema
 //! under `schemas/rascal/`; `matrix::validate` checks a matrix against its protocol, its
 //! corpus and the recipes its arms name, including the dependent-finder rejection. The
-//! commands (`rascal corpus verify`, `rascal lab …`) live in the binary crate.
+//! commands (`rascal corpus verify`, `rascal lab …`) live in the binary crate; `cell` holds
+//! what `lab run` writes.
 
+pub mod cell;
 pub mod corpus;
 pub mod matrix;
 pub mod protocol;

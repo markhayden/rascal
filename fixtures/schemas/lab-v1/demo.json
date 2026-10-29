@@ -1,0 +1,6 @@
+{
+  "lab_version": 1,
+  "name": "seam-demo",
+  "protocol_digest": "sha256:d7957270f0291d039ebb3ffd100e3b9b9574a75e3495fd6d104e0f9c97fcb766",
+  "matrix": "examples/lab/matrix.toml"
+}
