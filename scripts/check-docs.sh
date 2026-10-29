@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Docs coverage, both ways. Every op in the catalogue, every rendering profile and every
-# recipe output field is named in docs/; and every name under the documented tables exists in
-# the registry, so a stale name fails too. Runs the debug binary; `cargo build` first if needed.
+# Docs coverage, both ways. Every op in the catalogue, every rendering profile, every run-page
+# panel and every recipe output field is named in docs/; and every name under the documented
+# tables exists in the registry, so a stale name fails too. Runs the debug binary; `cargo build` first if needed.
 # DOCS_DIR and RASCAL_BIN override the locations for the self-test.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -33,6 +33,16 @@ for p in $documented_profiles; do
   grep -qx "$p" <<< "$profiles" || { echo "docs: '$p' is in $docs/masks.md's profile table but render has no such profile" >&2; status=1; }
 done
 
+# --- panels: the registry against docs/diagnostics.md's table -----------------------------------
+panels="$("$bin" dash --panels | sort -u)"
+documented_panels="$(grep -E '^\| `[a-z_]+` \| .* \| [0-9]+\.[0-9]+ \|$' "$docs/diagnostics.md" | sed -E 's/^\| `([a-z_]+)`.*/\1/' | sort -u)"
+for p in $panels; do
+  grep -qx "$p" <<< "$documented_panels" || { echo "docs: panel '$p' is registered but not in $docs/diagnostics.md's table" >&2; status=1; }
+done
+for p in $documented_panels; do
+  grep -qx "$p" <<< "$panels" || { echo "docs: '$p' is in $docs/diagnostics.md's panel table but no such panel is registered" >&2; status=1; }
+done
+
 # --- recipe outputs and config keys: the schemas against the pages -----------------------------------
 for key in mask image plan render; do
   grep -q "\`$key\`\|^$key = \|\b$key = \"" "$docs/recipes.md" || { echo "docs: recipe output '$key' is not named in $docs/recipes.md" >&2; status=1; }
@@ -41,5 +51,5 @@ for key in workspace corpus; do
   grep -q "\[$key\]\|\`$key\`" "$docs/recipes.md" "$docs/workspace.md" "$docs/lab.md" 2>/dev/null || { echo "docs: config section '$key' is not named in docs/" >&2; status=1; }
 done
 
-[ "$status" -eq 0 ] && echo "docs ok: $(wc -w <<< "$catalogue" | tr -d ' ') ops, $(wc -w <<< "$profiles" | tr -d ' ') profiles"
+[ "$status" -eq 0 ] && echo "docs ok: $(wc -w <<< "$catalogue" | tr -d ' ') ops, $(wc -w <<< "$profiles" | tr -d ' ') profiles, $(wc -w <<< "$panels" | tr -d ' ') panels"
 exit "$status"

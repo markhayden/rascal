@@ -1,6 +1,7 @@
 //! The `rascal` binary. Commands arrive with the tasks that own them (PLAN.md); task 1.1
 //! brings `run` and `render`.
 
+mod dash;
 mod exit;
 mod export;
 mod inspect;
@@ -92,6 +93,24 @@ enum Command {
         /// Rebuild the mask from its operation record and the stored inputs, and diff the planes.
         #[arg(long)]
         replay: bool,
+    },
+    /// The run page: the journal's steps, timings, envelopes and artifacts as one HTML page.
+    Dash {
+        /// A run directory or workspace.
+        #[arg(required_unless_present = "panels")]
+        root: Option<PathBuf>,
+        /// Write the page here (overwritten).
+        #[arg(long, conflicts_with = "serve")]
+        out: Option<PathBuf>,
+        /// List the registered panels, one per line, and exit.
+        #[arg(long, conflicts_with_all = ["out", "serve"])]
+        panels: bool,
+        /// Serve the page on loopback and print the URL; each request rebuilds it.
+        #[arg(long)]
+        serve: bool,
+        /// The loopback port for --serve (0 picks a free one).
+        #[arg(long, default_value_t = 0)]
+        port: u16,
     },
     /// Project a native envelope or a location onto the copied schemas (ADR 0009).
     Export {
@@ -198,12 +217,29 @@ const RESERVED: &[&str] = &[
     "render",
     "inspect",
     "export",
+    "dash",
     "ops",
     "workspace",
     "help",
 ];
 
+/// `RASCAL_LOG=<level or filter>` turns on tracing spans to stderr; off by default.
+fn init_tracing() {
+    if let Ok(filter) = std::env::var("RASCAL_LOG")
+        && !filter.trim().is_empty()
+    {
+        use tracing_subscriber::EnvFilter;
+        let filter = EnvFilter::try_new(filter).unwrap_or_else(|_| EnvFilter::new("info"));
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_writer(std::io::stderr)
+            .with_ansi(false)
+            .try_init();
+    }
+}
+
 fn main() {
+    init_tracing();
     let registry = match rascal_ops::registry() {
         Ok(registry) => registry,
         Err(error) => {
@@ -379,6 +415,34 @@ fn main() {
                 Ok(()) => exit::OK,
                 Err(error) => {
                     eprintln!("rascal inspect: {error}");
+                    exit::code_for(&error)
+                }
+            }
+        }
+        Command::Dash {
+            root,
+            out,
+            serve,
+            port,
+            panels,
+        } => {
+            let result = match (root, out, serve) {
+                _ if panels => {
+                    for name in dash::panels().names() {
+                        println!("{name}");
+                    }
+                    Ok(())
+                }
+                (Some(root), Some(out), _) => {
+                    dash::write(&root, &out).map(|p| println!("{}", p.display()))
+                }
+                (Some(root), None, true) => dash::serve(&root, port),
+                _ => Err(Error::usage("dash: give --out <file> or --serve")),
+            };
+            match result {
+                Ok(()) => exit::OK,
+                Err(error) => {
+                    eprintln!("rascal dash: {error}");
                     exit::code_for(&error)
                 }
             }

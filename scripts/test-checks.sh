@@ -122,6 +122,14 @@ cp docs/tools.md "$fake/tools.md"
 printf '| `sepia` | `image_input` | x | x |\n' >> "$fake/masks.md"
 out="$(DOCS_DIR="$fake" scripts/check-docs.sh 2>&1 || true)"
 if grep -q "'sepia' is in .* render has no such profile" <<< "$out"; then ok; else bad "check-docs accepted a stale profile: $out"; fi
+cp docs/masks.md "$fake/masks.md"
+grep -v '^| `envelope` |' docs/diagnostics.md > "$fake/diagnostics.md"
+out="$(DOCS_DIR="$fake" scripts/check-docs.sh 2>&1 || true)"
+if grep -q "panel 'envelope' is registered but not in" <<< "$out"; then ok; else bad "check-docs accepted an undocumented panel: $out"; fi
+cp docs/diagnostics.md "$fake/diagnostics.md"
+printf '| `aurora` | x | 9.9 |\n' >> "$fake/diagnostics.md"
+out="$(DOCS_DIR="$fake" scripts/check-docs.sh 2>&1 || true)"
+if grep -q "'aurora' is in .* no such panel is registered" <<< "$out"; then ok; else bad "check-docs accepted a stale documented panel: $out"; fi
 rm -rf "$fake"
 
 # --- smoke ------------------------------------------------------------------------------------

@@ -71,7 +71,7 @@ PNG.
 
 A point-list parameter is written `[[x, y], …]` in a recipe and `x,y;x,y` on the command line.
 
-`scripts/check-docs.sh` (part of `just check`) reads the catalogue and the render profiles from
+`scripts/check-docs.sh` (part of `just check`) reads the catalogue, the render profiles and the run-page panels from
 the binary and fails when an op or profile is missing from these pages, or when a documented
 name no longer exists.
 

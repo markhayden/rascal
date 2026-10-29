@@ -938,7 +938,8 @@ behind the tool.
 
 - Rust stable, edition 2024, pinned by `rust-toolchain.toml`. Crates: `image`, `imageproc`,
   `rayon`, `serde`, `serde_json`, `toml`, `schemars`, `jsonschema`, `clap`, `thiserror`,
-  `tracing`, `sha2`, `fs4` (file locks), `tokio` (binary only: process and HTTP), `reqwest` with
+  `tracing` with `tracing-subscriber` (binary only: the `RASCAL_LOG` sink), `sha2`, `fs4` (file
+  locks), `tokio` (binary only: process and HTTP), `reqwest` with
   `rustls` (binary only, HTTP fillers), an MCP crate or an in-house JSON-RPC implementation
   decided by ADR at M3. Anything beyond this list needs an ADR.
 - Python 3.12, `uv`, `pytest`, `ruff`, the MCP Python SDK, `onnxruntime`, `numpy`, `pillow`.

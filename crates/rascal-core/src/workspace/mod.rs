@@ -420,6 +420,9 @@ impl Workspace {
             .iter()
             .map(|(k, a)| (k.clone(), a.identity().as_str().to_string()))
             .collect();
+        // One span per op: its name, step and input identities; never a key or a pixel.
+        let span = tracing::info_span!("op", op = %manifest.name, step = %step_id, inputs = %serde_json::to_string(&input_identities).unwrap_or_default());
+        let _entered = span.enter();
         let started = Instant::now();
         let mut given = params.clone();
         let constants = given.remove("constants");
@@ -483,6 +486,7 @@ impl Workspace {
         let context = Context { frames: &frames };
         let result = op.run(&context, inputs, &resolved);
         let duration_ms = started.elapsed().as_millis() as u64;
+        tracing::debug!(op = %manifest.name, step = %step_id, duration_ms, ok = result.is_ok(), "op finished");
         let mut output = match result {
             Ok(output) => output,
             Err(error) => {

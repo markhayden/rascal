@@ -58,6 +58,7 @@ rascal paste base.png fill.png run/artifacts/<id> --mode poisson --out composite
 rascal ops list                                           # every op's manifest, as an agent sees it
 rascal inspect run/artifacts/<id> --json                  # or --out pages/ for the overlay and chart, --replay to rebuild
 rascal export --compat run/journal.jsonl --step rasterize --out e.json
+rascal dash run/ --out run/dash.html                     # the run page: timings, envelopes, every artifact; --serve for loopback
 ```
 
 Replace (screens, signs), retouch, extend and isolate are later milestones.

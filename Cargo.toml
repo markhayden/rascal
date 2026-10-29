@@ -18,8 +18,8 @@ rust-version = "1.99"
 # The dependency list from SPEC.md "Tech stack". Everything the spec names is declared here so a
 # later task adds one line to its crate manifest and nothing else; anything outside this list
 # needs an ADR. Versions are the crates.io releases current on 2026-10-28. An entry no crate uses
-# yet is absent from Cargo.lock until its first use. The MCP transport crate is decided in M3;
-# the tracing subscriber the binary needs for RASCAL_LOG is added by task 1.10 with a spec note.
+# yet is absent from Cargo.lock until its first use. The MCP transport crate is decided in M3.
+
 [workspace.dependencies]
 rascal-core = { path = "crates/rascal-core", version = "0.1.0" }
 rascal-ops = { path = "crates/rascal-ops", version = "0.1.0" }
@@ -39,6 +39,8 @@ rayon = "1.12"
 sha2 = "0.11"
 fs4 = "1.1"
 tracing = "0.1"
+# The subscriber behind RASCAL_LOG (SPEC "Diagnostics"): spans to stderr, off by default.
+tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "std", "ansi"] }
 tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "process", "io-util", "time", "sync", "signal"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json"] }
 
