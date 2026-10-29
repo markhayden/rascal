@@ -66,12 +66,12 @@ impl Op for Apply {
         if mask.prescriptions.is_empty() {
             return Ok(Output::not_applicable("the mask carries no prescription"));
         }
-        if mask.profile.is_none() {
+        let Some(profile) = &mask.profile else {
             return Ok(Output::invalid_args(
                 "the mask's prescriptions need its band profile for the line and the half-widths",
             ));
-        }
-        let (pixels, changed, largest) = apply_prescriptions(&image.pixels, mask);
+        };
+        let (pixels, changed, largest) = apply_prescriptions(&image.pixels, mask, &profile.band);
         let out = Image::new("apply.image", pixels, frame, Role::Working, None);
         let mut outputs = BTreeMap::new();
         outputs.insert("image".to_string(), Artifact::Image(Arc::new(out)));
@@ -90,9 +90,11 @@ impl Op for Apply {
 
 /// The prescriptions performed in order on a copy of the canvas: the result, how many pixels
 /// changed and the largest change in levels. The image's own sample format is kept.
-pub fn apply_prescriptions(canvas: &DynamicImage, mask: &Mask) -> (DynamicImage, u64, u8) {
-    let profile = mask.profile.as_ref().expect("checked by the op");
-    let band = &profile.band;
+pub fn apply_prescriptions(
+    canvas: &DynamicImage,
+    mask: &Mask,
+    band: &rascal_core::profile::BandProfile,
+) -> (DynamicImage, u64, u8) {
     let c = f64::from(band.column_px);
     let mut rgb = canvas.to_rgb8();
     let (w, h) = rgb.dimensions();

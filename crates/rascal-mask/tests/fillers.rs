@@ -187,7 +187,7 @@ fn each_fake_behaviour_produces_its_outcome_as_a_command() {
         let config = command_config(behaviour, true, 1);
         let filler = filler::from_config("fake", &config).unwrap();
         let started = Instant::now();
-        let result = filler.call(&request, &dir);
+        let result = filler.call(&request, &dir).into_result();
         match behaviour {
             Behaviour::Exact => {
                 let (fill, call) = result.unwrap();
@@ -280,7 +280,11 @@ fn each_fake_behaviour_produces_its_outcome_as_a_command() {
         )
     };
     let filler = filler::from_config("fake", &command_config(Behaviour::Exact, true, 5)).unwrap();
-    let err = filler.call(&no_mask, &dir).unwrap_err().to_string();
+    let err = filler
+        .call(&no_mask, &dir)
+        .into_result()
+        .unwrap_err()
+        .to_string();
     assert!(
         err.contains("{mask}") && err.contains("sends no mask"),
         "{err}"
@@ -297,7 +301,7 @@ fn each_fake_behaviour_produces_its_outcome_over_http_and_the_key_stays_out_of_e
         let (url, seen) = spawn(behaviour, None);
         let filler = filler::from_config("hosted", &http_config(&url, None, 1)).unwrap();
         let started = Instant::now();
-        let result = filler.call(&request, &dir);
+        let result = filler.call(&request, &dir).into_result();
         match behaviour {
             Behaviour::Exact => {
                 let (fill, call) = result.unwrap();
@@ -359,7 +363,7 @@ fn each_fake_behaviour_produces_its_outcome_over_http_and_the_key_stays_out_of_e
     )
     .unwrap()
     .with_key_source(move |name| (name == var).then(|| key.to_string()));
-    let (_, call) = filler.call(&request, &dir).unwrap();
+    let (_, call) = filler.call(&request, &dir).into_result().unwrap();
     assert_eq!(
         seen.lock().unwrap()[0].authorization.as_deref(),
         Some(&*format!("Bearer {key}"))
@@ -385,7 +389,11 @@ fn each_fake_behaviour_produces_its_outcome_over_http_and_the_key_stays_out_of_e
     )
     .unwrap()
     .with_key_source(|_| Some("not-the-key".to_string()));
-    let err = wrong.call(&request, &dir).unwrap_err().to_string();
+    let err = wrong
+        .call(&request, &dir)
+        .into_result()
+        .unwrap_err()
+        .to_string();
     assert!(
         err.contains("HTTP 401") && !err.contains("not-the-key"),
         "{err}"
@@ -393,7 +401,11 @@ fn each_fake_behaviour_produces_its_outcome_over_http_and_the_key_stays_out_of_e
     // An unset key_env (the real environment, where the variable does not exist) is a usage
     // error naming the variable, before any call.
     let unset = filler::from_config("hosted", &http_config(&url, Some(var), 5)).unwrap();
-    let err = unset.call(&request, &dir).unwrap_err().to_string();
+    let err = unset
+        .call(&request, &dir)
+        .into_result()
+        .unwrap_err()
+        .to_string();
     assert!(err.contains(var) && err.contains("not set"), "{err}");
     assert_eq!(seen.lock().unwrap().len(), 2, "the unset key made no call");
     let _ = std::fs::remove_dir_all(&dir);
@@ -472,4 +484,101 @@ fn walk(dir: &std::path::Path) -> Vec<PathBuf> {
         }
     }
     out
+}
+
+#[test]
+fn the_prompt_placeholder_a_missing_out_file_and_a_truncated_png() {
+    let dir = scratch("edges");
+    let (request, working, _) = sample_request();
+    // {prompt} is substituted: a shell command echoes it into {out}'s sibling and copies the
+    // image through as the answer.
+    let echo = dir.join("prompt.txt");
+    let config = FillerConfig {
+        command: Some(vec![
+            "/bin/sh".to_string(),
+            "-c".to_string(),
+            format!(
+                "printf '%s' \"$1\" > {} && cp \"$2\" \"$3\"",
+                echo.display()
+            ),
+            "sh".to_string(),
+            "{prompt}".to_string(),
+            "{image}".to_string(),
+            "{out}".to_string(),
+        ]),
+        ..command_config(Behaviour::Exact, false, 5)
+    };
+    let f = Frame::raw(64, 40, Projection::Flat);
+    let tinted = Image::new(
+        "t",
+        DynamicImage::ImageRgb8(working.pixels.to_rgb8()),
+        &f,
+        Role::Rendering,
+        Some(RenderingRole::ImageInput),
+    );
+    let mut with_prompt = FillRequest::build(
+        RenderingRole::ImageInput,
+        false,
+        &working,
+        &tinted,
+        None,
+        Some("a red chair"),
+    )
+    .unwrap();
+    with_prompt.width = request.width;
+    let image_config = FillerConfig {
+        profile: "tinted".to_string(),
+        ..config.clone()
+    };
+    let filler = filler::from_config("echo", &image_config).unwrap();
+    let (fill, call) = filler.call(&with_prompt, &dir).into_result().unwrap();
+    assert_eq!((fill.width(), fill.height()), (64, 40));
+    assert_eq!(std::fs::read_to_string(&echo).unwrap(), "a red chair");
+    assert!(
+        call.target.contains("{prompt}"),
+        "the record shows the placeholder, not the prompt: {}",
+        call.target
+    );
+    // A command that exits 0 without writing {out} is an operational error naming the file.
+    let silent = FillerConfig {
+        command: Some(vec![
+            "/bin/sh".to_string(),
+            "-c".to_string(),
+            "true".to_string(),
+            "sh".to_string(),
+            "{image}".to_string(),
+            "{out}".to_string(),
+        ]),
+        ..command_config(Behaviour::Exact, false, 5)
+    };
+    let err = filler::from_config("silent", &silent)
+        .unwrap()
+        .call(&request, &dir)
+        .into_result()
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("exited 0 but wrote no") && err.contains("response.png"),
+        "{err}"
+    );
+    // A body with the PNG signature that does not decode: truncated.
+    let truncate = FillerConfig {
+        command: Some(vec![
+            "/bin/sh".to_string(),
+            "-c".to_string(),
+            "head -c 100 \"$1\" > \"$2\"".to_string(),
+            "sh".to_string(),
+            "{image}".to_string(),
+            "{out}".to_string(),
+        ]),
+        ..command_config(Behaviour::Exact, false, 5)
+    };
+    let err = filler::from_config("truncate", &truncate)
+        .unwrap()
+        .call(&request, &dir)
+        .into_result()
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("did not decode"), "{err}");
+    let _ = std::fs::remove_dir_all(&dir);
 }

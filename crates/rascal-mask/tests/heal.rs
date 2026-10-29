@@ -153,7 +153,8 @@ fn heal_through_every_fake_with_and_without_max_side() {
             Behaviour::Failing,
             Behaviour::Slow,
         ] {
-            let config = command_config(&dir, behaviour, max_side, 1);
+            let timeout_s = if behaviour == Behaviour::Slow { 1 } else { 10 };
+            let config = command_config(&dir, behaviour, max_side, timeout_s);
             let run = dir.join(format!("{}-{}", behaviour.name(), max_side.unwrap_or(0)));
             let out = rascal(&[
                 "heal",
@@ -224,17 +225,18 @@ fn heal_through_every_fake_with_and_without_max_side() {
                             "windowed to {w}x{h}"
                         ),
                     }
-                    // Preservation: pixels of the raw image the band never reaches equal the
-                    // input; the fill changed pixels inside the band. The band lives in the two
-                    // 56 px edge strips the cut canvas holds.
+                    // Preservation: every raw pixel the band mask never reaches (w = 0, mapped
+                    // through the cut's two strips here, independently of heal's own mapping)
+                    // equals the input, and the fill changed pixels inside the band.
                     let result = image::open(run.join("result.png")).unwrap().to_rgb8();
+                    let reached = raw_reach_of_band(&run);
                     let mut changed = 0;
                     for (x, y, p) in result.enumerate_pixels() {
                         if p != input.get_pixel(x, y) {
                             changed += 1;
                             assert!(
-                                !(56..744).contains(&x),
-                                "{x},{y} changed outside the edge strips"
+                                reached[(y * 800 + x) as usize],
+                                "{x},{y} changed where w = 0"
                             );
                         }
                     }
@@ -329,7 +331,7 @@ fn continuity_falls_replay_needs_no_filler_and_no_dash_skips_the_page() {
     let gone = dir.join("gone.toml");
     std::fs::write(
         &gone,
-        "config_version = 1\n[fillers.fake]\ncommand = [\"/nonexistent/filler\", \"{image}\", \"{mask}\", \"{out}\"]\nprofile = \"grey\"\n",
+        "config_version = 1\n[fillers.fake]\ncommand = [\"/nonexistent/filler\", \"{image}\", \"{mask}\", \"{out}\"]\nprofile = \"grey\"\nrevision = \"fake\"\n",
     )
     .unwrap();
     let second = dir.join("second");
@@ -441,6 +443,43 @@ fn the_key_appears_in_no_file_under_out_and_in_no_span() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The raw pixels the run's band mask reaches, mapped by the test: the canvas's left half is
+/// the panorama's rightmost strip and its right half the leftmost (strip 56 of 800).
+fn raw_reach_of_band(run: &Path) -> Vec<bool> {
+    let out = rascal(&[
+        "workspace",
+        "list",
+        run.to_str().unwrap(),
+        "--type",
+        "Mask",
+        "--json",
+    ]);
+    let rows: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).unwrap();
+    // The ramp's mask is the last cut-frame mask with a prescription: the recipe's output.
+    let band = rows
+        .iter()
+        .rfind(|r| r["frame"].as_str().unwrap().starts_with("cut:"))
+        .unwrap();
+    let hex = band["identity"]
+        .as_str()
+        .unwrap()
+        .trim_start_matches("sha256:")
+        .to_string();
+    let mask =
+        rascal_core::mask::Mask::read(&run.join("artifacts").join(format!("{hex}.mask"))).unwrap();
+    assert_eq!(mask.dimensions(), (112, 400));
+    let mut reached = vec![false; 800 * 400];
+    for y in 0..400 {
+        for x in 0..112 {
+            if mask.weight(x, y) > 0.0 {
+                let rx = if x < 56 { 800 - 56 + x } else { x - 56 };
+                reached[(y * 800 + rx) as usize] = true;
+            }
+        }
+    }
+    reached
+}
+
 fn walk(dir: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     for entry in std::fs::read_dir(dir).unwrap().flatten() {
@@ -464,4 +503,217 @@ fn copy_tree(from: &Path, to: &Path) {
             std::fs::copy(entry.path(), target).unwrap();
         }
     }
+}
+
+#[test]
+fn heal_over_http_with_an_image_input_profile_send_mask_and_a_prompt() {
+    let dir = scratch("tinted");
+    let (url, seen) = spawn(Behaviour::Exact, None);
+    let config = dir.join("hosted.toml");
+    std::fs::write(
+        &config,
+        format!("config_version = 1\n[fillers.hosted]\nurl = \"{url}\"\nprofile = \"tinted\"\nsend_mask = true\npaste = \"hard\"\ntimeout_s = 20\n"),
+    )
+    .unwrap();
+    let run = dir.join("run");
+    let out = rascal_env(
+        &[
+            "heal",
+            "seam",
+            pano().to_str().unwrap(),
+            "--filler",
+            "hosted",
+            "--config",
+            config.to_str().unwrap(),
+            "--out",
+            run.to_str().unwrap(),
+            "--prompt",
+            "the sky",
+        ],
+        &[("RASCAL_LOG", "trace")],
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let request = &seen.lock().unwrap()[0];
+    assert!(
+        request.has_image && request.has_mask,
+        "the rendering as image and the grey as mask"
+    );
+    assert_eq!(request.prompt.as_deref(), Some("the sky"));
+    // The image sent is the tinted rendering (an RGB PNG), not the working image: the journal's
+    // render steps say which renderings were made, and the grey one is there for send_mask.
+    let lines = journal(&run);
+    let renders: Vec<&str> = lines
+        .iter()
+        .filter(|l| l["op"] == "render")
+        .map(|l| l["params"]["for"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        renders,
+        ["grey", "tinted", "grey"],
+        "the recipe's grey, then heal's tinted and grey"
+    );
+    // The filler span carries the request's size and the event its status.
+    let log = String::from_utf8_lossy(&out.stderr);
+    let span_line = log
+        .lines()
+        .find(|l| l.contains("filler{"))
+        .unwrap_or_else(|| panic!("a filler span: {log}"));
+    assert!(
+        span_line.contains("request_bytes=")
+            && span_line.contains("width=112")
+            && span_line.contains("height=400"),
+        "{span_line}"
+    );
+    assert!(
+        log.lines()
+            .any(|l| l.contains("filler call finished") && l.contains("status=200")),
+        "{log}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_max_side_under_the_support_stops_at_window_and_still_writes_the_page() {
+    let dir = scratch("small");
+    let config = command_config(&dir, Behaviour::Exact, Some(100), 10);
+    let run = dir.join("run");
+    let out = rascal(&[
+        "heal",
+        "seam",
+        pano().to_str().unwrap(),
+        "--filler",
+        "fake",
+        "--config",
+        config.to_str().unwrap(),
+        "--out",
+        run.to_str().unwrap(),
+        "--strict",
+    ]);
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("step window reported not_applicable") && err.contains("max_side is 100"),
+        "{err}"
+    );
+    assert!(!run.join("result.png").exists());
+    assert!(
+        run.join("dash.html").exists() && run.join("frames.json").exists(),
+        "the page and the tables are written for a stopped heal"
+    );
+    assert!(!journal(&run).iter().any(|l| l["op"] == "paste"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_replay_with_a_changed_request_or_another_filler_calls_the_filler() {
+    let dir = scratch("replay2");
+    let config = command_config(&dir, Behaviour::Exact, None, 10);
+    let first = dir.join("first");
+    let out = rascal(&[
+        "heal",
+        "seam",
+        pano().to_str().unwrap(),
+        "--filler",
+        "fake",
+        "--config",
+        config.to_str().unwrap(),
+        "--out",
+        first.to_str().unwrap(),
+        "--no-dash",
+    ]);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // The same image but a prompt: another request, so the (absent) filler is called and fails.
+    let gone = dir.join("gone.toml");
+    std::fs::write(&gone, "config_version = 1\n[fillers.fake]\ncommand = [\"/nonexistent/filler\", \"{image}\", \"{mask}\", \"{out}\"]\nprofile = \"grey\"\nrevision = \"fake\"\n").unwrap();
+    let second = dir.join("second");
+    let out = rascal(&[
+        "heal",
+        "seam",
+        pano().to_str().unwrap(),
+        "--filler",
+        "fake",
+        "--config",
+        gone.to_str().unwrap(),
+        "--out",
+        second.to_str().unwrap(),
+        "--replay",
+        first.to_str().unwrap(),
+        "--prompt",
+        "different",
+        "--no-dash",
+    ]);
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let lines = journal(&second);
+    assert!(lines.iter().any(|l| {
+        l["note"]
+            .as_str()
+            .is_some_and(|n| n.starts_with("filler call: ") && n.contains("cannot start"))
+    }));
+    assert!(
+        !lines
+            .iter()
+            .any(|l| l["note"].as_str().is_some_and(|n| n.contains("replayed")))
+    );
+    // The same request but another filler name (or revision) does not reuse the fill either.
+    let other = dir.join("other.toml");
+    std::fs::write(&other, "config_version = 1\n[fillers.other]\ncommand = [\"/nonexistent/filler\", \"{image}\", \"{mask}\", \"{out}\"]\nprofile = \"grey\"\nrevision = \"fake\"\n").unwrap();
+    let third = dir.join("third");
+    let out = rascal(&[
+        "heal",
+        "seam",
+        pano().to_str().unwrap(),
+        "--filler",
+        "other",
+        "--config",
+        other.to_str().unwrap(),
+        "--out",
+        third.to_str().unwrap(),
+        "--replay",
+        first.to_str().unwrap(),
+        "--no-dash",
+    ]);
+    assert_eq!(out.status.code(), Some(3));
+    // A replay directory without a journal is a usage error naming the rule.
+    let fourth = dir.join("fourth");
+    let out = rascal(&[
+        "heal",
+        "seam",
+        pano().to_str().unwrap(),
+        "--filler",
+        "fake",
+        "--config",
+        gone.to_str().unwrap(),
+        "--out",
+        fourth.to_str().unwrap(),
+        "--replay",
+        dir.to_str().unwrap(),
+    ]);
+    assert_eq!(
+        out.status.code(),
+        Some(64),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(String::from_utf8_lossy(&out.stderr).contains("no journal there"));
+    let _ = std::fs::remove_dir_all(&dir);
 }

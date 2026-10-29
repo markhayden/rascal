@@ -152,6 +152,24 @@ impl FillerConfig {
         if self.key_env.is_some() && self.url.is_none() {
             return Err(fail("key_env goes with url".into()));
         }
+        if let Some(command) = &self.command {
+            for placeholder in ["{image}", "{out}"] {
+                if !command.iter().any(|a| a.contains(placeholder)) {
+                    return Err(fail(format!("command names no {placeholder}")));
+                }
+            }
+            let wants_mask = command.iter().any(|a| a.contains("{mask}"));
+            if wants_mask && !self.mask_input() && !self.send_mask {
+                return Err(fail(
+                    "command names {mask} but the profile sends none; set send_mask = true".into(),
+                ));
+            }
+        }
+        if self.send_mask && self.mask_input() {
+            return Err(fail(
+                "send_mask applies to an image-input profile; a mask-input profile sends the mask already".into(),
+            ));
+        }
         if let Some(m) = self.max_side
             && m == 0
         {

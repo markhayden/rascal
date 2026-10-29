@@ -169,6 +169,7 @@ impl Op for Measure {
         let mut outputs = BTreeMap::new();
         let mut measurements: Vec<(String, f64, String)> = Vec::new();
         let mut statuses = Vec::new();
+        let mut sobel_cache: Option<Vec<f32>> = None;
         let emit = |report: &mut Report,
                     outputs: &mut BTreeMap<String, Artifact>,
                     measurements: &mut Vec<(String, f64, String)>,
@@ -249,8 +250,23 @@ impl Op for Measure {
                                     tone_step(&after_rgb, &profile.band, chroma_floor);
                                 vec![(1, dl), (2, dc), (3, dh)]
                             }
-                            "transition" => vec![(4, transition(&after_rgb, &profile.band))],
-                            _ => vec![(5, texture_match(&after_rgb, mask, &profile.band))],
+                            "transition" => vec![(
+                                4,
+                                transition(
+                                    &after_rgb,
+                                    &profile.band,
+                                    sobel_plane(&after_rgb, &mut sobel_cache),
+                                ),
+                            )],
+                            _ => vec![(
+                                5,
+                                texture_match(
+                                    &after_rgb,
+                                    mask,
+                                    &profile.band,
+                                    sobel_plane(&after_rgb, &mut sobel_cache),
+                                ),
+                            )],
                         };
                         emit(
                             &mut report,
@@ -368,7 +384,7 @@ pub struct Summary {
 
 pub fn summarise(values: &[f64], percentile: f64) -> Summary {
     let mut sorted = values.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).expect("finite"));
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let n = sorted.len();
     let rank = |p: f64| sorted[(((p / 100.0) * n as f64).ceil() as usize).clamp(1, n) - 1];
     Summary {
@@ -469,18 +485,29 @@ pub fn tone_step(
     out
 }
 
-/// Columns `[lo, hi)` clipped to the frame, from a half-open real interval about `c`.
+/// The Sobel magnitude of L, computed once per op and shared by the measures that need it.
+fn sobel_plane<'a>(after: &RgbImage, cache: &'a mut Option<Vec<f32>>) -> &'a [f32] {
+    let (w, h) = after.dimensions();
+    cache.get_or_insert_with(|| sobel_magnitude(&luminance(after), w, h))
+}
+
+/// Columns `[lo, hi)` clipped to the frame whose centres `x + 0.5` lie in `[c + from, c + to)`:
+/// the same pixel-centre rule the band's core uses, so "inside the band" here is the core's
+/// own columns.
 fn span(c: f64, from: f64, to: f64, width: u32) -> (i64, i64) {
-    let lo = (c + from).ceil().max(0.0) as i64;
-    let hi = ((c + to).ceil().max(0.0) as i64).min(i64::from(width));
+    let lo = (c + from - 0.5).ceil().max(0.0) as i64;
+    let hi = ((c + to - 0.5).ceil().max(0.0) as i64).min(i64::from(width));
     (lo, hi.max(lo))
 }
 
 /// Transition: per row, the mean Sobel magnitude of L over `[c − half, c + half]` divided by
 /// the row's mean outside `[c − 2 · half, c + 2 · half]`.
-pub fn transition(after: &RgbImage, band: &rascal_core::profile::BandProfile) -> PerRow {
+pub fn transition(
+    after: &RgbImage,
+    band: &rascal_core::profile::BandProfile,
+    sobel: &[f32],
+) -> PerRow {
     let (w, h) = after.dimensions();
-    let sobel = sobel_magnitude(&luminance(after), w, h);
     let c = f64::from(band.column_px);
     let mut out = PerRow::default();
     for y in 0..h {
@@ -508,9 +535,9 @@ pub fn texture_match(
     after: &RgbImage,
     mask: &Mask,
     band: &rascal_core::profile::BandProfile,
+    sobel: &[f32],
 ) -> PerRow {
     let (w, h) = after.dimensions();
-    let sobel = sobel_magnitude(&luminance(after), w, h);
     let c = f64::from(band.column_px);
     let mut out = PerRow::default();
     for y in 0..h {

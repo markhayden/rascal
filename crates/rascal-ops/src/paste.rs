@@ -190,6 +190,19 @@ pub fn paste_pixels(
             }
             DynamicImage::ImageRgba8(out)
         }
+        DynamicImage::ImageLuma8(src) => {
+            // Arithmetic per RGB channel on the grey value, written back as grey.
+            let mut out = src.clone();
+            for y in 0..h {
+                for x in 0..w {
+                    let v = out.get_pixel(x, y)[0];
+                    let mut rgb = [v, v, v];
+                    blend(x, y, &mut rgb);
+                    out.get_pixel_mut(x, y).0 = [rgb[0]];
+                }
+            }
+            DynamicImage::ImageLuma8(out)
+        }
         _ => {
             let mut out = base.to_rgb8();
             for y in 0..h {

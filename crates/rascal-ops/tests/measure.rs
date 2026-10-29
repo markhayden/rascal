@@ -282,8 +282,8 @@ fn transition_and_texture_match_follow_their_definitions_and_skip_empty_or_zero_
     let after = halves([120; 3], [140; 3], 3);
     let sobel = sobel_magnitude(&luminance(&after), W, H);
     let at = |x: u32, y: u32| f64::from(sobel[(y * W + x) as usize]);
-    let tr = transition(&after, &b);
-    let tm = texture_match(&after, &mask, &b);
+    let tr = transition(&after, &b, &sobel);
+    let tm = texture_match(&after, &mask, &b, &sobel);
     assert_eq!((tr.skipped, tm.skipped), (0, 0));
     for (i, &y) in tr.rows.iter().enumerate() {
         let c = f64::from(C);
@@ -330,15 +330,16 @@ fn transition_and_texture_match_follow_their_definitions_and_skip_empty_or_zero_
     }
     // A flat image: zero denominators, every row skipped, measured nothing for both.
     let flat = halves([120; 3], [120; 3], 0);
-    assert_eq!(transition(&flat, &b).skipped, H);
-    assert_eq!(texture_match(&flat, &mask, &b).skipped, H);
+    let flat_sobel = sobel_magnitude(&luminance(&flat), W, H);
+    assert_eq!(transition(&flat, &b, &flat_sobel).skipped, H);
+    assert_eq!(texture_match(&flat, &mask, &b, &flat_sobel).skipped, H);
     let (table, ins) = inputs(flat, None, &mask);
     let out = run(&table, &ins, "transition,texture_match");
     assert_eq!(out.envelope.status, Status::MeasuredNothing);
     assert_eq!(measurement(&out, "transition.rows_skipped"), f64::from(H));
     // A band wider than the frame: the outside window is empty, every row skipped.
     let wide = band(&f, 40.0);
-    assert_eq!(transition(&after, &wide).skipped, H);
+    assert_eq!(transition(&after, &wide, &sobel).skipped, H);
     // An unknown measure in the set is invalid_args.
     let (table, ins) = inputs(after, None, &mask);
     let out = run(&table, &ins, "continuity,sharpness");

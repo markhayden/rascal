@@ -72,8 +72,13 @@ this invocation's input image, or the heal is an operational error (exit 3). A f
 failure, timeout, mis-sized or non-PNG answer is the same.
 
 The fill is stored as an artifact with a `fill stored:` note carrying the request's identity
-(a hash of the bytes sent), so `--replay <previous run>` reuses it when the request is the same
-and makes no call: a healed run replays with the filler absent (G4).
+(a hash of the bytes sent), the filler's name and its `revision`, so `--replay <previous run>`
+reuses it when all three are the same and makes no call: a healed run replays with the filler
+absent (G4). The replayed artifact's record names the run it came from. `--replay` takes the
+directory holding the previous journal: the run directory, or the workspace when that run used
+`--workspace`. A heal that stops at a step that is not ok still writes the tables and the run
+page; every filler call, failed ones included, keeps its status, duration and bytes in the
+journal.
 
 ## The fake fillers
 

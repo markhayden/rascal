@@ -621,3 +621,110 @@ fn a_band_profile_line_shows_its_chart_and_strip() {
     assert_eq!(value["half"].as_array().unwrap().len(), 300);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A measure line's panel: every Series the line produced as a chart and the summaries table,
+/// and nothing for a line that produced none.
+#[test]
+fn a_measure_line_shows_its_series_and_summaries() {
+    let dir = scratch("measures");
+    let ws = dir.join("ws");
+    let sky = repo_root().join("fixtures/images/step-sky.png");
+    let out = rascal(&["workspace", "import", s(&ws), s(&sky)]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let port = |out: &std::process::Output, name: &str| -> String {
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .find_map(|l| {
+                l.strip_prefix(&format!("{name}: "))
+                    .map(|r| r.split_whitespace().next().unwrap().to_string())
+            })
+            .unwrap()
+    };
+    let w = s(&ws);
+    let out = rascal(&[
+        "line",
+        "--workspace",
+        w,
+        "--image",
+        "img-1",
+        "--column",
+        "0.5",
+        "--width_px",
+        "2",
+    ]);
+    let line_id = port(&out, "location");
+    let out = rascal(&[
+        "fan",
+        "--workspace",
+        w,
+        "--image",
+        "img-1",
+        "--line",
+        &line_id,
+    ]);
+    let band_id = port(&out, "band");
+    let out = rascal(&["profile", "--workspace", w, "--band", &band_id]);
+    let mask_id = port(&out, "mask");
+    let out = rascal(&[
+        "measure",
+        "--workspace",
+        w,
+        "--after",
+        "img-1",
+        "--before",
+        "img-1",
+        "--mask",
+        &mask_id,
+        "--json",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let html = dash(&ws, &dir.join("page.html"));
+    let lines = journal(&ws);
+    let measure = lines.iter().find(|l| l["op"] == "measure").unwrap();
+    let seq = measure["seq"].to_string();
+    let open = format!("<section data-seq=\"{seq}\"");
+    let at = html.find(&open).unwrap();
+    let section = &html[at..html[at..].find("</section>").unwrap() + at];
+    assert!(
+        section.contains("<strong>measures</strong>"),
+        "the measures panel"
+    );
+    let outputs = measure["outputs"].as_object().unwrap();
+    assert!(!outputs.is_empty(), "the measure produced series");
+    for port_name in outputs.keys() {
+        assert!(
+            section.contains(&format!("{port_name}: ")),
+            "a chart for {port_name}"
+        );
+    }
+    assert_eq!(
+        section.matches("<svg").count(),
+        outputs.len(),
+        "one chart per series"
+    );
+    for name in [
+        "continuity.mean",
+        "drift.outside.r",
+        "tone_step.dL.rows_skipped",
+    ] {
+        assert!(
+            section.contains(&format!("<td>{name}</td>")),
+            "the summary {name}"
+        );
+    }
+    // A line that is not a measure has no measures panel.
+    let fan_seq = lines.iter().find(|l| l["op"] == "fan").unwrap()["seq"].to_string();
+    let open = format!("<section data-seq=\"{fan_seq}\"");
+    let at = html.find(&open).unwrap();
+    let fan_section = &html[at..html[at..].find("</section>").unwrap() + at];
+    assert!(!fan_section.contains("<strong>measures</strong>"));
+    let _ = std::fs::remove_dir_all(&dir);
+}

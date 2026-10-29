@@ -156,13 +156,34 @@ impl FillerCall {
     }
 }
 
+/// What a call produced: the fill when it succeeded, and the record either way, so a failed
+/// call keeps its status, duration and bytes.
+pub struct CallOutcome {
+    pub fill: Result<DynamicImage>,
+    pub call: FillerCall,
+}
+
+impl CallOutcome {
+    /// The fill, or the error.
+    pub fn into_result(self) -> Result<(DynamicImage, FillerCall)> {
+        self.fill.map(|fill| (fill, self.call))
+    }
+}
+
 /// A configured filler.
 pub trait Filler: Send + Sync {
     /// The entry's name.
     fn name(&self) -> &str;
     /// Calls the filler with `scratch` for any files the call needs. The answer's dimensions
-    /// are asserted here, so a `Ok` fill is always the request's size.
-    fn call(&self, request: &FillRequest, scratch: &Path) -> Result<(DynamicImage, FillerCall)>;
+    /// are asserted here, so a `Ok` fill is always the request's size; the record is
+    /// returned whether or not the call succeeded.
+    fn call(&self, request: &FillRequest, scratch: &Path) -> CallOutcome;
+}
+
+/// The largest answer accepted for a request: eight bytes per pixel (RGBA16) plus a megabyte
+/// of headers and chunks; a PNG of the request's size is far below it.
+pub fn answer_cap(request: &FillRequest) -> u64 {
+    8 * u64::from(request.width) * u64::from(request.height) + (1 << 20)
 }
 
 /// The filler for a configuration entry.
@@ -193,21 +214,24 @@ pub(crate) fn decode_answer(
             format!("{who}: the answer is not a PNG ({} bytes)", bytes.len()),
         ));
     }
-    let decoded = rascal_core::image::decode_limited_bytes(bytes)
+    // The dimensions from the header first, so a wrong size is named before any pixel memory
+    // is allocated; then the decode, bounded to the request's size.
+    let (width, height) = image::ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|e| Error::op("filler", format!("{who}: the answer did not decode: {e}")))?
+        .into_dimensions()
         .map_err(|e| Error::op("filler", format!("{who}: the answer did not decode: {e}")))?;
-    if (decoded.width(), decoded.height()) != (request.width, request.height) {
+    if (width, height) != (request.width, request.height) {
         return Err(Error::op(
             "filler",
             format!(
-                "{who}: the answer is {}x{} but the request was {}x{}; there is no resize",
-                decoded.width(),
-                decoded.height(),
-                request.width,
-                request.height
+                "{who}: the answer is {width}x{height} but the request was {}x{}; there is no resize",
+                request.width, request.height
             ),
         ));
     }
-    Ok(decoded)
+    rascal_core::image::decode_bytes_within(bytes, request.width, request.height)
+        .map_err(|e| Error::op("filler", format!("{who}: the answer did not decode: {e}")))
 }
 
 /// A single-threaded runtime for one call.
@@ -225,5 +249,13 @@ pub(crate) fn excerpt(bytes: &[u8], limit: usize) -> String {
         format!("{text}…")
     } else {
         text
+    }
+}
+
+/// `text` with every occurrence of `secret` replaced, for a message that quotes a body.
+pub(crate) fn scrub(text: String, secret: Option<&str>) -> String {
+    match secret {
+        Some(key) if !key.is_empty() => text.replace(key, "[key]"),
+        _ => text,
     }
 }

@@ -8,7 +8,7 @@ use image::DynamicImage;
 use rascal_core::Error;
 use rascal_core::error::Result;
 
-use super::{FillRequest, Filler, FillerCall, decode_answer, excerpt, runtime};
+use super::{CallOutcome, FillRequest, Filler, FillerCall, decode_answer, excerpt, runtime};
 
 pub struct CommandFiller {
     name: String,
@@ -60,7 +60,34 @@ impl Filler for CommandFiller {
         &self.name
     }
 
-    fn call(&self, request: &FillRequest, scratch: &Path) -> Result<(DynamicImage, FillerCall)> {
+    fn call(&self, request: &FillRequest, scratch: &Path) -> CallOutcome {
+        let mut call = FillerCall {
+            filler: self.name.clone(),
+            target: self.argv.join(" "),
+            request_width: request.width,
+            request_height: request.height,
+            request_bytes: request.bytes(),
+            response_bytes: 0,
+            duration_ms: 0,
+            status: -1,
+            outcome: String::new(),
+        };
+        let fill = self.run(request, scratch, &mut call);
+        call.outcome = match &fill {
+            Ok(_) => "ok".to_string(),
+            Err(e) => e.to_string(),
+        };
+        CallOutcome { fill, call }
+    }
+}
+
+impl CommandFiller {
+    fn run(
+        &self,
+        request: &FillRequest,
+        scratch: &Path,
+        call: &mut FillerCall,
+    ) -> Result<DynamicImage> {
         let image_path = scratch.join("request-image.png");
         let mask_path = scratch.join("request-mask.png");
         let out_path = scratch.join("response.png");
@@ -75,17 +102,6 @@ impl Filler for CommandFiller {
             &out_path,
             request.prompt.as_deref(),
         )?;
-        let mut call = FillerCall {
-            filler: self.name.clone(),
-            target: self.argv.join(" "),
-            request_width: request.width,
-            request_height: request.height,
-            request_bytes: request.bytes(),
-            response_bytes: 0,
-            duration_ms: 0,
-            status: -1,
-            outcome: String::new(),
-        };
         let started = Instant::now();
         let rt = runtime()?;
         let outcome = rt.block_on(async {
@@ -116,16 +132,10 @@ impl Filler for CommandFiller {
             }
         });
         call.duration_ms = started.elapsed().as_millis() as u64;
-        let output = match outcome {
-            Ok(output) => output,
-            Err(e) => {
-                call.outcome = e.to_string();
-                return Err(e);
-            }
-        };
+        let output = outcome?;
         call.status = i64::from(output.status.code().unwrap_or(-1));
         if !output.status.success() {
-            let e = Error::op(
+            return Err(Error::op(
                 "filler",
                 format!(
                     "fillers.{}: exited with {}: {}",
@@ -136,9 +146,7 @@ impl Filler for CommandFiller {
                         .map_or("a signal".to_string(), |c| c.to_string()),
                     excerpt(&output.stderr, 4096).trim()
                 ),
-            );
-            call.outcome = e.to_string();
-            return Err(e);
+            ));
         }
         let bytes = std::fs::read(&out_path).map_err(|e| {
             Error::op(
@@ -151,15 +159,6 @@ impl Filler for CommandFiller {
             )
         })?;
         call.response_bytes = bytes.len() as u64;
-        match decode_answer(&bytes, request, &format!("fillers.{}", self.name)) {
-            Ok(image) => {
-                call.outcome = "ok".to_string();
-                Ok((image, call))
-            }
-            Err(e) => {
-                call.outcome = e.to_string();
-                Err(e)
-            }
-        }
+        decode_answer(&bytes, request, &format!("fillers.{}", self.name))
     }
 }

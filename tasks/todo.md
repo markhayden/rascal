@@ -44,7 +44,7 @@ with green CI on both platforms, and then the tag.
 - [x] 2.6 `measure` v1
 - [x] 2.7 Fillers and the fake fillers
 - [x] 2.8 `heal`'s typed graph and the shipped `seam` recipe → tag `m2.1`
-- [ ] Checkpoint M2 → tag `m2`
+- [x] Checkpoint M2 → tag `m2` (reviews in docs/reviews/m2-checkpoint.md)
 
 ## M3 MCP
 - [ ] 3.1 The transport decision and the independent client

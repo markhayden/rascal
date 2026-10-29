@@ -272,3 +272,22 @@ fn window_then_unwindow_is_the_identity_and_the_crop_frame_derives_from_parent_a
             .contains("not a crop: frame")
     );
 }
+
+#[test]
+fn the_crop_identity_changes_with_the_bbox_and_the_parent_and_ignores_n() {
+    let a = Frame::raw(400, 100, Projection::Flat);
+    let b = Frame::raw(400, 100, Projection::Equirectangular);
+    let one = Frame::crop(&a, 1, [100, 0, 300, 100]).unwrap();
+    assert_eq!(
+        one.identity,
+        Frame::crop(&a, 9, [100, 0, 300, 100]).unwrap().identity
+    );
+    assert_ne!(
+        one.identity,
+        Frame::crop(&a, 1, [101, 0, 300, 100]).unwrap().identity
+    );
+    assert_ne!(
+        one.identity,
+        Frame::crop(&b, 1, [100, 0, 300, 100]).unwrap().identity
+    );
+}

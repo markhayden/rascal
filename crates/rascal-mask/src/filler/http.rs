@@ -9,7 +9,10 @@ use image::DynamicImage;
 use rascal_core::Error;
 use rascal_core::error::Result;
 
-use super::{FillRequest, Filler, FillerCall, decode_answer, excerpt, runtime};
+use super::{
+    CallOutcome, FillRequest, Filler, FillerCall, answer_cap, decode_answer, excerpt, runtime,
+    scrub,
+};
 
 /// Where a key comes from: the process environment, or in a test a closure.
 type KeySource = std::sync::Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
@@ -68,8 +71,7 @@ impl Filler for HttpFiller {
         &self.name
     }
 
-    fn call(&self, request: &FillRequest, _scratch: &Path) -> Result<(DynamicImage, FillerCall)> {
-        let key = self.key()?;
+    fn call(&self, request: &FillRequest, _scratch: &Path) -> CallOutcome {
         let mut call = FillerCall {
             filler: self.name.clone(),
             target: self.url.clone(),
@@ -81,6 +83,19 @@ impl Filler for HttpFiller {
             status: -1,
             outcome: String::new(),
         };
+        let fill = self.run(request, &mut call);
+        call.outcome = match &fill {
+            Ok(_) => "ok".to_string(),
+            Err(e) => e.to_string(),
+        };
+        CallOutcome { fill, call }
+    }
+}
+
+impl HttpFiller {
+    fn run(&self, request: &FillRequest, call: &mut FillerCall) -> Result<DynamicImage> {
+        let key = self.key()?;
+        let cap = answer_cap(request);
         let started = Instant::now();
         let rt = runtime()?;
         let result: Result<(u16, Vec<u8>, String)> = rt.block_on(async {
@@ -127,46 +142,53 @@ impl Filler for HttpFiller {
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("")
                 .to_string();
-            let body = response.bytes().await.map_err(|e| {
+            // The answer is a PNG of the request's size: refuse a declared or streamed body
+            // over the cap before buffering it.
+            if let Some(declared) = response.content_length()
+                && declared > cap
+            {
+                return Err(Error::op(
+                    "filler",
+                    format!(
+                        "fillers.{}: the answer declares {declared} bytes, over the {cap} byte cap for a {}x{} request",
+                        self.name, request.width, request.height
+                    ),
+                ));
+            }
+            let mut body = Vec::new();
+            let mut stream = response;
+            while let Some(chunk) = stream.chunk().await.map_err(|e| {
                 Error::op(
                     "filler",
                     format!("fillers.{}: reading the body: {e}", self.name),
                 )
-            })?;
-            Ok((status, body.to_vec(), content_type))
+            })? {
+                body.extend_from_slice(&chunk);
+                if body.len() as u64 > cap {
+                    return Err(Error::op(
+                        "filler",
+                        format!(
+                            "fillers.{}: the answer passed the {cap} byte cap for a {}x{} request",
+                            self.name, request.width, request.height
+                        ),
+                    ));
+                }
+            }
+            Ok((status, body, content_type))
         });
         call.duration_ms = started.elapsed().as_millis() as u64;
-        let (status, body, content_type) = match result {
-            Ok(v) => v,
-            Err(e) => {
-                call.outcome = e.to_string();
-                return Err(e);
-            }
-        };
+        let (status, body, content_type) = result?;
         call.status = i64::from(status);
         call.response_bytes = body.len() as u64;
         if !(200..300).contains(&status) {
-            let e = Error::op(
+            // An endpoint that echoes its request could put the bearer key in the body.
+            let text = scrub(excerpt(&body, 200), key.as_deref());
+            return Err(Error::op(
                 "filler",
-                format!(
-                    "fillers.{}: HTTP {status}: {}",
-                    self.name,
-                    excerpt(&body, 200).trim()
-                ),
-            );
-            call.outcome = e.to_string();
-            return Err(e);
+                format!("fillers.{}: HTTP {status}: {}", self.name, text.trim()),
+            ));
         }
         let who = format!("fillers.{} ({content_type})", self.name);
-        match decode_answer(&body, request, &who) {
-            Ok(image) => {
-                call.outcome = "ok".to_string();
-                Ok((image, call))
-            }
-            Err(e) => {
-                call.outcome = e.to_string();
-                Err(e)
-            }
-        }
+        decode_answer(&body, request, &who)
     }
 }

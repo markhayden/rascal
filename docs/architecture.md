@@ -72,7 +72,6 @@ which parts exist; it is updated in the same commit as the code it describes.
 | primitives, `cut`, `put`, `line`, `rect`, `stroke`, `rasterize` | rascal-ops | done: the six primitives, `cut` and `put` with the Plan artifact, `rect`, `line`, `stroke`, and `rasterize` for every kind | M1 tasks 1.8a, 1.8b |
 | `inspect`, compatibility export | rascal-core, rascal-mask | done: the inspect op and pages, `--replay`, the export projection with its two refusals, self-contained runs, the docs-coverage check | M1 task 1.9 |
 | the run page and tracing | rascal-core, rascal-mask | done: `rascal dash` (`--out`, `--serve` on loopback, `--panels`), the panel registry with the envelope and artifacts panels, `RASCAL_LOG` spans per op | M1 task 1.10 |
-| the seam ops and `heal` | rascal-ops, rascal-mask | not started | M2 |
 | MCP client and server | rascal-mcp | not started | M3 |
 | `fan` and the band profile | rascal-ops, rascal-mask | done: the two rulers and the half-width rule, `fan-v1` and `fan-thin-v1` embedded, constant sets as parameter defaults, the step-sky fixture and golden profile, the profile panel | M2 task 2.1 |
 | `profile` and `feather` | rascal-ops | done: the band core at `half`, the per-row and the one-sigma feather by distance transform with finite support, the `sigma_px` series, protect wins | M2 task 2.2 |

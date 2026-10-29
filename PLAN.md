@@ -717,8 +717,8 @@ frame; the embedded `seam` recipe; the golden seam mask on the step-sky fixture;
 offline tests through every fake filler, with and without `max_side`; replay of a healed run
 reusing the recorded filler output with the fake filler absent (G4); `docs/{fillers,measures}.md`.
 
-**CLI scenario.** `rascal heal seam fixtures/images/step-sky.png --filler exact --config
-examples/rascal.toml --out run/` writes `run/result.png` whose `w = 0` pixels equal the input
+**CLI scenario.** `rascal heal seam fixtures/images/step-pano.png --filler fake --config
+fake.toml --out run/` (the testkit fake as a command filler, `rascal fake-filler exact`) writes `run/result.png` whose `w = 0` pixels equal the input
 and a journal with fan, ramp, filler and measures. By hand, with the owner's real local filler
 and real panorama (owner decision), the same command on the panorama.
 

@@ -184,8 +184,11 @@ fn ramp_measures_the_step_on_the_profiles_windows_and_apply_meets_the_sides_at_t
         }
     }
     // The pure function agrees with the op.
-    let (direct, changed, largest) =
-        apply_prescriptions(&DynamicImage::ImageRgb8(canvas.clone()), ramped);
+    let (direct, changed, largest) = apply_prescriptions(
+        &DynamicImage::ImageRgb8(canvas.clone()),
+        ramped,
+        &ramped.profile.as_ref().unwrap().band,
+    );
     assert_eq!(direct.to_rgb8(), after);
     assert!(
         changed > 0 && largest >= 4,

@@ -171,13 +171,19 @@ const MAX_ALLOC: u64 = 2 << 30;
 /// Decodes PNG (or JPEG) bytes within the same limits as [`decode_limited`]: a filler's or a
 /// pack's answer.
 pub fn decode_limited_bytes(bytes: &[u8]) -> Result<DynamicImage> {
+    decode_bytes_within(bytes, MAX_SIDE, MAX_SIDE)
+}
+
+/// Decodes bytes that must be at most `width` by `height`: an answer whose dimensions are
+/// known in advance is refused from its header, before any pixel memory is allocated.
+pub fn decode_bytes_within(bytes: &[u8], width: u32, height: u32) -> Result<DynamicImage> {
     let fail = |source| Error::Image {
         path: "<bytes>".into(),
         source,
     };
     let mut limits = image::Limits::default();
-    limits.max_image_width = Some(MAX_SIDE);
-    limits.max_image_height = Some(MAX_SIDE);
+    limits.max_image_width = Some(width.min(MAX_SIDE));
+    limits.max_image_height = Some(height.min(MAX_SIDE));
     limits.max_alloc = Some(MAX_ALLOC);
     let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes))
         .with_guessed_format()

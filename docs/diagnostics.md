@@ -54,7 +54,7 @@ registered panel is missing from this table or a listed panel is not registered.
 | `profile` | a band profile's half-width per row as a chart, beside the strip of the input image the band can reach | 2.1 |
 | `measures` | every series a `measure` line produced as a chart, with the envelope's summaries in a table | 2.6 |
 
-Arriving later: filler calls (2.8), pack calls (3.3).
+Arriving later: pack calls (3.3).
 
 ## Tracing
 
