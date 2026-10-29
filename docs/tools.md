@@ -59,6 +59,8 @@ before accepting it.
 | `cut` | prep | Image (wrapped raw); `strip` | Image in a new `cut:` frame (the two edge strips side by side, the wrap edge at the centre) and the Plan | 1.8a |
 | `put` | prep | Image (parent), Image (canvas), Plan | Image in the parent frame with the canvas's halves on the edge strips; cut then put is byte-identical; a canvas not in the cut frame of this image and plan is `invalid_args` | 1.8a |
 | `fan` | refine | Image, Location | a BandProfile: the half-width per row along a column line, wide where the surface is smooth and the sides differ in tone, `thin` where it is detailed, with the sampling windows it resolved; constant sets `fan-v1` and `fan-thin-v1` (`--constants`) | 2.1 |
+| `profile` | refine | BandProfile | a seam Mask: the core at each row's half-width about the line, the blend a feather whose sigma is `feather_ratio` of the row's half-width (`profile-v1`), the profile and its `sigma_px` series stored | 2.2 |
+| `feather` | refine | Mask | the same mask with its blend replaced by the feather of the core's edge outward with one `sigma_px`, zero beyond `support` sigmas (`feather-v1`); protect, the profile and the prescriptions kept | 2.2 |
 | `inspect` | inspect | Mask, Image | the overlay (an inspection Image) and a Series of the core's width per row; `rascal inspect` adds `--json`, `--out` and `--replay` | 1.9 |
 
 The pixel primitives every op is built from live in `rascal_ops::primitives`: row smoothing

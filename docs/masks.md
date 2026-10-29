@@ -66,6 +66,20 @@ before anything is read or written, so a hand-edited record cannot reach outside
 hand-edited plane is therefore refused on load, and `inspect --replay` reports a hand-edited
 record (`record_differs`) even when its planes are intact.
 
+## The feather
+
+`profile` and `feather` write the blend the same way. For a pixel outside the core, `D` is the
+distance from its centre to the nearest core pixel's edge (the exact Euclidean distance
+transform, less the half pixel to the boundary) and `σ` is the row's sigma (`profile`:
+`feather_ratio · half[y]`, stored as the `sigma_px` series) or the op's one sigma (`feather`):
+
+```
+blend = round(255 · exp(−D² / (2σ²)))      for 0 < D ≤ support · σ,   else 0
+```
+
+The weight tends to 1 at the core's boundary, the 50% contour is `1.1774 σ` outside the core,
+and the support (`feather-v1`: 3 sigmas) is finite. Protected pixels get `blend = 0`.
+
 ## Identity
 
 `sha256:` over the three planes' pixel digests, the use case, the frame identity, the profile's

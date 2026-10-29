@@ -300,3 +300,138 @@ fn fan_on_the_step_sky_canvas_prints_its_summary_and_opens_only_on_the_sky() {
     assert_eq!(fan["params"]["gate"], true);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Task 2.2's CLI scenario: `rascal profile --band <profile> --workspace ws/` then
+/// `rascal inspect` shows the core at the half-width and the blend fading outside it.
+#[test]
+fn profile_after_fan_writes_the_band_mask_that_inspect_describes() {
+    let dir = scratch("profile");
+    let ws = dir.join("ws");
+    let sky = repo_root().join("fixtures/images/step-sky.png");
+    let out = rascal(&[
+        "workspace",
+        "import",
+        ws.to_str().unwrap(),
+        sky.to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let port = |out: &std::process::Output, name: &str| -> String {
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .find_map(|l| {
+                l.strip_prefix(&format!("{name}: "))
+                    .map(|r| r.split_whitespace().next().unwrap().to_string())
+            })
+            .unwrap_or_else(|| panic!("no {name} in {}", String::from_utf8_lossy(&out.stdout)))
+    };
+    let out = rascal(&[
+        "line",
+        "--workspace",
+        ws.to_str().unwrap(),
+        "--image",
+        "img-1",
+        "--column",
+        "0.5",
+        "--width_px",
+        "2",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let line_id = port(&out, "location");
+    let out = rascal(&[
+        "fan",
+        "--workspace",
+        ws.to_str().unwrap(),
+        "--image",
+        "img-1",
+        "--line",
+        &line_id,
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let band_id = port(&out, "band");
+    let out = rascal(&[
+        "profile",
+        "--workspace",
+        ws.to_str().unwrap(),
+        "--band",
+        &band_id,
+        "--json",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let mask_id = port(&out, "mask");
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    let json = &stdout[stdout.find('{').unwrap()..=stdout.rfind('}').unwrap()];
+    let envelope: serde_json::Value = serde_json::from_str(json).unwrap();
+    assert_eq!(envelope["status"], "ok");
+    // The mask directory, by its id through workspace list.
+    let out = rascal(&[
+        "workspace",
+        "list",
+        ws.to_str().unwrap(),
+        "--type",
+        "Mask",
+        "--json",
+    ]);
+    let rows: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).unwrap();
+    let identity = rows.iter().find(|r| r["id"] == mask_id).unwrap()["identity"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let mask_dir = ws
+        .join("artifacts")
+        .join(format!("{}.mask", identity.trim_start_matches("sha256:")));
+    let out = rascal(&["inspect", mask_dir.to_str().unwrap(), "--json"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(report["record"]["use_case"], "seam");
+    assert!(
+        report["profile"].is_object(),
+        "the profile is stored: {}",
+        report["profile"]
+    );
+    assert_eq!(report["profile"]["rows"], 300);
+    let core = report["zones"]["core"].as_u64().unwrap();
+    let blend = report["zones"]["blend"].as_u64().unwrap();
+    assert!(
+        core > 300 * 6,
+        "the core is at least thin wide on every row: {core}"
+    );
+    assert!(
+        blend > core / 4,
+        "the blend fades outside the core: {blend} vs {core}"
+    );
+    // The overlay and chart pages render.
+    let pages = dir.join("pages");
+    let out = rascal(&[
+        "inspect",
+        mask_dir.to_str().unwrap(),
+        "--out",
+        pages.to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(pages.join("overlay.jpg").exists() && pages.join("chart.svg").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}

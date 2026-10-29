@@ -37,7 +37,7 @@ with green CI on both platforms, and then the tag.
 
 ## M2 Seam
 - [x] 2.1 `fan` and the band profile
-- [ ] 2.2 `profile` and `feather`
+- [x] 2.2 `profile` and `feather`
 - [ ] 2.3 `ramp` and `apply`
 - [ ] 2.4 `window` and `unwindow`
 - [ ] 2.5 `paste` (feather and hard)
