@@ -129,14 +129,15 @@ A whole panorama scaled to a browser window hides the very pixels a seam lives i
 pair has three views. The **focus** view, open by default, shows the region the two results
 changed at full size, both sides in boxes that scroll together, opened at the middle of the
 region; holding `f` swaps the sides in place, so one spot can be compared without moving the
-eye. The region is the union over both sides of the columns and rows where the result differs
+eye, and holding `s` shows the unhealed source in their place (the same for both arms, so it
+names neither). The region is the union over both sides of the columns and rows where the result differs
 from the source the heal started from (`rascal_core::lab::focus`), with context of half its
 extent on each axis, at least 64 and at most 512 pixels on each side, clamped at the edge of a
 bounded frame and continuing through the edge of a wrap frame (the two edge strips of a
 panorama come out side by side, the wrap edge in the middle). Both sides share the one region,
 so a thin mask and a wide one are judged in the same window; a pair whose results do not
 differ from the source anywhere shows the whole images. The **whole** view is the images
-entire. The **look around** view, for an image whose run frame is equirectangular (the
+entire, with the source beside them. The **look around** view, for an image whose run frame is equirectangular (the
 recipe's declaration, or the 2:1 assumption), draws both results from inside the sphere in
 WebGL2, aimed at the focus, the two sides sharing one orientation: drag to turn, wheel to
 zoom, `aim at the focus` to return. An image wider than the GPU's largest texture is drawn

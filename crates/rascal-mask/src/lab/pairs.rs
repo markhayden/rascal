@@ -3,7 +3,8 @@
 //! page order and the sides from the protocol's seed, writes `pairs/assignment.json` and the
 //! static `pairs/index.html` with both results embedded and nothing that names an arm; the
 //! page shows each pair at its focus (the region both results changed, at full size), whole,
-//! and for an equirectangular image from inside the sphere, and writes `picks.json`. `decode` checks the picks against the assignment's digest and
+//! and for an equirectangular image from inside the sphere, with the unhealed source beside
+//! the results, and writes `picks.json`. `decode` checks the picks against the assignment's digest and
 //! reports wins, losses and the outcome per group under the protocol's rules.
 
 use std::path::{Path, PathBuf};
@@ -268,8 +269,16 @@ pub fn pairs(root: &Path, arms: &str, whole_max_side: Option<u32>) -> Result<Pat
                 )
                 .replace("{{LEFT_CROP}}", &crop(&left)?)
                 .replace("{{RIGHT_CROP}}", &crop(&right)?)
+                .replace(
+                    "{{SOURCE_CROP}}",
+                    &match &focus {
+                        Some(f) => data_uri(&DynamicImage::ImageRgb8(f.crop(&left.source)))?,
+                        None => String::new(),
+                    },
+                )
                 .replace("{{LEFT}}", &whole(&left.result, whole_max_side)?)
                 .replace("{{RIGHT}}", &whole(&right.result, whole_max_side)?)
+                .replace("{{SOURCE}}", &whole(&left.source, whole_max_side)?)
                 .replace("{{BUTTONS}}", &buttons),
         );
     }

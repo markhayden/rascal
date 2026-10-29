@@ -34,7 +34,7 @@
 </head>
 <body>
 <h1>rascal pairs <span class="meta">{{LAB}}</span></h1>
-<p class="meta">{{SUMMARY}} Pick the better result of each pair, or <em>same</em> when they are as good, or <em>neither</em> when both fail. The arms are not named and the sides were drawn; judge the pictures. Each pair opens at its <em>focus</em>, the region the two results changed, at full size with the two sides scrolling together; hold <kbd>f</kbd> to swap the sides in place. <em>Whole</em> shows the images entire. For a panorama, <em>look around</em> views both from inside the sphere, aimed at the focus: drag to turn, wheel to zoom.</p>
+<p class="meta">{{SUMMARY}} Pick the better result of each pair, or <em>same</em> when they are as good, or <em>neither</em> when both fail. The arms are not named and the sides were drawn; judge the pictures. Each pair opens at its <em>focus</em>, the region the two results changed, at full size with the two sides scrolling together; hold <kbd>f</kbd> to swap the sides in place, hold <kbd>s</kbd> to see the unhealed source in their place. <em>Whole</em> shows the images entire, with the source beside them. For a panorama, <em>look around</em> views both from inside the sphere, aimed at the focus: drag to turn, wheel to zoom.</p>
 <div class="done"><span id="progress">0 of {{COUNT}} picked</span> · <a class="save" id="save" download="picks.json" href="#">Save picks.json</a> <span class="meta">(or copy the text at the bottom into a file)</span></div>
 <!-- pair -->
 <section class="pair" id="pair-{{ID}}" data-pair="{{ID}}" data-width="{{WIDTH}}" data-height="{{HEIGHT}}" data-focus="{{FOCUS}}" data-projection="{{PROJECTION}}">
@@ -46,15 +46,17 @@
   <button class="view look-button" data-view="look">look around</button>
   <select class="zoom" title="focus scale"><option value="1">1:1</option><option value="2">2:1</option><option value="fit">fit width</option></select>
   <button class="aim">aim at the focus</button>
-  <span class="hint">hold f to swap the sides</span>
+  <span class="hint">hold f to swap the sides, s to see the source</span>
 </div>
 <div class="sides view-focus">
   <figure><div class="scroll"><img class="crop" src="{{LEFT_CROP}}" alt="left, at the focus"></div><figcaption>left</figcaption></figure>
   <figure><div class="scroll"><img class="crop" src="{{RIGHT_CROP}}" alt="right, at the focus"></div><figcaption>right</figcaption></figure>
+  <img class="source-crop" src="{{SOURCE_CROP}}" alt="the source, at the focus" hidden>
 </div>
 <div class="sides view-whole" hidden>
   <figure><img class="full" src="{{LEFT}}" alt="left, whole"><figcaption>left</figcaption></figure>
   <figure><img class="full" src="{{RIGHT}}" alt="right, whole"><figcaption>right</figcaption></figure>
+  <figure><img class="full source" src="{{SOURCE}}" alt="the source, whole"><figcaption>the source, unhealed</figcaption></figure>
 </div>
 <div class="sides view-look look" hidden>
   <figure><canvas data-side="0"></canvas><figcaption>left</figcaption></figure>
@@ -98,10 +100,13 @@
   const look = makeLook();
   for (const section of sections) {
     const crops = Array.from(section.querySelectorAll("img.crop"));
-    const fulls = Array.from(section.querySelectorAll("img.full"));
+    const fulls = Array.from(section.querySelectorAll("img.full:not(.source)"));
     const boxes = Array.from(section.querySelectorAll(".scroll"));
     const focus = section.dataset.focus ? section.dataset.focus.split(",").map(Number) : null;
-    if (!focus) { crops.forEach((crop, i) => { crop.src = fulls[i].src; }); }
+    if (!focus) {
+      crops.forEach((crop, i) => { crop.src = fulls[i].src; });
+      section.querySelector("img.source-crop").src = section.querySelector("img.full.source").src;
+    }
     let syncing = false;
     boxes.forEach((box, i) => {
       box.addEventListener("scroll", () => {
@@ -151,15 +156,41 @@
     swapped = on;
     for (const section of sections) {
       const crops = Array.from(section.querySelectorAll("img.crop"));
-      const fulls = Array.from(section.querySelectorAll("img.full"));
+      const fulls = Array.from(section.querySelectorAll("img.full:not(.source)"));
       [crops[0].src, crops[1].src] = [crops[1].src, crops[0].src];
       [fulls[0].src, fulls[1].src] = [fulls[1].src, fulls[0].src];
     }
     look.swap();
   };
-  document.addEventListener("keydown", (e) => { if (e.key === "f" && !e.repeat && e.target.tagName !== "TEXTAREA") { swap(true); } });
-  document.addEventListener("keyup", (e) => { if (e.key === "f") { swap(false); } });
-  window.addEventListener("blur", () => swap(false));
+  // Holding s puts the unhealed source in both focus boxes; the results come back on release.
+  let showingSource = null;
+  const source = (on) => {
+    if ((showingSource !== null) === on) { return; }
+    if (on) {
+      showingSource = sections.map((section) => {
+        const crops = Array.from(section.querySelectorAll("img.crop"));
+        const kept = crops.map((crop) => crop.src);
+        const original = section.querySelector("img.source-crop").src;
+        for (const crop of crops) { crop.src = original; }
+        return kept;
+      });
+    } else {
+      sections.forEach((section, n) => {
+        Array.from(section.querySelectorAll("img.crop")).forEach((crop, i) => { crop.src = showingSource[n][i]; });
+      });
+      showingSource = null;
+    }
+  };
+  document.addEventListener("keydown", (e) => {
+    if (e.repeat || e.target.tagName === "TEXTAREA") { return; }
+    if (e.key === "f") { swap(true); }
+    if (e.key === "s") { source(true); }
+  });
+  document.addEventListener("keyup", (e) => {
+    if (e.key === "f") { swap(false); }
+    if (e.key === "s") { source(false); }
+  });
+  window.addEventListener("blur", () => { swap(false); source(false); });
 
   // The look-around view: each side's whole image is an equirectangular texture sampled by
   // a fragment shader from inside the sphere; both sides share one orientation. One WebGL2

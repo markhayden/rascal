@@ -139,12 +139,14 @@ fn pairs_writes_a_blind_page_and_decode_reports_the_outcome_per_group() {
         ["fan-ramp".to_string(), "thin".to_string()]
     );
     assert_eq!(assignment.lab, "seam-demo");
-    // The page: every result whole and at the pair's focus, every pair id, the digest, and
-    // nothing that names an arm, a side's cell or the filler's command. Three pairs have a
-    // focus through the wrap edge (the fake filler blurs the band); on the flat floor the
-    // blur changes nothing, so that pair has none and shows the whole images: fourteen
-    // embedded images. The seam recipe declares every image equirectangular.
-    assert_eq!(page.matches("data:image/png;base64,").count(), 14);
+    // The page: every result and the source whole and at the pair's focus, every pair id, the
+    // digest, and nothing that names an arm, a side's cell or the filler's command. Three
+    // pairs have a focus through the wrap edge (the fake filler blurs the band), each with
+    // two result crops and a source crop; on the flat floor the blur changes nothing, so that
+    // pair has no crops and shows the whole images: three whole images per pair plus nine
+    // crops, twenty-one embedded images. The seam recipe declares every image equirectangular.
+    assert_eq!(page.matches("data:image/png;base64,").count(), 21);
+    assert_eq!(page.matches("the source, unhealed").count(), 4);
     for pair in &assignment.pair {
         let section = page
             .lines()
