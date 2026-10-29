@@ -19,23 +19,10 @@ use rascal_core::workspace::Workspace;
 /// What `--json` prints.
 pub fn inspect_json(mask_dir: &Path) -> Result<serde_json::Value> {
     let mask = Mask::read(mask_dir)?;
-    let statistics = mask.statistics();
-    Ok(serde_json::json!({
-        "inspect_version": 1,
-        "path": mask_dir.display().to_string(),
-        "identity": mask.record.identity,
-        "record": mask.record,
-        "zones": statistics,
-        "profile": mask.profile.as_ref().map(|p| serde_json::json!({
-            "line": p.line,
-            "band": p.band.identity,
-            "sigma_px": p.sigma_px.identity,
-            "rows": p.band.half.len(),
-            "column_px": p.band.column_px,
-            "thin_px": p.band.thin_px,
-        })),
-        "prescriptions": mask.prescriptions.len(),
-    }))
+    serde_json::to_value(mask.inspect_report(mask_dir)).map_err(|source| Error::Json {
+        path: mask_dir.to_path_buf(),
+        source,
+    })
 }
 
 /// The workspace a stored mask lives in: `<workspace>/artifacts/<id>.mask`.

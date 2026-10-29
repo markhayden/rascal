@@ -30,9 +30,15 @@ statement of what the sequence guarantees.
   virtual filesystems), or across a drive whose cache ignores a flush. Atomic rename within one
   filesystem is assumed, so a workspace is one directory tree on one filesystem.
 - The testkit's `RecordingFs` records the order of writes, syncs and renames, and can crash at
-  any point, dropping what was written or renamed but never synced; the tests assert the order
-  above and the all-or-nothing outcome at each boundary. A platform test performs a real sync
-  on every CI runner.
+  any point, dropping what was written or renamed but never synced and truncating a crashed
+  append to its length before it; the tests assert the order above and the all-or-nothing
+  outcome at each boundary, for a location-only commit and for a mask commit whose staged tree
+  is a directory. A platform test performs a real sync on every CI runner.
+- Amended at the M1 checkpoint (2026-10-29): `repair` holds the writer lock for its whole run,
+  since judging orphans against a generation while a commit renames files in could remove a
+  payload the next generation names; and a journal append is one write under the journal
+  file's own lock, with the sequence number taken from the file, since two processes appending
+  to one journal could otherwise interleave a line or share a number. Both have tests.
 
 ## Alternatives
 

@@ -27,12 +27,16 @@ built from `journal.jsonl` and the operation records, from the template in
 
 The page names every journal line and no other, and embeds every artifact the journal names as
 a `data:` URI (PNG for images and mask planes, JSON for locations, plans, profiles and series),
-so the file stands alone. After `rascal workspace repair` the journal holds only committed
-invocations and the page carries a `journal rebuilt by repair` badge.
+so the file stands alone. Each artifact is embedded once, in an asset table keyed by identity
+(a mask's planes under `<identity>/core`, `/blend`, `/protect`), however many journal lines name
+it; thumbnails and links take theirs from the table by key. After `rascal workspace repair` the
+journal holds only committed invocations and the page carries a `journal rebuilt by repair`
+badge.
 
 `--serve` binds `127.0.0.1` only and prints the URL on stdout. It is a one-connection-at-a-time
 page server for a person watching a run, not a service: no other routes, no TLS, no
-authentication.
+authentication; a client that sends nothing for five seconds or reads nothing for thirty is
+dropped so it cannot hold the page.
 
 ## Panels
 

@@ -38,5 +38,15 @@
 
 <h2>Steps</h2>
 {{STEPS}}
+<script id="assets" type="application/json">{{ASSETS}}</script>
+<script>
+  // Every artifact is embedded once, in the table above; thumbnails and links take theirs by key.
+  const assets = JSON.parse(document.getElementById('assets').textContent);
+  for (const el of document.querySelectorAll('img[data-asset], a[data-asset]')) {
+    const uri = assets[el.dataset.asset];
+    if (!uri) continue;
+    if (el.tagName === 'IMG') el.src = uri; else el.href = uri;
+  }
+</script>
 </body>
 </html>

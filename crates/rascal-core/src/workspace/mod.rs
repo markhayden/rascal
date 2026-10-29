@@ -489,7 +489,21 @@ impl Workspace {
         };
         let frames = self.frames()?;
         let context = Context { frames: &frames };
-        let result = op.run(&context, inputs, &resolved);
+        let result = op.run(&context, inputs, &resolved).and_then(|output| {
+            let bytes = serde_json::to_vec(&output.envelope)
+                .map(|v| v.len() as u64)
+                .unwrap_or(u64::MAX);
+            if bytes > manifest.returns.max_envelope_bytes {
+                return Err(Error::op(
+                    &manifest.name,
+                    format!(
+                        "the envelope is {bytes} bytes, over the manifest's max_envelope_bytes {}",
+                        manifest.returns.max_envelope_bytes
+                    ),
+                ));
+            }
+            Ok(output)
+        });
         let duration_ms = started.elapsed().as_millis() as u64;
         tracing::debug!(op = %manifest.name, step = %step_id, duration_ms, ok = result.is_ok(), "op finished");
         let mut output = match result {

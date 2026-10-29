@@ -27,3 +27,4 @@ findings plus new findings, most severe first.
 | Milestone | File | Verdict |
 |---|---|---|
 | M0 | [m0-checkpoint.md](m0-checkpoint.md) | two reviews; every must-have fixed the same day; open only the CI run after the first push |
+| M1 | [m1-checkpoint.md](m1-checkpoint.md) | two reviews; the must-fix and every should-fix landed in two commits; four nits recorded with owners |

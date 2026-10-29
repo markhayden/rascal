@@ -77,59 +77,43 @@ impl Panel for ArtifactsPanel {
         let mut figures = Vec::new();
         for (port, identity) in &line.outputs {
             match workspace.load(identity) {
-                Ok(Artifact::Image(image)) => {
-                    figures.push(figure(port, identity, &png_bytes(&image.pixels)));
-                }
-                Ok(Artifact::Mask(mask)) => {
-                    for (plane, pixels) in [
-                        ("core", &mask.core),
-                        ("blend", &mask.blend),
-                        ("protect", &mask.protect),
-                    ] {
+                Ok(Artifact::Image(_)) => figures.push(figure(port, identity, identity)),
+                Ok(Artifact::Mask(_)) => {
+                    for plane in PLANES {
                         figures.push(figure(
                             &format!("{port}.{plane}"),
                             identity,
-                            &png_bytes(&image::DynamicImage::ImageLuma8(pixels.clone())),
+                            &format!("{identity}/{plane}"),
                         ));
                     }
                 }
                 Ok(Artifact::Location { location, .. }) => {
-                    figures.push(json_figure(
+                    figures.push(link(
                         port,
                         identity,
                         &format!("{} location", location.kind()),
-                        &location,
                     ));
                 }
-                Ok(Artifact::Plan(plan)) => {
-                    figures.push(json_figure(
-                        port,
-                        identity,
-                        &format!("plan, strip {} of {}", plan.strip, plan.width),
-                        &*plan,
-                    ));
-                }
-                Ok(Artifact::BandProfile(profile)) => {
-                    figures.push(json_figure(
-                        port,
-                        identity,
-                        &format!("band profile, {} rows", profile.half.len()),
-                        &*profile,
-                    ));
-                }
-                Ok(Artifact::Series(series)) => {
-                    figures.push(json_figure(
-                        port,
-                        identity,
-                        &format!(
-                            "series {} ({} rows, {})",
-                            series.name,
-                            series.rows.len(),
-                            series.unit
-                        ),
-                        &*series,
-                    ));
-                }
+                Ok(Artifact::Plan(plan)) => figures.push(link(
+                    port,
+                    identity,
+                    &format!("plan, strip {} of {}", plan.strip, plan.width),
+                )),
+                Ok(Artifact::BandProfile(profile)) => figures.push(link(
+                    port,
+                    identity,
+                    &format!("band profile, {} rows", profile.half.len()),
+                )),
+                Ok(Artifact::Series(series)) => figures.push(link(
+                    port,
+                    identity,
+                    &format!(
+                        "series {} ({} rows, {})",
+                        series.name,
+                        series.rows.len(),
+                        series.unit
+                    ),
+                )),
                 Err(e) => {
                     figures.push(format!("<figure data-identity=\"{}\"><figcaption>{}: not loadable: {}</figcaption></figure>", panel::escape(identity), panel::escape(port), panel::escape(&e.to_string())));
                 }
@@ -142,33 +126,99 @@ impl Panel for ArtifactsPanel {
     }
 }
 
-fn figure(label: &str, identity: &str, png: &[u8]) -> String {
-    let uri = panel::png_data_uri(png);
+const PLANES: [&str; 3] = ["core", "blend", "protect"];
+
+/// The first characters of an identity, for a caption.
+fn short(identity: &str) -> String {
+    identity.chars().take(19).collect()
+}
+
+/// A thumbnail that opens at full size; the bytes come from the page's asset table, keyed.
+fn figure(label: &str, identity: &str, key: &str) -> String {
     format!(
-        "<figure data-identity=\"{id}\"><a href=\"{uri}\" target=\"_blank\"><img src=\"{uri}\" alt=\"{label}\"></a><figcaption>{label}<br>{short}</figcaption></figure>",
+        "<figure data-identity=\"{id}\" data-asset=\"{key}\"><a data-asset=\"{key}\" target=\"_blank\"><img data-asset=\"{key}\" alt=\"{label}\"></a><figcaption>{label}<br>{short}</figcaption></figure>",
         id = panel::escape(identity),
+        key = panel::escape(key),
         label = panel::escape(label),
-        short = panel::escape(&identity[..identity.len().min(19)]),
+        short = panel::escape(&short(identity)),
     )
 }
 
-/// A non-image artifact: its JSON as a `data:` link, so the page embeds every artifact the
-/// same way.
-fn json_figure<T: serde::Serialize>(
-    port: &str,
-    identity: &str,
-    caption: &str,
-    value: &T,
-) -> String {
-    let json = serde_json::to_vec(value).unwrap_or_default();
+/// A non-image artifact: a link to its JSON in the asset table.
+fn link(port: &str, identity: &str, caption: &str) -> String {
     format!(
-        "<figure data-identity=\"{id}\"><a href=\"data:application/json;base64,{b64}\" target=\"_blank\">{port}: {caption}</a><figcaption>{short}</figcaption></figure>",
+        "<figure data-identity=\"{id}\" data-asset=\"{id}\"><a data-asset=\"{id}\" target=\"_blank\">{port}: {caption}</a><figcaption>{short}</figcaption></figure>",
         id = panel::escape(identity),
-        b64 = panel::base64(&json),
         port = panel::escape(port),
         caption = panel::escape(caption),
-        short = panel::escape(&identity[..identity.len().min(19)]),
+        short = panel::escape(&short(identity)),
     )
+}
+
+/// Every artifact the journal names, as `data:` URIs by asset key, each embedded once however
+/// many lines name it: an image or a JSON artifact under its identity, a mask's planes under
+/// `<identity>/<plane>`.
+fn assets(lines: &[JournalLine], workspace: &Workspace) -> BTreeMap<String, String> {
+    let mut table = BTreeMap::new();
+    for identity in lines.iter().flat_map(|l| l.outputs.values()) {
+        if table.contains_key(identity) || table.contains_key(&format!("{identity}/core")) {
+            continue;
+        }
+        let json = |value: &dyn erased::Json| -> String {
+            format!(
+                "data:application/json;base64,{}",
+                panel::base64(&value.to_json())
+            )
+        };
+        match workspace.load(identity) {
+            Ok(Artifact::Image(image)) => {
+                table.insert(
+                    identity.clone(),
+                    panel::png_data_uri(&png_bytes(&image.pixels)),
+                );
+            }
+            Ok(Artifact::Mask(mask)) => {
+                for (plane, pixels) in
+                    PLANES
+                        .into_iter()
+                        .zip([&mask.core, &mask.blend, &mask.protect])
+                {
+                    table.insert(
+                        format!("{identity}/{plane}"),
+                        panel::png_data_uri(&png_bytes(&image::DynamicImage::ImageLuma8(
+                            pixels.clone(),
+                        ))),
+                    );
+                }
+            }
+            Ok(Artifact::Location { location, .. }) => {
+                table.insert(identity.clone(), json(&location));
+            }
+            Ok(Artifact::Plan(plan)) => {
+                table.insert(identity.clone(), json(&*plan));
+            }
+            Ok(Artifact::BandProfile(profile)) => {
+                table.insert(identity.clone(), json(&*profile));
+            }
+            Ok(Artifact::Series(series)) => {
+                table.insert(identity.clone(), json(&*series));
+            }
+            Err(_) => {}
+        }
+    }
+    table
+}
+
+/// Serialization without naming every type.
+mod erased {
+    pub trait Json {
+        fn to_json(&self) -> Vec<u8>;
+    }
+    impl<T: serde::Serialize> Json for T {
+        fn to_json(&self) -> Vec<u8> {
+            serde_json::to_vec(self).unwrap_or_default()
+        }
+    }
 }
 
 fn png_bytes(pixels: &image::DynamicImage) -> Vec<u8> {
@@ -190,7 +240,9 @@ pub fn build(root: &Path) -> Result<String> {
     let ws = Workspace::open(root)?;
     let lines = match Journal::read(&ws.journal_path()) {
         Ok(lines) => lines,
-        Err(Error::Io { .. }) => Vec::new(),
+        Err(Error::Io { source, .. }) if source.kind() == std::io::ErrorKind::NotFound => {
+            Vec::new()
+        }
         Err(e) => return Err(e),
     };
     let panels = panels();
@@ -235,7 +287,7 @@ pub fn build(root: &Path) -> Result<String> {
             String::new()
         };
         rows.push(format!(
-            "<tr data-seq=\"{seq}\" data-step=\"{step}\" data-status=\"{status_text}\" data-repeat=\"{repeat}\"><td>{seq}</td><td>{step}{repeat_mark}</td><td>{op}</td><td class=\"status-{status_text}\">{status_text}</td><td>{duration} ms</td><td><div class=\"bar {class}\" style=\"margin-left:{left:.1}%;width:{width:.1}%\"></div></td></tr>",
+            "<tr data-seq=\"{seq}\" data-step=\"{step}\" data-status=\"{status_text}\" data-repeat=\"{repeat}\" data-duration-ms=\"{duration}\"><td>{seq}</td><td>{step}{repeat_mark}</td><td>{op}</td><td class=\"status-{status_text}\">{status_text}</td><td>{duration} ms</td><td><div class=\"bar {class}\" style=\"margin-left:{left:.1}%;width:{width:.1}%\"></div></td></tr>",
             seq = line.seq,
             step = panel::escape(&step),
             op = panel::escape(line.op.as_deref().unwrap_or("")),
@@ -289,7 +341,13 @@ pub fn build(root: &Path) -> Result<String> {
             "{{CALLS}}",
             "<p class=\"empty\" data-calls=\"0\">No filler or pack calls in this journal.</p>",
         )
-        .replace("{{STEPS}}", &steps.join("\n")))
+        .replace("{{STEPS}}", &steps.join("\n"))
+        .replace(
+            "{{ASSETS}}",
+            &serde_json::to_string(&assets(&lines, &ws))
+                .unwrap_or_default()
+                .replace("</", "<\\/"),
+        ))
 }
 
 /// Writes the page to a file destination (overwritten) and returns the path.
@@ -312,6 +370,9 @@ pub fn serve(root: &Path, port: u16) -> Result<()> {
             Ok(s) => s,
             Err(_) => continue,
         };
+        // One idle or slow client must not hold the page for everyone.
+        let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(5)));
+        let _ = stream.set_write_timeout(Some(std::time::Duration::from_secs(30)));
         // Read the whole request head before answering: closing with unread bytes in the
         // receive buffer makes the kernel reset the connection instead of ending it.
         if !read_request_head(&mut stream) {

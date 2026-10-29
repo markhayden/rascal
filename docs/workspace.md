@@ -35,6 +35,15 @@ only after the last sync. A crash before the pointer rename publishes nothing (o
 collected by `repair`); after it, the generation is complete and the journal is rebuilt from
 the records. ADR 0017 states the primitive per platform and what is and is not promised.
 
+The record file under `ops/` is content-addressed, so an invocation identical to an earlier
+one shares its file; the generation's `records` list carries each invocation's sequence number
+and duration, the two observations that differ between them.
+
+A journal append takes the journal file's own lock, assigns the sequence number from the lines
+already in the file and writes the line in one call, so two processes sharing a workspace never
+interleave lines or share a number. A line is complete only with its newline: an unterminated
+tail is the torn line a crash mid-append leaves, skipped on read and rebuilt by `repair`.
+
 Readers read `CURRENT` once and then the named generation, so they see a consistent snapshot.
 Ops stage in parallel and commit in turn.
 
@@ -54,7 +63,8 @@ commit runs to completion and the op reports `committed` together with `cancelle
 ## Repair
 
 `rascal workspace repair ws/ [--json]` puts right what a crash or a kill can leave behind, and
-reports what it did:
+reports what it did (`schemas/rascal/repair-v1.json`). It holds the writer lock throughout, so
+no commit is in flight while orphans are judged and the generation rewritten:
 
 - abandoned staging directories are removed;
 - an entry whose payload is missing on disk is dropped from a new, repaired generation (its

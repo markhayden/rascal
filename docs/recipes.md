@@ -51,8 +51,13 @@ Everything is checked before anything runs, and every error names the recipe and
   one of the op's sets; defaults are resolved by the manifest, and the resolved values are what
   the journal records;
 - `outputs.mask`, `outputs.image` and `outputs.plan` name bindings of the right type; a render
-  needs `outputs.mask`, a plain file name, a real profile, and `outputs.image` for the profiles
-  that draw on the image.
+  needs `outputs.mask`, a plain file name that is not one the run directory writes itself
+  (`journal.jsonl`, `CURRENT`, `lock`, `frames.json`, `locations.json`, `dash.html`), a real
+  profile, and `outputs.image` for the profiles that draw on the image.
+
+A number parameter may be written as an integer (`width = 1`) or a float (`width = 1.0`); it
+resolves as a float either way, so the two spellings record and hash the same. An integer
+parameter must be written as an integer.
 
 ## Running one
 

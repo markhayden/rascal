@@ -86,7 +86,7 @@ pub fn inventory() -> Vec<BoundaryType> {
     use crate::image::ImageRecord;
     use crate::journal::JournalLine;
     use crate::location::Location;
-    use crate::mask::MaskRecord;
+    use crate::mask::{InspectReport, MaskRecord};
     use crate::op::{Envelope, Manifest};
     use crate::profile::BandProfile;
     use crate::recipe::Recipe;
@@ -101,6 +101,12 @@ pub fn inventory() -> Vec<BoundaryType> {
             "rascal/repair-v1.json",
             Source::Generated,
             ["repair-v1/after-crash.json"]
+        ),
+        boundary_type!(
+            InspectReport,
+            "rascal/inspect-v1.json",
+            Source::Generated,
+            ["inspect-v1/rect.json"]
         ),
         boundary_type!(
             ReplayReport,
@@ -242,6 +248,8 @@ pub const COMPONENTS: &[&str] = &[
     "ArtifactEntry",
     "LocationEntry",
     "RecordEntry",
+    "ZoneStatistics",
+    "InspectProfile",
     "Refinement",
     "ParamKind",
     "CostTier",

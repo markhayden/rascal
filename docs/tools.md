@@ -57,7 +57,7 @@ before accepting it.
 | `rasterize` | refine | Location, Image; `use_case` | Mask: `bbox` and `polygon` as drawn, `whole_image` all, a column `line` as a band `width_px` wide, a path `line` dilated by `width_px / 2`, a `stroke` dilated by `radius_px`; `view` and `absent` are `not_applicable` | 1.1, 1.8b |
 | `render` | out | Mask [, Image]; `for`, `threshold`, `colour`, `strength` | Image: `grey`, `binary` (`mask_input`), `alpha`, `tinted` (`image_input`), `overlay` (inspection) | 1.1, 1.5 |
 | `cut` | prep | Image (wrapped raw); `strip` | Image in a new `cut:` frame (the two edge strips side by side, the wrap edge at the centre) and the Plan | 1.8a |
-| `put` | prep | Image (parent), Image (canvas), Plan | Image in the parent frame with the canvas's halves on the edge strips; cut then put is byte-identical | 1.8a |
+| `put` | prep | Image (parent), Image (canvas), Plan | Image in the parent frame with the canvas's halves on the edge strips; cut then put is byte-identical; a canvas not in the cut frame of this image and plan is `invalid_args` | 1.8a |
 | `inspect` | inspect | Mask, Image | the overlay (an inspection Image) and a Series of the core's width per row; `rascal inspect` adds `--json`, `--out` and `--replay` | 1.9 |
 
 The pixel primitives every op is built from live in `rascal_ops::primitives`: row smoothing

@@ -60,8 +60,11 @@ w = blend / 255  otherwise
 Checked whenever a mask is read, and named in the refusal: the planes are the record's size and
 each other's; `core` and `protect` are binary; `blend` is zero inside the core and under protect;
 a profile is in the mask's frame with one entry per row; a tone-ramp series has three channels
-and one entry per row in the mask's frame; the stored identity matches the content. A
-hand-edited plane is therefore refused on load.
+and one entry per row in the mask's frame; the stored identity matches the content; every file
+`mask.toml` names is a plain name inside the mask directory (no separator, not `..`), checked
+before anything is read or written, so a hand-edited record cannot reach outside the mask. A
+hand-edited plane is therefore refused on load, and `inspect --replay` reports a hand-edited
+record (`record_differs`) even when its planes are intact.
 
 ## Identity
 

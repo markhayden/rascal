@@ -709,8 +709,63 @@ fn check_file_names(record: &MaskRecord) -> Result<()> {
     Ok(())
 }
 
-/// Counts per zone, for `inspect --json`; task 1.9 gives the inspect output its schema.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// What `rascal inspect --json` prints: the record, the zone statistics and the identity, a
+/// boundary type with a schema (`schemas/rascal/inspect-v1.json`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct InspectReport {
+    /// The report's version.
+    pub inspect_version: u32,
+    /// The mask directory inspected.
+    pub path: String,
+    pub identity: String,
+    pub record: MaskRecord,
+    pub zones: ZoneStatistics,
+    /// The band profile, when the mask has one.
+    pub profile: Option<InspectProfile>,
+    /// How many prescriptions the mask carries.
+    pub prescriptions: usize,
+}
+
+/// The profile summary in an inspect report.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct InspectProfile {
+    pub line: String,
+    /// The band profile's identity.
+    pub band: String,
+    /// The sigma series' identity.
+    pub sigma_px: String,
+    pub rows: usize,
+    pub column_px: u32,
+    pub thin_px: f64,
+}
+
+impl Mask {
+    /// The inspect report for this mask, read from `path`.
+    pub fn inspect_report(&self, path: &Path) -> InspectReport {
+        InspectReport {
+            inspect_version: 1,
+            path: path.display().to_string(),
+            identity: self.record.identity.clone(),
+            record: self.record.clone(),
+            zones: self.statistics(),
+            profile: self.profile.as_ref().map(|p| InspectProfile {
+                line: p.line.clone(),
+                band: p.band.identity.clone(),
+                sigma_px: p.sigma_px.identity.clone(),
+                rows: p.band.half.len(),
+                column_px: p.band.column_px,
+                thin_px: p.band.thin_px,
+            }),
+            prescriptions: self.prescriptions.len(),
+        }
+    }
+}
+
+/// Counts per zone, part of the inspect report.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ZoneStatistics {
     pub width: u32,
     pub height: u32,

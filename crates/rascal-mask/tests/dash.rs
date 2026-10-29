@@ -111,27 +111,24 @@ fn attr_values(html: &str, tag: &str, attr: &str) -> Vec<String> {
     values
 }
 
-/// The `data:` URIs inside every `<figure data-identity="<identity>">`.
-fn figure_uris(html: &str, identity: &str) -> Vec<String> {
-    let open = format!("<figure data-identity=\"{identity}\"");
-    let mut uris = Vec::new();
-    for (i, _) in html.match_indices(&open) {
-        let end = html[i..].find("</figure>").unwrap() + i;
-        let figure = &html[i..end];
-        // The first data: URI in the figure: the thumbnail's src or the JSON link's href.
-        let uri = ["src=\"data:", "href=\"data:"]
-            .iter()
-            .filter_map(|key| {
-                figure.find(key).map(|at| {
-                    let rest = &figure[at + key.len() - 5..];
-                    rest[..rest.find('"').unwrap()].to_string()
-                })
-            })
-            .next()
-            .unwrap_or_else(|| panic!("figure for {identity} has no data: URI: {figure}"));
-        uris.push(uri);
-    }
-    uris
+/// The page's asset table: every artifact once, as a `data:` URI by key (an identity, or
+/// `<identity>/<plane>` for a mask).
+fn asset_table(html: &str) -> BTreeMap<String, String> {
+    let open = "<script id=\"assets\" type=\"application/json\">";
+    let at = html.find(open).expect("the asset table") + open.len();
+    let end = html[at..].find("</script>").unwrap() + at;
+    serde_json::from_str(&html[at..end].replace("<\\/", "</")).unwrap()
+}
+
+/// The asset keys of every `<figure data-identity="<identity>">`.
+fn figure_keys(html: &str, identity: &str) -> Vec<String> {
+    let open = format!("<figure data-identity=\"{identity}\" data-asset=\"");
+    html.match_indices(&open)
+        .map(|(i, _)| {
+            let rest = &html[i + open.len()..];
+            rest[..rest.find('"').unwrap()].to_string()
+        })
+        .collect()
 }
 
 fn base64_decode(text: &str) -> Vec<u8> {
@@ -202,17 +199,25 @@ fn assert_page_matches_journal(html: &str, lines: &[serde_json::Value]) {
 
 fn assert_every_artifact_embedded(html: &str, lines: &[serde_json::Value]) {
     let floor = image::open(repo_root().join("fixtures/images/floor.png")).unwrap();
-    let mut checked = 0;
+    let table = asset_table(html);
+    let mut checked = BTreeSet::new();
     for line in lines {
         let Some(outputs) = line["outputs"].as_object() else {
             continue;
         };
         for (port, identity) in outputs {
             let identity = identity.as_str().unwrap();
-            let uris = figure_uris(html, identity);
-            assert!(!uris.is_empty(), "{port} {identity} is not on the page");
-            for uri in uris {
-                let (mime, bytes) = decode_data_uri(&uri);
+            let keys = figure_keys(html, identity);
+            assert!(!keys.is_empty(), "{port} {identity} is not on the page");
+            for key in keys {
+                assert!(
+                    key == identity || key.starts_with(&format!("{identity}/")),
+                    "{key}"
+                );
+                let uri = table
+                    .get(&key)
+                    .unwrap_or_else(|| panic!("{key} is not in the asset table"));
+                let (mime, bytes) = decode_data_uri(uri);
                 match mime.as_str() {
                     "image/png" => {
                         let decoded = image::load_from_memory(&bytes).unwrap();
@@ -228,12 +233,23 @@ fn assert_every_artifact_embedded(html: &str, lines: &[serde_json::Value]) {
                     }
                     other => panic!("{port}: unexpected media type {other}"),
                 }
-                checked += 1;
+                checked.insert(key);
             }
         }
     }
-    // Two rect runs: the image and the rendering, the mask's three planes and the location, twice.
-    assert!(checked >= 12, "decoded {checked} embedded artifacts");
+    // The image, the location, the mask's three planes and the rendering: distinct assets.
+    assert!(
+        checked.len() >= 6,
+        "decoded {} distinct assets",
+        checked.len()
+    );
+    // Each embedded once: the page holds exactly one PNG data URI per PNG asset, however many
+    // journal lines name the artifact (the two rect runs share theirs).
+    let png_assets = table
+        .values()
+        .filter(|u| u.starts_with("data:image/png"))
+        .count();
+    assert_eq!(html.matches("data:image/png;base64,").count(), png_assets);
 }
 
 #[test]
@@ -400,8 +416,31 @@ fn serve_binds_loopback_only_and_rebuilds_on_each_request() {
     let body = second.split("\r\n\r\n").nth(1).unwrap();
     assert_page_matches_journal(body, &journal(&ws));
 
-    // Only loopback: no listener on the wildcard or any other local address for that port.
-    // A refused or timed-out connection both mean no listener there.
+    // Only loopback. On Linux the kernel's own table is the proof: every listener on the port
+    // is on 127.0.0.1. Everywhere, a connection to the port on a non-loopback local address
+    // is refused or times out, both meaning no listener there.
+    if let Ok(table) = std::fs::read_to_string("/proc/net/tcp") {
+        let listeners: Vec<&str> = table
+            .lines()
+            .skip(1)
+            .filter(|l| {
+                let mut f = l.split_whitespace();
+                let local = f.nth(1).unwrap_or("");
+                let state = f.nth(1).unwrap_or("");
+                state == "0A" && local.ends_with(&format!(":{port:04X}"))
+            })
+            .collect();
+        assert!(!listeners.is_empty(), "the listener is in /proc/net/tcp");
+        for l in listeners {
+            assert!(
+                l.split_whitespace()
+                    .nth(1)
+                    .unwrap()
+                    .starts_with("0100007F:"),
+                "{l}"
+            );
+        }
+    }
     for addr in local_non_loopback_addrs().into_iter().take(3) {
         let target = std::net::SocketAddr::from((addr, port));
         assert!(
@@ -414,24 +453,83 @@ fn serve_binds_loopback_only_and_rebuilds_on_each_request() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// The host's non-loopback IPv4 addresses, from `ifconfig`/`ip`; empty when neither is present.
+/// The host's non-loopback IPv4 addresses: the one a routed UDP socket binds to, plus any
+/// `ifconfig` or `ip` lists; empty on a host with none.
 fn local_non_loopback_addrs() -> Vec<std::net::Ipv4Addr> {
+    let mut addrs = BTreeSet::new();
+    if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0")
+        && socket.connect("10.255.255.255:1").is_ok()
+        && let Ok(std::net::SocketAddr::V4(local)) = socket.local_addr()
+    {
+        addrs.insert(*local.ip());
+    }
     let output = Command::new("ifconfig")
         .output()
         .or_else(|_| Command::new("ip").args(["-4", "addr"]).output());
-    let Ok(output) = output else {
-        return Vec::new();
-    };
-    String::from_utf8_lossy(&output.stdout)
-        .split_whitespace()
-        .filter_map(|w| {
-            w.split('/')
+    if let Ok(output) = output {
+        for word in String::from_utf8_lossy(&output.stdout).split_whitespace() {
+            if let Ok(a) = word
+                .split('/')
                 .next()
                 .unwrap()
                 .parse::<std::net::Ipv4Addr>()
-                .ok()
-        })
+            {
+                addrs.insert(a);
+            }
+        }
+    }
+    addrs
+        .into_iter()
         .filter(|a| !a.is_loopback() && !a.is_unspecified() && !a.is_broadcast())
         .filter(|a| a.octets()[0] != 255 && a.octets()[3] != 255)
         .collect()
+}
+
+/// The plan's CLI scenario: the page of a run directory lists the one step with its duration
+/// and the mask's three planes as thumbnails.
+#[test]
+fn the_run_directory_form_lists_the_step_with_its_duration_and_three_planes() {
+    let dir = scratch("rundir");
+    let floor = repo_root().join("fixtures/images/floor.png");
+    let run = dir.join("run");
+    let out = rascal(&[
+        "run",
+        "rect",
+        s(&floor),
+        "--bbox",
+        "0.2,0.2,0.6,0.6",
+        "--out",
+        s(&run),
+    ]);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let html = dash(&run, &dir.join("page.html"));
+    let lines = journal(&run);
+    assert_page_matches_journal(&html, &lines);
+    let durations = attr_values(&html, "tr", "data-duration-ms");
+    assert_eq!(durations.len(), lines.len());
+    for (d, line) in durations.iter().zip(&lines) {
+        assert_eq!(d, &line["duration_ms"].as_u64().unwrap_or(0).to_string());
+    }
+    let mask = lines.iter().find(|l| l["step"] == "rasterize").unwrap()["outputs"]["mask"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let table = asset_table(&html);
+    for plane in ["core", "blend", "protect"] {
+        let key = format!("{mask}/{plane}");
+        assert!(
+            figure_keys(&html, &mask).contains(&key),
+            "{plane} thumbnail"
+        );
+        let (mime, bytes) = decode_data_uri(&table[&key]);
+        assert_eq!(mime, "image/png");
+        let decoded = image::load_from_memory(&bytes).unwrap();
+        assert_eq!(decoded.width(), 320, "{plane}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }

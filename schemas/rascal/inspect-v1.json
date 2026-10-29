@@ -1,0 +1,418 @@
+{
+  "$defs": {
+    "InspectProfile": {
+      "additionalProperties": false,
+      "description": "The profile summary in an inspect report.",
+      "properties": {
+        "band": {
+          "description": "The band profile's identity.",
+          "type": "string"
+        },
+        "column_px": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "line": {
+          "type": "string"
+        },
+        "rows": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sigma_px": {
+          "description": "The sigma series' identity.",
+          "type": "string"
+        },
+        "thin_px": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "line",
+        "band",
+        "sigma_px",
+        "rows",
+        "column_px",
+        "thin_px"
+      ],
+      "type": "object"
+    },
+    "MaskRecord": {
+      "additionalProperties": false,
+      "description": "`mask.toml`.",
+      "properties": {
+        "frame": {
+          "description": "The frame id the planes are in.",
+          "type": "string"
+        },
+        "frame_identity": {
+          "description": "The frame's identity.",
+          "type": "string"
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "description": "The local id.",
+          "type": "string"
+        },
+        "identity": {
+          "description": "`sha256:` over the three planes' pixels, the use case, the frame identity, the\nprofile's line, band and sigma identities, every prescription with its series replaced\nby the series' identity, and the source identities. Ids, file names and provenance are\nnot part of it.",
+          "type": "string"
+        },
+        "prescriptions": {
+          "items": {
+            "$ref": "#/$defs/Prescription"
+          },
+          "type": "array"
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProfileSection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provenance": {
+          "items": {
+            "$ref": "#/$defs/ProvenanceNode"
+          },
+          "type": "array"
+        },
+        "source": {
+          "$ref": "#/$defs/Source",
+          "default": {
+            "instances": [],
+            "locations": []
+          }
+        },
+        "use_case": {
+          "$ref": "#/$defs/UseCase"
+        },
+        "version": {
+          "description": "The record's version.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "width": {
+          "description": "The planes' size, which is the frame's.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "zones": {
+          "$ref": "#/$defs/Zones"
+        }
+      },
+      "required": [
+        "version",
+        "id",
+        "frame",
+        "frame_identity",
+        "width",
+        "height",
+        "use_case",
+        "identity",
+        "zones"
+      ],
+      "type": "object"
+    },
+    "Prescription": {
+      "description": "A pixel change that belongs with the mask; `apply` performs it.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "A per-row colour step carried across the band.",
+          "properties": {
+            "kind": {
+              "const": "tone_ramp",
+              "type": "string"
+            },
+            "share": {
+              "description": "The share of the step each side moves toward the other.",
+              "format": "double",
+              "type": "number"
+            },
+            "step": {
+              "description": "The step `Series` file (3 channels, levels), relative to `mask.toml`.",
+              "type": "string"
+            },
+            "version": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "version",
+            "step",
+            "share"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ProfileSection": {
+      "additionalProperties": false,
+      "description": "The `[profile]` section: present when the mask is a band along a line.",
+      "properties": {
+        "band": {
+          "description": "The `BandProfile` file, relative to `mask.toml`.",
+          "type": "string"
+        },
+        "line": {
+          "description": "The identity of the `line` location.",
+          "type": "string"
+        },
+        "sigma_px": {
+          "description": "The per-row feather sigma `Series` file, relative to `mask.toml`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "line",
+        "band",
+        "sigma_px"
+      ],
+      "type": "object"
+    },
+    "ProvenanceNode": {
+      "additionalProperties": false,
+      "description": "One step that made or changed the mask: a copy of the journal's node, not part of identity.",
+      "properties": {
+        "constants": {
+          "description": "The constant set, when the op used one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "inputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Input identities by port.",
+          "type": "object"
+        },
+        "op": {
+          "type": "string"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Output identities by port.",
+          "type": "object"
+        },
+        "params": {
+          "additionalProperties": true,
+          "default": {},
+          "description": "The resolved parameters.",
+          "type": "object"
+        },
+        "step": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "step",
+        "op",
+        "version"
+      ],
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "description": "What the mask was made from.",
+      "properties": {
+        "instances": {
+          "default": [],
+          "description": "Identities of the finder instances.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "locations": {
+          "default": [],
+          "description": "Identities of the locations.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "UseCase": {
+      "description": "The use case a mask was made for.",
+      "enum": [
+        "seam",
+        "remove",
+        "repair",
+        "protect",
+        "custom"
+      ],
+      "type": "string"
+    },
+    "ZoneStatistics": {
+      "additionalProperties": false,
+      "description": "Counts per zone, part of the inspect report.",
+      "properties": {
+        "blend": {
+          "description": "Pixels with a nonzero blend.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "core": {
+          "description": "Pixels in the core.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "painted": {
+          "description": "Pixels with `w > 0`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "protect": {
+          "description": "Protected pixels.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "support": {
+          "description": "The integer bbox of `w > 0`.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "weight_sum": {
+          "description": "The sum of effective weights.",
+          "format": "double",
+          "type": "number"
+        },
+        "width": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "core",
+        "blend",
+        "protect",
+        "painted",
+        "weight_sum"
+      ],
+      "type": "object"
+    },
+    "Zones": {
+      "additionalProperties": false,
+      "description": "The plane files, relative to `mask.toml`.",
+      "properties": {
+        "blend": {
+          "description": "8-bit fractional paste weights outside the core; 0 inside it, under protect and beyond\nthe feather.",
+          "type": "string"
+        },
+        "core": {
+          "description": "Binary: 255 where a filler may paint; paste weight 1.",
+          "type": "string"
+        },
+        "protect": {
+          "description": "Binary: 255 where nothing may change; effective weight 0 wherever it is set.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "core",
+        "blend",
+        "protect"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "What `rascal inspect --json` prints: the record, the zone statistics and the identity, a\nboundary type with a schema (`schemas/rascal/inspect-v1.json`).",
+  "properties": {
+    "identity": {
+      "type": "string"
+    },
+    "inspect_version": {
+      "description": "The report's version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "path": {
+      "description": "The mask directory inspected.",
+      "type": "string"
+    },
+    "prescriptions": {
+      "description": "How many prescriptions the mask carries.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "profile": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/InspectProfile"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The band profile, when the mask has one."
+    },
+    "record": {
+      "$ref": "#/$defs/MaskRecord"
+    },
+    "zones": {
+      "$ref": "#/$defs/ZoneStatistics"
+    }
+  },
+  "required": [
+    "inspect_version",
+    "path",
+    "identity",
+    "record",
+    "zones",
+    "prescriptions"
+  ],
+  "title": "InspectReport",
+  "type": "object"
+}
