@@ -50,7 +50,7 @@ with green CI on both platforms, and then the tag.
 - [x] 3.1 The transport decision and the independent client
 - [x] 3.2 `rascal serve` → tag `m3.1`
 - [x] 3.3 The pack client and the isolation suite
-- [ ] Checkpoint M3 → tag `m3`
+- [x] Checkpoint M3 → tag `m3`
 
 ## M4 Refine
 - [ ] 4.1 `grow`, `shrink`, `close`
