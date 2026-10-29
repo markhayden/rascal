@@ -1375,13 +1375,16 @@ name = "rascal-mcp"
 version = "0.1.0"
 dependencies = [
  "image",
+ "nix",
  "rascal-core",
  "rascal-testkit",
  "rmcp",
  "serde",
  "serde_json",
  "tokio",
+ "tokio-util",
  "toml",
+ "tracing",
 ]
 
 [[package]]

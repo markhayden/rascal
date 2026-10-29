@@ -35,6 +35,7 @@ impl Op for Cut {
                 artifact_type: ArtifactType::Image,
                 required: true,
                 purpose: "A canonical or working image in a wrapped raw frame, at least 4 columns wide.".to_string(),
+                many: false,
             }],
             vec![
                 Port {
@@ -42,12 +43,14 @@ impl Op for Cut {
                     artifact_type: ArtifactType::Image,
                     required: true,
                     purpose: "The canvas, in the cut frame.".to_string(),
+                    many: false,
                 },
                 Port {
                     name: "plan".to_string(),
                     artifact_type: ArtifactType::Plan,
                     required: true,
                     purpose: "The strip width and the source spans, for put.".to_string(),
+                    many: false,
                 },
             ],
             vec![Param::optional("strip", "The strip fraction f in (0, 0.5]: s = min(max(2, 2·round_half_up(f·W/2)), 2·floor(W/4)).", ParamKind::Number, serde_json::json!(0.07)).bounded(1e-9, 0.5)],

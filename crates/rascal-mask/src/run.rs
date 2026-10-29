@@ -54,6 +54,18 @@ pub struct RunArgs {
     pub workspace: Option<PathBuf>,
     pub projection: Option<Projection>,
     pub strict: bool,
+    /// A recorded run whose pack calls answer instead of the packs (G4).
+    pub replay: Option<PathBuf>,
+}
+
+/// A bound and executed recipe, with the registry it ran in (the shipped ops plus the
+/// configured packs' tools) and the packs themselves, which stop when dropped.
+pub struct Prepared {
+    pub run: Run,
+    pub outcome: rascal_core::recipe::Outcome,
+    pub image: Artifact,
+    pub registry: OpRegistry,
+    pub packs: Vec<Arc<rascal_mcp::client::Pack>>,
 }
 
 /// What `run` did.
@@ -69,13 +81,13 @@ pub struct RunReport {
 /// its flag: `image` from the positional path, `location` from `--bbox` or `--location`,
 /// `stroke` from `--stroke`, `protect` and `mask` from stored mask directories; a declared
 /// input without its flag, or a flag without its input, is a usage error.
-pub fn run(registry: &OpRegistry, args: &RunArgs) -> Result<RunReport> {
+pub fn run(args: &RunArgs) -> Result<RunReport> {
     if args.prompt.is_some() {
         return Err(Error::usage(
             "--prompt binds through a configured pack, which arrives with M5; heal passes it to the filler",
         ));
     }
-    let (run, outcome, _) = run_recipe(registry, args)?;
+    let Prepared { run, outcome, .. } = run_recipe(args)?;
     let mask_dir = match outcome.outputs.get("mask") {
         Some(Artifact::Mask(mask)) => Some(mask.path_in(&run.workspace.root.join("artifacts"))),
         _ => None,
@@ -89,17 +101,16 @@ pub fn run(registry: &OpRegistry, args: &RunArgs) -> Result<RunReport> {
     })
 }
 
-/// Binds the inputs and runs the recipe; `heal` continues from the outcome. Returns the run,
-/// the outcome and the input image artifact.
-pub fn run_recipe(
-    registry: &OpRegistry,
-    args: &RunArgs,
-) -> Result<(Run, rascal_core::recipe::Outcome, Artifact)> {
-    if let Some(path) = &args.config {
-        rascal_core::config::Config::read(path)?;
-    }
+/// Binds the inputs and runs the recipe; `heal` continues from the outcome. The registry is
+/// built here: the shipped ops plus every configured pack's tools, journaling into the run's
+/// workspace (so the run directory exists before the recipe is validated).
+pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
+    let config = args
+        .config
+        .as_deref()
+        .map(rascal_core::config::Config::read)
+        .transpose()?;
     let recipe = load_recipe(&args.recipe)?;
-    recipe.validate(registry)?;
     if args.prompt.is_some() && recipe.inputs.contains_key("prompt") {
         return Err(Error::usage(
             "inputs.prompt binds through a configured pack, which arrives with M5",
@@ -147,6 +158,9 @@ pub fn run_recipe(
         Some(dir) => Run::open_in(&out, Arc::new(Workspace::open(dir)?))?,
         None => Run::open(&out)?,
     };
+    let (registry, packs) =
+        crate::packs::registry_for(config.as_ref(), &run.workspace, args.replay.as_deref())?;
+    recipe.validate(&registry)?;
 
     let (_, frame, image) = run
         .workspace
@@ -185,8 +199,14 @@ pub fn run_recipe(
     }
 
     let input_image = inputs["image"].clone();
-    let outcome = recipe.run(registry, inputs, &run)?;
-    Ok((run, outcome, input_image))
+    let outcome = recipe.run(&registry, inputs, &run)?;
+    Ok(Prepared {
+        run,
+        outcome,
+        image: input_image,
+        registry,
+        packs,
+    })
 }
 
 /// A location from a JSON file, validated against the schema and the image's frame. The file

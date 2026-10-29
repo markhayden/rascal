@@ -23,6 +23,26 @@ pub struct Port {
     pub required: bool,
     /// What the port is for.
     pub purpose: String,
+    /// An output port that takes any number of artifacts, named `<port>_<n>` from 0 (a
+    /// finder's instances); required means at least one. Never an input port in v1.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub many: bool,
+}
+
+impl Port {
+    /// The index an output name carries for a many port: `plane_3` is `Some(3)` for `plane`.
+    pub fn index_of(&self, output: &str) -> Option<usize> {
+        output
+            .strip_prefix(&self.name)?
+            .strip_prefix('_')?
+            .parse()
+            .ok()
+    }
+
+    /// The name of the `n`th artifact of a many port.
+    pub fn nth(&self, n: usize) -> String {
+        format!("{}_{n}", self.name)
+    }
 }
 
 /// The value kinds a parameter can take.
@@ -439,39 +459,58 @@ impl Manifest {
     }
 
     fn derive_output_schema(&self) -> serde_json::Value {
+        let entry = |p: &Port| {
+            serde_json::json!({
+                "type": "object", "additionalProperties": false,
+                "description": p.purpose,
+                "properties": {
+                    "artifact_type": { "const": p.artifact_type.to_string() },
+                    "id": { "type": "string" },
+                    "identity": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+                },
+                "required": ["artifact_type", "id", "identity"]
+            })
+        };
         let properties: serde_json::Map<String, serde_json::Value> = self
             .outputs
             .iter()
-            .map(|p| {
-                (
-                    p.name.clone(),
-                    serde_json::json!({
-                        "type": "object", "additionalProperties": false,
-                        "description": p.purpose,
-                        "properties": {
-                            "artifact_type": { "const": p.artifact_type.to_string() },
-                            "id": { "type": "string" },
-                            "identity": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
-                        },
-                        "required": ["artifact_type", "id", "identity"]
-                    }),
-                )
-            })
+            .filter(|p| !p.many)
+            .map(|p| (p.name.clone(), entry(p)))
+            .collect();
+        // A many port's artifacts are `<port>_<n>`; required means at least one.
+        let pattern_properties: serde_json::Map<String, serde_json::Value> = self
+            .outputs
+            .iter()
+            .filter(|p| p.many)
+            .map(|p| (format!("^{}_[0-9]+$", regex_escape(&p.name)), entry(p)))
             .collect();
         let required: Vec<&str> = self
             .outputs
             .iter()
-            .filter(|p| p.required)
+            .filter(|p| p.required && !p.many)
             .map(|p| p.name.as_str())
             .collect();
-        serde_json::json!({
+        let mut schema = serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "title": format!("{} artifacts", self.name),
             "type": "object",
             "additionalProperties": false,
             "properties": properties,
             "required": required,
-        })
+        });
+        if !pattern_properties.is_empty() {
+            schema["patternProperties"] = serde_json::Value::Object(pattern_properties);
+            let at_least_one: Vec<serde_json::Value> = self
+                .outputs
+                .iter()
+                .filter(|p| p.many && p.required)
+                .map(|p| serde_json::json!({ "required": [p.nth(0)] }))
+                .collect();
+            if !at_least_one.is_empty() {
+                schema["allOf"] = serde_json::Value::Array(at_least_one);
+            }
+        }
+        schema
     }
 
     /// The declared input port.
@@ -479,9 +518,16 @@ impl Manifest {
         self.inputs.iter().find(|p| p.name == name)
     }
 
-    /// The declared output port.
+    /// The declared output port: by name, or for a many port by `<port>_<n>`.
     pub fn output(&self, name: &str) -> Option<&Port> {
-        self.outputs.iter().find(|p| p.name == name)
+        self.outputs
+            .iter()
+            .find(|p| p.name == name && !p.many)
+            .or_else(|| {
+                self.outputs
+                    .iter()
+                    .find(|p| p.many && p.index_of(name).is_some())
+            })
     }
 
     /// The declared parameter.
@@ -533,6 +579,12 @@ impl Manifest {
         for port in &self.inputs {
             if !seen.insert(port.name.as_str()) {
                 return Err(format!("{name}: input {} is declared twice", port.name));
+            }
+            if port.many {
+                return Err(format!(
+                    "{name}: input {} is many; only an output may be",
+                    port.name
+                ));
             }
         }
         seen.clear();
@@ -788,7 +840,16 @@ impl Envelope {
             ));
         }
         if self.status == Status::Ok {
-            for port in manifest.outputs.iter().filter(|p| p.required) {
+            for port in manifest.outputs.iter().filter(|p| p.required && p.many) {
+                if !self.artifacts.contains_key(&port.nth(0)) {
+                    return Err(format!(
+                        "{name}: output {} needs at least one artifact ({})",
+                        port.name,
+                        port.nth(0)
+                    ));
+                }
+            }
+            for port in manifest.outputs.iter().filter(|p| p.required && !p.many) {
                 match self.artifacts.get(&port.name) {
                     None => return Err(format!("{name}: output {} is missing", port.name)),
                     Some(a) if a.artifact_type != port.artifact_type => {
@@ -821,6 +882,14 @@ impl Envelope {
                 self.status
             ));
         }
+        self.check_bounds(manifest)
+    }
+
+    /// The bounds part of [`Envelope::check`]: counts and texts within the manifest's
+    /// `returns`, measurements finite. What a pack's answer is held to before its outputs
+    /// exist.
+    pub fn check_bounds(&self, manifest: &Manifest) -> std::result::Result<(), String> {
+        let name = &manifest.name;
         let b = &manifest.returns;
         if self.summary.len() > b.max_summary_bytes as usize {
             return Err(format!(
@@ -968,6 +1037,19 @@ pub trait Op: Send + Sync {
     fn constant_set(&self, _name: &str) -> Params {
         Params::new()
     }
+}
+
+/// A port name as a regular expression literal (names are plain, but a dot or a bracket in
+/// one must not become syntax).
+fn regex_escape(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    for c in name.chars() {
+        if !c.is_ascii_alphanumeric() && c != '_' {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// The registry's shared input validation: every required port bound, every bound port of the

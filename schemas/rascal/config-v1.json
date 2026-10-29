@@ -1,5 +1,13 @@
 {
   "$defs": {
+    "Accepts": {
+      "description": "How a pack takes the images a call references: by path on the shared filesystem or as\nbase64 PNG bytes inside `_harness`.",
+      "enum": [
+        "path",
+        "base64"
+      ],
+      "type": "string"
+    },
     "CorpusConfig": {
       "additionalProperties": false,
       "description": "The private corpus (M6).",
@@ -85,6 +93,61 @@
       ],
       "type": "object"
     },
+    "PackConfig": {
+      "additionalProperties": false,
+      "description": "One tool pack under `[packs.<name>]`: the command that serves MCP over stdio, the\nenvironment it may see beyond the baseline, how it takes images, whether it may run calls at\nonce, a revision string for the lab, and two timeouts.",
+      "properties": {
+        "accepts": {
+          "$ref": "#/$defs/Accepts",
+          "default": "path",
+          "description": "`path` (default) or `base64`."
+        },
+        "call_timeout_s": {
+          "default": 120,
+          "description": "Seconds before a call is abandoned as an operational error and the pack shut down.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "command": {
+          "description": "The command and its arguments; no placeholders.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "concurrent": {
+          "default": false,
+          "description": "Whether calls may run at once; effective only when the tool's manifest agrees.",
+          "type": "boolean"
+        },
+        "env": {
+          "description": "Environment variable names passed through in addition to the baseline (`PATH`, `HOME`,\n`LANG`, `LC_ALL`, `TMPDIR`). A name any filler uses as `key_env`, or one ending in\n`_KEY`, `_TOKEN` or `_SECRET`, is removed even when declared.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "revision": {
+          "description": "Free text the lab hashes into a cell's identity; required for lab use.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "startup_timeout_s": {
+          "default": 60,
+          "description": "Seconds for the process to answer `initialize` and list its tools.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
     "WorkspaceConfig": {
       "additionalProperties": false,
       "description": "Where runs keep their workspace when `--workspace` is not given.",
@@ -125,6 +188,13 @@
         "$ref": "#/$defs/FillerConfig"
       },
       "description": "The fillers by name.",
+      "type": "object"
+    },
+    "packs": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PackConfig"
+      },
+      "description": "The tool packs by name.",
       "type": "object"
     },
     "workspace": {

@@ -532,15 +532,19 @@ fn read_request_head(stream: &mut std::net::TcpStream) -> bool {
     }
 }
 
-/// The filler and pack call rows, from the journal's `filler call:` notes.
+/// The filler and pack call rows, from the journal's `filler call:` and `pack call:` notes.
 fn calls_table(lines: &[JournalLine]) -> String {
-    let calls: Vec<(u64, serde_json::Value)> = lines
+    let calls: Vec<(u64, &str, serde_json::Value)> = lines
         .iter()
         .filter_map(|l| {
-            let text = l.note.as_deref()?.strip_prefix("filler call: ")?;
+            let note = l.note.as_deref()?;
+            let (kind, text) = match note.strip_prefix("filler call: ") {
+                Some(text) => ("filler", text),
+                None => ("pack", note.strip_prefix("pack call: ")?),
+            };
             serde_json::from_str::<serde_json::Value>(text)
                 .ok()
-                .map(|v| (l.seq, v))
+                .map(|v| (l.seq, kind, v))
         })
         .collect();
     if calls.is_empty() {
@@ -549,19 +553,27 @@ fn calls_table(lines: &[JournalLine]) -> String {
     }
     let rows: Vec<String> = calls
         .iter()
-        .map(|(seq, c)| {
+        .map(|(seq, kind, c)| {
             let s = |k: &str| panel::escape(c.get(k).and_then(|v| v.as_str()).unwrap_or(""));
             let n = |k: &str| c.get(k).and_then(|v| v.as_i64()).unwrap_or(0);
+            let (name, request, status) = match *kind {
+                "filler" => (
+                    s("filler"),
+                    format!("{}x{}", n("request_width"), n("request_height")),
+                    n("status").to_string(),
+                ),
+                _ => (
+                    format!("{} {}", s("pack"), s("tool")),
+                    format!("{} bytes", n("request_bytes")),
+                    s("status"),
+                ),
+            };
             format!(
-                "<tr data-call-seq=\"{seq}\"><td>{seq}</td><td>filler</td><td>{}</td><td>{}</td><td>{}x{}</td><td>{} / {} bytes</td><td>{} ms</td><td>{}</td><td>{}</td></tr>",
-                s("filler"),
+                "<tr data-call-seq=\"{seq}\" data-call-kind=\"{kind}\"><td>{seq}</td><td>{kind}</td><td>{name}</td><td>{}</td><td>{request}</td><td>{} / {} bytes</td><td>{} ms</td><td>{status}</td><td>{}</td></tr>",
                 s("target"),
-                n("request_width"),
-                n("request_height"),
                 n("request_bytes"),
                 n("response_bytes"),
                 n("duration_ms"),
-                n("status"),
                 s("outcome")
             )
         })

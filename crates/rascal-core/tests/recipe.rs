@@ -43,12 +43,14 @@ impl Op for Tuned {
                 artifact_type: ArtifactType::Mask,
                 required: true,
                 purpose: "The mask.".into(),
+                many: false,
             }],
             vec![Port {
                 name: "mask".into(),
                 artifact_type: ArtifactType::Mask,
                 required: true,
                 purpose: "The mask.".into(),
+                many: false,
             }],
             vec![
                 Param::optional(

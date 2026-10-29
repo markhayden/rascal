@@ -38,12 +38,14 @@ impl Op for Apply {
                     artifact_type: ArtifactType::Image,
                     required: true,
                     purpose: "The canvas.".to_string(),
+                    many: false,
                 },
                 Port {
                     name: "mask".to_string(),
                     artifact_type: ArtifactType::Mask,
                     required: true,
                     purpose: "The mask carrying the prescriptions.".to_string(),
+                    many: false,
                 },
             ],
             vec![Port {
@@ -51,6 +53,7 @@ impl Op for Apply {
                 artifact_type: ArtifactType::Image,
                 required: true,
                 purpose: "The canvas with the prescriptions performed.".to_string(),
+                many: false,
             }],
             vec![],
         )

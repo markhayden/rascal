@@ -16,16 +16,11 @@ use rascal_core::workspace::Workspace;
 
 /// The schema directory: beside the binary's source in a checkout, or `RASCAL_SCHEMAS`.
 fn schemas() -> Result<SchemaDir> {
-    if let Some(dir) = std::env::var_os("RASCAL_SCHEMAS") {
-        return Ok(SchemaDir::new(PathBuf::from(dir)));
-    }
-    let here = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas");
-    if here.is_dir() {
-        return Ok(SchemaDir::new(here));
-    }
-    Err(Error::usage(
-        "the schema directory was not found; set RASCAL_SCHEMAS to a checkout's schemas/ directory",
-    ))
+    SchemaDir::discover().ok_or_else(|| {
+        Error::usage(
+            "the schema directory was not found; set RASCAL_SCHEMAS to a checkout's schemas/ directory",
+        )
+    })
 }
 
 /// Runs the command and returns the written path.

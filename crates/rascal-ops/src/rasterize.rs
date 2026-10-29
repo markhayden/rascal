@@ -41,12 +41,14 @@ impl Op for Rasterize {
                     artifact_type: ArtifactType::Location,
                     required: true,
                     purpose: "The location to rasterize.".to_string(),
+                    many: false,
                 },
                 Port {
                     name: "image".to_string(),
                     artifact_type: ArtifactType::Image,
                     required: true,
                     purpose: "An image in the location's frame, for the frame.".to_string(),
+                    many: false,
                 },
             ],
             vec![Port {
@@ -54,6 +56,7 @@ impl Op for Rasterize {
                 artifact_type: ArtifactType::Mask,
                 required: true,
                 purpose: "The mask with the interior as its core.".to_string(),
+                many: false,
             }],
             vec![
                 Param::optional(

@@ -813,15 +813,18 @@ error and nothing is stored.
       every in-flight call and shutting the pack down, a late response for a tombstoned id
       ignored, process death, a credential-named variable removed despite declaration, stderr
       redacted; a concurrent-call cancellation failing every in-flight call with shutdown completed
-      before the next use; a relocated `run` of a test-only recipe (`segment` → `select` → `feather`, in the testkit)
+      before the next use; a relocated `run` of a test-only recipe (`segment` → `rasterize` of
+      the first region → `feather`, in the testkit; `select` arrives in M4)
       replaying to identical outputs with the pack executable absent and no call made; the pack
       span carries request size and status; the pack call row on the run page; the
       isolation suite; the `segment` export validates.
 
-**Verification.** `cargo test -p rascal-mcp -- client` and `cargo test -p rascal-mask --features testkit --test packs --test isolation`.
+**Verification.** `cargo test -p rascal-mcp --test client` (the pure parts) and `cargo test -p rascal-mask --features testkit --test packs --test isolation` (the fake runs as `rascal fake-pack`).
 
-**Dependencies.** 3.1, 1.7b, 2.7. **Files.** `crates/rascal-mcp/src/client/`, `crates/rascal-testkit/src/bin/fake-pack.rs`,
-`crates/rascal-mask/src/tools.rs`, `schemas/rascal/pack-context-v1.json`. **Size.** M.
+**Dependencies.** 3.1, 1.7b, 2.7. **Files.** `crates/rascal-mcp/src/client/`, `crates/rascal-core/src/pack.rs`,
+`crates/rascal-testkit/src/fake_pack.rs`, `crates/rascal-mask/src/{packs,tools}.rs`,
+`schemas/rascal/pack-{context,annotation}-v1.json`, ADR 0019. **Size.** M (landed as L: the
+manifest-in-`_meta` protocol, `many` ports and journal-backed replay were decided here).
 
 ### Checkpoint M3
 

@@ -8,10 +8,12 @@ mod heal;
 mod inspect;
 mod measure;
 mod ops;
+mod packs;
 mod paste;
 mod render;
 mod run;
 mod serve;
+mod tools;
 mod workspace_cmd;
 
 use std::path::PathBuf;
@@ -72,6 +74,10 @@ enum Command {
         /// Exit 1 when the recipe stops at a step that is not applicable.
         #[arg(long)]
         strict: bool,
+        /// A recorded run (its directory or workspace) whose pack calls answer instead of the
+        /// packs; no pack is started.
+        #[arg(long)]
+        replay: Option<PathBuf>,
     },
     /// Run a recipe and heal through a configured filler: the fixed graph with the
     /// preservation check and the measures; writes result.png and the run page.
@@ -134,6 +140,17 @@ enum Command {
         /// Calls that may run at once; each still commits in turn.
         #[arg(long, default_value_t = 1)]
         concurrency: usize,
+    },
+    /// The configured tool packs: list their tools, or call one from the shell.
+    Tools {
+        #[command(subcommand)]
+        command: ToolsCommand,
+    },
+    #[cfg(feature = "testkit")]
+    #[command(hide = true)]
+    FakePack {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
     /// A workspace: list what it holds, or import an image into it.
     Workspace {
@@ -329,6 +346,36 @@ impl From<ProjectionArg> for Projection {
     }
 }
 
+#[derive(Subcommand, Debug)]
+enum ToolsCommand {
+    /// Start every configured pack and print its tools as a client sees them.
+    List {
+        /// The configuration file (rascal.toml) naming the packs.
+        #[arg(long)]
+        config: PathBuf,
+        /// Print the manifests as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Call one pack tool: `rascal tools call <pack> <tool> --workspace ws --image img-1 --prompt x`;
+    /// the tool's arguments are those of its op subcommand (`--help` after the tool lists them).
+    Call {
+        /// The pack, as named in the configuration.
+        pack: String,
+        /// The tool.
+        tool: String,
+        /// The configuration file (rascal.toml) naming the pack.
+        #[arg(long)]
+        config: PathBuf,
+        /// The workspace the inputs are in and the outputs go to.
+        #[arg(long)]
+        workspace: PathBuf,
+        /// The tool's own arguments.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+}
+
 /// Built-in command names that an op may not shadow.
 const RESERVED: &[&str] = &[
     "run",
@@ -340,6 +387,8 @@ const RESERVED: &[&str] = &[
     "paste",
     "measure",
     "fake-filler",
+    "fake-pack",
+    "tools",
     "dash",
     "ops",
     "workspace",
@@ -420,6 +469,7 @@ fn main() {
             workspace,
             projection,
             strict,
+            replay,
         } => {
             let args = run::RunArgs {
                 recipe,
@@ -435,8 +485,9 @@ fn main() {
                 workspace,
                 projection: projection.map(Into::into),
                 strict,
+                replay,
             };
-            match run::run(&registry, &args) {
+            match run::run(&args) {
                 Ok(report) => {
                     for (profile, path) in &report.renders {
                         println!("{profile}: {}", path.display());
@@ -502,12 +553,13 @@ fn main() {
                     workspace,
                     projection: projection.map(Into::into),
                     strict,
+                    replay: replay.clone(),
                 },
                 filler,
                 no_dash,
                 replay,
             };
-            match heal::heal(&registry, &args) {
+            match heal::heal(&args) {
                 Ok(report) => {
                     for (profile, path) in &report.renders {
                         println!("{profile}: {}", path.display());
@@ -547,20 +599,40 @@ fn main() {
             workspace,
             config,
             concurrency,
-        } => match serve::serve(
-            registry,
-            &serve::ServeArgs {
-                workspace,
-                config,
-                concurrency,
-            },
-        ) {
+        } => match serve::serve(&serve::ServeArgs {
+            workspace,
+            config,
+            concurrency,
+        }) {
             Ok(()) => exit::OK,
             Err(error) => {
                 eprintln!("rascal serve: {error}");
                 exit::code_for(&error)
             }
         },
+        Command::Tools { command } => {
+            let result = match command {
+                ToolsCommand::List { config, json } => {
+                    tools::list(&config, json).map(|()| exit::OK)
+                }
+                ToolsCommand::Call {
+                    pack,
+                    tool,
+                    config,
+                    workspace,
+                    args,
+                } => tools::call(&pack, &tool, &config, &workspace, &args),
+            };
+            match result {
+                Ok(code) => code,
+                Err(error) => {
+                    eprintln!("rascal tools: {error}");
+                    exit::code_for(&error)
+                }
+            }
+        }
+        #[cfg(feature = "testkit")]
+        Command::FakePack { args } => rascal_testkit::fake_pack::main(&args),
         Command::Workspace { command } => {
             let result = match command {
                 WorkspaceCommand::List {

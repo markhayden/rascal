@@ -1,0 +1,399 @@
+{
+  "$defs": {
+    "ContextImage": {
+      "additionalProperties": false,
+      "description": "One image a call references, as the pack receives it: the port it was bound to, the\nartifact, its frame and size, and the pixels by path or as base64 PNG bytes.",
+      "properties": {
+        "base64": {
+          "description": "The PNG as standard base64, when the pack accepts base64.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "frame": {
+          "type": "string"
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "description": "The workspace id the argument carries.",
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "path": {
+          "description": "The PNG's absolute path, when the pack accepts paths.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "port": {
+          "description": "The input port the image was bound to.",
+          "type": "string"
+        },
+        "record": {
+          "$ref": "#/$defs/ImageRecord",
+          "description": "The image record."
+        },
+        "width": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "port",
+        "id",
+        "identity",
+        "frame",
+        "width",
+        "height",
+        "record"
+      ],
+      "type": "object"
+    },
+    "Frame": {
+      "additionalProperties": false,
+      "description": "A frame record, as written to `frames.json`. The fields a kind needs are set; the others\nare absent (`serde(flatten)` and `deny_unknown_fields` do not combine, so the derived\nframes' fields are optional rather than a tagged union).",
+      "properties": {
+        "bbox": {
+          "description": "`[left, top, right, bottom)` in parent pixels, for a `crop:` frame.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "frame_version": {
+          "description": "The record's version.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "description": "The semantic id: `raw:<W>x<H>:<projection>`, `cut:<image-id>:<plan-id>`, `crop:<n>`.",
+          "type": "string"
+        },
+        "identity": {
+          "description": "`sha256:` over the kind, size, projection and topology, and for a derived frame its\nparent's identity and the mapping parameters; no image is involved.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/FrameKind"
+        },
+        "parent": {
+          "description": "The parent frame id, for a derived frame.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parent_identity": {
+          "description": "The parent's identity, for a derived frame.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "plan": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Plan"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The cut plan, for a `cut:` frame."
+        },
+        "projection": {
+          "$ref": "#/$defs/Projection"
+        },
+        "topology": {
+          "$ref": "#/$defs/Topology"
+        },
+        "width": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "frame_version",
+        "id",
+        "kind",
+        "width",
+        "height",
+        "projection",
+        "topology",
+        "identity"
+      ],
+      "type": "object"
+    },
+    "FrameKind": {
+      "description": "The kinds of frame.",
+      "oneOf": [
+        {
+          "const": "raw",
+          "description": "A root: the frame of an imported image.",
+          "type": "string"
+        },
+        {
+          "const": "cut",
+          "description": "The two edge strips of a wrapped parent, side by side; the centre column is the\nparent's wrap edge. Carries `parent`, `parent_identity` and `plan`.",
+          "type": "string"
+        },
+        {
+          "const": "crop",
+          "description": "An integer bbox of the parent. Carries `parent`, `parent_identity` and `bbox`.",
+          "type": "string"
+        }
+      ]
+    },
+    "ImageRecord": {
+      "additionalProperties": false,
+      "description": "An image record: the pixels are in `file`, a PNG beside the record.",
+      "properties": {
+        "file": {
+          "description": "The PNG, relative to the record.",
+          "type": "string"
+        },
+        "frame": {
+          "description": "The frame id the pixels are in.",
+          "type": "string"
+        },
+        "frame_identity": {
+          "description": "The frame's identity.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The local id.",
+          "type": "string"
+        },
+        "identity": {
+          "description": "`sha256:` over the pixel digest, the frame identity and the roles.",
+          "type": "string"
+        },
+        "image_version": {
+          "description": "The record's version.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pixel_digest": {
+          "description": "`sha256:` over width, height, channel count and the samples in row-major order.",
+          "type": "string"
+        },
+        "rendering_role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RenderingRole"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        }
+      },
+      "required": [
+        "image_version",
+        "id",
+        "frame",
+        "frame_identity",
+        "role",
+        "pixel_digest",
+        "identity",
+        "file"
+      ],
+      "type": "object"
+    },
+    "Plan": {
+      "additionalProperties": false,
+      "description": "The cut plan: how a `cut:` canvas was taken from its parent and how `put` returns it.",
+      "properties": {
+        "height": {
+          "description": "The parent's height.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "identity": {
+          "description": "`sha256:` over the parent frame's identity, width, height, strip and the spans.",
+          "type": "string"
+        },
+        "left_span": {
+          "description": "The parent columns `[start, end)` the canvas's left half came from: the rightmost `s`.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "parent": {
+          "description": "The parent frame id.",
+          "type": "string"
+        },
+        "parent_identity": {
+          "description": "The parent frame's identity.",
+          "type": "string"
+        },
+        "plan_version": {
+          "description": "The record's version.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "right_span": {
+          "description": "The parent columns the canvas's right half came from: the leftmost `s`.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "strip": {
+          "description": "The strip width: even, at least 2, `2s <= width`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "width": {
+          "description": "The parent's width.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "plan_version",
+        "parent",
+        "parent_identity",
+        "width",
+        "height",
+        "strip",
+        "left_span",
+        "right_span",
+        "identity"
+      ],
+      "type": "object"
+    },
+    "Projection": {
+      "description": "How an image's pixels map onto the world.",
+      "oneOf": [
+        {
+          "const": "flat",
+          "description": "An ordinary photograph.",
+          "type": "string"
+        },
+        {
+          "const": "equirectangular",
+          "description": "A full 360 by 180 panorama whose left and right edges meet.",
+          "type": "string"
+        }
+      ]
+    },
+    "RenderingRole": {
+      "description": "Which filler field a rendering fills.",
+      "enum": [
+        "mask_input",
+        "image_input"
+      ],
+      "type": "string"
+    },
+    "Role": {
+      "description": "What an image is for.",
+      "enum": [
+        "canonical",
+        "working",
+        "fill",
+        "composite",
+        "rendering",
+        "plane",
+        "inspection"
+      ],
+      "type": "string"
+    },
+    "Topology": {
+      "description": "Whether the frame's horizontal edges meet.",
+      "oneOf": [
+        {
+          "const": "wrap",
+          "description": "The left and right edges are the same column: a complete equirectangular frame.",
+          "type": "string"
+        },
+        {
+          "const": "bounded",
+          "description": "The edges are edges.",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "rascal's client-side context on a pack call, the `_harness` argument: the run and call\nids, the referenced images, and every frame the pack may name in its answer.",
+  "properties": {
+    "call_id": {
+      "description": "This call, unique within the run.",
+      "type": "string"
+    },
+    "context_version": {
+      "description": "The context's version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "frames": {
+      "description": "The frames the images are in, with their parents up to the root: a region or an image\nthe pack returns must be in one of them.",
+      "items": {
+        "$ref": "#/$defs/Frame"
+      },
+      "type": "array"
+    },
+    "images": {
+      "items": {
+        "$ref": "#/$defs/ContextImage"
+      },
+      "type": "array"
+    },
+    "run_id": {
+      "description": "The run (the workspace root, as the pack would see it in a path).",
+      "type": "string"
+    }
+  },
+  "required": [
+    "context_version",
+    "run_id",
+    "call_id",
+    "images",
+    "frames"
+  ],
+  "title": "PackContext",
+  "type": "object"
+}

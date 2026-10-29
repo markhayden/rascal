@@ -199,6 +199,10 @@
         "artifact_type": {
           "$ref": "#/$defs/ArtifactType"
         },
+        "many": {
+          "description": "An output port that takes any number of artifacts, named `<port>_<n>` from 0 (a\nfinder's instances); required means at least one. Never an input port in v1.",
+          "type": "boolean"
+        },
         "name": {
           "type": "string"
         },

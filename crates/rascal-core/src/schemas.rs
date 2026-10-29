@@ -35,6 +35,16 @@ impl SchemaDir {
     }
 
     /// The directory's path.
+    /// The schema directory of a checkout: `RASCAL_SCHEMAS` when set, else `schemas/` beside
+    /// the crates as they were compiled; `None` when neither exists (an installed binary).
+    pub fn discover() -> Option<SchemaDir> {
+        if let Some(dir) = std::env::var_os("RASCAL_SCHEMAS") {
+            return Some(SchemaDir::new(PathBuf::from(dir)));
+        }
+        let here = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas");
+        here.is_dir().then(|| SchemaDir::new(here))
+    }
+
     pub fn root(&self) -> &Path {
         &self.root
     }

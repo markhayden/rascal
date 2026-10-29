@@ -22,9 +22,9 @@ built from `journal.jsonl` and the operation records, from the template in
   duration and a waterfall bar. A step that ran more than once is marked `repeat n`; a
   `not_applicable` or `measured_nothing` step is amber, a failed (`invalid_args`) one red; a
   journal note is grey.
-- **Filler and pack calls**: one row per `filler call:` note in the journal (the entry, its
-  command or URL, the request's size, the bytes, the duration, the exit code or HTTP status
-  and the outcome); pack calls arrive with M3.
+- **Filler and pack calls**: one row per `filler call:` or `pack call:` note in the journal
+  (the kind, the entry or the pack and tool, its command or URL, the request's size, the
+  bytes, the duration, the exit code, HTTP status or call status, and the outcome).
 - **Steps**: a section per journal line with every panel's rendering for it.
 
 The page names every journal line and no other, and embeds every artifact the journal names as
@@ -54,7 +54,6 @@ registered panel is missing from this table or a listed panel is not registered.
 | `profile` | a band profile's half-width per row as a chart, beside the strip of the input image the band can reach | 2.1 |
 | `measures` | every series a `measure` line produced as a chart, with the envelope's summaries in a table | 2.6 |
 
-Arriving later: pack calls (3.3).
 
 ## Tracing
 
@@ -66,5 +65,7 @@ RASCAL_LOG=debug rascal run rect photo.jpg --bbox 0.2,0.2,0.6,0.6 --out run/
 filter (`rascal_core=debug`). Off when unset. Spans go to stderr only, never to stdout and never
 to the MCP stream, so an operator can watch a session live. One span per op carries the op name,
 the step id and the input identities; the closing event carries the duration and whether the op
-returned. Filler and pack calls add their own spans with request size and status when they
-arrive. Nothing in a span is a key or a pixel; `tests/dash.rs` checks a fixture run's output.
+returned. A filler call adds a `filler` span (the entry, request bytes and size) and a pack call
+a `pack` span (the pack, the tool, the call id, request bytes) whose closing event carries the
+status, duration and response bytes. Nothing in a span is a key or a pixel; `tests/dash.rs`,
+`tests/heal.rs` and `tests/packs.rs` check runs' output.

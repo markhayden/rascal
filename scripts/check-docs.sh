@@ -57,7 +57,7 @@ done
 for key in mask image plan render; do
   grep -q "\`$key\`\|^$key = \|\b$key = \"" "$docs/recipes.md" || { echo "docs: recipe output '$key' is not named in $docs/recipes.md" >&2; status=1; }
 done
-for key in workspace corpus; do
+for key in workspace corpus fillers packs; do
   grep -q "\[$key\]\|\`$key\`" "$docs/recipes.md" "$docs/workspace.md" "$docs/lab.md" 2>/dev/null || { echo "docs: config section '$key' is not named in docs/" >&2; status=1; }
 done
 

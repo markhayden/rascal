@@ -35,12 +35,14 @@ impl Op for Render {
                     artifact_type: ArtifactType::Mask,
                     required: true,
                     purpose: "The mask to render.".to_string(),
+                    many: false,
                 },
                 Port {
                     name: "image".to_string(),
                     artifact_type: ArtifactType::Image,
                     required: false,
                     purpose: "The image to draw on, required by alpha, tinted and overlay; in the mask's frame.".to_string(),
+                    many: false,
                 },
             ],
             vec![Port {
@@ -48,6 +50,7 @@ impl Op for Render {
                 artifact_type: ArtifactType::Image,
                 required: true,
                 purpose: "The rendering.".to_string(),
+                many: false,
             }],
             vec![
                 Param::required("for", "The profile.", ParamKind::Choice).choices(&["grey", "binary", "alpha", "tinted", "overlay"]),

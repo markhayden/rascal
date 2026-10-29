@@ -215,6 +215,17 @@ impl Workspace {
         Journal::open(&self.journal_path())?.note(text).map(|_| ())
     }
 
+    /// Where a committed image's PNG lives: canonical images under `images/`, every other role
+    /// under `artifacts/`. The file exists only once the image is committed.
+    pub fn image_path(&self, image: &Image) -> PathBuf {
+        let dir = if image.record.role == Role::Canonical {
+            "images"
+        } else {
+            "artifacts"
+        };
+        self.root.join(dir).join(&image.record.file)
+    }
+
     // --- loading artifacts --------------------------------------------------------------------
 
     /// Loads an artifact by local id or identity from the snapshot.

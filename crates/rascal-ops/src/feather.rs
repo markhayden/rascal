@@ -50,12 +50,14 @@ impl Op for Feather {
                 artifact_type: ArtifactType::Mask,
                 required: true,
                 purpose: "The mask whose core to feather.".to_string(),
+                many: false,
             }],
             vec![Port {
                 name: "mask".to_string(),
                 artifact_type: ArtifactType::Mask,
                 required: true,
                 purpose: "The mask with the new blend.".to_string(),
+                many: false,
             }],
             vec![
                 Param::required(

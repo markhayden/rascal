@@ -3,9 +3,11 @@
 //! minimal MCP client, a filesystem shim and synthetic image builders.
 //!
 //! Builders arrive with the tasks that need them: the synthetic images (1.1), the filesystem
-//! shim (1.7b), the fake fillers (2.7), the independent MCP client and the fake MCP server (3.1).
+//! shim (1.7b), the fake fillers (2.7), the independent MCP client and the fake MCP server (3.1),
+//! the fake pack (3.3).
 
 pub mod fake_filler;
+pub mod fake_pack;
 pub mod fs_shim;
 pub mod images;
 pub mod mcp_client;

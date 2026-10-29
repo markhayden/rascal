@@ -11,7 +11,8 @@ rascal export --compat --location box.json --out box.json                # a sta
 
 The projection keeps `status`, `summary`, `measurements`, `regions`, `images`, `transforms` and
 `provenance`, and drops `artifacts` and every other native field, since that is rascal's
-bookkeeping and not content. It then fails, naming the item, on content the copied schema cannot
+bookkeeping and not content. A pack tool's envelope (`segment` through the fake pack, with its
+polygon regions and plane images) exports the same way; `tests/packs.rs` validates one. It then fails, naming the item, on content the copied schema cannot
 express: a `line` or `stroke` region, or an image whose mapping to its parent is not a plain
 bbox (an image in a `cut:` frame maps to two spans). Nothing is approximated. A standalone
 location exports as the location object alone and validates against the copied envelope's

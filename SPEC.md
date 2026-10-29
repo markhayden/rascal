@@ -776,17 +776,34 @@ The pack's environment is `PATH`, `HOME`, `LANG`, `LC_ALL`, `TMPDIR` plus the de
 names, **minus** every variable any filler names as `key_env` and minus any name ending in
 `_KEY`, `_TOKEN` or `_SECRET`; removal wins over declaration. Startup: spawn, `initialize` (the
 server must answer `2025-11-25` and advertise `tools`), `tools/list` to exhaustion, manifest
-validation (both schemas, rascal's annotation block, bounds). A call carries the op's arguments
-plus `_harness` (rascal's client-side context: `run_id`, `call_id`, the referenced images by path
-or base64 with their records; `schemas/rascal/pack-context-v1.json`); this object exists only
-between rascal and its packs and never appears in the public server's tool schemas. **Result
-validation before anything is committed**: the envelope against the pack's output schema and the
-manifest's bounds; image blocks in exactly the count, order and media types of `images`; every
-returned region's frame among the frames passed in the call; failure is an operational error and
-nothing from that call is stored. Concurrency is allowed only when both the manifest and the
-config permit it; a timeout or cancellation of any call makes every in-flight call on that pack
-an operational error and shuts the pack down before any reuse: stdin close, 5 s, SIGTERM, 5 s,
-SIGKILL. Captured stderr goes to the journal with credential redaction applied.
+validation: each tool carries in its MCP `_meta` the copied-shape `manifest`
+(`schemas/copied/manifest-v1.json`) and rascal's annotation block `rascal`
+(`schemas/rascal/pack-annotation-v1.json`: typed ports, parameters, constant sets); the native
+manifest is built from the two, checked as every op's is, and its bounds must stay under
+rascal's ceilings (ADR 0019). A finder's variable outputs are **many ports**: an output port
+marked `many` takes any number of artifacts named `<port>_<n>` from 0, required meaning at
+least one; a tool's regions become `Location` artifacts and its images `Image` artifacts with
+the `plane` role, in order, on the many ports of those types. A call carries the op's arguments
+(parameters by name, an `Image` port's id, a `Location` port's location) plus `_harness`
+(rascal's client-side context: `run_id`, `call_id`, the referenced images by path or base64
+with their records, and every frame they are in up to the root;
+`schemas/rascal/pack-context-v1.json`); this object exists only between rascal and its packs
+and never appears in the public server's tool schemas. **Result validation before anything is
+committed**: the envelope as rascal's closed type and within the manifest's bounds, `isError`
+exactly for `invalid_args`; image blocks in exactly the count, order and media types of
+`images`, each decoding to the size its entry and frame say; every returned region's and
+image's frame among the frames passed in the call, with valid geometry; failure is an
+operational error and nothing from that call is stored. Concurrency is allowed only when both
+the manifest and the config permit it; a timeout, a cancellation or the death of the process
+makes every in-flight call on that pack an operational error and shuts the pack down before any
+reuse: stdin close, 5 s, SIGTERM, 5 s, SIGKILL; the next call starts afresh and the restarted
+pack must list the same tools. Captured stderr goes to the journal with credential redaction
+applied. The journal records each call (`pack call:`, never a key), the pack's listing at
+startup (`pack manifest:`) and each successful call's request identity, envelope and outputs
+(`pack stored:`), so `run --replay <recorded run>` and `heal --replay` answer pack steps from
+the recording without starting the pack (G4); a request the recording lacks is an error, never
+a call. `rascal tools list --config` starts every pack and prints its tools; `rascal tools call
+<pack> <tool> --workspace … --<port> … --<param> …` runs one as its op subcommand.
 
 ### Measures
 
@@ -942,7 +959,9 @@ behind the tool.
   `tracing` with `tracing-subscriber` (binary only: the `RASCAL_LOG` sink), `sha2`, `fs4` (file
   locks), `tokio` (binary only: process and HTTP), `reqwest` with
   `rustls` (binary only, HTTP fillers), the `rmcp` MCP crate pinned by ADR 0015 (the
-  in-house alternative was declined there). Anything beyond this list needs an ADR.
+  in-house alternative was declined there) with `tokio-util` (its cancellation token) and
+  `nix` (SIGTERM in the pack shutdown escalation; ADR 0019). Anything beyond this list needs
+  an ADR.
 - Python 3.12, `uv`, `pytest`, `ruff`, the MCP Python SDK, `onnxruntime`, `numpy`, `pillow`.
   Supported in v1: macOS arm64 and Linux x86_64.
 - GitHub Actions; `cargo-dist` for release archives; `cargo-deny` for licences and sources.
@@ -1134,8 +1153,10 @@ release acceptance, run by the release workflow and by hand.
   `_harness`, result validation failures of each kind rejected before commit, serial and
   concurrent calls under the AND rule, timeout and cancellation failing every in-flight call and
   shutting the pack down, late responses, process death, the environment allowlist removing a
-  credential-named variable, shutdown); the server driven by the independent minimal client
-  through import, list, every op, read, describe, and the error mappings.
+  credential-named variable, shutdown): the pure parts in `rascal-mcp`'s tests, the process
+  parts in `rascal-mask`'s `tests/packs.rs` where the fake runs as `rascal fake-pack`; the
+  server driven by the independent minimal client through import, list, every op, read,
+  describe, and the error mappings.
 - **End to end offline**: `heal` through each fake filler on the synthetic panorama (exact: a
   deterministic blur across the mask; mis-sized: operational error; re-encoding: every pixel
   changed and `w = 0` pixels still equal `B` after paste and put; slow: timeout; failing), with

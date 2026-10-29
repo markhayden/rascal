@@ -60,6 +60,7 @@ rascal inspect run/artifacts/<id> --json                  # or --out pages/ for 
 rascal export --compat run/journal.jsonl --step rasterize --out e.json
 rascal dash run/ --out run/dash.html                     # the run page: timings, envelopes, every artifact; --serve for loopback
 rascal serve --workspace ws/                              # every op as an MCP tool over stdio, plus import/list/describe/read/dash
+rascal tools call fake segment --config rascal.toml --workspace ws/ --image photo.png --prompt "the chair"   # a pack's tool from the shell
 ```
 
 Replace (screens, signs), retouch, extend and isolate are later milestones.

@@ -36,12 +36,14 @@ impl Op for Unwindow {
                     artifact_type: ArtifactType::Image,
                     required: true,
                     purpose: "The parent image.".to_string(),
+                    many: false,
                 },
                 Port {
                     name: "crop".to_string(),
                     artifact_type: ArtifactType::Image,
                     required: true,
                     purpose: "The crop, in a crop: frame of the parent.".to_string(),
+                    many: false,
                 },
             ],
             vec![Port {
@@ -49,6 +51,7 @@ impl Op for Unwindow {
                 artifact_type: ArtifactType::Image,
                 required: true,
                 purpose: "The parent with the crop written back.".to_string(),
+                many: false,
             }],
             vec![],
         )

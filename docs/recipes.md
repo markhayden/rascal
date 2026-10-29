@@ -65,6 +65,7 @@ parameter must be written as an integer.
 rascal run <recipe> <image> --out run/ [--bbox x0,y0,x1,y1 | --location l.json]
                                        [--stroke s.json] [--protect <mask dir>] [--mask <mask dir>]
                                        [--projection flat|equirectangular] [--config rascal.toml] [--strict]
+                                       [--replay <run or workspace>]
 ```
 
 The positional image binds `inputs.image`. `--bbox` is sugar that binds `inputs.location` to a
@@ -78,6 +79,11 @@ A step that returns `not_applicable` publishes nothing; a later step that binds 
 not run and the run stops naming the requirement; `rascal run` exits 1 under `--strict` and 0
 without. A bad parameter value is `invalid_args` in the journal and exit 64.
 
+A recipe may call a configured pack's tool (`[packs.*]` in `--config`; `docs/tools.md` "The
+packs") as a step like any other; its `many` outputs bind as `<step>.<port>_<n>`. `--replay`
+names a recorded run: no pack is started and each pack step is answered from that run's journal
+when the request is the same, or fails naming the request.
+
 ## The shipped recipes
 
 | recipe | since | steps |
@@ -89,8 +95,8 @@ without. A bad parameter value is `invalid_args` in the journal and exit 64.
 ## The configuration file
 
 `--config rascal.toml` names the file a pipeline gives rascal. Its general sections are here;
-`[fillers.*]` is on `docs/fillers.md` and `[packs]` arrives with M3. The schema is
-`schemas/rascal/config-v1.json`; `examples/rascal.toml` is a complete file.
+`[fillers.*]` (`fillers`) is on `docs/fillers.md` and `[packs.*]` (`packs`) on `docs/tools.md`.
+The schema is `schemas/rascal/config-v1.json`; `examples/rascal.toml` is a complete file.
 
 ```toml
 config_version = 1

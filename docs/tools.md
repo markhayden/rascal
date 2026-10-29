@@ -12,7 +12,7 @@ catalogue; `rascal ops describe <op> [--json]` prints one manifest as a client s
 | `name`, `version` | the op and its semantic version; a behaviour change bumps it |
 | `purpose`, `when_to_use`, `when_not_to_use`, `output_guidance` | the four sentences an agent reads before calling |
 | `cost` | `tier` (cheap, moderate, expensive) and rough `seconds` per call |
-| `inputs`, `outputs` | typed ports: name, artifact type (`Image`, `Location`, `Mask`, `BandProfile`, `Series`, `Plan`), required, purpose |
+| `inputs`, `outputs` | typed ports: name, artifact type (`Image`, `Location`, `Mask`, `BandProfile`, `Series`, `Plan`), required, purpose; an output port may be `many`: it takes any number of artifacts named `<port>_0`, `<port>_1`, … (a finder's instances), and required then means at least one |
 | `params` | each with a kind (number, integer, boolean, string, number array, choice), required or a default, bounds, length or choices |
 | `returns` | bounds on the envelope: images, regions, measurements, transforms, summary bytes |
 | `input_schema`, `output_schema` | JSON Schemas derived from `params` and `outputs` |
@@ -84,10 +84,9 @@ A point-list parameter is written `[[x, y], …]` in a recipe and `x,y;x,y` on t
 the binary and fails when an op or profile is missing from these pages, or when a documented
 name no longer exists.
 
-The remaining ops arrive with their tasks (PLAN.md):
-`fan`, `profile`, `feather`, `ramp`, `apply`, `window`, `unwindow`, `paste`, `measure` in M2;
-`grow`, `shrink`, `close`, `subtract`, `select`, `invert`, `tighten` in M4; `segment` from the
-Python pack in M5.
+The remaining ops arrive with their tasks (PLAN.md): `grow`, `shrink`, `close`, `subtract`,
+`select`, `invert`, `tighten` in M4; `segment` from the Python pack in M5 (the client that runs
+it, and a fake pack that serves it, are below).
 
 ## The server
 
@@ -112,3 +111,91 @@ JSON-RPC invalid-params error; an operational failure is a JSON-RPC internal err
 each still committing in turn. Tracing goes to stderr only, never to the protocol stream. The
 testkit's independent client (`crates/rascal-testkit/src/mcp_client.rs`), written against the
 protocol document and nothing of rascal's, drives the server in `tests/serve.rs`.
+
+## The packs
+
+A **pack** is a tool server rascal starts: a process speaking MCP over its stdio, declared in
+`rascal.toml` and holding the learned finders (`segment` from the Python pack in M5; the
+testkit's fake pack now). Every tool a pack lists becomes an op in the registry of the run,
+callable from a recipe step, from `rascal tools call`, and from `rascal serve` when it is given
+the same configuration.
+
+```toml
+[packs.rascal-tools]
+command = ["/opt/rascal-tools/.venv/bin/rascal-tools", "serve"]   # the process; no placeholders
+env = ["RASCAL_TOOLS_MODELS"]            # passed through in addition to the baseline
+accepts = "path"                         # how it takes images: path (default) or base64
+concurrent = false                       # calls may overlap only when the tool's manifest agrees
+revision = "segmenter export 2026-10"    # the lab hashes it into a cell's identity
+startup_timeout_s = 60                   # initialize and tools/list
+call_timeout_s = 120                     # one call; then the pack is shut down
+```
+
+**Environment.** The process sees `PATH`, `HOME`, `LANG`, `LC_ALL`, `TMPDIR` plus the declared
+`env` names, minus every variable any filler names as `key_env` and minus every name ending in
+`_KEY`, `_TOKEN` or `_SECRET`; removal wins over declaration. Nothing else of the parent's
+environment reaches it.
+
+**Startup.** Spawn; `initialize` must answer revision `2025-11-25` and advertise `tools`;
+`tools/list` to exhaustion; every tool must carry, in its MCP `_meta`, `manifest` (the copied
+manifest shape, `schemas/copied/manifest-v1.json`) and `rascal` (the annotation block,
+`schemas/rascal/pack-annotation-v1.json`: the typed ports, the parameters, the constant sets).
+rascal builds the native manifest from the two, checks it as it checks every op's, and refuses
+bounds over its ceilings (64 images, 64 MiB per image, 16 MiB per envelope, the image side
+limit). A refusal names the tool and the reason; the pack is stopped. The listing is journaled
+(`pack manifest:` notes), so a replay knows the tools without the pack.
+
+**A call** carries the step's parameters by name, each `Image` port's workspace id, each
+`Location` port's location object, and `_harness` (`schemas/rascal/pack-context-v1.json`): the
+run and call ids, every referenced image with its record and its pixels by absolute path or as
+base64 PNG, and every frame those images are in up to the root. `_harness` exists only between
+rascal and its packs; `rascal serve` never shows it.
+
+**The answer** is validated before anything is stored: the envelope as rascal's closed type and
+within the manifest's bounds; `isError` exactly for `invalid_args`; image content blocks in
+exactly the count, order and media type (`image/png`) of `images`, each decoding to the size
+its entry and its frame say; every region and image in a frame the call passed, with valid
+geometry. A failure is an operational error, the call is journaled, nothing is published. On
+success the envelope's regions become `Location` artifacts and its images `Image` artifacts
+with the `plane` role, on the tool's `many` output ports in order (`region_0`, `plane_0`, …);
+a single port of the type takes exactly one. The envelope's `images[].identity` is filled with
+the stored artifact's identity.
+
+**Concurrency and failure.** Calls to a tool overlap only when the config's `concurrent` and
+the manifest's both say so; otherwise one at a time. A timeout, a cancellation (a `serve`
+client's, or `Pack::fail_in_flight`) or the process dying fails every in-flight call on the
+pack and shuts it down before any reuse: stdin closed, five seconds, SIGTERM, five seconds,
+SIGKILL. The next call starts a fresh process, which must list the same tools. A late answer
+for a call that already failed goes nowhere.
+
+**The journal** gets one `pack call:` note per call (pack, tool, command, request and response
+bytes, duration, status `ok | timeout | cancelled | died | error`, outcome; never a key), the
+pack's stderr as `pack stderr:` notes with credential redaction (every credential-shaped value
+of the parent's environment, anything after `Bearer`, anything after a `key=`, `token:` or
+similar), and one `pack stored:` note per successful call: the request identity, the pack and
+its revision, the tool, the envelope and the outputs by identity.
+
+**Replay** (`rascal run … --replay <run or workspace>`, and `heal --replay`): no pack is
+started; the tools come from the recorded run's `pack manifest:` notes and each call is answered
+from a `pack stored:` note with the same request identity, pack name and revision, its outputs
+loaded from the recorded run by identity. A request the recording does not hold is an error
+naming it; the pack is never called under `--replay`.
+
+**From the shell.**
+
+```
+rascal tools list --config rascal.toml [--json]                     # start every pack, print its tools
+rascal tools call fake segment --config rascal.toml --workspace ws/ \
+    --image photo.png --prompt "the chair" [--max_instances 3] [--json]   # one tool, as its op subcommand
+```
+
+`tools call` takes the tool's own arguments: `--<port>` an id (or a path, imported first) and
+`--<param>` a value, plus `--json`, `--out` and `--strict` as every op subcommand does.
+
+**The fake pack** (`rascal fake-pack <behaviour>` with the `testkit` feature, or the testkit's
+`fake-pack` binary) serves `segment` with one selectable behaviour: `exact`, `bad-schema`,
+`over-bounds`, `block-mismatch`, `foreign-frame`, `wrong-size`, `non-png`, `slow`, `die`,
+`stderr`, `env`, `no-annotation`, `old-version`; `--concurrent` marks its manifest concurrent.
+`crates/rascal-mask/tests/packs.rs` drives each through the client; `tests/isolation.rs` is the
+isolation suite (G5): instruction-like filenames, prompts and tool output never alter control
+flow, ids never resolve outside the registry, a pack sees the allowlisted environment only.

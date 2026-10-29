@@ -51,12 +51,14 @@ impl Op for Profile {
                 artifact_type: ArtifactType::BandProfile,
                 required: true,
                 purpose: "The band profile fan produced.".to_string(),
+                many: false,
             }],
             vec![Port {
                 name: "mask".to_string(),
                 artifact_type: ArtifactType::Mask,
                 required: true,
                 purpose: "The band mask.".to_string(),
+                many: false,
             }],
             vec![
                 Param::optional(

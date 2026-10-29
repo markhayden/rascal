@@ -25,6 +25,7 @@ use rmcp::model::{
 use rmcp::service::{RequestContext, RoleServer};
 use tokio::sync::Semaphore;
 
+use crate::client::Pack;
 use crate::jsonrpc::{self, image_blocks_of, invalid, operational};
 use crate::transport;
 
@@ -65,10 +66,13 @@ pub struct Server {
 }
 
 struct Inner {
-    workspace: Workspace,
+    workspace: Arc<Workspace>,
     registry: OpRegistry,
     /// Calls run under this permit: one by default, `--concurrency n` for more.
-    permits: Semaphore,
+    permits: Arc<Semaphore>,
+    /// The packs behind the registry's pack ops: a client's cancellation fails their
+    /// in-flight calls and shuts them down.
+    packs: Vec<Arc<Pack>>,
     /// The largest image `workspace_read` returns.
     max_image_bytes: u64,
     /// A hook for the dash writer, supplied by the binary (the page template lives there).
@@ -77,16 +81,23 @@ struct Inner {
 
 impl Server {
     /// A server over a workspace.
-    pub fn new(workspace: Workspace, registry: OpRegistry, concurrency: usize) -> Server {
+    pub fn new(workspace: Arc<Workspace>, registry: OpRegistry, concurrency: usize) -> Server {
         Server {
             inner: Arc::new(Inner {
                 workspace,
                 registry,
-                permits: Semaphore::new(concurrency.max(1)),
+                permits: Arc::new(Semaphore::new(concurrency.max(1))),
+                packs: Vec::new(),
                 max_image_bytes: 64 << 20,
                 dash: None,
             }),
         }
+    }
+
+    /// With the packs whose tools the registry holds, so a cancelled call fails them.
+    pub fn with_packs(mut self, packs: Vec<Arc<Pack>>) -> Server {
+        Arc::get_mut(&mut self.inner).expect("not yet shared").packs = packs;
+        self
     }
 
     /// With the run page writer `workspace_dash` calls.
@@ -509,14 +520,32 @@ impl ServerHandler for Server {
         let name = request.name.to_string();
         // Serial by default: the permit is held for the whole call, cancellation included.
         let permit = tokio::select! {
-            p = self.inner.permits.acquire() => p.map_err(|e| ErrorData::internal_error(e.to_string(), None))?,
+            p = self.inner.permits.clone().acquire_owned() => p.map_err(|e| ErrorData::internal_error(e.to_string(), None))?,
             () = context.ct.cancelled() => return Err(ErrorData::new(rmcp::model::ErrorCode::INTERNAL_ERROR, "cancelled before the call started", Some(serde_json::json!({ "class": "cancelled" })))),
         };
         let server = self.clone();
-        let result = tokio::task::spawn_blocking(move || server.call(&name, &args))
-            .await
-            .map_err(|e| ErrorData::internal_error(format!("the call panicked: {e}"), None))?;
-        drop(permit);
+        // The permit travels with the blocking call, so a cancelled call still counts until
+        // it returns; a cancellation fails every pack's in-flight calls, which brings a pack
+        // op back promptly.
+        let task = tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            server.call(&name, &args)
+        });
+        let result = tokio::select! {
+            r = task => r.map_err(|e| ErrorData::internal_error(format!("the call panicked: {e}"), None))?,
+            () = context.ct.cancelled() => {
+                let packs = self.inner.packs.clone();
+                if !packs.is_empty() {
+                    let _ = tokio::task::spawn_blocking(move || {
+                        for pack in &packs {
+                            pack.fail_in_flight("cancelled by the client");
+                        }
+                    })
+                    .await;
+                }
+                return Err(ErrorData::new(rmcp::model::ErrorCode::INTERNAL_ERROR, "cancelled", Some(serde_json::json!({ "class": "cancelled" }))));
+            }
+        };
         match result {
             Ok(result) => Ok(result.into()),
             // Validation failed: the journaled envelope is the result, flagged as an error.

@@ -50,12 +50,14 @@ impl Op for Window {
                     artifact_type: ArtifactType::Image,
                     required: true,
                     purpose: "The image to window.".to_string(),
+                    many: false,
                 },
                 Port {
                     name: "mask".to_string(),
                     artifact_type: ArtifactType::Mask,
                     required: true,
                     purpose: "The mask whose support the window is built around.".to_string(),
+                    many: false,
                 },
             ],
             vec![
@@ -64,12 +66,14 @@ impl Op for Window {
                     artifact_type: ArtifactType::Image,
                     required: true,
                     purpose: "The crop of the image, in the crop: frame.".to_string(),
+                    many: false,
                 },
                 Port {
                     name: "mask".to_string(),
                     artifact_type: ArtifactType::Mask,
                     required: true,
                     purpose: "The mask's planes cropped by the same bbox, in the crop: frame.".to_string(),
+                    many: false,
                 },
             ],
             vec![

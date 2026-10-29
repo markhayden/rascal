@@ -80,12 +80,14 @@ impl Op for Probe {
                     artifact_type: ArtifactType::Mask,
                     required: true,
                     purpose: "The mask.".into(),
+                    many: false,
                 },
                 Port {
                     name: "image".into(),
                     artifact_type: ArtifactType::Image,
                     required: false,
                     purpose: "An image.".into(),
+                    many: false,
                 },
             ],
             vec![Port {
@@ -93,6 +95,7 @@ impl Op for Probe {
                 artifact_type: ArtifactType::Mask,
                 required: true,
                 purpose: "The same mask.".into(),
+                many: false,
             }],
             vec![
                 Param::required("amount", "A number in [0, 10].", ParamKind::Number)

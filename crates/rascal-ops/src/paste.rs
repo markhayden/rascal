@@ -44,18 +44,21 @@ impl Op for Paste {
                     artifact_type: ArtifactType::Image,
                     required: true,
                     purpose: "The image to paste onto.".to_string(),
+                    many: false,
                 },
                 Port {
                     name: "fill".to_string(),
                     artifact_type: ArtifactType::Image,
                     required: true,
                     purpose: "The filler's result, in the same frame and size.".to_string(),
+                    many: false,
                 },
                 Port {
                     name: "mask".to_string(),
                     artifact_type: ArtifactType::Mask,
                     required: true,
                     purpose: "The mask whose effective weight decides what is written.".to_string(),
+                    many: false,
                 },
             ],
             vec![Port {
@@ -63,6 +66,7 @@ impl Op for Paste {
                 artifact_type: ArtifactType::Image,
                 required: true,
                 purpose: "The composite.".to_string(),
+                many: false,
             }],
             vec![
                 Param::optional(

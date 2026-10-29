@@ -1,0 +1,182 @@
+{
+  "$defs": {
+    "ArtifactType": {
+      "description": "The artifact types a port can declare.",
+      "enum": [
+        "Image",
+        "Location",
+        "Mask",
+        "BandProfile",
+        "Series",
+        "Plan"
+      ],
+      "type": "string"
+    },
+    "Param": {
+      "additionalProperties": false,
+      "description": "A parameter an op accepts in a recipe step or on the command line.",
+      "properties": {
+        "choices": {
+          "description": "For a choice: the allowed strings.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "default": {
+          "description": "The default when not required, as JSON."
+        },
+        "kind": {
+          "$ref": "#/$defs/ParamKind"
+        },
+        "length": {
+          "description": "For a number array: its length.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max": {
+          "description": "For a number or integer: the inclusive upper bound.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "min": {
+          "description": "For a number or integer: the inclusive lower bound.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "purpose": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "purpose",
+        "kind",
+        "required"
+      ],
+      "type": "object"
+    },
+    "ParamKind": {
+      "description": "The value kinds a parameter can take.",
+      "oneOf": [
+        {
+          "enum": [
+            "number",
+            "integer",
+            "boolean",
+            "string"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "number_array",
+          "description": "A fixed-length array of numbers; `length` says how many.",
+          "type": "string"
+        },
+        {
+          "const": "choice",
+          "description": "One of `choices`.",
+          "type": "string"
+        },
+        {
+          "const": "point_list",
+          "description": "Two or more `[x, y]` points as fractions of the frame.",
+          "type": "string"
+        }
+      ]
+    },
+    "Port": {
+      "additionalProperties": false,
+      "description": "A typed input or output of an op.",
+      "properties": {
+        "artifact_type": {
+          "$ref": "#/$defs/ArtifactType"
+        },
+        "many": {
+          "description": "An output port that takes any number of artifacts, named `<port>_<n>` from 0 (a\nfinder's instances); required means at least one. Never an input port in v1.",
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "purpose": {
+          "description": "What the port is for.",
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "artifact_type",
+        "required",
+        "purpose"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "rascal's annotation block on a pack tool: what the copied manifest shape does not carry.",
+  "properties": {
+    "annotation_version": {
+      "description": "The block's version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "constants": {
+      "description": "The constant sets a step may select; the first is the default.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "inputs": {
+      "description": "The input ports, by name: each is an argument taking an artifact id.",
+      "items": {
+        "$ref": "#/$defs/Port"
+      },
+      "type": "array"
+    },
+    "outputs": {
+      "description": "The output ports; a `many` port takes the envelope's regions (a `Location` port) or\nits images (an `Image` port) in order, named `<port>_<n>`.",
+      "items": {
+        "$ref": "#/$defs/Port"
+      },
+      "type": "array"
+    },
+    "params": {
+      "default": [],
+      "description": "The parameters, by name: each is an argument.",
+      "items": {
+        "$ref": "#/$defs/Param"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "annotation_version",
+    "inputs",
+    "outputs"
+  ],
+  "title": "PackAnnotation",
+  "type": "object"
+}

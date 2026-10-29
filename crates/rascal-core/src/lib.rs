@@ -19,6 +19,7 @@ pub mod mapping;
 pub mod mask;
 pub mod op;
 pub mod outdir;
+pub mod pack;
 pub mod panel;
 pub mod profile;
 pub mod recipe;

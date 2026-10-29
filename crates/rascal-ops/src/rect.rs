@@ -34,12 +34,14 @@ impl Op for Rect {
                 artifact_type: ArtifactType::Image,
                 required: true,
                 purpose: "The image whose frame the box is in.".to_string(),
+                many: false,
             }],
             vec![Port {
                 name: "location".to_string(),
                 artifact_type: ArtifactType::Location,
                 required: true,
                 purpose: "The box as a bbox location.".to_string(),
+                many: false,
             }],
             vec![
                 Param::required(

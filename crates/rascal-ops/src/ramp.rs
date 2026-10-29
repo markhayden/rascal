@@ -58,12 +58,14 @@ impl Op for Ramp {
                     artifact_type: ArtifactType::Image,
                     required: true,
                     purpose: "The canvas the band was measured on.".to_string(),
+                    many: false,
                 },
                 Port {
                     name: "mask".to_string(),
                     artifact_type: ArtifactType::Mask,
                     required: true,
                     purpose: "The band mask, with its profile.".to_string(),
+                    many: false,
                 },
             ],
             vec![Port {
@@ -71,6 +73,7 @@ impl Op for Ramp {
                 artifact_type: ArtifactType::Mask,
                 required: true,
                 purpose: "The mask with the prescription added.".to_string(),
+                many: false,
             }],
             vec![
                 Param::optional(

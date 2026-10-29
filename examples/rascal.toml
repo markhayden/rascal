@@ -1,4 +1,4 @@
-# rascal.toml: the configuration a pipeline gives rascal (docs/recipes.md, docs/fillers.md).
+# rascal.toml: the configuration a pipeline gives rascal (docs/recipes.md, docs/fillers.md, docs/tools.md).
 config_version = 1
 
 [workspace]                                      # where runs keep their workspace when --workspace is not given
@@ -26,3 +26,19 @@ revision = "vendor model 2026-10"
 # [fillers.fake]
 # command = ["rascal", "fake-filler", "exact", "{image}", "{mask}", "{out}"]
 # profile = "grey"
+
+# A tool pack: a process speaking MCP over stdio (docs/tools.md "The packs"). Its environment is
+# PATH, HOME, LANG, LC_ALL, TMPDIR plus `env`, minus every filler's key_env and every *_KEY,
+# *_TOKEN, *_SECRET name; removal wins over declaration.
+[packs.rascal-tools]
+command = ["/opt/rascal-tools/.venv/bin/rascal-tools", "serve"]
+env = ["RASCAL_TOOLS_MODELS"]
+accepts = "path"                                 # or base64
+concurrent = false                               # effective only when the tool's manifest agrees
+revision = "segmenter export 2026-10"            # the lab hashes it into cell identity; required for lab use
+startup_timeout_s = 60
+call_timeout_s = 120
+
+# The testkit's fake pack, for trying the client without a model (build with --features testkit):
+# [packs.fake]
+# command = ["rascal", "fake-pack", "exact"]

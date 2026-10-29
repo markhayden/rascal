@@ -58,7 +58,7 @@ struct StoredFill {
     revision: Option<String>,
 }
 
-pub fn heal(registry: &OpRegistry, args: &HealArgs) -> Result<HealReport> {
+pub fn heal(args: &HealArgs) -> Result<HealReport> {
     let config_path = args
         .run
         .config
@@ -92,8 +92,15 @@ pub fn heal(registry: &OpRegistry, args: &HealArgs) -> Result<HealReport> {
         ))
     })?;
 
-    // R: the recipe's declared outputs.
-    let (run, outcome, input_image) = run::run_recipe(registry, &args.run)?;
+    // R: the recipe's declared outputs, in the registry the run built (packs included).
+    let run::Prepared {
+        run,
+        outcome,
+        image: input_image,
+        registry,
+        packs: _packs,
+    } = run::run_recipe(&args.run)?;
+    let registry = &registry;
     if outcome.status != Status::Ok {
         return stopped(
             &run,

@@ -64,6 +64,7 @@ impl Op for Measure {
                 artifact_type: ArtifactType::Series,
                 required: false,
                 purpose: format!("The per-row `{name}` series ({unit}); absent when the measure was not in the set, not applicable or measured nothing."),
+                many: false,
             })
             .collect();
         Manifest::new(
@@ -83,24 +84,28 @@ impl Op for Measure {
                     artifact_type: ArtifactType::Image,
                     required: true,
                     purpose: "The image to measure (the composite).".to_string(),
+                    many: false,
                 },
                 Port {
                     name: "before".to_string(),
                     artifact_type: ArtifactType::Image,
                     required: false,
                     purpose: "The image before (for drift).".to_string(),
+                    many: false,
                 },
                 Port {
                     name: "mask".to_string(),
                     artifact_type: ArtifactType::Mask,
                     required: true,
                     purpose: "The mask, with its profile for the band measures.".to_string(),
+                    many: false,
                 },
                 Port {
                     name: "line".to_string(),
                     artifact_type: ArtifactType::Location,
                     required: false,
                     purpose: "The line (column form) for continuity; the profile's column when absent.".to_string(),
+                    many: false,
                 },
             ],
             outputs,

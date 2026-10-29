@@ -144,12 +144,14 @@ impl Op for Fan {
                     artifact_type: ArtifactType::Image,
                     required: true,
                     purpose: "The image, in a bounded frame.".to_string(),
+                    many: false,
                 },
                 Port {
                     name: "line".to_string(),
                     artifact_type: ArtifactType::Location,
                     required: true,
                     purpose: "The line location in column form, in the image's frame.".to_string(),
+                    many: false,
                 },
             ],
             vec![Port {
@@ -157,6 +159,7 @@ impl Op for Fan {
                 artifact_type: ArtifactType::BandProfile,
                 required: true,
                 purpose: "The band profile.".to_string(),
+                many: false,
             }],
             TUNABLES.iter().map(|(k, p)| param(k, p)).collect(),
         )

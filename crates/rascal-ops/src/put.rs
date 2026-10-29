@@ -38,18 +38,21 @@ impl Op for Put {
                     required: true,
                     purpose: "The parent image, in the raw frame the plan was made for."
                         .to_string(),
+                    many: false,
                 },
                 Port {
                     name: "canvas".to_string(),
                     artifact_type: ArtifactType::Image,
                     required: true,
                     purpose: "The canvas, in the cut frame.".to_string(),
+                    many: false,
                 },
                 Port {
                     name: "plan".to_string(),
                     artifact_type: ArtifactType::Plan,
                     required: true,
                     purpose: "The plan cut produced.".to_string(),
+                    many: false,
                 },
             ],
             vec![Port {
@@ -57,6 +60,7 @@ impl Op for Put {
                 artifact_type: ArtifactType::Image,
                 required: true,
                 purpose: "The parent with the canvas put back.".to_string(),
+                many: false,
             }],
             vec![],
         )
