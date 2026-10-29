@@ -95,6 +95,12 @@ pub fn op_commands(registry: &OpRegistry, reserved: &[&str]) -> Vec<Command> {
                         .value_parser(clap::value_parser!(PathBuf))
                         .required(true)
                         .help("The workspace the inputs are in and the outputs go to."),
+                )
+                .arg(
+                    Arg::new("json")
+                        .long("json")
+                        .action(clap::ArgAction::SetTrue)
+                        .help("Print the native envelope as JSON after the output ids."),
                 );
             for port in &m.inputs {
                 let help = format!(
@@ -231,6 +237,12 @@ fn run_op_inner(registry: &OpRegistry, name: &str, matches: &ArgMatches) -> Resu
                 .get(port)
                 .map(|a| a.identity.as_str())
                 .unwrap_or("")
+        );
+    }
+    if matches.get_flag("json") {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&invocation.output.envelope).unwrap_or_default()
         );
     }
     if let Some(c) = &invocation.committed {

@@ -49,9 +49,9 @@ registered panel is missing from this table or a listed panel is not registered.
 |---|---|---|
 | `envelope` | the native envelope (status, summary, measurements, requirements) and the resolved parameters with the constant set version | 1.10 |
 | `artifacts` | every output of the line: images and the three mask planes as thumbnails that open at full size, other artifacts as JSON links | 1.10 |
+| `profile` | a band profile's half-width per row as a chart, beside the strip of the input image the band can reach | 2.1 |
 
-Arriving later: the rulers' per-row charts beside the strip they measured (2.1), the measures
-with their series (2.6), filler calls (2.8), pack calls (3.3).
+Arriving later: the measures with their series (2.6), filler calls (2.8), pack calls (3.3).
 
 ## Tracing
 

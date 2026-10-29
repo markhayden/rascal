@@ -961,6 +961,13 @@ pub trait Op: Send + Sync {
     /// a parameter value wrong for its input returns `invalid_args`; an operational failure is
     /// an error.
     fn run(&self, context: &Context<'_>, inputs: &Inputs, params: &Params) -> Result<Output>;
+
+    /// The values a constant set gives the op's parameters: applied under the step's own
+    /// values and over the manifest's defaults, so the journal records what actually ran. An
+    /// op without constant sets returns nothing.
+    fn constant_set(&self, _name: &str) -> Params {
+        Params::new()
+    }
 }
 
 /// The registry's shared input validation: every required port bound, every bound port of the

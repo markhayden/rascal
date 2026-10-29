@@ -25,7 +25,64 @@ pub fn panels() -> PanelRegistry {
     let mut registry = PanelRegistry::new();
     registry.register(Box::new(EnvelopePanel));
     registry.register(Box::new(ArtifactsPanel));
+    registry.register(Box::new(ProfilePanel));
     registry
+}
+
+/// A band profile's half-width per row as a chart, beside the strip of the image it measured.
+struct ProfilePanel;
+
+impl Panel for ProfilePanel {
+    fn name(&self) -> &'static str {
+        "profile"
+    }
+
+    fn render(&self, line: &JournalLine, workspace: &Workspace) -> Option<Rendered> {
+        let mut parts = Vec::new();
+        for (port, identity) in &line.outputs {
+            let Ok(Artifact::BandProfile(band)) = workspace.load(identity) else {
+                continue;
+            };
+            let chart = rascal_ops::inspect::chart_svg(
+                &format!("{port}: half-width per row"),
+                "px",
+                &band.half,
+            );
+            // The strip: the image columns the band can reach, around the centre column.
+            let strip = line
+                .inputs
+                .get("image")
+                .and_then(|id| workspace.load(id).ok())
+                .and_then(|artifact| match artifact {
+                    Artifact::Image(image) => Some(image),
+                    _ => None,
+                })
+                .map(|image| {
+                    let reach = band.half.iter().cloned().fold(0.0, f64::max).ceil() as u32 + 4;
+                    let (w, h) = (image.pixels.width(), image.pixels.height());
+                    let x0 = band.column_px.saturating_sub(reach);
+                    let x1 = (band.column_px + reach).min(w);
+                    let crop = image.pixels.crop_imm(x0, 0, x1 - x0, h);
+                    format!(
+                        "<figure class=\"strip\"><img src=\"{}\" alt=\"columns {x0} to {x1} of {}\"><figcaption>columns {x0} to {x1} around {}</figcaption></figure>",
+                        panel::png_data_uri(&png_bytes(&crop)),
+                        panel::escape(&image.record.frame),
+                        band.column_px
+                    )
+                })
+                .unwrap_or_default();
+            parts.push(format!(
+                "<div class=\"profile\">{strip}{chart}<p class=\"meta\">thin {:.1} px, {} rows, constants {}</p></div>",
+                band.thin_px,
+                band.half.len(),
+                panel::escape(&band.constants)
+            ));
+        }
+        (!parts.is_empty()).then(|| Rendered {
+            title: "profile".to_string(),
+            html: parts.join(""),
+        })
+    }
 }
 
 struct EnvelopePanel;

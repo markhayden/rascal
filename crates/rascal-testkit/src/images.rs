@@ -45,3 +45,40 @@ pub fn floor(width: u32, height: u32) -> RgbImage {
 pub fn flat(width: u32, height: u32, value: u8) -> RgbImage {
     RgbImage::from_pixel(width, height, Rgb([value, value, value]))
 }
+
+/// The step-sky canvas: a smooth sky over a textured floor, with a tone step across the centre
+/// column (the left side a little brighter), as a cut panorama canvas presents a seam. `fan`
+/// opens on the sky rows, where the sides differ and nothing is textured, and stays at its
+/// minimum on the floor rows.
+pub fn step_sky(width: u32, height: u32) -> RgbImage {
+    let horizon = height * 3 / 5;
+    let mut out = RgbImage::new(width, height);
+    let floor = floor(width, height);
+    for y in 0..height {
+        for x in 0..width {
+            let step = if x < width / 2 { 10.0 } else { 0.0 };
+            let px = if y < horizon {
+                let t = y as f32 / horizon.max(1) as f32;
+                let base = [120.0 + 70.0 * t, 160.0 + 45.0 * t, 220.0 + 10.0 * t];
+                [base[0] + step, base[1] + step, base[2] + step]
+            } else {
+                let p = floor.get_pixel(x, y);
+                [
+                    f32::from(p[0]) + step,
+                    f32::from(p[1]) + step,
+                    f32::from(p[2]) + step,
+                ]
+            };
+            out.put_pixel(
+                x,
+                y,
+                Rgb([
+                    px[0].round().clamp(0.0, 255.0) as u8,
+                    px[1].round().clamp(0.0, 255.0) as u8,
+                    px[2].round().clamp(0.0, 255.0) as u8,
+                ]),
+            );
+        }
+    }
+    out
+}

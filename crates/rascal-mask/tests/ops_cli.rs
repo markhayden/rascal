@@ -202,3 +202,101 @@ fn not_applicable_exits_1_under_strict_and_0_without_and_names_the_requirement()
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Task 2.1's CLI scenario: `rascal fan --workspace ws/ --image <canvas> --line loc --json`
+/// prints the profile summary; on the step-sky canvas the sky rows widen and the floor stays
+/// at thin.
+#[test]
+fn fan_on_the_step_sky_canvas_prints_its_summary_and_opens_only_on_the_sky() {
+    let dir = scratch("fan");
+    let ws = dir.join("ws");
+    let sky = repo_root().join("fixtures/images/step-sky.png");
+    let out = rascal(&[
+        "workspace",
+        "import",
+        ws.to_str().unwrap(),
+        sky.to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let out = rascal(&[
+        "line",
+        "--workspace",
+        ws.to_str().unwrap(),
+        "--image",
+        "img-1",
+        "--column",
+        "0.5",
+        "--width_px",
+        "2",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    let line_id = stdout
+        .lines()
+        .find_map(|l| l.strip_prefix("location: "))
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .to_string();
+    let out = rascal(&[
+        "fan",
+        "--workspace",
+        ws.to_str().unwrap(),
+        "--image",
+        "img-1",
+        "--line",
+        &line_id,
+        "--json",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    assert!(stdout.lines().any(|l| l.starts_with("band: ")), "{stdout}");
+    let json = &stdout[stdout.find('{').unwrap()..=stdout.rfind('}').unwrap()];
+    let envelope: serde_json::Value = serde_json::from_str(json).unwrap();
+    assert_eq!(envelope["status"], "ok");
+    let summary = envelope["summary"].as_str().unwrap();
+    assert!(
+        summary.contains("thin")
+            && summary.contains("widest half")
+            && summary.contains("rows widened"),
+        "{summary}"
+    );
+    let measure = |name: &str| {
+        envelope["measurements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["name"] == name)
+            .unwrap()["value"]
+            .as_f64()
+            .unwrap()
+    };
+    let thin = measure("thin_px");
+    assert!(measure("half_max_px") > thin + 5.0, "the sky opens");
+    let widened = measure("rows_widened");
+    // 300 rows, the top three fifths sky: the widened rows are a sky-sized share, not all.
+    assert!(
+        widened > 120.0 && widened < 230.0,
+        "rows widened: {widened}"
+    );
+    // The journal records the resolved tunables and the set.
+    let lines = journal(&ws);
+    let fan = lines.iter().find(|l| l["op"] == "fan").unwrap();
+    assert_eq!(fan["params"]["constants"], "fan-v1");
+    assert_eq!(fan["params"]["wide_max"], 0.15);
+    assert_eq!(fan["params"]["gate"], true);
+    let _ = std::fs::remove_dir_all(&dir);
+}

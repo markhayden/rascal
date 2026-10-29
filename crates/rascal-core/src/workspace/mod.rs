@@ -453,6 +453,17 @@ impl Workspace {
                 manifest.name
             )));
         }
+        // The selected (or default) constant set supplies the defaults the step did not give.
+        let selected = constants_name
+            .clone()
+            .or_else(|| manifest.constants.first().cloned());
+        if let Some(name) = &selected {
+            for (key, value) in op.constant_set(name) {
+                if manifest.param(&key).is_some() {
+                    given.entry(key).or_insert(value);
+                }
+            }
+        }
         let resolved = match manifest.resolve_params(&given) {
             Ok(mut resolved) => {
                 match constants {

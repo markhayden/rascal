@@ -5,6 +5,7 @@
 //! primitives arrive in 1.8a and the rest of the catalogue from M2 on.
 
 pub mod cut;
+pub mod fan;
 pub mod inspect;
 pub mod line;
 pub mod primitives;
@@ -26,6 +27,7 @@ pub fn register_all(registry: &mut OpRegistry) -> rascal_core::error::Result<()>
     registry.register(Box::new(line::Line))?;
     registry.register(Box::new(stroke::Stroke))?;
     registry.register(Box::new(inspect::Inspect))?;
+    registry.register(Box::new(fan::Fan))?;
     Ok(())
 }
 
