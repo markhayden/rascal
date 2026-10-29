@@ -481,16 +481,16 @@ fn a_timeout_fails_every_in_flight_call_and_shuts_the_pack_down() {
         "{:?}",
         started.elapsed()
     );
-    assert!(
-        ea.contains("no answer within call_timeout_s = 1")
-            || ea.contains("another call on the pack failed"),
-        "{ea}"
-    );
-    assert!(
-        eb.contains("no answer within call_timeout_s = 1")
-            || eb.contains("another call on the pack failed"),
-        "{eb}"
-    );
+    // Each call fails for one of three reasons, all the same event: its own timeout, a
+    // sibling's timeout failing it, or the shutdown that timeout caused closing its transport
+    // first (the last wins the race on a slow machine).
+    let failed_by_the_timeout = |e: &str| {
+        e.contains("no answer within call_timeout_s = 1")
+            || e.contains("another call on the pack failed")
+            || e.contains("the pack went away")
+    };
+    assert!(failed_by_the_timeout(&ea), "{ea}");
+    assert!(failed_by_the_timeout(&eb), "{eb}");
     assert!(
         ea.contains("no answer within") || eb.contains("no answer within"),
         "{ea} / {eb}"
