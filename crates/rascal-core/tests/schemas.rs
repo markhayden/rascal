@@ -171,6 +171,7 @@ fn the_location_schema_is_closed_and_versioned_by_its_id() {
         versioning: Versioning::SchemaId,
         generate: || serde_json::Value::Null,
         roundtrip: |value| Ok(value.clone()),
+        open: &[],
         fixtures: &[
             "location-v1/valid/bbox.json",
             "location-v1/valid/view.json",
@@ -672,7 +673,8 @@ pub struct LookAlike;
 #[test]
 fn every_boundary_type_in_the_crates_is_registered_and_current() {
     let inventory = schema_drift::inventory();
-    let names: Vec<&str> = inventory.iter().map(|entry| entry.name).collect();
+    let mut names: Vec<&str> = inventory.iter().map(|entry| entry.name).collect();
+    names.extend_from_slice(schema_drift::COMPONENTS);
     let mut sources = Vec::new();
     rust_sources(&repo_root().join("crates"), &mut sources);
     assert!(!sources.is_empty());
@@ -698,6 +700,20 @@ fn every_boundary_type_in_the_crates_is_registered_and_current() {
             findings.is_empty(),
             "{}: {findings:?} (UPDATE_SCHEMAS=1 regenerates a drifted schema)",
             entry.name
+        );
+    }
+    // Every component is a `$defs` entry of some committed schema: none is a boundary type in
+    // hiding.
+    let committed: Vec<serde_json::Value> = inventory
+        .iter()
+        .filter_map(|entry| schemas().read(entry.schema).ok())
+        .collect();
+    for component in schema_drift::COMPONENTS {
+        assert!(
+            committed
+                .iter()
+                .any(|schema| schema["$defs"].get(component).is_some()),
+            "{component} is listed as a component but no committed schema defines it"
         );
     }
 }

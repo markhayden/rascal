@@ -52,6 +52,9 @@ pub struct BoundaryType {
     pub roundtrip: fn(&serde_json::Value) -> Result<serde_json::Value, String>,
     /// Serialized fixtures, relative to `fixtures/schemas/`.
     pub fixtures: &'static [&'static str],
+    /// Names of `$defs` whose objects are open on purpose, each justified where it is listed
+    /// (a recipe step carries op-specific parameters). Everything else must be closed.
+    pub open: &'static [&'static str],
 }
 
 /// Registers a boundary type, versioned by field. Compiles only for a type with the three
@@ -71,14 +74,199 @@ macro_rules! boundary_type {
                 ::serde_json::to_value(typed).map_err(|e| e.to_string())
             },
             fixtures: &[$($fixture),*],
+            open: &[],
         }
     };
 }
 
 /// Every boundary type in the core. Each task that adds one adds a line here.
 pub fn inventory() -> Vec<BoundaryType> {
-    Vec::new()
+    use crate::config::Config;
+    use crate::frame::{Frame, Plan};
+    use crate::image::ImageRecord;
+    use crate::journal::JournalLine;
+    use crate::location::Location;
+    use crate::mask::{InspectReport, MaskRecord};
+    use crate::op::{Envelope, Manifest};
+    use crate::profile::BandProfile;
+    use crate::recipe::Recipe;
+    use crate::replay::ReplayReport;
+    use crate::series::Series;
+    use crate::workspace::record::OperationRecord;
+    use crate::workspace::registry::Generation;
+    use crate::workspace::repair::Report;
+    vec![
+        boundary_type!(
+            Report,
+            "rascal/repair-v1.json",
+            Source::Generated,
+            ["repair-v1/after-crash.json"]
+        ),
+        boundary_type!(
+            InspectReport,
+            "rascal/inspect-v1.json",
+            Source::Generated,
+            ["inspect-v1/rect.json"]
+        ),
+        boundary_type!(
+            ReplayReport,
+            "rascal/replay-v1.json",
+            Source::Generated,
+            ["replay-v1/tampered-core.json"]
+        ),
+        boundary_type!(
+            Frame,
+            "rascal/frame-v1.json",
+            Source::Generated,
+            [
+                "frame-v1/raw-flat.json",
+                "frame-v1/raw-equirectangular.json",
+                "frame-v1/cut.json",
+                "frame-v1/crop.json"
+            ]
+        ),
+        boundary_type!(
+            Plan,
+            "rascal/plan-v1.json",
+            Source::Generated,
+            ["plan-v1/strip.json"]
+        ),
+        boundary_type!(
+            ImageRecord,
+            "rascal/image-v1.json",
+            Source::Generated,
+            ["image-v1/canonical.json", "image-v1/rendering.json"]
+        ),
+        boundary_type!(
+            MaskRecord,
+            "rascal/mask-v1.json",
+            Source::Generated,
+            ["mask-v1/rect.json", "mask-v1/seam.json"]
+        ),
+        boundary_type!(
+            JournalLine,
+            "rascal/journal-v1.json",
+            Source::Generated,
+            ["journal-v1/op.json", "journal-v1/note.json"]
+        ),
+        boundary_type!(
+            Manifest,
+            "rascal/manifest-v1.json",
+            Source::Generated,
+            ["manifest-v1/rect.json"]
+        ),
+        boundary_type!(
+            Envelope,
+            "rascal/envelope-v1.json",
+            Source::Generated,
+            ["envelope-v1/ok.json", "envelope-v1/not-applicable.json"]
+        ),
+        boundary_type!(
+            Config,
+            "rascal/config-v1.json",
+            Source::Generated,
+            ["config-v1/minimal.json", "config-v1/full.json"]
+        ),
+        boundary_type!(
+            Generation,
+            "rascal/generation-v1.json",
+            Source::Generated,
+            ["generation-v1/after-rect.json"]
+        ),
+        boundary_type!(
+            OperationRecord,
+            "rascal/operation-v1.json",
+            Source::Generated,
+            ["operation-v1/rasterize.json"]
+        ),
+        BoundaryType {
+            // A step's parameters are the op's own keys, so Step is open on purpose.
+            open: &["Step"],
+            ..boundary_type!(
+                Recipe,
+                "rascal/recipe-v1.json",
+                Source::Authored,
+                ["recipe-v1/rect.json", "recipe-v1/seam.json"]
+            )
+        },
+        boundary_type!(
+            BandProfile,
+            "rascal/band-profile-v1.json",
+            Source::Generated,
+            ["band-profile-v1/seam.json"]
+        ),
+        boundary_type!(
+            Series,
+            "rascal/series-v1.json",
+            Source::Generated,
+            ["series-v1/sigma.json", "series-v1/step.json"]
+        ),
+        BoundaryType {
+            versioning: Versioning::SchemaId,
+            ..boundary_type!(
+                Location,
+                "rascal/location-v1.json",
+                Source::Authored,
+                [
+                    "location-v1/valid/absent.json",
+                    "location-v1/valid/bbox.json",
+                    "location-v1/valid/line-column.json",
+                    "location-v1/valid/line-path.json",
+                    "location-v1/valid/polygon.json",
+                    "location-v1/valid/stroke.json",
+                    "location-v1/valid/view.json",
+                    "location-v1/valid/whole_image.json",
+                ]
+            )
+        },
+    ]
 }
+
+/// Types that derive `JsonSchema` only as parts of a registered type and have no schema file
+/// of their own. The schema test asserts each appears in the `$defs` of a committed schema,
+/// so a type cannot hide here.
+pub const COMPONENTS: &[&str] = &[
+    "Projection",
+    "Topology",
+    "FrameKind",
+    "PlanEntry",
+    "Role",
+    "RenderingRole",
+    "UseCase",
+    "Zones",
+    "Source",
+    "ProfileSection",
+    "Prescription",
+    "ProvenanceNode",
+    "Windows",
+    "WorkspaceConfig",
+    "CorpusConfig",
+    "InputDecl",
+    "RenderOut",
+    "Outputs",
+    "Step",
+    "ArtifactEntry",
+    "LocationEntry",
+    "RecordEntry",
+    "ZoneStatistics",
+    "InspectProfile",
+    "Refinement",
+    "ParamKind",
+    "CostTier",
+    "Cost",
+    "Bounds",
+    "Measurement",
+    "Region",
+    "EnvelopeImage",
+    "Transform",
+    "Provenance",
+    "ArtifactType",
+    "Port",
+    "Param",
+    "Status",
+    "ArtifactRef",
+    "Event",
+];
 
 /// What the harness found wrong with one boundary type.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,7 +318,7 @@ pub fn check(entry: &BoundaryType, schemas: &SchemaDir, fixtures: &Path) -> Vec<
             schema: schema_name.clone(),
         });
     }
-    if !is_closed(&committed) {
+    if !is_closed_except(&committed, entry.open) {
         findings.push(Finding::NotClosed {
             schema: schema_name.clone(),
         });
@@ -211,8 +399,23 @@ fn same_json(a: &serde_json::Value, b: &serde_json::Value) -> bool {
     }
 }
 
+/// `is_closed`, with the named `$defs` exempt.
+fn is_closed_except(schema: &serde_json::Value, open: &[&str]) -> bool {
+    if open.is_empty() {
+        return is_closed(schema);
+    }
+    let mut trimmed = schema.clone();
+    if let Some(defs) = trimmed.get_mut("$defs").and_then(|d| d.as_object_mut()) {
+        for name in open {
+            defs.remove(*name);
+        }
+    }
+    is_closed(&trimmed)
+}
+
 /// True when every object the schema describes refuses unknown properties. An object with no
-/// `properties` and a schema-valued `additionalProperties` is a map and closed by construction.
+/// `properties` and a schema-valued (or `true`) `additionalProperties` is a map and closed by
+/// construction: it has no fields to misspell.
 fn is_closed(schema: &serde_json::Value) -> bool {
     let Some(object) = schema.as_object() else {
         return true;
@@ -221,7 +424,9 @@ fn is_closed(schema: &serde_json::Value) -> bool {
     let is_object = object.get("type").and_then(|t| t.as_str()) == Some("object") || has_properties;
     let additional = object.get("additionalProperties");
     if is_object {
-        let is_map = !has_properties && additional.is_some_and(|a| a.is_object());
+        // A map: no named properties, values described by a schema (or anything, `true`).
+        let is_map = !has_properties
+            && additional.is_some_and(|a| a.is_object() || *a == serde_json::Value::Bool(true));
         if !is_map && additional != Some(&serde_json::Value::Bool(false)) {
             return false;
         }

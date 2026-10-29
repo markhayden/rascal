@@ -1,0 +1,622 @@
+{
+  "$defs": {
+    "ArtifactRef": {
+      "additionalProperties": false,
+      "description": "A typed output by id and identity: rascal's extension to the envelope.",
+      "properties": {
+        "artifact_type": {
+          "$ref": "#/$defs/ArtifactType"
+        },
+        "id": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact_type",
+        "id",
+        "identity"
+      ],
+      "type": "object"
+    },
+    "ArtifactType": {
+      "description": "The artifact types a port can declare.",
+      "enum": [
+        "Image",
+        "Location",
+        "Mask",
+        "BandProfile",
+        "Series",
+        "Plan"
+      ],
+      "type": "string"
+    },
+    "Envelope": {
+      "additionalProperties": false,
+      "description": "What an op returns.",
+      "properties": {
+        "artifacts": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ArtifactRef"
+          },
+          "default": {},
+          "description": "The typed outputs by output name.",
+          "type": "object"
+        },
+        "envelope_version": {
+          "description": "The envelope schema version.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "images": {
+          "items": {
+            "$ref": "#/$defs/EnvelopeImage"
+          },
+          "type": "array"
+        },
+        "measurements": {
+          "items": {
+            "$ref": "#/$defs/Measurement"
+          },
+          "type": "array"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "reason": {
+          "description": "Why, when the status is not `ok`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "refinement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Refinement"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What a refinement cleared."
+        },
+        "regions": {
+          "items": {
+            "$ref": "#/$defs/Region"
+          },
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/Status"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "transforms": {
+          "items": {
+            "$ref": "#/$defs/Transform"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "envelope_version",
+        "status",
+        "summary",
+        "provenance"
+      ],
+      "type": "object"
+    },
+    "EnvelopeImage": {
+      "additionalProperties": false,
+      "description": "An image the op produced, by reference to its artifact.",
+      "properties": {
+        "frame": {
+          "type": "string"
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "identity": {
+          "description": "The image artifact's identity.",
+          "type": "string"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "parent": {
+          "type": "string"
+        },
+        "width": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "frame",
+        "parent",
+        "width",
+        "height",
+        "media_type",
+        "identity"
+      ],
+      "type": "object"
+    },
+    "Event": {
+      "description": "What a line records.",
+      "oneOf": [
+        {
+          "const": "op",
+          "description": "An op invocation.",
+          "type": "string"
+        },
+        {
+          "const": "note",
+          "description": "Something assumed or decided outside an op, such as a projection assumed from the\nimage's aspect.",
+          "type": "string"
+        }
+      ]
+    },
+    "Location": {
+      "description": "A location in one frame. Serialized with `kind` as the tag, matching\n`schemas/rascal/location-v1.json`.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "`[x0, y0, x1, y1]` as fractions of the frame.",
+          "properties": {
+            "bbox": {
+              "items": {
+                "format": "double",
+                "type": "number"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
+            "frame": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "bbox",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "frame",
+            "bbox"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Three to sixty-four vertices as fractions of the frame, a simple polygon.",
+          "properties": {
+            "frame": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "polygon",
+              "type": "string"
+            },
+            "polygon": {
+              "items": {
+                "items": {
+                  "format": "double",
+                  "type": "number"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "type": "array"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "frame",
+            "polygon"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A direction on a wrapped frame, in degrees.",
+          "properties": {
+            "fov": {
+              "format": "double",
+              "type": "number"
+            },
+            "frame": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "view",
+              "type": "string"
+            },
+            "pitch": {
+              "format": "double",
+              "type": "number"
+            },
+            "yaw": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "frame",
+            "yaw",
+            "pitch",
+            "fov"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "frame": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "whole_image",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "frame"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Something missing from this frame.",
+          "properties": {
+            "frame": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "absent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "frame"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A line the seam band follows: a column or a path, with its full width in pixels.",
+          "properties": {
+            "column": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "frame": {
+              "type": "string"
+            },
+            "group": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "line",
+              "type": "string"
+            },
+            "path": {
+              "items": {
+                "items": {
+                  "format": "double",
+                  "type": "number"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "type": "array"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "width_px": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "frame",
+            "width_px"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A rough mark along a path with a radius in pixels.",
+          "properties": {
+            "frame": {
+              "type": "string"
+            },
+            "group": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "stroke",
+              "type": "string"
+            },
+            "path": {
+              "items": {
+                "items": {
+                  "format": "double",
+                  "type": "number"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "radius_px": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "frame",
+            "path",
+            "radius_px"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Measurement": {
+      "additionalProperties": false,
+      "description": "A named scalar with a unit, in a frame.",
+      "properties": {
+        "frame": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "value": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "value",
+        "unit"
+      ],
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "description": "Who produced the envelope and how long it took.",
+      "properties": {
+        "duration_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tool": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool",
+        "version",
+        "duration_ms"
+      ],
+      "type": "object"
+    },
+    "Refinement": {
+      "additionalProperties": false,
+      "description": "What a refinement reports about what it cleared; part of the envelope.",
+      "properties": {
+        "blend_cleared": {
+          "type": "boolean"
+        },
+        "profile_cleared": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "blend_cleared",
+        "profile_cleared"
+      ],
+      "type": "object"
+    },
+    "Region": {
+      "additionalProperties": false,
+      "description": "A located finding with a label and a score.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "score": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "location",
+        "label",
+        "score"
+      ],
+      "type": "object"
+    },
+    "Status": {
+      "description": "An invocation's outcome class. Ops never return a verdict.",
+      "enum": [
+        "ok",
+        "measured_nothing",
+        "not_applicable",
+        "invalid_args"
+      ],
+      "type": "string"
+    },
+    "Transform": {
+      "additionalProperties": false,
+      "description": "A transform between two frames.",
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "params": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "to": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "from",
+        "to",
+        "kind",
+        "params"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One journal line.",
+  "properties": {
+    "duration_ms": {
+      "description": "Wall time of the invocation; an observation, never part of an identity.",
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "envelope": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Envelope"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "event": {
+      "$ref": "#/$defs/Event"
+    },
+    "inputs": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {},
+      "description": "Input identities by port.",
+      "type": "object"
+    },
+    "journal_version": {
+      "description": "The line's version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "note": {
+      "description": "The text of a note.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "op": {
+      "description": "The op name and version, for an op.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "outputs": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {},
+      "description": "Output identities by port.",
+      "type": "object"
+    },
+    "params": {
+      "description": "The resolved parameters."
+    },
+    "seq": {
+      "description": "The line's position in this journal, from 1.",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "step": {
+      "description": "The step id, for an op.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "journal_version",
+    "seq",
+    "event"
+  ],
+  "title": "JournalLine",
+  "type": "object"
+}

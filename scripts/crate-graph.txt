@@ -9,6 +9,8 @@ prod rascal-mask -> rascal-ops
 prod rascal-mask -> rascal-mcp
 prod rascal-mask -> rascal-testkit
 dev rascal-core -> rascal-testkit
+# The core's contract tests exercise the shipped ops; path only, dropped on publish.
+dev rascal-core -> rascal-ops
 dev rascal-ops -> rascal-testkit
 dev rascal-mcp -> rascal-testkit
 dev rascal-mask -> rascal-testkit

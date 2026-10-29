@@ -55,6 +55,10 @@ rascal run repair print.jpg --stroke scratch.json --out run/
 rascal heal seam pano.jpg --filler local-inpaint --config rascal.toml --out run/
 rascal render run/artifacts/<id> --for tinted --image img-3 --out seam-tinted.png
 rascal paste base.png fill.png run/artifacts/<id> --mode poisson --out composite.png
+rascal ops list                                           # every op's manifest, as an agent sees it
+rascal inspect run/artifacts/<id> --json                  # or --out pages/ for the overlay and chart, --replay to rebuild
+rascal export --compat run/journal.jsonl --step rasterize --out e.json
+rascal dash run/ --out run/dash.html                     # the run page: timings, envelopes, every artifact; --serve for loopback
 ```
 
 Replace (screens, signs), retouch, extend and isolate are later milestones.
@@ -75,7 +79,7 @@ exchange documents without translation; rascal is fully standalone and depends o
 
 ## Status
 
-Pre-release. M0 (scaffold) is in progress. The design is in [SPEC.md](SPEC.md), the build order
+Pre-release. M0 (scaffold) is done; M1 (core) is in progress, and `rascal run rect` works end to end. The design is in [SPEC.md](SPEC.md), the build order
 in [PLAN.md](PLAN.md), the decisions in [docs/adr/](docs/adr/README.md), and the current state
 of each part in [docs/architecture.md](docs/architecture.md#status).
 

@@ -1,7 +1,23 @@
 # Compatibility export
 
-What `rascal export --compat` projects, what it drops, and what it refuses by name. The export
-itself arrives with M1 task 1.9; this page already documents the schemas it targets.
+What `rascal export --compat` projects, what it drops, and what it refuses by name.
+
+## The command
+
+```
+rascal export --compat run/journal.jsonl --step rect --out rect.json     # a step's envelope
+rascal export --compat --location box.json --out box.json                # a standalone location
+```
+
+The projection keeps `status`, `summary`, `measurements`, `regions`, `images`, `transforms` and
+`provenance`, and drops `artifacts` and every other native field, since that is rascal's
+bookkeeping and not content. It then fails, naming the item, on content the copied schema cannot
+express: a `line` or `stroke` region, or an image whose mapping to its parent is not a plain
+bbox (an image in a `cut:` frame maps to two spans). Nothing is approximated. A standalone
+location exports as the location object alone and validates against the copied envelope's
+embedded `Location` definition by `$ref`; `line` and `stroke` have no copied form. The export
+is validated against the copied schema before it is written; the schemas are read from a
+checkout's `schemas/` directory or from `RASCAL_SCHEMAS`.
 
 ## The copied schemas
 
@@ -15,7 +31,11 @@ rascal has no code dependency on the origin.
 
 ## rascal's schemas
 
-`schemas/rascal/` holds rascal's own versioned schemas. The first is `location-v1.json`: a
+`schemas/rascal/` holds rascal's own versioned schemas, generated from the boundary types by
+the drift harness except where noted: `frame-v1` (the three frame kinds; a derived frame's
+fields are optional rather than a tagged union, since `serde(flatten)` and
+`deny_unknown_fields` do not combine), `image-v1`, `mask-v1`, `band-profile-v1`, `series-v1`,
+`journal-v1`, `manifest-v1`, `envelope-v1`, `config-v1`, the authored `recipe-v1` and the authored `location-v1.json`: a
 location is **one of** the copied `Location` definition (the kinds `bbox`, `polygon`, `view`,
 `whole_image`, `absent`, referenced by `$ref` and never redefined) or rascal's `line` (a column
 or a path with a full width in pixels) or `stroke` (a path with a radius in pixels). Inside a
@@ -39,7 +59,8 @@ registered type the test suite:
   because it references a copied schema, such as the location) is not compared;
 - asserts the committed schema is closed everywhere it describes an object
   (`deny_unknown_fields`; a map with a schema-valued `additionalProperties` and no
-  `properties` is closed by construction), for both sources;
+  `properties` is closed by construction), for both sources, except the `$defs` an entry
+  lists as open on purpose with its reason (a recipe step, whose keys are the op's parameters);
 - asserts the type is versioned, for both sources: by field (every shape the schema can take,
   through `oneOf`, `anyOf`, `allOf` and local `$ref`s, requires a `version` or `*_version`
   property) or, for a type whose shape is shared with a copied schema that has none, by schema

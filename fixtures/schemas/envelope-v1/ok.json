@@ -1,0 +1,25 @@
+{
+  "envelope_version": 1,
+  "status": "ok",
+  "summary": "fine",
+  "measurements": [
+    {
+      "name": "painted",
+      "value": 1200.0,
+      "unit": "px",
+      "frame": "raw:40x30:flat"
+    }
+  ],
+  "provenance": {
+    "tool": "probe",
+    "version": "1.2.3",
+    "duration_ms": 4
+  },
+  "artifacts": {
+    "mask": {
+      "artifact_type": "Mask",
+      "id": "mask",
+      "identity": "sha256:5ed18df425f9b33694f47280d9db5193394e6609f61ab4dc97057975b9a78130"
+    }
+  }
+}

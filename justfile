@@ -11,7 +11,7 @@ bootstrap:
     cargo install cargo-dist --version {{dist_version}} --locked
 
 # Everything a commit must pass. Exactly the list in PLAN.md "Commit strategy".
-check: fmt-check clippy test deny graph packaging clean-room hooks-test checks-test
+check: fmt-check clippy test deny graph packaging clean-room docs hooks-test checks-test
 
 fmt-check:
     cargo fmt --all -- --check
@@ -43,6 +43,10 @@ packaging:
 # the tree); passes trivially when the variable is unset, as in CI.
 clean-room:
     scripts/scan-clean-room.sh
+
+# Every op, profile and recipe field is documented, and every documented name exists.
+docs:
+    scripts/check-docs.sh
 
 # Prove the repository checks fail when they should.
 checks-test:

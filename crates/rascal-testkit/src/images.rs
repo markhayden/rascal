@@ -1,0 +1,47 @@
+//! Synthetic images with known content, built deterministically so a committed fixture can be
+//! checked against its builder and a test can know the answer before it runs.
+
+use image::{Rgb, RgbImage};
+
+/// A small deterministic generator (a linear congruential step), so noise is reproducible
+/// across platforms without a dependency.
+struct Lcg(u64);
+
+impl Lcg {
+    fn next(&mut self) -> u32 {
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        (self.0 >> 33) as u32
+    }
+}
+
+/// A textured floor: warm planks with a grain, darker joins every 40 columns, a gentle
+/// vertical light falloff and a little noise. Nothing in it is smooth enough to be mistaken
+/// for sky, and the planks give `fan` something to measure later.
+pub fn floor(width: u32, height: u32) -> RgbImage {
+    let mut lcg = Lcg(0x5eed_f100_12ab_cd01);
+    let mut out = RgbImage::new(width, height);
+    for y in 0..height {
+        let light = 1.0 - 0.25 * (y as f32 / height.max(1) as f32);
+        for x in 0..width {
+            let join = x % 40 < 2;
+            let grain = ((x as f32 * 0.37 + y as f32 * 0.11).sin() * 0.5 + 0.5) * 18.0;
+            let noise = (lcg.next() % 11) as f32 - 5.0;
+            let (r, g, b) = if join {
+                (62.0, 44.0, 30.0)
+            } else {
+                (168.0 + grain, 124.0 + grain * 0.8, 84.0 + grain * 0.5)
+            };
+            let px = |v: f32| ((v + noise) * light).round().clamp(0.0, 255.0) as u8;
+            out.put_pixel(x, y, Rgb([px(r), px(g), px(b)]));
+        }
+    }
+    out
+}
+
+/// A flat mid-grey field: the simplest canvas for a mask test.
+pub fn flat(width: u32, height: u32, value: u8) -> RgbImage {
+    RgbImage::from_pixel(width, height, Rgb([value, value, value]))
+}

@@ -63,15 +63,15 @@ which parts exist; it is updated in the same commit as the code it describes.
 | Part | Crate | State | Arrives |
 |---|---|---|---|
 | schema drift harness and boundary-type inventory | rascal-core | done | M0 task 0.4 |
-| frames, images, locations, artifacts, identity | rascal-core | not started | M1 task 1.2 |
-| the mask record and effective weight | rascal-core | not started | M1 task 1.3 |
-| Op trait, manifest, envelope, registry | rascal-core | not started | M1 task 1.4 |
-| renderings | rascal-core, rascal-ops | not started | M1 task 1.5 |
-| recipes with typed bindings | rascal-core | not started | M1 task 1.6 |
-| workspace, journal, repair | rascal-core | not started | M1 tasks 1.7a, 1.7b |
-| primitives, `cut`, `put`, `line`, `rect`, `stroke`, `rasterize` | rascal-ops | not started | M1 tasks 1.8a, 1.8b |
-| `inspect`, compatibility export | rascal-core, rascal-mask | not started | M1 task 1.9 |
-| the run page and tracing | rascal-mask | not started | M1 task 1.10 |
+| frames, images, locations, artifacts, identity | rascal-core | done: the three frame kinds and the cut plan, canonical serialization and committed vectors (ADR 0016), the seven location kinds with their rules, mapping toward the root with parts and partial | M1 task 1.2 |
+| the mask record and effective weight | rascal-core | done: the full record with profile, prescriptions, source and provenance; invariants named on load; refinement helpers; BandProfile and Series; `inspect --json` | M1 task 1.3 |
+| Op trait, manifest, envelope, registry | rascal-core | done: the full manifest with derived schemas and bounds, parameter resolution, the native envelope, registry checks at registration, shared input validation, `ops list` and `ops describe` | M1 task 1.4 |
+| renderings | rascal-core, rascal-ops | done: the five profiles with roles, polarity and parameters; `render` with `--image`, `--threshold`, `--colour`, `--strength` | M1 task 1.5 |
+| recipes with typed bindings | rascal-core | done: every validation error with its step id, constant sets, defaults resolved into the journal, the recipe and config schemas, the binding flags | M1 task 1.6 |
+| workspace, journal, repair | rascal-core | done: generations, staging locks, the commit protocol with the spec's sync order (ADR 0017), operation records, one journal line per invocation, cancellation before the lock, `workspace list`, `import` and `repair` (orphans, missing payloads, the journal rebuilt from the records), per-op subcommands | M1 tasks 1.7a, 1.7b |
+| primitives, `cut`, `put`, `line`, `rect`, `stroke`, `rasterize` | rascal-ops | done: the six primitives, `cut` and `put` with the Plan artifact, `rect`, `line`, `stroke`, and `rasterize` for every kind | M1 tasks 1.8a, 1.8b |
+| `inspect`, compatibility export | rascal-core, rascal-mask | done: the inspect op and pages, `--replay`, the export projection with its two refusals, self-contained runs, the docs-coverage check | M1 task 1.9 |
+| the run page and tracing | rascal-core, rascal-mask | done: `rascal dash` (`--out`, `--serve` on loopback, `--panels`), the panel registry with the envelope and artifacts panels, `RASCAL_LOG` spans per op | M1 task 1.10 |
 | the seam ops and `heal` | rascal-ops, rascal-mask | not started | M2 |
 | MCP client and server | rascal-mcp | not started | M3 |
 | the refine ops and the remove, repair, protect recipes | rascal-ops, rascal-mask | not started | M4 |

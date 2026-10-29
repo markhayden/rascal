@@ -9,7 +9,7 @@ The plan's "Owner decisions" table is the index; this file holds the answers.
 | 2 | The forbidden-word list location (`RASCAL_FORBIDDEN_WORDS`) | task 0.1's first commit | the clean-room scan runs locally on every commit from 0.1 on; the list never enters the tree | made 2026-10-28 |
 | 3 | A real local filler and a real wrapped image on the owner's machine | task 2.8's by-hand run | M2's checkpoint needs one real heal through a real filler, viewed by the owner | pending |
 | 4 | The MCP transport (an MCP crate or an in-house JSON-RPC implementation) | task 3.1, by ADR 0015 | no MCP code is written until the ADR is accepted | pending |
-| 5 | The segmenter, its branch (A or B) and the export's redistribution terms | task 5.2, decided in task 4.5 by ADR 0016 | M5's `segment` task does not start, and success criterion 5 or 5b is not fixed, until the ADR is accepted | pending |
+| 5 | The segmenter, its branch (A or B) and the export's redistribution terms | task 5.2, decided in task 4.5 by ADR 0018 | M5's `segment` task does not start, and success criterion 5 or 5b is not fixed, until the ADR is accepted | pending |
 | 6 | The private corpus: location, first contents, the sky and structured groups with at least `min_decided` images each | task 6.1 | no lab matrix is written until the corpus manifest verifies | pending |
 | 7 | The path fan before or after v1 | after M7, unless task 4.3 shows the need | v0.1.0 ships without it unless the owner decides otherwise during M4 | pending |
 
@@ -30,3 +30,10 @@ The owner also asks for breadth of framing. Wrapped images and 360 panoramas are
 case among many, not the project's identity. Examples, fixtures and docs draw on varied subjects
 (stitched scans, product shots, archival prints, interiors, landscapes, screens and signs) rather
 than any single industry.
+
+## 8. Merging and pushing at checkpoints
+
+2026-10-28, at the M0 checkpoint. After the owner has reviewed and approved a milestone, the
+agent merges it into `main`, runs `just check` on the merge commit, pushes `main` and the tags,
+waits for CI on both platforms, and tags the checkpoint. `main` is never force pushed, and no
+milestone is merged without the owner's approval.

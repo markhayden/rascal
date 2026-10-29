@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "CorpusConfig": {
+      "additionalProperties": false,
+      "description": "The private corpus (M6).",
+      "properties": {
+        "manifest": {
+          "description": "The corpus manifest; relative to the configuration file.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "WorkspaceConfig": {
+      "additionalProperties": false,
+      "description": "Where runs keep their workspace when `--workspace` is not given.",
+      "properties": {
+        "dir": {
+          "description": "A directory; relative to the configuration file.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The configuration file.",
+  "properties": {
+    "config_version": {
+      "description": "The file's version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "corpus": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CorpusConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "workspace": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorkspaceConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "config_version"
+  ],
+  "title": "Config",
+  "type": "object"
+}

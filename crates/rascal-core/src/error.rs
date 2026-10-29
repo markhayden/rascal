@@ -1,4 +1,5 @@
 //! The one error type of the core crate. Every variant names the path or thing it is about.
+//! The binary maps `Usage` and `Recipe` to exit 64 and everything else to exit 3.
 
 use std::path::PathBuf;
 
@@ -26,6 +27,13 @@ pub enum Error {
         #[source]
         source: Box<toml::de::Error>,
     },
+    /// An image that cannot be decoded or encoded.
+    #[error("{path}: {source}")]
+    Image {
+        path: PathBuf,
+        #[source]
+        source: image::ImageError,
+    },
     /// A schema file that cannot be compiled into a validator.
     #[error("{path}: not a usable JSON Schema: {message}")]
     Schema { path: PathBuf, message: String },
@@ -42,7 +50,57 @@ pub enum Error {
         expected: String,
         actual: String,
     },
+    /// The caller asked for something the command line cannot grant: a bad argument, a run
+    /// directory that is not empty, an unknown recipe. Exit 64.
+    #[error("{message}")]
+    Usage { message: String },
+    /// A recipe that does not validate, named by step. Exit 64.
+    #[error("recipe {recipe}, step {step}: {message}")]
+    Recipe {
+        recipe: String,
+        step: String,
+        message: String,
+    },
+    /// A mask that breaks one of its invariants, named. Exit 3.
+    #[error("mask {id}: invariant broken: {invariant}")]
+    MaskInvariant { id: String, invariant: String },
+    /// An op was given an input it cannot take: a wrong artifact type, a frame mismatch, a
+    /// location kind a later task implements. Exit 3.
+    #[error("{op}: {message}")]
+    Op { op: String, message: String },
 }
 
 /// The core's result type.
 pub type Result<T> = std::result::Result<T, Error>;
+
+impl Error {
+    /// A usage error from a message.
+    pub fn usage(message: impl Into<String>) -> Self {
+        Error::Usage {
+            message: message.into(),
+        }
+    }
+
+    /// An op error from a message.
+    /// A usage error about one op: the caller's arguments, not the op, are wrong.
+    pub fn usage_for(op: &str, message: impl Into<String>) -> Self {
+        Error::Usage {
+            message: format!("{op}: {}", message.into()),
+        }
+    }
+
+    pub fn op(op: &str, message: impl Into<String>) -> Self {
+        Error::Op {
+            op: op.to_string(),
+            message: message.into(),
+        }
+    }
+
+    /// An io error naming its path.
+    pub fn io(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
+        Error::Io {
+            path: path.into(),
+            source,
+        }
+    }
+}

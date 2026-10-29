@@ -21,19 +21,19 @@ with green CI on both platforms, and then the tag.
 - [ ] Checkpoint M0: owner reads the ADRs → merge to `main` → push → CI green on both platforms → tag `m0`
 
 ## M1 Core
-- [ ] 1.1 Walking slice → tag `m1.1`
-- [ ] 1.2 Frames, identity, canonical serialization, locations and mapping
-- [ ] 1.3 The mask record and effective weight
-- [ ] 1.4 Op contracts
-- [ ] 1.5 Renderings and the `render` op
-- [ ] 1.6 Recipes with typed bindings
-- [ ] 1.7a Workspace generations and the commit protocol
-- [ ] 1.7b Repair, recovery and the journal projection
-- [ ] 1.8a Primitives, `cut`/`put` and the Plan
-- [ ] 1.8b `line`, `stroke` and the full `rasterize`
-- [ ] 1.9 `inspect`, compatibility export, self-contained runs, docs coverage
-- [ ] 1.10 The run page and tracing → tag `m1.2`
-- [ ] Checkpoint M1 → tag `m1`
+- [x] 1.1 Walking slice → tag `m1.1`
+- [x] 1.2 Frames, identity, canonical serialization, locations and mapping
+- [x] 1.3 The mask record and effective weight
+- [x] 1.4 Op contracts
+- [x] 1.5 Renderings and the `render` op
+- [x] 1.6 Recipes with typed bindings
+- [x] 1.7a Workspace generations and the commit protocol
+- [x] 1.7b Repair, recovery and the journal projection
+- [x] 1.8a Primitives, `cut`/`put` and the Plan
+- [x] 1.8b `line`, `stroke` and the full `rasterize`
+- [x] 1.9 `inspect`, compatibility export, self-contained runs, docs coverage
+- [x] 1.10 The run page and tracing → tag `m1.2`
+- [x] Checkpoint M1 → tag `m1` (reviews in docs/reviews/m1-checkpoint.md)
 
 ## M2 Seam
 - [ ] 2.1 `fan` and the band profile

@@ -1,0 +1,307 @@
+{
+  "$defs": {
+    "ArtifactType": {
+      "description": "The artifact types a port can declare.",
+      "enum": [
+        "Image",
+        "Location",
+        "Mask",
+        "BandProfile",
+        "Series",
+        "Plan"
+      ],
+      "type": "string"
+    },
+    "Bounds": {
+      "additionalProperties": false,
+      "description": "Bounds on what an op returns in its envelope.",
+      "properties": {
+        "max_envelope_bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_image_bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_images": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_long_edge": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_measurements": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_region_label_bytes": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_regions": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_summary_bytes": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_transforms": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_images",
+        "max_long_edge",
+        "max_image_bytes",
+        "max_summary_bytes",
+        "max_regions",
+        "max_region_label_bytes",
+        "max_measurements",
+        "max_transforms",
+        "max_envelope_bytes"
+      ],
+      "type": "object"
+    },
+    "Cost": {
+      "additionalProperties": false,
+      "description": "The cost of one call.",
+      "properties": {
+        "seconds": {
+          "description": "Rough duration of one call, in seconds.",
+          "format": "double",
+          "type": "number"
+        },
+        "tier": {
+          "$ref": "#/$defs/CostTier"
+        }
+      },
+      "required": [
+        "tier",
+        "seconds"
+      ],
+      "type": "object"
+    },
+    "CostTier": {
+      "description": "How expensive one call is.",
+      "enum": [
+        "cheap",
+        "moderate",
+        "expensive"
+      ],
+      "type": "string"
+    },
+    "Param": {
+      "additionalProperties": false,
+      "description": "A parameter an op accepts in a recipe step or on the command line.",
+      "properties": {
+        "choices": {
+          "description": "For a choice: the allowed strings.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "default": {
+          "description": "The default when not required, as JSON."
+        },
+        "kind": {
+          "$ref": "#/$defs/ParamKind"
+        },
+        "length": {
+          "description": "For a number array: its length.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max": {
+          "description": "For a number or integer: the inclusive upper bound.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "min": {
+          "description": "For a number or integer: the inclusive lower bound.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "purpose": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "purpose",
+        "kind",
+        "required"
+      ],
+      "type": "object"
+    },
+    "ParamKind": {
+      "description": "The value kinds a parameter can take.",
+      "oneOf": [
+        {
+          "enum": [
+            "number",
+            "integer",
+            "boolean",
+            "string"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "number_array",
+          "description": "A fixed-length array of numbers; `length` says how many.",
+          "type": "string"
+        },
+        {
+          "const": "choice",
+          "description": "One of `choices`.",
+          "type": "string"
+        },
+        {
+          "const": "point_list",
+          "description": "Two or more `[x, y]` points as fractions of the frame.",
+          "type": "string"
+        }
+      ]
+    },
+    "Port": {
+      "additionalProperties": false,
+      "description": "A typed input or output of an op.",
+      "properties": {
+        "artifact_type": {
+          "$ref": "#/$defs/ArtifactType"
+        },
+        "name": {
+          "type": "string"
+        },
+        "purpose": {
+          "description": "What the port is for.",
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "artifact_type",
+        "required",
+        "purpose"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "What an op is and takes. Every field is required to be meaningful: the registry checks\nthem at start and a test checks them for every shipped op.",
+  "properties": {
+    "constants": {
+      "description": "The named constant sets a step may select with `constants = \"<name>\"`; the first is the\ndefault. Empty for an op that has none.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "cost": {
+      "$ref": "#/$defs/Cost"
+    },
+    "input_schema": {
+      "description": "The JSON Schema of the parameter table, derived from `params`."
+    },
+    "inputs": {
+      "items": {
+        "$ref": "#/$defs/Port"
+      },
+      "type": "array"
+    },
+    "manifest_version": {
+      "description": "The manifest schema version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "name": {
+      "type": "string"
+    },
+    "output_guidance": {
+      "type": "string"
+    },
+    "output_schema": {
+      "description": "The JSON Schema of the `artifacts` table, derived from `outputs`."
+    },
+    "outputs": {
+      "items": {
+        "$ref": "#/$defs/Port"
+      },
+      "type": "array"
+    },
+    "params": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Param"
+      },
+      "type": "array"
+    },
+    "purpose": {
+      "type": "string"
+    },
+    "returns": {
+      "$ref": "#/$defs/Bounds",
+      "description": "Bounds on what the envelope holds."
+    },
+    "version": {
+      "type": "string"
+    },
+    "when_not_to_use": {
+      "type": "string"
+    },
+    "when_to_use": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "manifest_version",
+    "name",
+    "version",
+    "purpose",
+    "when_to_use",
+    "when_not_to_use",
+    "output_guidance",
+    "cost",
+    "inputs",
+    "outputs",
+    "returns",
+    "input_schema",
+    "output_schema"
+  ],
+  "title": "Manifest",
+  "type": "object"
+}

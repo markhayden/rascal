@@ -1,0 +1,12 @@
+{
+  "envelope_version": 1,
+  "status": "not_applicable",
+  "summary": "not applicable: the box lies wholly outside the frame",
+  "reason": "the box lies wholly outside the frame",
+  "provenance": {
+    "tool": "rect",
+    "version": "1.0.0",
+    "duration_ms": 0
+  },
+  "artifacts": {}
+}

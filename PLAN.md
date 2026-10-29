@@ -108,7 +108,8 @@ the bootstrap commit by hand.
 from the previous checkpoint tag. Tasks are committed on the milestone branch, or on short task
 branches `mN/<task>` merged into the milestone branch when two tasks are in flight. A milestone
 merges into `main` with a merge commit (no squash) after the owner's review and the checkpoint
-checklist passes. Nothing is pushed by the agent.
+checklist passes. From the M0 checkpoint on (owner decision 2026-10-28) the agent merges and
+pushes at checkpoints once the owner has approved the milestone; `main` is never force pushed.
 
 **Commits.** Conventional Commits with a scope (`feat(ops): …`, `test(core): …`,
 `docs(adr): …`). From task 0.1 on, every commit leaves `just check` green. `just check` is,
@@ -124,13 +125,14 @@ same commit as the change they describe. Secrets, real photographs and corpus pa
 a commit; the pre-commit hook (0.2) scans for credential-shaped values and for image files
 outside `fixtures/` and `.github/assets/`.
 
-**Pre-merge verification and checkpoints.** The push policy is: the owner pushes `main` only at
-checkpoints, and a checkpoint is a merge commit that has passed CI on both platforms. The
+**Pre-merge verification and checkpoints.** The push policy is: `main` is pushed only at
+checkpoints, after the owner's approval, and a checkpoint is a merge commit that has passed CI
+on both platforms. The
 procedure: `just ci-local` on the milestone branch (`just check` natively on the owner's macOS
 arm64 machine, then `just check` inside a Linux container with the pinned toolchain, run by
 `scripts/ci-local.sh` through Docker; the container's architecture is the host's, so this is a
 Linux check, not an x86_64 check); the owner's review; the merge commit created on `main`
-locally; `just check` on the merge commit itself; the owner pushes `main`; GitHub Actions runs
+locally; `just check` on the merge commit itself; `main` is pushed; GitHub Actions runs
 `just check` on macOS arm64 and Linux x86_64 and, for the package and release workflows, the
 publish dry run and `scripts/acceptance.sh`; only when that is green is the merge commit tagged
 `mN` (annotated, with the checklist and the versions of external artifacts: bundle digests,

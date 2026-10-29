@@ -1,0 +1,637 @@
+{
+  "$defs": {
+    "ArtifactEntry": {
+      "additionalProperties": false,
+      "description": "A stored artifact: where it is and what it is.",
+      "properties": {
+        "artifact_type": {
+          "$ref": "#/$defs/ArtifactType"
+        },
+        "frame": {
+          "description": "The frame id.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The local id, such as `img-1` or `mask-3`.",
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "path": {
+          "description": "The file or directory, relative to the workspace root.",
+          "type": "string"
+        },
+        "seq": {
+          "description": "The sequence number of the record that produced it.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "artifact_type",
+        "identity",
+        "frame",
+        "path",
+        "seq"
+      ],
+      "type": "object"
+    },
+    "ArtifactType": {
+      "description": "The artifact types a port can declare.",
+      "enum": [
+        "Image",
+        "Location",
+        "Mask",
+        "BandProfile",
+        "Series",
+        "Plan"
+      ],
+      "type": "string"
+    },
+    "Frame": {
+      "additionalProperties": false,
+      "description": "A frame record, as written to `frames.json`. The fields a kind needs are set; the others\nare absent (`serde(flatten)` and `deny_unknown_fields` do not combine, so the derived\nframes' fields are optional rather than a tagged union).",
+      "properties": {
+        "bbox": {
+          "description": "`[left, top, right, bottom)` in parent pixels, for a `crop:` frame.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "frame_version": {
+          "description": "The record's version.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "description": "The semantic id: `raw:<W>x<H>:<projection>`, `cut:<image-id>:<plan-id>`, `crop:<n>`.",
+          "type": "string"
+        },
+        "identity": {
+          "description": "`sha256:` over the kind, size, projection and topology, and for a derived frame its\nparent's identity and the mapping parameters; no image is involved.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/FrameKind"
+        },
+        "parent": {
+          "description": "The parent frame id, for a derived frame.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parent_identity": {
+          "description": "The parent's identity, for a derived frame.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "plan": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Plan"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The cut plan, for a `cut:` frame."
+        },
+        "projection": {
+          "$ref": "#/$defs/Projection"
+        },
+        "topology": {
+          "$ref": "#/$defs/Topology"
+        },
+        "width": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "frame_version",
+        "id",
+        "kind",
+        "width",
+        "height",
+        "projection",
+        "topology",
+        "identity"
+      ],
+      "type": "object"
+    },
+    "FrameKind": {
+      "description": "The kinds of frame.",
+      "oneOf": [
+        {
+          "const": "raw",
+          "description": "A root: the frame of an imported image.",
+          "type": "string"
+        },
+        {
+          "const": "cut",
+          "description": "The two edge strips of a wrapped parent, side by side; the centre column is the\nparent's wrap edge. Carries `parent`, `parent_identity` and `plan`.",
+          "type": "string"
+        },
+        {
+          "const": "crop",
+          "description": "An integer bbox of the parent. Carries `parent`, `parent_identity` and `bbox`.",
+          "type": "string"
+        }
+      ]
+    },
+    "Location": {
+      "description": "A location in one frame. Serialized with `kind` as the tag, matching\n`schemas/rascal/location-v1.json`.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "`[x0, y0, x1, y1]` as fractions of the frame.",
+          "properties": {
+            "bbox": {
+              "items": {
+                "format": "double",
+                "type": "number"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
+            "frame": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "bbox",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "frame",
+            "bbox"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Three to sixty-four vertices as fractions of the frame, a simple polygon.",
+          "properties": {
+            "frame": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "polygon",
+              "type": "string"
+            },
+            "polygon": {
+              "items": {
+                "items": {
+                  "format": "double",
+                  "type": "number"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "type": "array"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "frame",
+            "polygon"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A direction on a wrapped frame, in degrees.",
+          "properties": {
+            "fov": {
+              "format": "double",
+              "type": "number"
+            },
+            "frame": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "view",
+              "type": "string"
+            },
+            "pitch": {
+              "format": "double",
+              "type": "number"
+            },
+            "yaw": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "frame",
+            "yaw",
+            "pitch",
+            "fov"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "frame": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "whole_image",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "frame"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Something missing from this frame.",
+          "properties": {
+            "frame": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "absent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "frame"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A line the seam band follows: a column or a path, with its full width in pixels.",
+          "properties": {
+            "column": {
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "frame": {
+              "type": "string"
+            },
+            "group": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "line",
+              "type": "string"
+            },
+            "path": {
+              "items": {
+                "items": {
+                  "format": "double",
+                  "type": "number"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "type": "array"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "width_px": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "frame",
+            "width_px"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A rough mark along a path with a radius in pixels.",
+          "properties": {
+            "frame": {
+              "type": "string"
+            },
+            "group": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "stroke",
+              "type": "string"
+            },
+            "path": {
+              "items": {
+                "items": {
+                  "format": "double",
+                  "type": "number"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "radius_px": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "frame",
+            "path",
+            "radius_px"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "LocationEntry": {
+      "additionalProperties": false,
+      "description": "A location as the registry lists it.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        }
+      },
+      "required": [
+        "id",
+        "identity",
+        "location"
+      ],
+      "type": "object"
+    },
+    "Plan": {
+      "additionalProperties": false,
+      "description": "The cut plan: how a `cut:` canvas was taken from its parent and how `put` returns it.",
+      "properties": {
+        "height": {
+          "description": "The parent's height.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "identity": {
+          "description": "`sha256:` over the parent frame's identity, width, height, strip and the spans.",
+          "type": "string"
+        },
+        "left_span": {
+          "description": "The parent columns `[start, end)` the canvas's left half came from: the rightmost `s`.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "parent": {
+          "description": "The parent frame id.",
+          "type": "string"
+        },
+        "parent_identity": {
+          "description": "The parent frame's identity.",
+          "type": "string"
+        },
+        "plan_version": {
+          "description": "The record's version.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "right_span": {
+          "description": "The parent columns the canvas's right half came from: the leftmost `s`.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "strip": {
+          "description": "The strip width: even, at least 2, `2s <= width`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "width": {
+          "description": "The parent's width.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "plan_version",
+        "parent",
+        "parent_identity",
+        "width",
+        "height",
+        "strip",
+        "left_span",
+        "right_span",
+        "identity"
+      ],
+      "type": "object"
+    },
+    "PlanEntry": {
+      "additionalProperties": false,
+      "description": "A stored plan: a registry entry, not a file.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "identity": {
+          "type": "string"
+        },
+        "plan": {
+          "$ref": "#/$defs/Plan"
+        },
+        "seq": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "identity",
+        "plan",
+        "seq"
+      ],
+      "type": "object"
+    },
+    "Projection": {
+      "description": "How an image's pixels map onto the world.",
+      "oneOf": [
+        {
+          "const": "flat",
+          "description": "An ordinary photograph.",
+          "type": "string"
+        },
+        {
+          "const": "equirectangular",
+          "description": "A full 360 by 180 panorama whose left and right edges meet.",
+          "type": "string"
+        }
+      ]
+    },
+    "RecordEntry": {
+      "additionalProperties": false,
+      "description": "One committed invocation in a generation.",
+      "properties": {
+        "duration_ms": {
+          "description": "Wall time of the invocation, in milliseconds.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "identity": {
+          "description": "The operation record's identity (`ops/<hex>.json`).",
+          "type": "string"
+        },
+        "seq": {
+          "description": "The workspace sequence number the invocation committed at.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "identity",
+        "seq",
+        "duration_ms"
+      ],
+      "type": "object"
+    },
+    "Topology": {
+      "description": "Whether the frame's horizontal edges meet.",
+      "oneOf": [
+        {
+          "const": "wrap",
+          "description": "The left and right edges are the same column: a complete equirectangular frame.",
+          "type": "string"
+        },
+        {
+          "const": "bounded",
+          "description": "The edges are edges.",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One generation.",
+  "properties": {
+    "artifacts": {
+      "items": {
+        "$ref": "#/$defs/ArtifactEntry"
+      },
+      "type": "array"
+    },
+    "frames": {
+      "items": {
+        "$ref": "#/$defs/Frame"
+      },
+      "type": "array"
+    },
+    "generation_version": {
+      "description": "The record's version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "locations": {
+      "items": {
+        "$ref": "#/$defs/LocationEntry"
+      },
+      "type": "array"
+    },
+    "n": {
+      "description": "The generation number, from 1.",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "next_id": {
+      "description": "The next id counter per prefix, as one number (ids are `<prefix>-<counter>`).",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "plans": {
+      "items": {
+        "$ref": "#/$defs/PlanEntry"
+      },
+      "type": "array"
+    },
+    "records": {
+      "description": "Every committed operation record, in commit order. The record file under `ops/` is\ncontent-addressed, so an invocation identical to an earlier one shares its file; the\nobservations that differ between them, the sequence number and the duration, live here.",
+      "items": {
+        "$ref": "#/$defs/RecordEntry"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "generation_version",
+    "n",
+    "next_id",
+    "frames",
+    "locations",
+    "artifacts",
+    "plans",
+    "records"
+  ],
+  "title": "Generation",
+  "type": "object"
+}

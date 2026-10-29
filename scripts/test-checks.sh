@@ -106,6 +106,32 @@ if (cd "$repo" && "$scan" --staged) >/dev/null 2>&1; then ok; else bad "clean-ro
 unset RASCAL_FORBIDDEN_WORDS
 cleanup_clean_room; trap - EXIT
 
+# --- docs coverage ----------------------------------------------------------------------------
+# An undocumented op fails naming it; a stale documented name fails naming it; the real docs pass.
+[ -x target/debug/rascal ] || cargo build -q -p rascal-mask
+if scripts/check-docs.sh >/dev/null 2>&1; then ok; else bad "check-docs rejected the real docs: $(scripts/check-docs.sh 2>&1 | head -3)"; fi
+fake="$(mktemp -d)"; cp -R docs/. "$fake/"
+grep -v '^| `rect` |' docs/tools.md > "$fake/tools.md"
+out="$(DOCS_DIR="$fake" scripts/check-docs.sh 2>&1 || true)"
+if grep -q "op 'rect' is in the catalogue but not in" <<< "$out"; then ok; else bad "check-docs accepted an undocumented op: $out"; fi
+cp docs/tools.md "$fake/tools.md"
+printf '| `vanish` | refine | Mask | Mask | 9.9 |\n' >> "$fake/tools.md"
+out="$(DOCS_DIR="$fake" scripts/check-docs.sh 2>&1 || true)"
+if grep -q "'vanish' is in .* but not in the catalogue" <<< "$out"; then ok; else bad "check-docs accepted a stale documented op: $out"; fi
+cp docs/tools.md "$fake/tools.md"
+printf '| `sepia` | `image_input` | x | x |\n' >> "$fake/masks.md"
+out="$(DOCS_DIR="$fake" scripts/check-docs.sh 2>&1 || true)"
+if grep -q "'sepia' is in .* render has no such profile" <<< "$out"; then ok; else bad "check-docs accepted a stale profile: $out"; fi
+cp docs/masks.md "$fake/masks.md"
+grep -v '^| `envelope` |' docs/diagnostics.md > "$fake/diagnostics.md"
+out="$(DOCS_DIR="$fake" scripts/check-docs.sh 2>&1 || true)"
+if grep -q "panel 'envelope' is registered but not in" <<< "$out"; then ok; else bad "check-docs accepted an undocumented panel: $out"; fi
+cp docs/diagnostics.md "$fake/diagnostics.md"
+printf '| `aurora` | x | 9.9 |\n' >> "$fake/diagnostics.md"
+out="$(DOCS_DIR="$fake" scripts/check-docs.sh 2>&1 || true)"
+if grep -q "'aurora' is in .* no such panel is registered" <<< "$out"; then ok; else bad "check-docs accepted a stale documented panel: $out"; fi
+rm -rf "$fake"
+
 # --- smoke ------------------------------------------------------------------------------------
 # A binary with the wrong version fails; one that exits 2 on no arguments fails.
 probe="$(mktemp -d)"

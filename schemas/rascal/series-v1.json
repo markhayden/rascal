@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A per-row series. `values` holds `rows.len() × channels` finite numbers, row-major.",
+  "properties": {
+    "channels": {
+      "description": "Values per row: 1, or 3 for a colour quantity.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "frame": {
+      "description": "The frame id the rows belong to.",
+      "type": "string"
+    },
+    "frame_identity": {
+      "description": "The frame's identity.",
+      "type": "string"
+    },
+    "id": {
+      "description": "The local id.",
+      "type": "string"
+    },
+    "identity": {
+      "description": "`sha256:` over the name, unit, frame identity, channels, rows and values.",
+      "type": "string"
+    },
+    "name": {
+      "description": "What was measured, such as `sigma_px` or `tone_ramp.step`.",
+      "type": "string"
+    },
+    "rows": {
+      "description": "The row index of each entry, ascending.",
+      "items": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "type": "array"
+    },
+    "series_version": {
+      "description": "The record's version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "unit": {
+      "description": "The unit: `px`, `levels`, `ratio`, `degrees`.",
+      "type": "string"
+    },
+    "values": {
+      "description": "`rows.len() × channels` values, row-major.",
+      "items": {
+        "format": "double",
+        "type": "number"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "series_version",
+    "id",
+    "name",
+    "unit",
+    "frame",
+    "frame_identity",
+    "channels",
+    "rows",
+    "values",
+    "identity"
+  ],
+  "title": "Series",
+  "type": "object"
+}
