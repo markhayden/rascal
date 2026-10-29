@@ -11,7 +11,7 @@ bootstrap:
     cargo install cargo-dist --version {{dist_version}} --locked
 
 # Everything a commit must pass. Exactly the list in PLAN.md "Commit strategy".
-check: fmt-check clippy test deny graph packaging clean-room docs hooks-test checks-test
+check: fmt-check clippy test deny graph packaging clean-room docs hooks-test checks-test python
 
 fmt-check:
     cargo fmt --all -- --check
@@ -23,6 +23,12 @@ clippy:
 test:
     cargo test --workspace
     cargo test --workspace --features rascal-mask/testkit
+
+# The Python pack's gates (ruff, pytest), offline against its synced environment; a machine
+# without `uv` or without `tools/python/.venv` (`uv sync --frozen` there, once) skips them and
+# says so. `cargo test` never needs the pack.
+python:
+    scripts/check-python.sh
 
 # Licences, bans and sources work offline; advisories need the network and run in CI.
 deny:

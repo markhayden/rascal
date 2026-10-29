@@ -32,7 +32,8 @@ cargo install rascal-mask        # installs the `rascal` command
 ```
 
 Release archives for macOS arm64, Linux x86_64 and Linux arm64 will be attached to GitHub
-releases. The Python pack is `rascal-tools` on PyPI and is optional.
+releases. The Python pack is `rascal-tools` (`tools/python`, a `uv` project; on PyPI with the
+release) and is optional.
 
 ## The recipes
 

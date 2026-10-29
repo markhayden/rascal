@@ -1,0 +1,10 @@
+# The model artifacts `rascal-tools fetch` downloads into the cache and verifies (SPEC.md "The
+# Python pack and its bundle"). Empty until the segmenter decision (owner decision 5, ADR 0018)
+# names the export; the format is one [[artifact]] per file:
+#
+# [[artifact]]
+# name = "segmenter-encoder.onnx"           # the file name in the cache
+# url = "https://…"                         # where fetch downloads it from
+# sha256 = "…"                              # the digest fetch verifies before and after
+# licence = "Apache-2.0"                    # as recorded in MODEL.md
+artifact = []

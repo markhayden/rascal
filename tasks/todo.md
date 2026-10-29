@@ -65,7 +65,7 @@ with green CI on both platforms, and then the tag.
 - [x] Checkpoint M4 → tag `m4`
 
 ## M5 Pack
-- [ ] 5.1 The pack skeleton, `echo_region`, `fetch` and the harness
+- [x] 5.1 The pack skeleton, `echo_region`, `fetch` and the harness
 - [ ] 5.2 `segment` under branch A, or branch B
 - [ ] 5.3 The bundle and offline setup → tag `m5.1`
 - [ ] Checkpoint M5 → tag `m5`

@@ -217,6 +217,20 @@ rascal tools call fake segment --config rascal.toml --workspace ws/ \
 `tools call` takes the tool's own arguments: `--<port>` an id (or a path, imported first) and
 `--<param>` a value, plus `--json`, `--out` and `--strict` as every op subcommand does.
 
+**The Python pack** is `tools/python`, a `uv` project (`rascal-tools`): an MCP server over stdio
+on the SDK's 1.x line (revision 2025-11-25), listing each tool with both `_meta` documents built
+from one `ToolSpec` and holding its bounds under rascal's ceilings at listing time. It serves
+`echo_region` (a box in, one region and one plane out: the parity tool) and, with
+`serve --debug-tools`, `echo_env` (the variable names it can see). `rascal-tools fetch` is the
+one network step: it downloads the artifacts `artifacts.toml` names into `RASCAL_TOOLS_MODELS`
+(default `~/.cache/rascal-tools`) and verifies each SHA-256, discarding a mismatch. Its tests
+are offline (`pytest`, `ruff`; `scripts/check-python.sh`, part of `just check` when the
+environment exists), with a parity harness that compares a tool's answer to stored outputs
+within a stated tolerance and skips `segmenter`-marked cases until the artifact is fetched.
+Launch is `tools/python/.venv/bin/rascal-tools serve` after `uv sync --frozen` there;
+`crates/rascal-mask/tests/packs_real.rs` drives it through rascal's client. `segment` arrives
+with the owner's segmenter decision (`tools/python/MODEL.md`).
+
 **The fake pack** (`rascal fake-pack <behaviour>` with the `testkit` feature, or the testkit's
 `fake-pack` binary) serves `segment` with one selectable behaviour: `exact`, `bad-schema`,
 `over-bounds`, `block-mismatch`, `foreign-frame`, `wrong-size`, `non-png`, `slow`,
