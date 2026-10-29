@@ -1,0 +1,26 @@
+# Repair a scratch or a tear: a stroke a person drew along it is tightened to the defect's own
+# edges and feathered.
+version = 1
+name = "repair"
+use_case = "repair"
+
+[inputs]
+image = { type = "Image" }
+stroke = { type = "Location" }
+
+[[step]]
+id = "tighten"
+op = "tighten"
+inputs = { stroke = "inputs.stroke", image = "inputs.image" }
+constants = "tighten-v1"
+
+[[step]]
+id = "feather"
+op = "feather"
+inputs = { mask = "tighten.mask" }
+sigma_px = 2.0
+
+[outputs]
+mask = "feather.mask"
+image = "inputs.image"
+render = [{ for = "grey", out = "repair-grey.png" }]

@@ -1,0 +1,17 @@
+version = 1
+id = "feather.mask"
+frame = "raw:400x300:flat"
+frame_identity = "sha256:db69632671bcaf6222d700e747610ec00076eed2adaeb30b8b67ce4bf617e3e6"
+width = 400
+height = 300
+use_case = "repair"
+identity = "sha256:1b4c6724e3d6edb51c3ac3c7757750b7fdc83bb142c4959317f5cee261778afb"
+
+[zones]
+core = "core.png"
+blend = "blend.png"
+protect = "protect.png"
+
+[source]
+locations = ["sha256:f514b22f802f76b13278d27055cd11480b89f654129a6a660ccea72268b4ed0b"]
+instances = []

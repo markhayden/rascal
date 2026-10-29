@@ -31,7 +31,7 @@ impl Op for Subtract {
             "Protects pixels: the second mask's support or a location, grown by a margin, joins protect; core and blend are cleared under it.",
             "To keep something the mask would otherwise repaint: a person in front of the object, a logo, a previous edit.",
             "To make the core smaller for its own sake (use shrink): protected pixels are kept for good, by every later step.",
-            "The same mask with protect enlarged by the second input dilated by grow_px, and core and blend cleared there. The profile and the prescriptions are kept: apply honours the new protect. Exactly one of subtract and location is given.",
+            "The same mask with protect enlarged by the second input dilated by grow_px, and core and blend cleared there. The profile and the prescriptions are kept: apply honours the new protect. At most one of subtract and location; with neither the mask passes through unchanged.",
             Cost {
                 tier: CostTier::Cheap,
                 seconds: 0.1,
@@ -125,8 +125,25 @@ impl Op for Subtract {
                 return Ok(Output::invalid_args("give subtract or location, not both"));
             }
             _ => {
-                return Ok(Output::invalid_args(
-                    "give a mask as subtract or a location",
+                // Nothing to protect (an optional input the caller left out): the mask passes
+                // through under the step's name, so the recipe reads the same either way.
+                let mut out = (**mask).clone();
+                out.record.id = "subtract.mask".to_string();
+                let frame = mask.record.frame.clone();
+                let protected = count(&out.protect);
+                let mut outputs = BTreeMap::new();
+                outputs.insert("mask".to_string(), Artifact::Mask(Arc::new(out)));
+                return Ok(Output::ok(
+                    "nothing to protect: no second input; the mask passes through",
+                    outputs,
+                )
+                .with_measurement("grow_px", grow_px, "px", Some(&frame))
+                .with_measurement("protect_px_before", protected as f64, "px", Some(&frame))
+                .with_measurement(
+                    "protect_px_after",
+                    protected as f64,
+                    "px",
+                    Some(&frame),
                 ));
             }
         };

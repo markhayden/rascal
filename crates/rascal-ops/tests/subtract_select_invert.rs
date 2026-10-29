@@ -160,14 +160,15 @@ fn subtract_protects_from_a_mask_or_a_location_grown_and_keeps_the_profile() {
         run(&Subtract, &table, &both, Params::new()).envelope.status,
         Status::InvalidArgs
     );
+    // Neither: the mask passes through (a recipe's optional protect left out).
     let mut neither: Inputs = BTreeMap::new();
-    neither.insert("mask".into(), Artifact::Mask(Arc::new(mask)));
-    assert_eq!(
-        run(&Subtract, &table, &neither, Params::new())
-            .envelope
-            .status,
-        Status::InvalidArgs
-    );
+    neither.insert("mask".into(), Artifact::Mask(Arc::new(mask.clone())));
+    let out = run(&Subtract, &table, &neither, Params::new());
+    assert_eq!(out.envelope.status, Status::Ok);
+    let same = mask_out(&out);
+    assert_eq!(same.core.as_raw(), mask.core.as_raw());
+    assert_eq!(same.protect.as_raw(), mask.protect.as_raw());
+    assert!(out.envelope.summary.contains("passes through"));
 }
 
 fn plane_image(f: &Frame, id: &str, role: Role, set: impl Fn(u32, u32) -> bool) -> Artifact {

@@ -31,6 +31,10 @@ use crate::workspace::Workspace;
 pub struct InputDecl {
     #[serde(rename = "type")]
     pub artifact_type: ArtifactType,
+    /// An input the caller may leave out; a step port bound to it is then left unbound, so
+    /// only an optional port may take it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub optional: bool,
 }
 
 /// One step: its id, op, typed input bindings, and every other key as a parameter.
@@ -230,6 +234,14 @@ impl Recipe {
             .map(|p| p.artifact_type)
     }
 
+    /// Whether a binding names a declared input the caller may leave out.
+    fn binding_is_optional_input(&self, binding: &str) -> bool {
+        binding
+            .strip_prefix("inputs.")
+            .and_then(|name| self.inputs.get(name))
+            .is_some_and(|d| d.optional)
+    }
+
     /// Whether a binding names a many output port as a whole (`<step>.<port>`), which only a
     /// many input may take.
     fn binding_is_many(&self, binding: &str, upto: usize, registry: &OpRegistry) -> bool {
@@ -293,6 +305,15 @@ impl Recipe {
                         format!(
                             "input {port} must be a {}, but {binding} is a {bound}",
                             declared.artifact_type
+                        ),
+                    ));
+                }
+                if declared.required && self.binding_is_optional_input(binding) {
+                    return Err(self.fail(
+                        &step.id,
+                        format!(
+                            "input {port} is required by {}, but {binding} is an optional input",
+                            step.op
                         ),
                     ));
                 }
@@ -561,6 +582,7 @@ impl Recipe {
                         a.artifact_type()
                     )));
                 }
+                None if decl.optional => {}
                 None => {
                     return Err(Error::usage(format!(
                         "input {name} ({}) was not given",
@@ -601,6 +623,10 @@ impl Recipe {
                     .collect();
                 if !expanded.is_empty() && !bindings.contains_key(binding) {
                     step_inputs.extend(expanded);
+                    continue;
+                }
+                if !bindings.contains_key(binding) && self.binding_is_optional_input(binding) {
+                    // The caller left the optional input out: the port stays unbound.
                     continue;
                 }
                 match bindings.get(binding) {

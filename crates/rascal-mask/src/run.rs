@@ -21,6 +21,10 @@ use rascal_core::workspace::Workspace;
 const SHIPPED: &[(&str, &str)] = &[
     ("rect", include_str!("../recipes/rect.toml")),
     ("seam", include_str!("../recipes/seam.toml")),
+    ("remove", include_str!("../recipes/remove.toml")),
+    ("repair", include_str!("../recipes/repair.toml")),
+    ("repair-area", include_str!("../recipes/repair-area.toml")),
+    ("protect", include_str!("../recipes/protect.toml")),
 ];
 
 /// A shipped recipe by name, or a recipe file by path.
@@ -117,6 +121,7 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
         ));
     }
     let declared = |name: &str| recipe.inputs.contains_key(name);
+    let optional = |name: &str| recipe.inputs.get(name).is_some_and(|d| d.optional);
     for (flag, given, input) in [
         (
             "--bbox or --location",
@@ -133,7 +138,7 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
                 recipe.name
             )));
         }
-        if !given && declared(input) {
+        if !given && declared(input) && !optional(input) {
             return Err(Error::usage(format!(
                 "recipe {} needs inputs.{input}: give {flag}",
                 recipe.name
@@ -186,13 +191,28 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
     for (name, path) in [("protect", &args.protect), ("mask", &args.mask)] {
         if let Some(path) = path {
             let mask = Mask::read(path)?;
+            // The mask is in the image's frame, or (for protect's second pass) in a frame
+            // derived from it that the workspace knows: a cut canvas or a crop of it.
             if mask.record.frame != frame.id {
-                return Err(Error::usage(format!(
-                    "{}: the mask is in frame {} but the image is in {}",
-                    path.display(),
-                    mask.record.frame,
-                    frame.id
-                )));
+                let root = run
+                    .workspace
+                    .frames()?
+                    .chain(&mask.record.frame)
+                    .ok()
+                    .and_then(|chain| chain.last().map(|f| f.id.clone()));
+                if root.as_deref() != Some(frame.id.as_str()) {
+                    return Err(Error::usage(format!(
+                        "{}: the mask is in frame {} but the image is in {}{}",
+                        path.display(),
+                        mask.record.frame,
+                        frame.id,
+                        if root.is_none() {
+                            "; the workspace does not know the mask's frame (use --workspace from the run that made it)"
+                        } else {
+                            ""
+                        }
+                    )));
+                }
             }
             inputs.insert(name.to_string(), Artifact::Mask(Arc::new(mask)));
         }

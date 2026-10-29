@@ -1,0 +1,25 @@
+# Repair a stain or a spot: a box or a polygon as drawn, feathered.
+version = 1
+name = "repair-area"
+use_case = "repair"
+
+[inputs]
+image = { type = "Image" }
+location = { type = "Location" }
+
+[[step]]
+id = "rasterize"
+op = "rasterize"
+inputs = { location = "inputs.location", image = "inputs.image" }
+use_case = "repair"
+
+[[step]]
+id = "feather"
+op = "feather"
+inputs = { mask = "rasterize.mask" }
+sigma_px = 3.0
+
+[outputs]
+mask = "feather.mask"
+image = "inputs.image"
+render = [{ for = "grey", out = "repair-area-grey.png" }]

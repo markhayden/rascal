@@ -60,8 +60,8 @@ with green CI on both platforms, and then the tag.
 - [x] 4.1 `grow`, `shrink`, `close`
 - [x] 4.2 `subtract`, `select`, `invert`
 - [x] 4.3 `tighten`
-- [ ] 4.4 The `remove`, `repair`, `repair-area`, `protect` recipes and the acceptance script → tag `m4.1`
-- [ ] 4.5 The segmenter decision
+- [x] 4.4 The `remove`, `repair`, `repair-area`, `protect` recipes and the acceptance script → tag `m4.1`
+- [~] 4.5 The segmenter decision (survey drafted; owner signs)
 - [ ] Checkpoint M4 → tag `m4`
 
 ## M5 Pack

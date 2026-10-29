@@ -2,7 +2,8 @@ name: package
 
 # Proves the crates package as crates.io would serve them: the packaging check, the generated
 # release workflow being current, and a workspace publish dry run (package, verify, no upload).
-# From M4 task 4.4 this workflow also runs scripts/acceptance.sh.
+# It also runs scripts/acceptance.sh: the six recipes, serve with the independent client and
+# the docs coverage, all against a `rascal` installed from the packages.
 on:
   push:
     branches: ["main", "m*"]
@@ -30,3 +31,5 @@ jobs:
         run: dist generate --check && dist plan
       - run: scripts/check-packaging.sh
       - run: scripts/publish.sh --dry-run
+      - name: Release acceptance from the packaged crates
+        run: scripts/acceptance.sh

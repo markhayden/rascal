@@ -46,6 +46,8 @@ before accepting it.
   without. A later step that binds the refused step's output does not run; the run stops
   naming the requirement.
 - Every invocation appends one journal line, publishing or not, successful or not.
+- A step port bound to a recipe input the caller left out (an `optional` input) is unbound;
+  the op sees no artifact there and must say what it does without one.
 
 ## The catalogue
 

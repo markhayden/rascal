@@ -1,0 +1,21 @@
+# The second pass: everything the first pass's mask reached is protected and the rest of the
+# image is editable, in the image's own raw frame. The image is the earlier composite; the mask
+# is the earlier mask, in that raw frame or any frame derived from it (a cut canvas, a crop).
+version = 1
+name = "protect"
+use_case = "protect"
+
+[inputs]
+image = { type = "Image" }
+mask = { type = "Mask" }
+
+[[step]]
+id = "invert"
+op = "invert"
+inputs = { mask = "inputs.mask" }
+to = "raw"
+
+[outputs]
+mask = "invert.mask"
+image = "inputs.image"
+render = [{ for = "grey", out = "protect-grey.png" }]

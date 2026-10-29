@@ -69,6 +69,11 @@ dist-check:
 publish-dry-run:
     scripts/publish.sh --dry-run
 
+# Release acceptance: install from the packaged crates, the six recipes, serve with the
+# independent client, the docs coverage (scripts/acceptance.sh). Minutes, not seconds.
+acceptance:
+    scripts/acceptance.sh
+
 # The offline smoke against any built binary, for example `just smoke target/release/rascal`.
 smoke binary="target/debug/rascal":
     scripts/smoke.sh {{binary}}

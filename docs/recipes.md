@@ -15,6 +15,7 @@ projection = "equirectangular"          # optional: how an input image is read w
 
 [inputs]                                # what the caller binds; any artifact type
 image = { type = "Image" }
+protect = { type = "Mask", optional = true }   # optional: the caller may leave it out; only an optional port may take it
 
 [[step]]
 id = "cut"                              # unique, no '.', not "inputs"
@@ -46,7 +47,9 @@ Everything is checked before anything runs, and every error names the recipe and
   `.` and are not `inputs`; input names likewise;
 - every op is in the catalogue; every bound port exists on the op; every binding names a
   declared input or an earlier step's output of the declared type (`input location must be a
-  Location, but render.image is a Image`); every required port is bound;
+  Location, but render.image is a Image`); every required port is bound; a required port never
+  binds an optional input (when the caller leaves one out, the port stays unbound and the op
+  runs without it: `subtract` with no `inputs.protect` passes its mask through);
 - every parameter is declared by the op and passes its kind and bounds; a `constants` names
   one of the op's sets; defaults are resolved by the manifest, and the resolved values are what
   the journal records;
@@ -72,8 +75,9 @@ The positional image binds `inputs.image`. `--bbox` is sugar that binds `inputs.
 new bbox location in the image's frame; `--location` binds any location kind from a JSON file
 (the `frame` may be omitted; if named it must be the image's frame); `--stroke` binds a stroke
 location to `inputs.stroke`; `--protect` and `--mask` bind stored mask directories in the
-image's frame. A flag without its declared input, or a declared input without its flag, is a
-usage error. `--prompt` arrives with the Python pack (M5).
+image's frame, or (for `protect`) in a frame derived from it that the workspace knows. A flag
+without its declared input, or a declared input without its flag, is a usage error, except an
+input the recipe marks `optional`. `--prompt` arrives with the Python pack (M5).
 
 A step that returns `not_applicable` publishes nothing; a later step that binds its output does
 not run and the run stops naming the requirement; `rascal run` exits 1 under `--strict` and 0
@@ -91,7 +95,15 @@ when the request is the same, or fails naming the request.
 |---|---|---|
 | `rect` | 1.1 | `inputs.location` → `rasterize`; renders `grey` |
 | `seam` | 2.8 | `cut` → `line` → `fan` → `profile` → `ramp`; outputs the band mask, the cut canvas and the plan; `heal seam` consumes them (`docs/fillers.md`) |
-| `remove`, `repair`, `repair-area`, `protect` | M4 | see SPEC.md "Recipes" |
+| `remove` | 4.4 | `inputs.location` (a box, a polygon or a stroke; `--prompt` through a pack's `select` in M5) → `rasterize` → `grow` (4 px, 12 px down for the shadow) → `close` (3 px) → `subtract` (optional `inputs.protect`, grown 2 px) → `feather` (4 px) |
+| `repair` | 4.4 | `inputs.stroke` → `tighten` (`tighten-v1`) → `feather` (2 px) |
+| `repair-area` | 4.4 | `inputs.location` (a box or a polygon) → `rasterize` → `feather` (3 px) |
+| `protect` | 4.4 | `inputs.image` (the earlier composite, in its raw frame) and `inputs.mask` (the earlier mask, in that frame or one derived from it that the workspace knows) → `invert` into the raw frame; outputs the inverted mask and the image, no plan: the second pass edits everything the first left alone and keeps what it painted |
+
+Goldens for the four M4 recipes live under `fixtures/masks/` and `crates/rascal-mask/tests/recipes.rs`
+reproduces them; `heal seam` followed by `heal protect` in one workspace is the two-pass test.
+`scripts/acceptance.sh` (`just acceptance`, and the package workflow) installs `rascal` from
+the packaged crates and runs the six by name on the fixtures with no configuration file.
 
 ## The configuration file
 

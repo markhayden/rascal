@@ -1,0 +1,17 @@
+version = 1
+id = "mask"
+frame = "raw:800x400:equirectangular"
+frame_identity = "sha256:cae6a7e96ce5120c0c1122d9ee5a25646732bd1522170877204a88def89aa71d"
+width = 800
+height = 400
+use_case = "protect"
+identity = "sha256:e8abca067e5e4693dcf8d2369730fdb2d1737660b261237958e84fdcc842b22d"
+
+[zones]
+core = "core.png"
+blend = "blend.png"
+protect = "protect.png"
+
+[source]
+locations = ["sha256:e84345012d8d6b97c216cf6b91c9306fa49642f9db2ded63e6fcf2efd5ec6cd7"]
+instances = []

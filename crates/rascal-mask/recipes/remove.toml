@@ -1,0 +1,47 @@
+# Remove an object: a location (a box, a polygon or a stroke) becomes the core, grown a little
+# and further downward for its shadow, closed, kept off anything protected, feathered. With a
+# configured pack, `--prompt` binds the finder's planes through `select` instead (M5).
+version = 1
+name = "remove"
+use_case = "remove"
+
+[inputs]
+image = { type = "Image" }
+location = { type = "Location" }
+protect = { type = "Mask", optional = true }
+
+[[step]]
+id = "rasterize"
+op = "rasterize"
+inputs = { location = "inputs.location", image = "inputs.image" }
+use_case = "remove"
+
+[[step]]
+id = "grow"
+op = "grow"
+inputs = { mask = "rasterize.mask" }
+px = 4.0
+down_px = 12.0
+
+[[step]]
+id = "close"
+op = "close"
+inputs = { mask = "grow.mask" }
+radius_px = 3.0
+
+[[step]]
+id = "subtract"
+op = "subtract"
+inputs = { mask = "close.mask", subtract = "inputs.protect" }
+grow_px = 2.0
+
+[[step]]
+id = "feather"
+op = "feather"
+inputs = { mask = "subtract.mask" }
+sigma_px = 4.0
+
+[outputs]
+mask = "feather.mask"
+image = "inputs.image"
+render = [{ for = "grey", out = "remove-grey.png" }]
