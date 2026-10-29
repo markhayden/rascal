@@ -171,6 +171,7 @@ fn the_location_schema_is_closed_and_versioned_by_its_id() {
         versioning: Versioning::SchemaId,
         generate: || serde_json::Value::Null,
         roundtrip: |value| Ok(value.clone()),
+        open: &[],
         fixtures: &[
             "location-v1/valid/bbox.json",
             "location-v1/valid/view.json",

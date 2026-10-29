@@ -1,16 +1,20 @@
 //! Recipes: TOML step lists with typed bindings, validated before anything runs, and the
 //! runner that executes one against a run directory, writing artifacts and the journal.
 //!
-//! Task 1.1 binds `Image`, `Location` and `Mask`, resolves no defaults and writes under
-//! `--out` directly. REPLACED BY 1.6 (the recipe schema, defaults resolved at validation,
-//! requirements, every error path) and 1.7a (the workspace commit protocol).
+//! A recipe is validated before anything runs: every op known, every step id unique, every
+//! binding typed and pointing at an earlier step or a declared input, every required port
+//! bound, every parameter declared and within bounds, every constant set known to its op,
+//! every output of the right type; the error names the step. Defaults are resolved by the
+//! manifest and the resolved values are what the journal records. The runner writes under
+//! `--out` directly. REPLACED BY 1.7a (the workspace commit protocol).
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
-use serde::Deserialize;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
 use crate::artifact::{Artifact, ArtifactType};
 use crate::error::{Error, Result};
@@ -23,7 +27,7 @@ use crate::op::{self, Context, Envelope, Inputs, Params, Provenance, Status};
 use crate::registry::OpRegistry;
 
 /// A declared recipe input.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct InputDecl {
     #[serde(rename = "type")]
@@ -36,7 +40,59 @@ pub struct Step {
     pub id: String,
     pub op: String,
     pub inputs: BTreeMap<String, String>,
+    /// The constant set the step selects, for ops that have them.
+    pub constants: Option<String>,
     pub params: Params,
+}
+
+impl JsonSchema for Step {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Step".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "object",
+            "description": "One step: id, op, typed input bindings, an optional constant set, and every other key as a parameter.",
+            "properties": {
+                "id": { "type": "string" },
+                "op": { "type": "string" },
+                "inputs": { "type": "object", "additionalProperties": { "type": "string" } },
+                "constants": { "type": "string" }
+            },
+            "required": ["id", "op"],
+            "additionalProperties": true
+        })
+    }
+}
+
+impl serde::Serialize for Step {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        let mut table = toml::Table::new();
+        table.insert("id".into(), toml::Value::String(self.id.clone()));
+        table.insert("op".into(), toml::Value::String(self.op.clone()));
+        if !self.inputs.is_empty() {
+            table.insert(
+                "inputs".into(),
+                toml::Value::Table(
+                    self.inputs
+                        .iter()
+                        .map(|(k, v)| (k.clone(), toml::Value::String(v.clone())))
+                        .collect(),
+                ),
+            );
+        }
+        if let Some(c) = &self.constants {
+            table.insert("constants".into(), toml::Value::String(c.clone()));
+        }
+        for (k, v) in &self.params {
+            table.insert(k.clone(), v.clone());
+        }
+        table.serialize(serializer)
+    }
 }
 
 impl<'de> Deserialize<'de> for Step {
@@ -54,6 +110,15 @@ impl<'de> Deserialize<'de> for Step {
             _ => {
                 return Err(D::Error::custom(format!(
                     "step {id}: `op` must be a string"
+                )));
+            }
+        };
+        let constants = match table.remove("constants") {
+            None => None,
+            Some(toml::Value::String(s)) => Some(s),
+            Some(_) => {
+                return Err(D::Error::custom(format!(
+                    "step {id}: `constants` must be a string"
                 )));
             }
         };
@@ -78,13 +143,14 @@ impl<'de> Deserialize<'de> for Step {
             id,
             op,
             inputs,
+            constants,
             params: table,
         })
     }
 }
 
 /// A rendering the recipe writes under `--out`.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RenderOut {
     #[serde(rename = "for")]
@@ -93,7 +159,7 @@ pub struct RenderOut {
 }
 
 /// The contract a recipe's consumer reads, by output name.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Outputs {
     #[serde(default)]
@@ -106,8 +172,8 @@ pub struct Outputs {
     pub render: Vec<RenderOut>,
 }
 
-/// A recipe file. REPLACED BY 1.6 (its schema in `schemas/rascal/recipe-v1.json`).
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+/// A recipe file; its schema is the authored `schemas/rascal/recipe-v1.json`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Recipe {
     pub version: u32,
@@ -217,6 +283,36 @@ impl Recipe {
             manifest
                 .resolve_params(&step.params)
                 .map_err(|m| self.fail(&step.id, format!("op {}: {m}", step.op)))?;
+
+            if let Some(constants) = &step.constants {
+                if manifest.constants.is_empty() {
+                    return Err(self.fail(
+                        &step.id,
+                        format!(
+                            "op {} has no constant sets, but constants = \"{constants}\" was given",
+                            step.op
+                        ),
+                    ));
+                }
+                if !manifest.constants.iter().any(|c| c == constants) {
+                    return Err(self.fail(
+                        &step.id,
+                        format!(
+                            "op {} has no constant set {constants}; it has {}",
+                            step.op,
+                            manifest.constants.join(", ")
+                        ),
+                    ));
+                }
+            }
+        }
+        for name in self.inputs.keys() {
+            if name.is_empty() || name.contains('.') {
+                return Err(self.fail(
+                    "inputs",
+                    format!("input names must be non-empty and contain no '.': {name:?}"),
+                ));
+            }
         }
         let n = self.step.len();
         for (name, binding, expected) in [
@@ -249,11 +345,36 @@ impl Recipe {
             if registry.get("render").is_none() {
                 return Err(self.fail("outputs", "render needs the render op"));
             }
+            let render_manifest = registry.get("render").map(|op| op.manifest());
             for r in &self.outputs.render {
                 if r.out.is_empty() || r.out.contains('/') || r.out.contains("..") {
                     return Err(self.fail(
                         "outputs",
                         format!("render out '{}' must be a plain file name", r.out),
+                    ));
+                }
+                if let Some(profiles) = render_manifest
+                    .as_ref()
+                    .and_then(|m| m.param("for"))
+                    .map(|p| &p.choices)
+                    && !profiles.iter().any(|p| p == &r.profile)
+                {
+                    return Err(self.fail(
+                        "outputs",
+                        format!(
+                            "render profile '{}' is not one of {}",
+                            r.profile,
+                            profiles.join(", ")
+                        ),
+                    ));
+                }
+                if r.profile != "grey" && r.profile != "binary" && self.outputs.image.is_none() {
+                    return Err(self.fail(
+                        "outputs",
+                        format!(
+                            "render profile '{}' draws on the image: set outputs.image",
+                            r.profile
+                        ),
                     ));
                 }
             }
@@ -380,8 +501,49 @@ impl Run {
             .map(|(k, a)| (k.clone(), a.identity().as_str().to_string()))
             .collect();
         let started = Instant::now();
-        let resolved = match manifest.resolve_params(params) {
-            Ok(resolved) => resolved,
+        let mut given = params.clone();
+        let constants = given.remove("constants");
+        if let Some(c) = &constants {
+            let name = c.as_str().unwrap_or_default();
+            if !manifest.constants.iter().any(|k| k == name) {
+                let mut envelope = Envelope::invalid_args(format!("no constant set {name}"));
+                envelope.provenance = Provenance {
+                    tool: manifest.name.clone(),
+                    version: manifest.version.clone(),
+                    duration_ms: 0,
+                };
+                self.journal_op(
+                    step_id,
+                    &manifest,
+                    params,
+                    input_identities,
+                    BTreeMap::new(),
+                    Some(envelope),
+                    0,
+                )?;
+                return Err(Error::usage(format!(
+                    "step {step_id}: {}: no constant set {name}",
+                    manifest.name
+                )));
+            }
+        }
+        let resolved = match manifest.resolve_params(&given) {
+            Ok(mut resolved) => {
+                match constants {
+                    Some(c) => {
+                        resolved.insert("constants".to_string(), c);
+                    }
+                    None => {
+                        if let Some(first) = manifest.constants.first() {
+                            resolved.insert(
+                                "constants".to_string(),
+                                toml::Value::String(first.clone()),
+                            );
+                        }
+                    }
+                }
+                resolved
+            }
             Err(message) => {
                 let mut envelope = Envelope::invalid_args(message.clone());
                 envelope.provenance = Provenance {
@@ -570,7 +732,14 @@ impl Recipe {
                 }
                 break;
             }
-            let output = run.invoke(&step.id, &step.op, registry, &step_inputs, &step.params)?;
+            let mut params = step.params.clone();
+            if let Some(constants) = &step.constants {
+                params.insert(
+                    "constants".to_string(),
+                    toml::Value::String(constants.clone()),
+                );
+            }
+            let output = run.invoke(&step.id, &step.op, registry, &step_inputs, &params)?;
             if output.envelope.status != Status::Ok {
                 let reason = output.envelope.reason.clone().unwrap_or_default();
                 unmet.insert(

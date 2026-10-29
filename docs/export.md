@@ -19,7 +19,7 @@ rascal has no code dependency on the origin.
 the drift harness except where noted: `frame-v1` (the three frame kinds; a derived frame's
 fields are optional rather than a tagged union, since `serde(flatten)` and
 `deny_unknown_fields` do not combine), `image-v1`, `mask-v1`, `band-profile-v1`, `series-v1`,
-`journal-v1`, `manifest-v1` and the authored `location-v1.json`: a
+`journal-v1`, `manifest-v1`, `envelope-v1`, `config-v1`, the authored `recipe-v1` and the authored `location-v1.json`: a
 location is **one of** the copied `Location` definition (the kinds `bbox`, `polygon`, `view`,
 `whole_image`, `absent`, referenced by `$ref` and never redefined) or rascal's `line` (a column
 or a path with a full width in pixels) or `stroke` (a path with a radius in pixels). Inside a
@@ -43,7 +43,8 @@ registered type the test suite:
   because it references a copied schema, such as the location) is not compared;
 - asserts the committed schema is closed everywhere it describes an object
   (`deny_unknown_fields`; a map with a schema-valued `additionalProperties` and no
-  `properties` is closed by construction), for both sources;
+  `properties` is closed by construction), for both sources, except the `$defs` an entry
+  lists as open on purpose with its reason (a recipe step, whose keys are the op's parameters);
 - asserts the type is versioned, for both sources: by field (every shape the schema can take,
   through `oneOf`, `anyOf`, `allOf` and local `$ref`s, requires a `version` or `*_version`
   property) or, for a type whose shape is shared with a copied schema that has none, by schema

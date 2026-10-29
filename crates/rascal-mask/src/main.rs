@@ -35,8 +35,26 @@ enum Command {
         out: PathBuf,
         /// Bind inputs.location to a box: x0,y0,x1,y1 as fractions of the image. A value may
         /// start with a minus sign (a box reaching past the left edge of a flat image).
-        #[arg(long, allow_hyphen_values = true)]
+        #[arg(long, allow_hyphen_values = true, conflicts_with = "location")]
         bbox: Option<String>,
+        /// Bind inputs.location to a location JSON file (any kind) in the image's frame.
+        #[arg(long)]
+        location: Option<PathBuf>,
+        /// Bind inputs.stroke to a stroke location JSON file in the image's frame.
+        #[arg(long)]
+        stroke: Option<PathBuf>,
+        /// Bind inputs.protect to a stored mask directory in the image's frame.
+        #[arg(long)]
+        protect: Option<PathBuf>,
+        /// Bind inputs.mask to a stored mask directory in the image's frame.
+        #[arg(long)]
+        mask: Option<PathBuf>,
+        /// Bind inputs.prompt through a configured pack (arrives with M5).
+        #[arg(long)]
+        prompt: Option<String>,
+        /// The configuration file (rascal.toml).
+        #[arg(long)]
+        config: Option<PathBuf>,
         /// The image's projection; without it an exactly 2:1 image is taken as equirectangular.
         #[arg(long)]
         projection: Option<ProjectionArg>,
@@ -143,6 +161,12 @@ fn main() {
             image,
             out,
             bbox,
+            location,
+            stroke,
+            protect,
+            mask,
+            prompt,
+            config,
             projection,
             strict,
         } => {
@@ -151,6 +175,12 @@ fn main() {
                 image,
                 out,
                 bbox,
+                location,
+                stroke,
+                protect,
+                mask,
+                prompt,
+                config,
                 projection: projection.map(Into::into),
                 strict,
             };

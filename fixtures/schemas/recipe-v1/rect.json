@@ -1,0 +1,1 @@
+{"version":1,"name":"rect","use_case":"custom","projection":null,"inputs":{"image":{"type":"Image"},"location":{"type":"Location"}},"step":[{"id":"rasterize","op":"rasterize","inputs":{"image":"inputs.image","location":"inputs.location"}}],"outputs":{"mask":"rasterize.mask","image":"inputs.image","plan":null,"render":[{"for":"grey","out":"rect-grey.png"}]}}

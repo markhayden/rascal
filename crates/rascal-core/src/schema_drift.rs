@@ -52,6 +52,9 @@ pub struct BoundaryType {
     pub roundtrip: fn(&serde_json::Value) -> Result<serde_json::Value, String>,
     /// Serialized fixtures, relative to `fixtures/schemas/`.
     pub fixtures: &'static [&'static str],
+    /// Names of `$defs` whose objects are open on purpose, each justified where it is listed
+    /// (a recipe step carries op-specific parameters). Everything else must be closed.
+    pub open: &'static [&'static str],
 }
 
 /// Registers a boundary type, versioned by field. Compiles only for a type with the three
@@ -71,12 +74,14 @@ macro_rules! boundary_type {
                 ::serde_json::to_value(typed).map_err(|e| e.to_string())
             },
             fixtures: &[$($fixture),*],
+            open: &[],
         }
     };
 }
 
 /// Every boundary type in the core. Each task that adds one adds a line here.
 pub fn inventory() -> Vec<BoundaryType> {
+    use crate::config::Config;
     use crate::frame::Frame;
     use crate::image::ImageRecord;
     use crate::journal::JournalLine;
@@ -84,6 +89,7 @@ pub fn inventory() -> Vec<BoundaryType> {
     use crate::mask::MaskRecord;
     use crate::op::{Envelope, Manifest};
     use crate::profile::BandProfile;
+    use crate::recipe::Recipe;
     use crate::series::Series;
     vec![
         boundary_type!(
@@ -127,6 +133,22 @@ pub fn inventory() -> Vec<BoundaryType> {
             Source::Generated,
             ["envelope-v1/ok.json", "envelope-v1/not-applicable.json"]
         ),
+        boundary_type!(
+            Config,
+            "rascal/config-v1.json",
+            Source::Generated,
+            ["config-v1/minimal.json", "config-v1/full.json"]
+        ),
+        BoundaryType {
+            // A step's parameters are the op's own keys, so Step is open on purpose.
+            open: &["Step"],
+            ..boundary_type!(
+                Recipe,
+                "rascal/recipe-v1.json",
+                Source::Authored,
+                ["recipe-v1/rect.json", "recipe-v1/seam.json"]
+            )
+        },
         boundary_type!(
             BandProfile,
             "rascal/band-profile-v1.json",
@@ -177,6 +199,12 @@ pub const COMPONENTS: &[&str] = &[
     "Prescription",
     "ProvenanceNode",
     "Windows",
+    "WorkspaceConfig",
+    "CorpusConfig",
+    "InputDecl",
+    "RenderOut",
+    "Outputs",
+    "Step",
     "Refinement",
     "ParamKind",
     "CostTier",
@@ -245,7 +273,7 @@ pub fn check(entry: &BoundaryType, schemas: &SchemaDir, fixtures: &Path) -> Vec<
             schema: schema_name.clone(),
         });
     }
-    if !is_closed(&committed) {
+    if !is_closed_except(&committed, entry.open) {
         findings.push(Finding::NotClosed {
             schema: schema_name.clone(),
         });
@@ -324,6 +352,20 @@ fn same_json(a: &serde_json::Value, b: &serde_json::Value) -> bool {
         }
         _ => a == b,
     }
+}
+
+/// `is_closed`, with the named `$defs` exempt.
+fn is_closed_except(schema: &serde_json::Value, open: &[&str]) -> bool {
+    if open.is_empty() {
+        return is_closed(schema);
+    }
+    let mut trimmed = schema.clone();
+    if let Some(defs) = trimmed.get_mut("$defs").and_then(|d| d.as_object_mut()) {
+        for name in open {
+            defs.remove(*name);
+        }
+    }
+    is_closed(&trimmed)
 }
 
 /// True when every object the schema describes refuses unknown properties. An object with no

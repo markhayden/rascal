@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rascal:schemas:rascal:recipe-v1",
+  "title": "Recipe",
+  "description": "A recipe: a TOML list of typed steps (SPEC.md \"Recipes\"). Bindings are `<step id>.<output>` or `inputs.<name>`. A step's keys other than id, op, inputs and constants are the op's parameters, so a step is open; everything else is closed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "name", "use_case"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "use_case": { "type": "string", "enum": ["seam", "remove", "repair", "protect", "custom"] },
+    "projection": { "type": ["string", "null"], "enum": ["flat", "equirectangular", null] },
+    "inputs": {
+      "type": "object",
+      "description": "Declared inputs by name; the CLI binds them from --image, --bbox, --location, --stroke, --protect and --mask.",
+      "additionalProperties": { "$ref": "#/$defs/InputDecl" }
+    },
+    "step": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Step" }
+    },
+    "outputs": { "$ref": "#/$defs/Outputs" }
+  },
+  "$defs": {
+    "InputDecl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["Image", "Location", "Mask", "BandProfile", "Series", "Plan"] }
+      }
+    },
+    "Step": {
+      "type": "object",
+      "description": "One step: id, op, typed input bindings, an optional constant set, and every other key as a parameter.",
+      "required": ["id", "op"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "pattern": "^[^.]+$", "not": { "const": "inputs" } },
+        "op": { "type": "string", "minLength": 1 },
+        "inputs": { "type": "object", "additionalProperties": { "type": "string", "pattern": "^[^.]+\\.[^.]+$" } },
+        "constants": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "RenderOut": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["for", "out"],
+      "properties": {
+        "for": { "type": "string", "enum": ["grey", "binary", "alpha", "tinted", "overlay"] },
+        "out": { "type": "string", "minLength": 1, "pattern": "^[^/]+$" }
+      }
+    },
+    "Outputs": {
+      "type": "object",
+      "description": "The contract a consumer reads, by output name, never by step name.",
+      "additionalProperties": false,
+      "properties": {
+        "mask": { "type": ["string", "null"] },
+        "image": { "type": ["string", "null"] },
+        "plan": { "type": ["string", "null"] },
+        "render": { "type": "array", "items": { "$ref": "#/$defs/RenderOut" } }
+      }
+    }
+  }
+}

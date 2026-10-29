@@ -300,6 +300,10 @@ pub struct Manifest {
     pub outputs: Vec<Port>,
     #[serde(default)]
     pub params: Vec<Param>,
+    /// The named constant sets a step may select with `constants = "<name>"`; the first is the
+    /// default. Empty for an op that has none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub constants: Vec<String>,
     /// Bounds on what the envelope holds.
     pub returns: Bounds,
     /// The JSON Schema of the parameter table, derived from `params`.
@@ -335,6 +339,7 @@ impl Manifest {
             inputs,
             outputs,
             params,
+            constants: Vec::new(),
             returns: Bounds::standard(),
             input_schema: serde_json::Value::Null,
             output_schema: serde_json::Value::Null,
@@ -342,6 +347,12 @@ impl Manifest {
         manifest.input_schema = manifest.derive_input_schema();
         manifest.output_schema = manifest.derive_output_schema();
         manifest
+    }
+
+    /// With the constant sets the op accepts.
+    pub fn with_constants(mut self, constants: &[&str]) -> Manifest {
+        self.constants = constants.iter().map(|c| c.to_string()).collect();
+        self
     }
 
     fn derive_input_schema(&self) -> serde_json::Value {

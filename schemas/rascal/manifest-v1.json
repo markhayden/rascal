@@ -218,6 +218,13 @@
   "additionalProperties": false,
   "description": "What an op is and takes. Every field is required to be meaningful: the registry checks\nthem at start and a test checks them for every shipped op.",
   "properties": {
+    "constants": {
+      "description": "The named constant sets a step may select with `constants = \"<name>\"`; the first is the\ndefault. Empty for an op that has none.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
     "cost": {
       "$ref": "#/$defs/Cost"
     },

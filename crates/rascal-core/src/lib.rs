@@ -7,6 +7,7 @@
 
 pub mod artifact;
 pub mod canonical;
+pub mod config;
 pub mod error;
 pub mod frame;
 pub mod identity;

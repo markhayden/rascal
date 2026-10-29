@@ -11,6 +11,7 @@ use rascal_core::error::Result;
 use rascal_core::frame::Projection;
 use rascal_core::image::Image;
 use rascal_core::location::Location;
+use rascal_core::mask::Mask;
 use rascal_core::op::Status;
 use rascal_core::outdir::{self, OutKind};
 use rascal_core::recipe::{Recipe, Run};
@@ -41,6 +42,12 @@ pub struct RunArgs {
     pub image: PathBuf,
     pub out: PathBuf,
     pub bbox: Option<String>,
+    pub location: Option<PathBuf>,
+    pub stroke: Option<PathBuf>,
+    pub protect: Option<PathBuf>,
+    pub mask: Option<PathBuf>,
+    pub prompt: Option<String>,
+    pub config: Option<PathBuf>,
     pub projection: Option<Projection>,
     pub strict: bool,
 }
@@ -54,17 +61,52 @@ pub struct RunReport {
     pub renders: Vec<(String, PathBuf)>,
 }
 
-/// Runs a recipe. The run directory must be new or empty.
+/// Runs a recipe. The run directory must be new or empty. Every declared input is bound from
+/// its flag: `image` from the positional path, `location` from `--bbox` or `--location`,
+/// `stroke` from `--stroke`, `protect` and `mask` from stored mask directories; a declared
+/// input without its flag, or a flag without its input, is a usage error.
 pub fn run(registry: &OpRegistry, args: &RunArgs) -> Result<RunReport> {
+    if let Some(path) = &args.config {
+        rascal_core::config::Config::read(path)?;
+    }
     let recipe = load_recipe(&args.recipe)?;
     recipe.validate(registry)?;
-    let bbox = args.bbox.as_deref().map(Location::parse_bbox).transpose()?;
-    if recipe.inputs.contains_key("location") && bbox.is_none() {
+    if args.prompt.is_some() {
+        return Err(Error::usage(
+            "--prompt binds through a configured pack, which arrives with M5",
+        ));
+    }
+    let declared = |name: &str| recipe.inputs.contains_key(name);
+    for (flag, given, input) in [
+        (
+            "--bbox or --location",
+            args.bbox.is_some() || args.location.is_some(),
+            "location",
+        ),
+        ("--stroke", args.stroke.is_some(), "stroke"),
+        ("--protect", args.protect.is_some(), "protect"),
+        ("--mask", args.mask.is_some(), "mask"),
+    ] {
+        if given && !declared(input) {
+            return Err(Error::usage(format!(
+                "recipe {} declares no inputs.{input}; {flag} does not apply",
+                recipe.name
+            )));
+        }
+        if !given && declared(input) {
+            return Err(Error::usage(format!(
+                "recipe {} needs inputs.{input}: give {flag}",
+                recipe.name
+            )));
+        }
+    }
+    if !declared("image") {
         return Err(Error::usage(format!(
-            "recipe {} needs inputs.location: give --bbox x0,y0,x1,y1",
+            "recipe {} declares no inputs.image; every run takes an image",
             recipe.name
         )));
     }
+    let bbox = args.bbox.as_deref().map(Location::parse_bbox).transpose()?;
     if !args.image.is_file() {
         return Err(Error::io(
             &args.image,
@@ -94,6 +136,32 @@ pub fn run(registry: &OpRegistry, args: &RunArgs) -> Result<RunReport> {
             Artifact::Location { location, identity },
         );
     }
+    if let Some(path) = &args.location {
+        inputs.insert(
+            "location".to_string(),
+            location_from_file(path, &frame, None)?,
+        );
+    }
+    if let Some(path) = &args.stroke {
+        inputs.insert(
+            "stroke".to_string(),
+            location_from_file(path, &frame, Some("stroke"))?,
+        );
+    }
+    for (name, path) in [("protect", &args.protect), ("mask", &args.mask)] {
+        if let Some(path) = path {
+            let mask = Mask::read(path)?;
+            if mask.record.frame != frame.id {
+                return Err(Error::usage(format!(
+                    "{}: the mask is in frame {} but the image is in {}",
+                    path.display(),
+                    mask.record.frame,
+                    frame.id
+                )));
+            }
+            inputs.insert(name.to_string(), Artifact::Mask(Arc::new(mask)));
+        }
+    }
 
     let outcome = recipe.run(registry, inputs, &mut run)?;
     let mask_dir = match outcome.outputs.get("mask") {
@@ -107,4 +175,51 @@ pub fn run(registry: &OpRegistry, args: &RunArgs) -> Result<RunReport> {
         mask_dir,
         renders: outcome.renders,
     })
+}
+
+/// A location from a JSON file, validated against the schema and the image's frame. The file
+/// may name the frame by its id or leave `frame` out; the image's frame is used.
+fn location_from_file(
+    path: &Path,
+    frame: &rascal_core::frame::Frame,
+    kind: Option<&str>,
+) -> Result<Artifact> {
+    let text = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
+    let mut value: serde_json::Value =
+        serde_json::from_str(&text).map_err(|source| Error::Json {
+            path: path.to_path_buf(),
+            source,
+        })?;
+    if let Some(object) = value.as_object_mut() {
+        match object.get("frame").and_then(|f| f.as_str()) {
+            None => {
+                object.insert(
+                    "frame".to_string(),
+                    serde_json::Value::String(frame.id.clone()),
+                );
+            }
+            Some(named) if named != frame.id => {
+                return Err(Error::usage(format!(
+                    "{}: names frame {named} but the image is in {}",
+                    path.display(),
+                    frame.id
+                )));
+            }
+            Some(_) => {}
+        }
+    }
+    let location: Location = serde_json::from_value(value)
+        .map_err(|e| Error::usage(format!("{}: not a location: {e}", path.display())))?;
+    location.validate(frame)?;
+    if let Some(kind) = kind
+        && location.kind() != kind
+    {
+        return Err(Error::usage(format!(
+            "{}: expected a {kind} location, got a {}",
+            path.display(),
+            location.kind()
+        )));
+    }
+    let identity = location.identity(&frame.identity);
+    Ok(Artifact::Location { location, identity })
 }
