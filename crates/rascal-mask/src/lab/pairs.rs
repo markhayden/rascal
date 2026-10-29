@@ -77,6 +77,16 @@ fn focus_of(left: &Side, right: &Side) -> Result<Option<Focus>> {
     Ok(changes.focus(left.topology))
 }
 
+/// A whole image for the page: scaled to `max_side` on its longest side when it is larger.
+fn whole(image: &DynamicImage, max_side: Option<u32>) -> Result<String> {
+    match max_side {
+        Some(side) if image.width().max(image.height()) > side => {
+            data_uri(&image.resize(side, side, image::imageops::FilterType::Triangle))
+        }
+        _ => data_uri(image),
+    }
+}
+
 fn data_uri(image: &DynamicImage) -> Result<String> {
     Ok(panel::png_data_uri(&rascal_core::canonical::encode_png(
         image,
@@ -136,8 +146,10 @@ fn split_template() -> Result<(&'static str, &'static str, &'static str)> {
     Ok((head, block, tail))
 }
 
-/// Writes the assignment and the page; returns the page's path.
-pub fn pairs(root: &Path, arms: &str) -> Result<PathBuf> {
+/// Writes the assignment and the page; returns the page's path. `whole_max_side` scales the
+/// whole images (the whole and look-around views) to that longest side, said on the page;
+/// the focus crops are always at full size.
+pub fn pairs(root: &Path, arms: &str, whole_max_side: Option<u32>) -> Result<PathBuf> {
     let lab = LabDir {
         root: root.to_path_buf(),
     };
@@ -256,8 +268,8 @@ pub fn pairs(root: &Path, arms: &str) -> Result<PathBuf> {
                 )
                 .replace("{{LEFT_CROP}}", &crop(&left)?)
                 .replace("{{RIGHT_CROP}}", &crop(&right)?)
-                .replace("{{LEFT}}", &data_uri(&left.result)?)
-                .replace("{{RIGHT}}", &data_uri(&right.result)?)
+                .replace("{{LEFT}}", &whole(&left.result, whole_max_side)?)
+                .replace("{{RIGHT}}", &whole(&right.result, whole_max_side)?)
                 .replace("{{BUTTONS}}", &buttons),
         );
     }
@@ -267,10 +279,15 @@ pub fn pairs(root: &Path, arms: &str) -> Result<PathBuf> {
         .replace(
             "{{SUMMARY}}",
             &panel::escape(&format!(
-                "{} pairs over {} groups; protocol {}.",
+                "{} pairs over {} groups; protocol {}.{}",
                 assignment.pair.len(),
                 protocol.group.len(),
-                digest
+                digest,
+                whole_max_side
+                    .map(|side| format!(
+                        " The whole images are scaled to a longest side of {side} px for the whole and look-around views; the focus is at full size."
+                    ))
+                    .unwrap_or_default()
             )),
         )
         .replace("{{COUNT}}", &assignment.pair.len().to_string())

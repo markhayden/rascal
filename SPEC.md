@@ -887,7 +887,8 @@ attempt and never overwrites one. `rascal lab pairs --arms a,b` writes `pairs/as
 from `seed`, the protocol digest) and `pairs/index.html` (static, images embedded, order drawn
 from `seed`; each pair shown at its focus, the region both results changed in the source, at
 full size with the sides scrolling together, whole, and for an equirectangular frame from
-inside the sphere with one orientation for both sides); the page writes `picks.json` (version,
+inside the sphere with one orientation for both sides; the whole images scaled only by an
+explicit `--whole-max-side`, said on the page, never the focus); the page writes `picks.json` (version,
 assignment digest, one of `left | right | same | neither` per pair id). `rascal lab decode` rejects picks whose assignment digest does not
 match or that are missing, duplicated or foreign, and reports per group: decided pairs (`left`
 or `right`), wins, losses, `same`, `neither`, and the outcome under the protocol.

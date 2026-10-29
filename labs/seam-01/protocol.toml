@@ -1,0 +1,17 @@
+# The first lab round's protocol (docs/lab.md), frozen before any result is seen: the arms
+# fan-ramp (fan-v1) and thin (fan-thin-v1), the sky and structured groups of the generated
+# corpus (labs/seam-01/corpus.toml), the seed the pairs page draws from, and min_decided = 8
+# because the sky group holds nine images, two of them variants of one composition.
+version = 1
+name = "seam-01"
+seed = 20261029
+arms = ["fan-ramp", "thin"]
+min_decided = 8
+
+[[group]]
+name = "sky"
+images = ["beach-dark-sunset", "beach-dawn", "sky-02-v2", "sky-03", "sky-04", "sky-05", "sky-06", "sky-07", "sky-08"]
+
+[[group]]
+name = "structured"
+images = ["str-01-v2", "str-02-v2", "str-03", "str-04", "str-06", "str-07", "str-08", "str-09", "str-10", "str-11", "str-12"]

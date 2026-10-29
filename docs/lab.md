@@ -29,6 +29,8 @@ the `[workspace]`, `[fillers]` and `[packs]` sections are described in `docs/wor
 
 ## The protocol
 
+A round's committed inputs (the corpus manifest, `protocol.toml` and `matrix.toml`) live under
+`labs/<name>/`; its run output goes under `lab/<name>/`, which is never committed.
 `protocol.toml` is committed before `lab run` is invoked; the run records the digest of its
 bytes, and a change after a run is a new lab name. It names the lab, the seed `lab pairs`
 draws from, the two arms compared (`arms = [a, b]`; wins are a's), `min_decided` (default 10)
@@ -115,7 +117,9 @@ image id, the group, the cell and attempt on each side and which side arm `a` to
 `pairs/index.html`, a static page with both results embedded as PNG data and nothing that
 names an arm, a side's cell or the configuration; the command prints the page's size, which on
 full panoramas runs to hundreds of megabytes (the spec asks for embedding and forbids a silent
-resize). The page order and each pair's sides are
+resize). `--whole-max-side <px>` scales the whole images to that longest side for the whole and
+look-around views and says so on the page, so a round of many large panoramas opens in a
+browser; the focus crops are never scaled. The page order and each pair's sides are
 drawn from the protocol's seed (splitmix64; the order by Fisher–Yates, then one bit per pair),
 so the same lab draws the same page. The judge picks `left`, `right`, `same` or `neither` per
 pair and saves `picks.json` (version, the assignment file's digest, one pick per pair id);

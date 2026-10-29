@@ -33,6 +33,28 @@ fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
+/// Standard base64 without padding tolerance beyond what the page writes.
+fn base64_decode(text: &str) -> Vec<u8> {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = Vec::with_capacity(text.len() * 3 / 4);
+    let mut buffer = 0u32;
+    let mut bits = 0;
+    for byte in text.bytes() {
+        if byte == b'=' {
+            break;
+        }
+        let value = TABLE.iter().position(|&t| t == byte).unwrap() as u32;
+        buffer = (buffer << 6) | value;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buffer >> bits) as u8);
+            buffer &= (1 << bits) - 1;
+        }
+    }
+    out
+}
+
 fn write_picks(
     path: &Path,
     assignment_bytes: &[u8],
@@ -242,6 +264,48 @@ fn pairs_writes_a_blind_page_and_decode_reports_the_outcome_per_group() {
         "{}",
         text(&out.stdout)
     );
+    // --whole-max-side scales the whole images, says so, and leaves the focus crops alone.
+    let out = rascal(&[
+        "lab",
+        "pairs",
+        lab.to_str().unwrap(),
+        "--arms",
+        "fan-ramp,thin",
+        "--whole-max-side",
+        "100",
+    ]);
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    let scaled = std::fs::read_to_string(&page_path).unwrap();
+    assert!(scaled.contains("scaled to a longest side of 100 px"));
+    assert!(scaled.len() < page.len());
+    let full = scaled
+        .split("<img class=\"full\" src=\"data:image/png;base64,")
+        .nth(1)
+        .and_then(|rest| rest.split('"').next())
+        .unwrap();
+    let decoded = image::load_from_memory(&base64_decode(full)).unwrap();
+    assert!(
+        decoded.width().max(decoded.height()) <= 100,
+        "{}x{}",
+        decoded.width(),
+        decoded.height()
+    );
+    let crop = scaled
+        .split("<img class=\"crop\" src=\"data:image/png;base64,")
+        .nth(1)
+        .and_then(|rest| rest.split('"').next())
+        .unwrap();
+    let crop = image::load_from_memory(&base64_decode(crop)).unwrap();
+    assert!(crop.width() > 100, "the focus crop is at full size");
+    // The unscaled page again for the checks below.
+    let out = rascal(&[
+        "lab",
+        "pairs",
+        lab.to_str().unwrap(),
+        "--arms",
+        "fan-ramp,thin",
+    ]);
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
     // --arms with one name, three names or the same arm twice.
     for arms in ["fan-ramp", "fan-ramp,thin,wide", "thin,thin"] {
         let out = rascal(&["lab", "pairs", lab.to_str().unwrap(), "--arms", arms]);
