@@ -10,6 +10,7 @@ pub mod fan;
 pub mod feather;
 pub mod inspect;
 pub mod line;
+pub mod measure;
 pub mod paste;
 pub mod primitives;
 pub mod profile;
@@ -42,6 +43,7 @@ pub fn register_all(registry: &mut OpRegistry) -> rascal_core::error::Result<()>
     registry.register(Box::new(window::Window))?;
     registry.register(Box::new(unwindow::Unwindow))?;
     registry.register(Box::new(paste::Paste))?;
+    registry.register(Box::new(measure::Measure))?;
     Ok(())
 }
 

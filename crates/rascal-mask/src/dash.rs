@@ -26,7 +26,70 @@ pub fn panels() -> PanelRegistry {
     registry.register(Box::new(EnvelopePanel));
     registry.register(Box::new(ArtifactsPanel));
     registry.register(Box::new(ProfilePanel));
+    registry.register(Box::new(MeasuresPanel));
     registry
+}
+
+/// Every Series a `measure` line produced, as a chart, with the envelope's summaries beside it.
+struct MeasuresPanel;
+
+impl Panel for MeasuresPanel {
+    fn name(&self) -> &'static str {
+        "measures"
+    }
+
+    fn render(&self, line: &JournalLine, workspace: &Workspace) -> Option<Rendered> {
+        if line.op.as_deref() != Some("measure") {
+            return None;
+        }
+        let mut parts = Vec::new();
+        for (port, identity) in &line.outputs {
+            let Ok(Artifact::Series(series)) = workspace.load(identity) else {
+                continue;
+            };
+            let values: Vec<f64> = if series.channels == 1 {
+                series.values.clone()
+            } else {
+                series
+                    .values
+                    .chunks(series.channels as usize)
+                    .map(|c| c[0])
+                    .collect()
+            };
+            parts.push(format!(
+                "<div class=\"profile\">{}<p class=\"meta\">{}: {} rows ({})</p></div>",
+                rascal_ops::inspect::chart_svg(
+                    &format!("{port}: {}", series.name),
+                    &series.unit,
+                    &values
+                ),
+                panel::escape(port),
+                series.rows.len(),
+                panel::escape(&series.unit)
+            ));
+        }
+        if let Some(envelope) = &line.envelope {
+            let rows: Vec<String> = envelope
+                .measurements
+                .iter()
+                .map(|m| {
+                    format!(
+                        "<tr><td>{}</td><td>{:.4}</td><td>{}</td></tr>",
+                        panel::escape(&m.name),
+                        m.value,
+                        panel::escape(&m.unit)
+                    )
+                })
+                .collect();
+            if !rows.is_empty() {
+                parts.push(format!("<table class=\"summaries\"><thead><tr><th>summary</th><th>value</th><th>unit</th></tr></thead><tbody>{}</tbody></table>", rows.join("")));
+            }
+        }
+        (!parts.is_empty()).then(|| Rendered {
+            title: "measures".to_string(),
+            html: parts.join(""),
+        })
+    }
 }
 
 /// A band profile's half-width per row as a chart, beside the strip of the image it measured.

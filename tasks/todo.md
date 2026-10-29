@@ -41,7 +41,7 @@ with green CI on both platforms, and then the tag.
 - [x] 2.3 `ramp` and `apply`
 - [x] 2.4 `window` and `unwindow`
 - [x] 2.5 `paste` (feather and hard)
-- [ ] 2.6 `measure` v1
+- [x] 2.6 `measure` v1
 - [ ] 2.7 Fillers and the fake fillers
 - [ ] 2.8 `heal`'s typed graph and the shipped `seam` recipe → tag `m2.1`
 - [ ] Checkpoint M2 → tag `m2`

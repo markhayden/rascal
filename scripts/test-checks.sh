@@ -127,6 +127,14 @@ grep -v '^| `envelope` |' docs/diagnostics.md > "$fake/diagnostics.md"
 out="$(DOCS_DIR="$fake" scripts/check-docs.sh 2>&1 || true)"
 if grep -q "panel 'envelope' is registered but not in" <<< "$out"; then ok; else bad "check-docs accepted an undocumented panel: $out"; fi
 cp docs/diagnostics.md "$fake/diagnostics.md"
+grep -v '^| `drift` |' docs/measures.md > "$fake/measures.md"
+out="$(DOCS_DIR="$fake" scripts/check-docs.sh 2>&1 || true)"
+if grep -q "measure 'drift' is registered but not in" <<< "$out"; then ok; else bad "check-docs accepted an undocumented measure: $out"; fi
+cp docs/measures.md "$fake/measures.md"
+printf '| `sparkle` | x | x | x |\n' >> "$fake/measures.md"
+out="$(DOCS_DIR="$fake" scripts/check-docs.sh 2>&1 || true)"
+if grep -q "'sparkle' is in .* no such measure is registered" <<< "$out"; then ok; else bad "check-docs accepted a stale documented measure: $out"; fi
+cp docs/measures.md "$fake/measures.md"
 printf '| `aurora` | x | 9.9 |\n' >> "$fake/diagnostics.md"
 out="$(DOCS_DIR="$fake" scripts/check-docs.sh 2>&1 || true)"
 if grep -q "'aurora' is in .* no such panel is registered" <<< "$out"; then ok; else bad "check-docs accepted a stale documented panel: $out"; fi

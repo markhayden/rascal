@@ -5,6 +5,7 @@ mod dash;
 mod exit;
 mod export;
 mod inspect;
+mod measure;
 mod ops;
 mod paste;
 mod render;
@@ -130,6 +131,30 @@ enum Command {
         #[arg(long)]
         out: PathBuf,
     },
+    /// The measures of a composite: continuity, tone step, transition, texture match, drift.
+    Measure {
+        /// The image to measure (the composite).
+        #[arg(long, required_unless_present = "list")]
+        after: Option<PathBuf>,
+        /// The image before, for drift.
+        #[arg(long)]
+        before: Option<PathBuf>,
+        /// The mask directory (`<id>.mask/`), with its profile for the band measures.
+        #[arg(long, required_unless_present = "list")]
+        mask: Option<PathBuf>,
+        /// The measures to run, comma-separated (default: all five).
+        #[arg(long)]
+        set: Option<String>,
+        /// Print the envelope as JSON (the summaries are its measurements).
+        #[arg(long)]
+        json: bool,
+        /// Exit 1 when the envelope is not ok (measured nothing, not applicable).
+        #[arg(long)]
+        strict: bool,
+        /// List the measures, one per line, and exit.
+        #[arg(long, conflicts_with_all = ["after", "before", "mask", "set", "json"])]
+        list: bool,
+    },
     /// Composite a fill onto a base through a stored mask (feather, hard; poisson with M7).
     Paste {
         /// The base image, in the mask's frame.
@@ -237,6 +262,7 @@ const RESERVED: &[&str] = &[
     "inspect",
     "export",
     "paste",
+    "measure",
     "dash",
     "ops",
     "workspace",
@@ -483,6 +509,51 @@ fn main() {
                 exit::code_for(&error)
             }
         },
+        Command::Measure {
+            after,
+            before,
+            mask,
+            set,
+            json,
+            strict,
+            list,
+        } => {
+            if list {
+                println!("{}", measure::list());
+                exit::OK
+            } else {
+                let args = measure::MeasureArgs {
+                    before,
+                    after: after.unwrap_or_default(),
+                    mask: mask.unwrap_or_default(),
+                    set,
+                };
+                match measure::measure(&registry, &args) {
+                    Ok(envelope) => {
+                        if json {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&envelope).unwrap_or_default()
+                            );
+                        } else {
+                            println!("{}", envelope.summary);
+                            for m in &envelope.measurements {
+                                println!("{:<28} {:>14.4} {}", m.name, m.value, m.unit);
+                            }
+                        }
+                        if envelope.status == Status::Ok || !strict {
+                            exit::OK
+                        } else {
+                            exit::NOT_APPLICABLE
+                        }
+                    }
+                    Err(error) => {
+                        eprintln!("rascal measure: {error}");
+                        exit::code_for(&error)
+                    }
+                }
+            }
+        }
         Command::Paste {
             base,
             fill,

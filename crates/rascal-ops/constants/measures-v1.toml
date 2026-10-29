@@ -1,0 +1,5 @@
+# measures-v1 (SPEC.md "Measures"). A change to a value is a new set version.
+# A hue difference is omitted where either side's chroma is below this, in Lab chroma units.
+chroma_floor = 1.0
+# The percentile reported beside mean, median and max.
+percentile = 95
