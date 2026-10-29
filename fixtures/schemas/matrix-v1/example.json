@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "name": "seam-demo",
+  "corpus": "corpus.toml",
+  "protocol": "protocol.toml",
+  "seed": 20261028,
+  "image": [
+    {
+      "id": "sky-01"
+    },
+    {
+      "id": "sky-02"
+    },
+    {
+      "id": "structured-01"
+    },
+    {
+      "id": "structured-02"
+    }
+  ],
+  "arm": [
+    {
+      "name": "thin",
+      "recipe": "seam",
+      "overrides": {
+        "fan.constants": "fan-thin-v1"
+      },
+      "filler": "fake",
+      "spend_usd_per_call": 0.0
+    },
+    {
+      "name": "fan-ramp",
+      "recipe": "seam",
+      "filler": "fake",
+      "spend_usd_per_call": 0.0
+    }
+  ]
+}

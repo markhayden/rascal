@@ -2,3 +2,5 @@
 //! directly. The commands themselves live in `main.rs`.
 
 pub mod filler;
+pub mod lab;
+pub mod recipes;

@@ -14,6 +14,7 @@ pub mod frame;
 pub mod identity;
 pub mod image;
 pub mod journal;
+pub mod lab;
 pub mod location;
 pub mod mapping;
 pub mod mask;

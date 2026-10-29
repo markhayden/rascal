@@ -1,0 +1,144 @@
+{
+  "$defs": {
+    "Arm": {
+      "additionalProperties": false,
+      "description": "One arm: a recipe with overrides, healed through a filler.",
+      "properties": {
+        "filler": {
+          "description": "The filler entry in the configuration the run is given.",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "overrides": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Override"
+          },
+          "description": "Parameter overrides, `\"<step>.<param>\" = value`; `\"<step>.constants\"` selects a set.",
+          "type": "object"
+        },
+        "recipe": {
+          "description": "A shipped recipe by name or a recipe file relative to this file.",
+          "type": "string"
+        },
+        "spend_usd_per_call": {
+          "default": 0.0,
+          "description": "What one filler call may cost; the ledger sums it.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "recipe",
+        "filler"
+      ],
+      "type": "object"
+    },
+    "MatrixImage": {
+      "additionalProperties": false,
+      "description": "One image of the matrix: a corpus id with what the recipes need for it.",
+      "properties": {
+        "id": {
+          "description": "A corpus image id.",
+          "type": "string"
+        },
+        "inputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Recipe input bindings by input name: files relative to this file (a location, a mask).",
+          "type": "object"
+        },
+        "overrides": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Override"
+          },
+          "description": "Per-image parameter overrides, `\"<step>.<param>\" = value` (a prompt for this image).",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "Override": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "format": "int64",
+          "type": "integer"
+        },
+        {
+          "format": "double",
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/Override"
+          },
+          "type": "array"
+        }
+      ],
+      "description": "An override's value: what a step parameter takes."
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "`matrix.toml`.",
+  "properties": {
+    "arm": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Arm"
+      },
+      "type": "array"
+    },
+    "corpus": {
+      "description": "The corpus manifest, relative to this file.",
+      "type": "string"
+    },
+    "image": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/MatrixImage"
+      },
+      "type": "array"
+    },
+    "name": {
+      "description": "The lab's name; the protocol's must match.",
+      "type": "string"
+    },
+    "protocol": {
+      "description": "The protocol, relative to this file; required, and its digest is recorded.",
+      "type": "string"
+    },
+    "seed": {
+      "description": "The draw seed; the protocol's must match.",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "version": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version",
+    "name",
+    "corpus",
+    "protocol",
+    "seed"
+  ],
+  "title": "Matrix",
+  "type": "object"
+}

@@ -1,0 +1,59 @@
+{
+  "$defs": {
+    "CorpusImage": {
+      "additionalProperties": false,
+      "description": "One image of the corpus.",
+      "properties": {
+        "file": {
+          "description": "The file, relative to the corpus root; a plain relative path.",
+          "type": "string"
+        },
+        "group": {
+          "description": "The group the protocol judges it under (`sky`, `structured`).",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "licence": {
+          "description": "Where the image came from and under what terms it may be used.",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "`sha256:<hex>` of the file's bytes.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "file",
+        "sha256",
+        "group",
+        "licence"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "`corpus.toml`.",
+  "properties": {
+    "image": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CorpusImage"
+      },
+      "type": "array"
+    },
+    "version": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "title": "Corpus",
+  "type": "object"
+}

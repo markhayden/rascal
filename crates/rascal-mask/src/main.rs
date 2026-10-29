@@ -6,6 +6,7 @@ mod exit;
 mod export;
 mod heal;
 mod inspect;
+use rascal_mask::lab;
 mod measure;
 mod ops;
 mod packs;
@@ -156,6 +157,11 @@ enum Command {
     Workspace {
         #[command(subcommand)]
         command: WorkspaceCommand,
+    },
+    /// The corpus: verify a manifest's files against their digests.
+    Corpus {
+        #[command(subcommand)]
+        command: CorpusCommand,
     },
     /// The op catalogue: every manifest as a client sees it.
     Ops {
@@ -344,6 +350,19 @@ impl From<ProjectionArg> for Projection {
             ProjectionArg::Equirectangular => Projection::Equirectangular,
         }
     }
+}
+
+#[derive(Subcommand, Debug)]
+enum CorpusCommand {
+    /// Every image's file under the corpus root against its SHA-256; a missing or changed
+    /// file is reported by id and the command fails after the whole list.
+    Verify {
+        /// The corpus manifest (corpus.toml).
+        manifest: PathBuf,
+        /// The corpus root; default RASCAL_CORPUS, else ~/rascal/corpus.
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -657,6 +676,20 @@ fn main() {
         }
         #[cfg(feature = "testkit")]
         Command::FakePack { args } => rascal_testkit::fake_pack::main(&args),
+        Command::Corpus { command } => {
+            let result = match command {
+                CorpusCommand::Verify { manifest, root } => {
+                    lab::corpus_verify(&manifest, root.as_deref()).map(|()| exit::OK)
+                }
+            };
+            match result {
+                Ok(code) => code,
+                Err(error) => {
+                    eprintln!("rascal corpus: {error}");
+                    exit::code_for(&error)
+                }
+            }
+        }
         Command::Workspace { command } => {
             let result = match command {
                 WorkspaceCommand::List {

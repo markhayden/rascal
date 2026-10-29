@@ -85,6 +85,9 @@ pub fn inventory() -> Vec<BoundaryType> {
     use crate::frame::{Frame, Plan};
     use crate::image::ImageRecord;
     use crate::journal::JournalLine;
+    use crate::lab::corpus::Corpus;
+    use crate::lab::matrix::Matrix;
+    use crate::lab::protocol::Protocol;
     use crate::location::Location;
     use crate::mask::{InspectReport, MaskRecord};
     use crate::op::{Envelope, Manifest};
@@ -102,6 +105,24 @@ pub fn inventory() -> Vec<BoundaryType> {
             "rascal/repair-v1.json",
             Source::Generated,
             ["repair-v1/after-crash.json"]
+        ),
+        boundary_type!(
+            Corpus,
+            "rascal/corpus-v1.json",
+            Source::Generated,
+            ["corpus-v1/example.json"]
+        ),
+        boundary_type!(
+            Protocol,
+            "rascal/protocol-v1.json",
+            Source::Generated,
+            ["protocol-v1/example.json"]
+        ),
+        boundary_type!(
+            Matrix,
+            "rascal/matrix-v1.json",
+            Source::Generated,
+            ["matrix-v1/example.json"]
         ),
         boundary_type!(
             InspectReport,
@@ -254,6 +275,12 @@ pub const COMPONENTS: &[&str] = &[
     "Windows",
     "WorkspaceConfig",
     "CorpusConfig",
+    "CorpusImage",
+    "Group",
+    "Rules",
+    "MatrixImage",
+    "Arm",
+    "Override",
     "FillerConfig",
     "PackConfig",
     "Accepts",

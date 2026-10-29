@@ -1,0 +1,21 @@
+# A protocol (docs/lab.md): committed before `lab run`, which records its digest. The groups
+# name corpus ids; `arms` are the two matrix arms compared, wins counted for the first; the
+# rules are fractions of the decided pairs (left or right picks); fewer than `min_decided`
+# decided pairs in a group is inconclusive. A change after a run is a new lab name.
+version = 1
+name = "seam-demo"
+seed = 20261028
+arms = ["fan-ramp", "thin"]
+min_decided = 2
+
+[rules]
+preferred = [2, 3]    # wins / decided ≥ 2/3
+not_worse = [1, 3]    # losses / decided < 1/3
+
+[[group]]
+name = "sky"
+images = ["sky-01", "sky-02"]
+
+[[group]]
+name = "structured"
+images = ["structured-01", "structured-02"]
