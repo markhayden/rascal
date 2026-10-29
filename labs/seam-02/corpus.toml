@@ -1,0 +1,142 @@
+# User-selected keep set.
+version = 1
+
+[[image]]
+id = "beach-dark-sunset"
+file = "beach-dark-sunset/panorama.png"
+sha256 = "sha256:e9e956d57aae2587e760776807d7586bcaa5064f427e20aeb54874039a60f5f8"
+group = "sky"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:05:14.866685+00:00. Prompt: Create one seamless equirectangular 360-degree environment map.\nCover the full 360 degrees horizontally and 180 degrees vertically, intended for\na 2:1 spherical panorama. Fill the entire canvas with the environment, with a\nlevel horizon at mid-height, zenith at the top and nadir at the bottom. The left\nand right edges must show adjacent parts of the SAME scene and join continuously:\nmatch geometry, lighting, horizon, texture, and color across the wrap seam.\nUse equirectangular pole distortion, not a perspective photo, fisheye, tiny planet,\ncollage, or a panorama shown inside a frame. No borders, labels, or text.\nRestyle the supplied image. Preserve its scene layout, objects, camera position, horizon, and panorama geometry; change the appearance as requested.\n\nScene / style request:\nTransform this exact beach panorama into a dark sunset and early blue-hour scene. Preserve the sandbar, shoreline, waves, distant land, camera position, and equirectangular layout. Use deep navy and muted violet sky with a narrow burnt-orange glow at the horizon, subtle warm reflections on wet sand and water, and low natural ambient light. Keep enough shadow detail to see the beach. No new buildings, people, lights, moon, or text. Keep the left and right edges continuous across the wrap seam. Restyled from panorama.png; source rights/privacy apply."
+
+[[image]]
+id = "beach-dawn"
+file = "beach-dawn/panorama.png"
+sha256 = "sha256:c43d2196cbfeaba8b1dba72290066eaea44f644afcb5341635f4a231a144eb90"
+group = "sky"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T17:58:09.160467+00:00. Prompt: Create one seamless equirectangular 360-degree environment map.\nCover the full 360 degrees horizontally and 180 degrees vertically, intended for\na 2:1 spherical panorama. Fill the entire canvas with the environment, with a\nlevel horizon at mid-height, zenith at the top and nadir at the bottom. The left\nand right edges must show adjacent parts of the SAME scene and join continuously:\nmatch geometry, lighting, horizon, texture, and color across the wrap seam.\nUse equirectangular pole distortion, not a perspective photo, fisheye, tiny planet,\ncollage, or a panorama shown inside a frame. No borders, labels, or text.\n\nScene / style request:\nA quiet sandy beach at dawn, gentle surf and pale clouds, ocean horizon crossing the wrap seam. Photorealistic. No people, logos, or readable signs. Generated from text; no source photograph."
+
+[[image]]
+id = "sky-02-v2"
+file = "sky-02-v2/panorama.png"
+sha256 = "sha256:0cc94426c22867a7c703a74191760ac4d7c864c684299dcc844d476e8e583ef9"
+group = "sky"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:21:14.206533+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: high desert plateau at golden hour, scrub, distant mesas, thin cirrus.\nBehind the viewer, keep open sky above simple, uncluttered ground or water appropriate to this scene, so the wrap edge crosses smooth sky; keep focal features away from that edge.\nRender a single continuous full spherical environment, not just a wide-angle forward-facing photograph. Include the environment behind the camera in the same continuous panorama. No repeated side panels, pasted edge strips, duplicated views, or internal vertical compositing boundaries anywhere in the image.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."
+
+[[image]]
+id = "sky-03"
+file = "sky-03/panorama.png"
+sha256 = "sha256:59536d60e9a7d30cbd436d2463ece909cd536ff64f6db838b4124ab54a485d63"
+group = "sky"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:11:54.840992+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: frozen lake in winter, flat snow, low sun, pale gradient sky.\nBehind the viewer, keep open sky above simple, uncluttered ground or water appropriate to this scene, so the wrap edge crosses smooth sky; keep focal features away from that edge.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."
+
+[[image]]
+id = "sky-04"
+file = "sky-04/panorama.png"
+sha256 = "sha256:bdd1d938bb1df0f9e10d04c5488608f71924cddd72b2b5b7232f1786559922bb"
+group = "sky"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:12:12.649205+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: salt flat after rain, mirror reflection, overcast sky.\nBehind the viewer, keep open sky above simple, uncluttered ground or water appropriate to this scene, so the wrap edge crosses smooth sky; keep focal features away from that edge.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."
+
+[[image]]
+id = "sky-05"
+file = "sky-05/panorama.png"
+sha256 = "sha256:9c70ffce1ce8faeb1641ac1fb6f84d5540f3ae372dfb564fe97a7bd5bf362420"
+group = "sky"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:12:52.408601+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: rooftop terrace at dusk, low parapet, city lights far below, deep blue sky with a few clouds.\nBehind the viewer, keep open sky above simple, uncluttered ground or water appropriate to this scene, so the wrap edge crosses smooth sky; keep focal features away from that edge.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."
+
+[[image]]
+id = "sky-06"
+file = "sky-06/panorama.png"
+sha256 = "sha256:1bceb5710dcf5d336e0c97fed60be266f840b283f6e0894ea6f3b7c4a0449665"
+group = "sky"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:13:40.483107+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: alpine meadow in summer, wildflowers, peaks on the far horizon, cumulus clouds.\nBehind the viewer, keep open sky above simple, uncluttered ground or water appropriate to this scene, so the wrap edge crosses smooth sky; keep focal features away from that edge.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."
+
+[[image]]
+id = "sky-07"
+file = "sky-07/panorama.png"
+sha256 = "sha256:db806cdaaf245008ee56ef46fe0c7de11cce433ea321f0faa9238c68e17bf5da"
+group = "sky"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:14:20.462527+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: wheat field before harvest, a single tree far away, hazy summer sky.\nBehind the viewer, keep open sky above simple, uncluttered ground or water appropriate to this scene, so the wrap edge crosses smooth sky; keep focal features away from that edge.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."
+
+[[image]]
+id = "sky-08"
+file = "sky-08/panorama.png"
+sha256 = "sha256:ea777b17c0bbc5d5132b5a60d8013d7e978d96f24374d497a2128bdcbc0888ff"
+group = "sky"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:14:15.433400+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: open sea from the deck of a small boat, swell, scattered clouds.\nBehind the viewer, keep open sky above simple, uncluttered ground or water appropriate to this scene, so the wrap edge crosses smooth sky; keep focal features away from that edge.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."
+
+[[image]]
+id = "str-01-v2"
+file = "str-01-v2/panorama.png"
+sha256 = "sha256:e0e301b9a4fe39147a558fe66054095d9ed6bd6f31098d38aa775fce00a6a366"
+group = "structured"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:20:45.338129+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: a workshop with pegboard walls, tool racks and a workbench all around.\nBehind the viewer, continue ordinary walls, furniture, trees, or structural detail appropriate to this scene, so the wrap edge crosses detail; avoid a distinctive focal feature at that edge.\nRender a single continuous full spherical environment, not just a wide-angle forward-facing photograph. Include the environment behind the camera in the same continuous panorama. No repeated side panels, pasted edge strips, duplicated views, or internal vertical compositing boundaries anywhere in the image.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."
+
+[[image]]
+id = "str-02-v2"
+file = "str-02-v2/panorama.png"
+sha256 = "sha256:44851eea5bae48546e8d983a356fced64d73c4d751c1084764aa4f75d8bd623d"
+group = "structured"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:21:25.645326+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: a library reading room, bookshelves on every wall, a long table.\nBehind the viewer, continue ordinary walls, furniture, trees, or structural detail appropriate to this scene, so the wrap edge crosses detail; avoid a distinctive focal feature at that edge.\nRender a single continuous full spherical environment, not just a wide-angle forward-facing photograph. Include the environment behind the camera in the same continuous panorama. No repeated side panels, pasted edge strips, duplicated views, or internal vertical compositing boundaries anywhere in the image.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."
+
+[[image]]
+id = "str-03"
+file = "str-03/panorama.png"
+sha256 = "sha256:c6c9fdcc36b9fd75e10de1d058301a25a04d8ca668d3f4105899adb30b9e23c3"
+group = "structured"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:12:33.453859+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: a narrow European street, stone facades, shutters, cobbles.\nBehind the viewer, continue ordinary walls, furniture, trees, or structural detail appropriate to this scene, so the wrap edge crosses detail; avoid a distinctive focal feature at that edge.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."
+
+[[image]]
+id = "str-04"
+file = "str-04/panorama.png"
+sha256 = "sha256:5ee1f8e51ca57bee989559231fbdb7b648fa17d4d8f01e76a75e82ac15ee9ed2"
+group = "structured"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:13:03.456510+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: a dense forest trail, tree trunks and ferns on all sides.\nBehind the viewer, continue ordinary walls, furniture, trees, or structural detail appropriate to this scene, so the wrap edge crosses detail; avoid a distinctive focal feature at that edge.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."
+
+[[image]]
+id = "str-06"
+file = "str-06/panorama.png"
+sha256 = "sha256:d31398e146c57a354a619e716a76fd42694ec7ab18b265be6ba446e74b2746a7"
+group = "structured"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:14:19.120938+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: a subway platform with tiled pillars, signage without legible text, tracks.\nBehind the viewer, continue ordinary walls, furniture, trees, or structural detail appropriate to this scene, so the wrap edge crosses detail; avoid a distinctive focal feature at that edge.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."
+
+[[image]]
+id = "str-07"
+file = "str-07/panorama.png"
+sha256 = "sha256:dd2208140f50f8b735a95ea818a1345b8646a0ed743fa7606acb2995f33589bc"
+group = "structured"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:14:23.397764+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: a greenhouse interior, glass panes, rows of plants on benches.\nBehind the viewer, continue ordinary walls, furniture, trees, or structural detail appropriate to this scene, so the wrap edge crosses detail; avoid a distinctive focal feature at that edge.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."
+
+[[image]]
+id = "str-08"
+file = "str-08/panorama.png"
+sha256 = "sha256:dcbff6d0a092bfaad08b6aa34d41da8640ccabab67a95b62bc4028bbf21bcee5"
+group = "structured"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:16:00.578929+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: a brick loft with large windows, exposed beams, a sofa and rugs.\nBehind the viewer, continue ordinary walls, furniture, trees, or structural detail appropriate to this scene, so the wrap edge crosses detail; avoid a distinctive focal feature at that edge.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."
+
+[[image]]
+id = "str-09"
+file = "str-09/panorama.png"
+sha256 = "sha256:58a8db0b06a87c3dd6c78bbc29b0a1bbda21f1dc80200261a8b1062d4737d8d5"
+group = "structured"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:14:56.847358+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: a wooden barn interior, hay bales, beams, hanging tack.\nBehind the viewer, continue ordinary walls, furniture, trees, or structural detail appropriate to this scene, so the wrap edge crosses detail; avoid a distinctive focal feature at that edge.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."
+
+[[image]]
+id = "str-10"
+file = "str-10/panorama.png"
+sha256 = "sha256:97eefc640349b65176fd94d28d8fb2700daf06f94484d5541cf82b466608f1fd"
+group = "structured"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:16:03.929530+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: a museum gallery with framed paintings on every wall, parquet floor.\nBehind the viewer, continue ordinary walls, furniture, trees, or structural detail appropriate to this scene, so the wrap edge crosses detail; avoid a distinctive focal feature at that edge.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."
+
+[[image]]
+id = "str-11"
+file = "str-11/panorama.png"
+sha256 = "sha256:20383ac1f1ef02bd8b93b1d2452b6dd78f7b356e38e367317dbe2b2bc9464f32"
+group = "structured"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:16:23.072016+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: a parking garage, concrete columns, painted lines, fluorescent light.\nBehind the viewer, continue ordinary walls, furniture, trees, or structural detail appropriate to this scene, so the wrap edge crosses detail; avoid a distinctive focal feature at that edge.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."
+
+[[image]]
+id = "str-12"
+file = "str-12/panorama.png"
+sha256 = "sha256:9dd761eda56e2e53526b9787875b2e330c9154568e9b42b301d2dabcea2987b9"
+group = "structured"
+licence = "AI-generated with gemini-3.1-flash-image on 2026-10-29T18:16:30.465978+00:00. Prompt: A seamless equirectangular 360-degree panorama, 2:1 aspect, photographic, the left and right edges continuing the same scene exactly, no text, no people's faces. Looking direction: a conference room with a long table, chairs, a whiteboard, glass walls.\nBehind the viewer, continue ordinary walls, furniture, trees, or structural detail appropriate to this scene, so the wrap edge crosses detail; avoid a distinctive focal feature at that edge.\n\nCamera at standing eye height, about 1.6 metres, level, with the horizon near\nthe middle row. The center of the image is the forward looking direction.\nDirectly behind the viewer, at the left/right wrap edge, show ordinary scene\ncontent rather than a focal feature. Continue the same geometry, lighting,\ntexture, and color exactly from the right edge into the left edge.\nCover 360 degrees horizontally and 180 degrees vertically, with zenith at the\ntop and nadir at the bottom. Use equirectangular pole distortion. Fill the\ncanvas: no borders, inset views, collage, fisheye, or tiny-planet projection.\n Generated from text; no source photograph."

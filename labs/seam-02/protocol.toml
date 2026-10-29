@@ -1,0 +1,17 @@
+# The second round's protocol (docs/lab.md, docs/results/seam-01.md): the same corpus and
+# groups as seam-01, the masks healed by two fillers. The protocol's gate comparison is
+# fan-ramp against thin under Bria; the matrix holds the LaMa arms too, judged as their own
+# pairs pages (fan-ramp-lama against thin-lama, and each mask across the fillers).
+version = 1
+name = "seam-02"
+seed = 20261030
+arms = ["fan-ramp-bria", "thin-bria"]
+min_decided = 8
+
+[[group]]
+name = "sky"
+images = ["beach-dark-sunset", "beach-dawn", "sky-02-v2", "sky-03", "sky-04", "sky-05", "sky-06", "sky-07", "sky-08"]
+
+[[group]]
+name = "structured"
+images = ["str-01-v2", "str-02-v2", "str-03", "str-04", "str-06", "str-07", "str-08", "str-09", "str-10", "str-11", "str-12"]

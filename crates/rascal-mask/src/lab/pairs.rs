@@ -1,7 +1,8 @@
 //! `rascal lab pairs <lab> --arms a,b` and `rascal lab decode <lab> <picks.json>` (SPEC.md
 //! "The lab"). `pairs` takes the two arms' current cells for every protocol image, draws the
-//! page order and the sides from the protocol's seed, writes `pairs/assignment.json` and the
-//! static `pairs/index.html` with both results embedded and nothing that names an arm; the
+//! page order and the sides from the protocol's seed, writes `pairs/<a>-vs-<b>/assignment.json`
+//! and the static `index.html` beside it with both results embedded and nothing that names an
+//! arm; a lab holds one such directory per comparison; the
 //! page shows each pair at its focus (the region both results changed, at full size), whole,
 //! and for an equirectangular image from inside the sphere, with the unhealed source beside
 //! the results, and writes `picks.json`. `decode` checks the picks against the assignment's digest and
@@ -204,7 +205,16 @@ pub fn pairs(root: &Path, arms: &str, whole_max_side: Option<u32>) -> Result<Pat
         [a.to_string(), b.to_string()],
         candidates,
     );
-    let dir = lab.root.join("pairs");
+    // One directory per comparison, so a lab with more arms than the protocol names holds
+    // every pairs page at once; decode finds the assignment by the picks' digest.
+    for name in [a, b] {
+        if name.contains('/') || name.contains("..") || name.is_empty() {
+            return Err(Error::usage(format!(
+                "arm name {name:?} cannot name a directory"
+            )));
+        }
+    }
+    let dir = lab.root.join("pairs").join(format!("{a}-vs-{b}"));
     std::fs::create_dir_all(&dir).map_err(|source| Error::Io {
         path: dir.clone(),
         source,
@@ -329,11 +339,52 @@ pub fn decode(root: &Path, picks: &Path) -> Result<Decode> {
     };
     let (protocol, _) = protocol_of(&lab)?;
     let record = lab.record()?;
-    let assignment_path = lab.root.join("pairs").join("assignment.json");
-    let bytes = std::fs::read(&assignment_path).map_err(|source| Error::Io {
-        path: assignment_path.clone(),
+    let text = std::fs::read(picks).map_err(|source| Error::Io {
+        path: picks.to_path_buf(),
         source,
     })?;
+    let picks_file: Picks = serde_json::from_slice(&text).map_err(|source| Error::Json {
+        path: picks.to_path_buf(),
+        source,
+    })?;
+    // The assignment the picks were made on: the one under pairs/ whose bytes carry the digest
+    // the picks name.
+    let pairs_dir = lab.root.join("pairs");
+    let mut found: Option<(PathBuf, Vec<u8>)> = None;
+    let mut seen: Vec<String> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&pairs_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path().join("assignment.json");
+            if !path.is_file() {
+                continue;
+            }
+            let bytes = std::fs::read(&path).map_err(|source| Error::Io {
+                path: path.clone(),
+                source,
+            })?;
+            let digest = rascal_core::lab::bytes_digest(&bytes);
+            if digest == picks_file.assignment_digest {
+                found = Some((path, bytes));
+                break;
+            }
+            seen.push(format!(
+                "{} ({digest})",
+                entry.file_name().to_string_lossy()
+            ));
+        }
+    }
+    let Some((assignment_path, bytes)) = found else {
+        return Err(Error::usage(format!(
+            "{}: the picks were made on assignment {} but this lab has {}; stale or foreign picks",
+            picks.display(),
+            picks_file.assignment_digest,
+            if seen.is_empty() {
+                "no pairs page".to_string()
+            } else {
+                seen.join(", ")
+            }
+        )));
+    };
     let assignment: Assignment = serde_json::from_slice(&bytes).map_err(|source| Error::Json {
         path: assignment_path.clone(),
         source,
@@ -349,14 +400,6 @@ pub fn decode(root: &Path, picks: &Path) -> Result<Decode> {
         )));
     }
     let digest = rascal_core::lab::bytes_digest(&bytes);
-    let text = std::fs::read(picks).map_err(|source| Error::Io {
-        path: picks.to_path_buf(),
-        source,
-    })?;
-    let picks_file: Picks = serde_json::from_slice(&text).map_err(|source| Error::Json {
-        path: picks.to_path_buf(),
-        source,
-    })?;
     pairs::decode(&protocol, &assignment, &digest, &picks_file)
         .map_err(|m| Error::usage(format!("{}: {m}", picks.display())))
 }

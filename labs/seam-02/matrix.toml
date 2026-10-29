@@ -1,0 +1,94 @@
+# The second round's matrix (docs/lab.md): every kept image through the seam recipe under the
+# two masks (fan-v1 and fan-thin-v1) and two fillers, Bria Eraser on fal (hosted; the spend is
+# an estimate per call) and LaMa locally. Run:
+#   rascal lab run labs/seam-02/matrix.toml --config <rascal.toml with [fillers.bria-erase] and [fillers.lama]> \
+#       --out lab/seam-02/ --corpus-root <the corpus files> --no-dash
+version = 1
+name = "seam-02"
+corpus = "corpus.toml"
+protocol = "protocol.toml"
+seed = 20261030
+
+[[image]]
+id = "beach-dark-sunset"
+
+[[image]]
+id = "beach-dawn"
+
+[[image]]
+id = "sky-02-v2"
+
+[[image]]
+id = "sky-03"
+
+[[image]]
+id = "sky-04"
+
+[[image]]
+id = "sky-05"
+
+[[image]]
+id = "sky-06"
+
+[[image]]
+id = "sky-07"
+
+[[image]]
+id = "sky-08"
+
+[[image]]
+id = "str-01-v2"
+
+[[image]]
+id = "str-02-v2"
+
+[[image]]
+id = "str-03"
+
+[[image]]
+id = "str-04"
+
+[[image]]
+id = "str-06"
+
+[[image]]
+id = "str-07"
+
+[[image]]
+id = "str-08"
+
+[[image]]
+id = "str-09"
+
+[[image]]
+id = "str-10"
+
+[[image]]
+id = "str-11"
+
+[[image]]
+id = "str-12"
+
+[[arm]]
+name = "fan-ramp-bria"
+recipe = "seam"
+filler = "bria-erase"
+spend_usd_per_call = 0.04
+
+[[arm]]
+name = "thin-bria"
+recipe = "seam"
+overrides = { "fan.constants" = "fan-thin-v1" }
+filler = "bria-erase"
+spend_usd_per_call = 0.04
+
+[[arm]]
+name = "fan-ramp-lama"
+recipe = "seam"
+filler = "lama"
+
+[[arm]]
+name = "thin-lama"
+recipe = "seam"
+overrides = { "fan.constants" = "fan-thin-v1" }
+filler = "lama"
