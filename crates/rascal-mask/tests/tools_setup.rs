@@ -1,8 +1,10 @@
 //! Task 5.3's command: `rascal tools setup` refuses a tampered bundle with exit 3 naming the
 //! file, a missing bundle with exit 64, a bundle for another platform with exit 64, and asks
-//! for a destination; with `RASCAL_BUNDLE` naming a bundle built by
-//! `scripts/build-bundle.sh` for this machine, it installs into a clean directory with no
-//! network and the installed pack answers `echo_region` (skipped with a note otherwise).
+//! for a destination, refuses a pack command with no directory before `.venv` without
+//! touching the current directory, and refuses a machine without uv before writing; with
+//! `RASCAL_BUNDLE` naming a bundle built by `scripts/build-bundle.sh` for this machine, it
+//! installs into a clean directory with no network and the installed pack answers
+//! `echo_region` (skipped with a note outside CI, a failure in CI).
 #![allow(clippy::unwrap_used)]
 
 use std::path::{Path, PathBuf};
@@ -123,13 +125,60 @@ fn setup_refuses_a_tampered_bundle_a_missing_one_another_platform_and_no_destina
     );
     assert_eq!(out.status.code(), Some(64), "{}", text(&out.stderr));
     assert!(text(&out.stderr).contains("not a bundle"));
-    // A config whose pack entry points nowhere installable.
+    // A config whose pack entry points nowhere installable, and one whose command is a bare
+    // `.venv/bin/rascal-tools` (no directory before .venv): refused, and the current
+    // directory is not written to.
     let cfg = dir.join("rascal.toml");
+    for command in ["rascal-tools", ".venv/bin/rascal-tools"] {
+        std::fs::write(
+            &cfg,
+            format!(
+                "config_version = 1\n[packs.rascal-tools]\ncommand = [{command:?}, \"serve\"]\n"
+            ),
+        )
+        .unwrap();
+        let cwd = dir.join("cwd");
+        std::fs::create_dir_all(&cwd).unwrap();
+        let out = Command::new(env!("CARGO_BIN_EXE_rascal"))
+            .args([
+                "tools",
+                "setup",
+                "--bundle",
+                bundle.to_str().unwrap(),
+                "--config",
+                cfg.to_str().unwrap(),
+            ])
+            .current_dir(&cwd)
+            .output()
+            .unwrap();
+        assert_eq!(
+            out.status.code(),
+            Some(64),
+            "{command}: {}",
+            text(&out.stderr)
+        );
+        assert!(
+            text(&out.stderr).contains("--into"),
+            "{command}: {}",
+            text(&out.stderr)
+        );
+        assert_eq!(
+            std::fs::read_dir(&cwd).unwrap().count(),
+            0,
+            "{command}: the current directory is untouched"
+        );
+    }
+    // A relative directory in the command is taken from the configuration file's directory;
+    // the destination is checked before uv is needed, so a machine without uv is refused
+    // after the bundle verified and before anything is written. (The wheel is restored first.)
+    std::fs::write(bundle.join("wheelhouse/dep-1.0-py3-none-any.whl"), [4, 5]).unwrap();
     std::fs::write(
         &cfg,
-        "config_version = 1\n[packs.rascal-tools]\ncommand = [\"rascal-tools\", \"serve\"]\n",
+        "config_version = 1\n[packs.rascal-tools]\ncommand = [\"pack/.venv/bin/rascal-tools\", \"serve\"]\n",
     )
     .unwrap();
+    let empty_path = dir.join("empty-path");
+    std::fs::create_dir_all(&empty_path).unwrap();
     let out = rascal(
         &[
             "tools",
@@ -139,16 +188,30 @@ fn setup_refuses_a_tampered_bundle_a_missing_one_another_platform_and_no_destina
             "--config",
             cfg.to_str().unwrap(),
         ],
-        &[],
+        &[("PATH", empty_path.to_str().unwrap())],
     );
     assert_eq!(out.status.code(), Some(64), "{}", text(&out.stderr));
-    assert!(text(&out.stderr).contains("--into"));
+    assert!(
+        text(&out.stderr).contains("uv is not on PATH"),
+        "{}",
+        text(&out.stderr)
+    );
+    assert!(
+        text(&out.stdout).contains("files verified"),
+        "verified before the prerequisites: {}",
+        text(&out.stdout)
+    );
+    assert!(!dir.join("pack").exists(), "nothing written without uv");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn a_built_bundle_installs_offline_and_the_installed_pack_answers() {
     let Some(bundle) = std::env::var_os("RASCAL_BUNDLE") else {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "RASCAL_BUNDLE is not set in CI; scripts/bundle-acceptance.sh sets it"
+        );
         eprintln!("skipped: RASCAL_BUNDLE is not set (scripts/build-bundle.sh makes one)");
         return;
     };

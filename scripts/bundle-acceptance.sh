@@ -40,8 +40,11 @@ disconnected=()
 if command -v unshare >/dev/null 2>&1 && unshare -rn true 2>/dev/null; then
   disconnected=(unshare -rn)
   echo "bundle: the network is disabled (unshare -rn)"
+elif [ -n "${CI:-}" ] && [ "$platform" = linux-x86_64 ]; then
+  echo "bundle: unshare -rn is refused on this Linux runner; the disconnected step needs it" >&2
+  exit 1
 else
-  echo "bundle: no network namespace here; relying on uv --offline and empty caches"
+  echo "bundle: no network namespace here (macOS); the proof is uv --offline --no-index --no-cache and the launcher never calling uv"
 fi
 export UV_CACHE_DIR="$scratch/uv-cache" PIP_CACHE_DIR="$scratch/pip-cache" PIP_NO_INDEX=1 UV_PYTHON_DOWNLOADS=never
 mkdir -p "$UV_CACHE_DIR" "$PIP_CACHE_DIR"
@@ -80,4 +83,7 @@ else
   echo "bundle: tools/python/.venv is missing; the pytest bundle test did not run"
   [ -z "${CI:-}" ] || exit 1
 fi
+
+echo "bundle: the Rust install test against this bundle"
+RASCAL_BUNDLE="$scratch/bundle" cargo test --quiet -p rascal-mask --test tools_setup -- a_built_bundle
 echo "bundle ok: $platform"

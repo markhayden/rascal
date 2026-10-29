@@ -252,8 +252,15 @@ digest the lab records. Launch never touches the network. `scripts/bundle-accept
 (part of `scripts/acceptance.sh`, and a macOS job in the package workflow) builds this
 machine's bundle, installs it with the network disabled where the kernel allows (`unshare
 -rn`) and the caches empty, calls `echo_region` through the install, refuses a tampered copy,
-and runs the pytest bundle test (`tools/python/tests/test_bundle.py`, which checks the build's
-output when `RASCAL_BUNDLE` names one and skips otherwise).
+runs the pytest bundle test (`tools/python/tests/test_bundle.py`, which checks the build's
+output when `RASCAL_BUNDLE` names one and skips otherwise) and the Rust install test against
+the built bundle. On Linux the install and the call run in a network namespace with no
+interfaces; macOS has no such namespace, so there the proof is uv's `--offline --no-index
+--no-cache` with interpreter downloads forbidden, and the fact that the launcher never calls
+uv. `setup` runs uv and the launcher with the baseline environment only (`PATH`, `HOME`,
+`LANG`, `LC_ALL`, `TMPDIR`), so no key and no uv setting of the shell's reaches them, and the
+environment is always `<dir>/.venv`. A bundle given as a URL (the spec's one network step)
+arrives with the release, task 7.2; until then `--bundle` names a directory.
 
 **The fake pack** (`rascal fake-pack <behaviour>` with the `testkit` feature, or the testkit's
 `fake-pack` binary) serves `segment` with one selectable behaviour: `exact`, `bad-schema`,

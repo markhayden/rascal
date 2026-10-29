@@ -33,11 +33,13 @@ class Answer:
 
     def plane(self, frame: str, plane: np.ndarray) -> None:
         """A binary or 8-bit instance plane, H × W, as one image entry and one PNG block."""
+        if plane.dtype == np.bool_:
+            plane = plane.astype(np.uint8) * 255
+        elif plane.dtype != np.uint8:
+            raise ValueError(f"a plane is bool or uint8, not {plane.dtype}; no silent threshold")
         height, width = plane.shape[:2]
         buffer = io.BytesIO()
-        Image.fromarray(np.ascontiguousarray(plane.astype(np.uint8)), mode="L").save(
-            buffer, format="PNG"
-        )
+        Image.fromarray(np.ascontiguousarray(plane), mode="L").save(buffer, format="PNG")
         self.images.append(
             {
                 "frame": frame,

@@ -1,6 +1,7 @@
 """The MCP server over stdio: tools listed with their two `_meta` documents, every call parsed
 for `_harness`, every answer an envelope with its image blocks. A harness error is an
-`invalid_args` envelope; anything else the tool raises is a JSON-RPC error with its class."""
+`invalid_args` envelope; anything else a tool raises the SDK turns into an `isError` result
+with the exception's text and no envelope, which rascal reports as an operational error."""
 
 from __future__ import annotations
 

@@ -57,17 +57,21 @@ def fetch_one(artifact: Artifact, cache: Path) -> Path:
     target = cache / artifact.name
     if target.is_file() and digest(target) == artifact.sha256:
         return target
+    if not artifact.url.startswith(("https://", "http://")):
+        raise FetchError(f"{artifact.name}: url {artifact.url!r} is not http(s)")
     partial = cache / (artifact.name + ".partial")
-    with urllib.request.urlopen(artifact.url) as response, partial.open("wb") as out:  # noqa: S310
-        shutil.copyfileobj(response, out)
-    got = digest(partial)
-    if got != artifact.sha256:
+    try:
+        with urllib.request.urlopen(artifact.url) as response, partial.open("wb") as out:  # noqa: S310
+            shutil.copyfileobj(response, out)
+        got = digest(partial)
+        if got != artifact.sha256:
+            raise FetchError(
+                f"{artifact.name}: downloaded sha256 {got} does not match artifacts.toml's "
+                f"{artifact.sha256}; the file was discarded"
+            )
+        partial.replace(target)
+    finally:
         partial.unlink(missing_ok=True)
-        raise FetchError(
-            f"{artifact.name}: downloaded sha256 {got} does not match artifacts.toml's "
-            f"{artifact.sha256}; the file was discarded"
-        )
-    partial.replace(target)
     return target
 
 
