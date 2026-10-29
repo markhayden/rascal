@@ -882,9 +882,9 @@ offending binding named; tests say so. `rascal lab run` writes
 `lab/<name>/cells/<identity>/attempts/<n>/` with the run directory, the result image (and the
 source it started from, named by the attempt record) and `cell.json`; `latest` points at the attempt in use; a ledger records every external call. Resume
 reuses a cell only when its identity matches and `latest` is complete; `--redo <arm>` adds an
-attempt and never overwrites one. `rascal lab pairs --arms a,b` writes `pairs/assignment.json`
+attempt and never overwrites one. `rascal lab pairs --arms a,b` writes `pairs/<a>-vs-<b>/assignment.json`
 (version, pair ids, the two cell identities and attempts per pair, the side assignment drawn
-from `seed`, the protocol digest) and `pairs/index.html` (static, images embedded, order drawn
+from `seed`, the protocol digest) and `index.html` beside it (static, images embedded, order drawn
 from `seed`; each pair shown at its focus, the region both results changed in the source, at
 full size with the sides scrolling together, whole, and for an equirectangular frame from
 inside the sphere with one orientation for both sides; the whole images scaled only by an

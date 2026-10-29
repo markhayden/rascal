@@ -112,9 +112,9 @@ rascal lab decode lab/<name>/ picks.json
 
 `lab pairs` takes the two arms' current cells (those of the last `lab run`) for every image
 the protocol's groups name, each with a complete `latest` attempt, and writes
-`pairs/assignment.json` (the lab, the protocol digest, the arms, the seed, and per pair the
+`pairs/<a>-vs-<b>/assignment.json` (the lab, the protocol digest, the arms, the seed, and per pair the
 image id, the group, the cell and attempt on each side and which side arm `a` took) and
-`pairs/index.html`, a static page with both results embedded as PNG data and nothing that
+`index.html` beside it, a static page with both results embedded as PNG data and nothing that
 names an arm, a side's cell or the configuration; the command prints the page's size, which on
 full panoramas runs to hundreds of megabytes (the spec asks for embedding and forbids a silent
 resize). `--whole-max-side <px>` scales the whole images to that longest side for the whole and
@@ -145,7 +145,7 @@ from a scaled copy and the page says so; detail belongs to the focus view. For t
 attempt record names the `source` image beside the `result`, and `lab pairs` refuses an
 attempt without one.
 
-`lab decode` reads the picks against `pairs/assignment.json` (which must be this lab's, under
+`lab decode` reads the picks against the assignment under `pairs/` whose digest they name (a lab holds one comparison directory per `--arms` pair, so a matrix with more arms than the protocol names can be judged pair by pair; the assignment must be this lab's, under
 this protocol) and the lab's `protocol.toml` (kept beside `lab.json` by the run; an edited one
 is refused). Picks whose assignment digest
 differs (stale or foreign), a pair with no pick, a pair picked twice, a pair not in the

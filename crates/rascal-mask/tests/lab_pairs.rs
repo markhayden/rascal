@@ -128,10 +128,11 @@ fn pairs_writes_a_blind_page_and_decode_reports_the_outcome_per_group() {
         "fan-ramp,thin",
     ]);
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
-    let page_path = lab.join("pairs/index.html");
+    let page_path = lab.join("pairs/fan-ramp-vs-thin/index.html");
     assert!(text(&out.stdout).contains(&page_path.display().to_string()));
     let page = std::fs::read_to_string(&page_path).unwrap();
-    let assignment_bytes = std::fs::read(lab.join("pairs/assignment.json")).unwrap();
+    let assignment_bytes =
+        std::fs::read(lab.join("pairs/fan-ramp-vs-thin/assignment.json")).unwrap();
     let assignment: Assignment = serde_json::from_slice(&assignment_bytes).unwrap();
     assert_eq!(assignment.pair.len(), 4);
     assert_eq!(
@@ -480,19 +481,33 @@ fn pairs_writes_a_blind_page_and_decode_reports_the_outcome_per_group() {
         text(&out.stderr)
     );
     std::fs::write(&attempt, sound).unwrap();
-    // A foreign assignment copied into this lab is refused by decode.
-    let assignment_path = lab.join("pairs/assignment.json");
+    // A foreign assignment copied into this lab is refused by decode: with the picks made on
+    // the original, the digest no longer matches (stale or foreign, the comparison named);
+    // with picks made on the copy, the lab name gives it away.
+    let assignment_path = lab.join("pairs/fan-ramp-vs-thin/assignment.json");
     let original = std::fs::read_to_string(&assignment_path).unwrap();
-    std::fs::write(
-        &assignment_path,
-        original.replace("\"lab\": \"seam-demo\"", "\"lab\": \"other\""),
-    )
-    .unwrap();
+    let edited = original.replace("\"lab\": \"seam-demo\"", "\"lab\": \"other\"");
+    std::fs::write(&assignment_path, &edited).unwrap();
     let out = rascal(&[
         "lab",
         "decode",
         lab.to_str().unwrap(),
         picks.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(64), "{}", text(&out.stderr));
+    assert!(
+        text(&out.stderr).contains("stale or foreign")
+            && text(&out.stderr).contains("fan-ramp-vs-thin"),
+        "{}",
+        text(&out.stderr)
+    );
+    let on_copy = dir.join("on-copy.json");
+    write_picks(&on_copy, edited.as_bytes(), |_, _| "left");
+    let out = rascal(&[
+        "lab",
+        "decode",
+        lab.to_str().unwrap(),
+        on_copy.to_str().unwrap(),
     ]);
     assert_eq!(out.status.code(), Some(64), "{}", text(&out.stderr));
     assert!(
