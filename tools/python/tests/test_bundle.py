@@ -42,8 +42,23 @@ def test_the_manifest_lists_every_file_with_its_digest_and_nothing_else() -> Non
     assert set(listed) == present
     for rel, digest in listed.items():
         assert digest == "sha256:" + hashlib.sha256((root / rel).read_bytes()).hexdigest(), rel
-    for required in ("pyproject.toml", "uv.lock", "MODEL.md", "artifacts.toml", bundle["wheel"]):
+    for required in (
+        "pyproject.toml",
+        "uv.lock",
+        "MODEL.md",
+        "artifacts.toml",
+        "NOTICE",
+        "LICENSE",
+        bundle["wheel"],
+    ):
         assert required in listed
+    # The models are in, every one of them, or none is.
+    named = [a["name"] for a in tomllib.loads((root / "artifacts.toml").read_text())["artifact"]]
+    bundled = {rel for rel in listed if rel.startswith("models/")}
+    if bundle["models"]:
+        assert bundled == {f"models/{name}" for name in named}
+    else:
+        assert not bundled
 
 
 @requires_bundle

@@ -60,7 +60,14 @@ def test_artifacts_toml_is_read_and_checked(tmp_path: Path) -> None:
     with pytest.raises(fetch.FetchError, match="lacks sha256"):
         fetch.read_artifacts(toml)
     # The pack's own file is empty until the segmenter is decided, and reads as such.
-    assert fetch.read_artifacts(Path(__file__).parents[1] / "artifacts.toml") == []
+    shipped = fetch.read_artifacts(fetch.ARTIFACTS)
+    assert [a.name for a in shipped] == [
+        "owlv2-base-patch16.onnx",
+        "owlv2-base-patch16.tokenizer.json",
+        "sam2.1-hiera-tiny.encoder.onnx",
+        "sam2.1-hiera-tiny.decoder.onnx",
+    ]
+    assert all(a.licence == "Apache-2.0" and len(a.sha256) == 64 for a in shipped)
 
 
 def test_a_missing_artifact_skips_a_segmenter_test() -> None:

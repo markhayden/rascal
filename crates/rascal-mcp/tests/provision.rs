@@ -37,7 +37,7 @@ fn synthetic(root: &Path, platform: &str) -> Vec<(String, Vec<u8>)> {
         ),
     ];
     let mut manifest = format!(
-        "bundle_version = 1\npack = \"rascal-tools\"\npack_version = \"0.1.0\"\npython = \"3.12\"\nplatform = \"{platform}\"\nwheel = \"wheel/rascal_tools-0.1.0-py3-none-any.whl\"\n\n[files]\n"
+        "bundle_version = 1\npack = \"rascal-tools\"\npack_version = \"0.1.0\"\npython = \"3.12\"\nplatform = \"{platform}\"\nwheel = \"wheel/rascal_tools-0.1.0-py3-none-any.whl\"\nmodels = false\n\n[files]\n"
     );
     for (rel, bytes) in &files {
         let path = root.join(rel);

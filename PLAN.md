@@ -983,13 +983,14 @@ criterion 5b in force.
 rascal.toml` removes the chairs on the chair-blob fixture.
 
 **Acceptance.**
-- [ ] Branch A: parity within `MODEL.md`'s tolerance; the export's SHA-256 recorded; no test
-      downloads anything. Branch B: the absence test.
+- [x] Branch A: parity within `MODEL.md`'s tolerance; the export's SHA-256 recorded; no test
+      downloads anything. (The export took ADR 0018's drop-in decoder, SAM 2.1 Hiera-Tiny;
+      `--prompt` binds a recipe `Text` input and the prompt recipe is `remove-prompt`.)
 
 **Verification.** `uv run --frozen --offline --no-sync pytest -m segmenter`; `cargo test -p rascal-mask --features testkit --test remove_prompt`.
 
 **Dependencies.** 5.1, 4.5. **Files.** `tools/python/src/rascal_tools/segment.py`, `tools/python/MODEL.md`,
-`tools/python/artifacts.toml`, `crates/rascal-mask/recipes/remove.toml`. **Size.** M.
+`tools/python/src/rascal_tools/artifacts.toml`, `crates/rascal-mask/recipes/remove.toml`. **Size.** M.
 
 ### Task 5.3: The bundle and offline setup
 

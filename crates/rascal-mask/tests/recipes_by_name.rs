@@ -182,7 +182,7 @@ fn location_files_bind_and_mismatched_flags_are_refused() {
         dir.join("r6").to_str().unwrap(),
     ]);
     assert_eq!(out.status.code(), Some(64));
-    // --prompt is reserved.
+    // --prompt binds a Text input; rect declares none.
     let out = rascal(&[
         "run",
         "rect",
@@ -195,7 +195,10 @@ fn location_files_bind_and_mismatched_flags_are_refused() {
         dir.join("r7").to_str().unwrap(),
     ]);
     assert_eq!(out.status.code(), Some(64));
-    assert!(String::from_utf8_lossy(&out.stderr).contains("M5"));
+    assert!(
+        String::from_utf8_lossy(&out.stderr)
+            .contains("declares no inputs.prompt; --prompt does not apply")
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 

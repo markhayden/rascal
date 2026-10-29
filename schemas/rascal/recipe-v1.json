@@ -42,7 +42,7 @@
     },
     "inputs": {
       "type": "object",
-      "description": "Declared inputs by name; the CLI binds them from --image, --bbox, --location, --stroke, --protect and --mask.",
+      "description": "Declared inputs by name; the CLI binds them from --image, --bbox, --location, --stroke, --protect, --mask and --prompt (a Text input).",
       "additionalProperties": {
         "$ref": "#/$defs/InputDecl"
       }
@@ -58,6 +58,19 @@
     }
   },
   "$defs": {
+    "InputType": {
+      "description": "What a declared input is: an artifact of one type, bound to step ports, or Text (a prompt), which a step's string parameter takes by naming it as its value (prompt = \"inputs.prompt\").",
+      "type": "string",
+      "enum": [
+        "Image",
+        "Location",
+        "Mask",
+        "BandProfile",
+        "Series",
+        "Plan",
+        "Text"
+      ]
+    },
     "InputDecl": {
       "type": "object",
       "additionalProperties": false,
@@ -66,15 +79,7 @@
       ],
       "properties": {
         "type": {
-          "type": "string",
-          "enum": [
-            "Image",
-            "Location",
-            "Mask",
-            "BandProfile",
-            "Series",
-            "Plan"
-          ]
+          "$ref": "#/$defs/InputType"
         },
         "optional": {
           "type": "boolean",

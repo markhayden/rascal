@@ -19,7 +19,7 @@ async def test_listing_calls_and_errors_over_a_session(anyio_backend) -> None:
         assert session.get_server_capabilities() is not None
         listed = await session.list_tools()
         names = [t.name for t in listed.tools]
-        assert names == ["echo_region", "echo_env"]
+        assert names == ["echo_region", "segment", "echo_env"]
         echo = listed.tools[0]
         assert echo.meta is not None and "manifest" in echo.meta and "rascal" in echo.meta
         assert echo.meta["manifest"]["name"] == "echo_region"

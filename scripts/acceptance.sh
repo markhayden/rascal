@@ -3,7 +3,8 @@
 #
 # 1. Package every crate as crates.io would serve it and install `rascal-mask` from the packages
 #    into a clean directory, the sibling crates supplied from their packages (not the checkout).
-# 2. Run the six shipped recipes by name on the fixtures with no configuration file; each must
+# 2. Run the six location recipes by name on the fixtures with no configuration file (the
+#    seventh, remove-prompt, needs a pack: the bundle step calls segment when the models are in); each must
 #    produce its mask and its renders.
 # 3. Start `serve` and drive it with the independent client through the seam ops; read the same
 #    workspace back with the CLI.

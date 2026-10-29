@@ -13,7 +13,7 @@ use rascal_core::location::Location;
 use rascal_core::mask::Mask;
 use rascal_core::op::Status;
 use rascal_core::outdir::{self, OutKind};
-use rascal_core::recipe::Run;
+use rascal_core::recipe::{InputType, Recipe, Run};
 use rascal_core::registry::OpRegistry;
 use rascal_core::workspace::Workspace;
 
@@ -46,6 +46,8 @@ pub struct Prepared {
     pub image: Artifact,
     pub registry: OpRegistry,
     pub packs: Vec<Arc<rascal_mcp::client::Pack>>,
+    /// The recipe as loaded, so `heal` knows what `--prompt` bound.
+    pub recipe: Recipe,
 }
 
 /// What `run` did.
@@ -57,15 +59,25 @@ pub struct RunReport {
     pub renders: Vec<(String, PathBuf)>,
 }
 
+/// Whether a recipe declares `inputs.prompt` as text, which `--prompt` binds.
+pub fn declares_prompt(recipe: &Recipe) -> bool {
+    recipe
+        .inputs
+        .get("prompt")
+        .is_some_and(|d| d.kind == InputType::Text)
+}
+
 /// Runs a recipe. The run directory must be new or empty. Every declared input is bound from
 /// its flag: `image` from the positional path, `location` from `--bbox` or `--location`,
-/// `stroke` from `--stroke`, `protect` and `mask` from stored mask directories; a declared
-/// input without its flag, or a flag without its input, is a usage error.
+/// `stroke` from `--stroke`, `protect` and `mask` from stored mask directories, `prompt`
+/// (text) from `--prompt`; a declared input without its flag, or a flag without its input,
+/// is a usage error.
 pub fn run(args: &RunArgs) -> Result<RunReport> {
-    if args.prompt.is_some() {
-        return Err(Error::usage(
-            "--prompt binds through a configured pack, which arrives with M5; heal passes it to the filler",
-        ));
+    if args.prompt.is_some() && !declares_prompt(&load_recipe(&args.recipe)?) {
+        return Err(Error::usage(format!(
+            "recipe {} declares no inputs.prompt; --prompt does not apply (remove-prompt takes one)",
+            args.recipe
+        )));
     }
     let Prepared { run, outcome, .. } = run_recipe(args)?;
     let mask_dir = match outcome.outputs.get("mask") {
@@ -91,10 +103,11 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
         .map(rascal_core::config::Config::read)
         .transpose()?;
     let recipe = load_recipe(&args.recipe)?;
-    if args.prompt.is_some() && recipe.inputs.contains_key("prompt") {
-        return Err(Error::usage(
-            "inputs.prompt binds through a configured pack, which arrives with M5",
-        ));
+    if declares_prompt(&recipe) && args.prompt.is_none() {
+        return Err(Error::usage(format!(
+            "recipe {} needs inputs.prompt: give --prompt",
+            recipe.name
+        )));
     }
     let declared = |name: &str| recipe.inputs.contains_key(name);
     let optional = |name: &str| recipe.inputs.get(name).is_some_and(|d| d.optional);
@@ -141,7 +154,23 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
     };
     let (registry, packs) =
         crate::packs::registry_for(config.as_ref(), &run.workspace, args.replay.as_deref())?;
-    recipe.validate(&registry)?;
+    recipe.validate(&registry).map_err(|e| {
+        let no_packs = config.as_ref().is_none_or(|c| c.packs.is_empty());
+        match e {
+            Error::Recipe {
+                recipe,
+                step,
+                message,
+            } if no_packs && message.starts_with("unknown op ") => Error::Recipe {
+                recipe,
+                step,
+                message: format!(
+                    "{message}; it is not a shipped op, so it needs a configured pack (--config with a [packs.*] entry that serves it)"
+                ),
+            },
+            other => other,
+        }
+    })?;
 
     let (_, frame, image) = run
         .workspace
@@ -194,14 +223,21 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
         }
     }
 
+    let mut texts: BTreeMap<String, String> = BTreeMap::new();
+    if let Some(prompt) = &args.prompt
+        && declares_prompt(&recipe)
+    {
+        texts.insert("prompt".to_string(), prompt.clone());
+    }
     let input_image = inputs["image"].clone();
-    let outcome = recipe.run(&registry, inputs, &run)?;
+    let outcome = recipe.run(&registry, inputs, &texts, &run)?;
     Ok(Prepared {
         run,
         outcome,
         image: input_image,
         registry,
         packs,
+        recipe,
     })
 }
 

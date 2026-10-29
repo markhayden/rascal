@@ -47,3 +47,14 @@ tag or file read on each primary page. The owner signed decision 5 on 2026-10-29
   them like every other file.
 - Model weights never enter the repository; `fetch` brings them to the owner's machine and the
   bundle carries them to a user's.
+
+## Refined 2026-10-29: the decoder is SAM 2.1 Hiera-Tiny
+
+The first export took the drop-in this record named, not MobileSAM. MobileSAM's code is
+installable only from its git repository, and the export environment (`tools/python/export/`)
+is locked to PyPI packages so the export reproduces from its lock; SAM 2.1 Hiera-Tiny comes
+through Transformers like the detector, under the same licence, at four times the size (127 MB
+of graphs against about 40 MB) and with tighter planes. The detector is OWLv2 base as decided.
+The exported graphs are 749 MB in all, not tens of megabytes: the bundle grows by that, and
+the artifacts are release assets the pack fetches or a bundle carries. `MODEL.md` records the
+export, its parity and the preprocessing the pack mirrors.

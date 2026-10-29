@@ -1,0 +1,22 @@
+rascal-tools ships two models exported to ONNX (MODEL.md). Each is redistributed under the
+Apache License, Version 2.0 (the licence text is LICENSE at the root of the rascal repository
+and travels with every bundle); this file is the notice of the changes made.
+
+OWLv2 base, patch 16
+  Source: https://huggingface.co/google/owlv2-base-patch16, revision
+  2a1560802f8cf3c408fec9b809d705f56a2f7146, licensed Apache-2.0 by its authors (Google).
+  Changes: the PyTorch checkpoint was exported to ONNX (opset 18) through Transformers'
+  Owlv2ForObjectDetection with torch.onnx.export on 2026-10-29, as owlv2-base-patch16.onnx;
+  the CLIP tokenizer was saved as owlv2-base-patch16.tokenizer.json. Weights are unchanged.
+
+SAM 2.1 Hiera-Tiny
+  Source: https://huggingface.co/facebook/sam2.1-hiera-tiny, revision
+  de431c4043854a71d8101e17995dfe596bf101a5, licensed Apache-2.0 by its authors (Meta).
+  Changes: the PyTorch checkpoint was exported to ONNX (opset 18) through Transformers'
+  Sam2Model with torch.onnx.export on 2026-10-29, as two graphs, the image encoder
+  (sam2.1-hiera-tiny.encoder.onnx) and the prompt encoder with the mask decoder taking box
+  prompts and returning one mask per box (sam2.1-hiera-tiny.decoder.onnx). Weights are
+  unchanged.
+
+The export procedure, the graphs' interfaces and the parity checks are in MODEL.md; the
+digests of the exported files are in artifacts.toml.

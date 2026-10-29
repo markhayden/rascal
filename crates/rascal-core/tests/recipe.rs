@@ -295,7 +295,9 @@ fn resolved_defaults_and_the_constant_set_appear_in_the_journal() {
         "location".to_string(),
         Artifact::Location { location, identity },
     );
-    let outcome = recipe.run(&registry, inputs, &run).unwrap();
+    let outcome = recipe
+        .run(&registry, inputs, &BTreeMap::new(), &run)
+        .unwrap();
     assert_eq!(outcome.status, rascal_core::op::Status::Ok);
     let lines = rascal_core::journal::Journal::read(&dir.join("journal.jsonl")).unwrap();
     let by_step = |id: &str| {
@@ -333,18 +335,91 @@ fn resolved_defaults_and_the_constant_set_appear_in_the_journal() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A stand-in for the pack's `segment`, with the ports and parameters the Python pack
+/// declares, so `remove-prompt` validates without a pack; it never runs.
+struct StandInSegment;
+
+impl rascal_core::op::Op for StandInSegment {
+    fn manifest(&self) -> rascal_core::op::Manifest {
+        use rascal_core::op::{Cost, CostTier, Manifest, Param, ParamKind, Port};
+        Manifest::new(
+            "segment",
+            "0.1.0",
+            "A stand-in for the pack's segment.",
+            "Never: this is a validation stand-in.",
+            "Always.",
+            "Nothing: it never runs.",
+            Cost {
+                tier: CostTier::Expensive,
+                seconds: 4.0,
+            },
+            vec![Port {
+                name: "image".to_string(),
+                artifact_type: ArtifactType::Image,
+                required: true,
+                purpose: "The image to search.".to_string(),
+                many: false,
+            }],
+            vec![
+                Port {
+                    name: "region".to_string(),
+                    artifact_type: ArtifactType::Location,
+                    required: true,
+                    purpose: "One box per instance.".to_string(),
+                    many: true,
+                },
+                Port {
+                    name: "plane".to_string(),
+                    artifact_type: ArtifactType::Image,
+                    required: true,
+                    purpose: "One plane per instance.".to_string(),
+                    many: true,
+                },
+            ],
+            vec![
+                Param::required("prompt", "What to find.", ParamKind::String),
+                Param::optional(
+                    "max_instances",
+                    "The most instances.",
+                    ParamKind::Integer,
+                    serde_json::json!(8),
+                )
+                .bounded(1.0, 16.0),
+                Param::optional(
+                    "threshold",
+                    "The score a box needs.",
+                    ParamKind::Number,
+                    serde_json::json!(0.2),
+                )
+                .bounded(0.0, 1.0),
+            ],
+        )
+    }
+
+    fn run(
+        &self,
+        _: &rascal_core::op::Context<'_>,
+        _: &rascal_core::op::Inputs,
+        _: &rascal_core::op::Params,
+    ) -> rascal_core::error::Result<rascal_core::op::Output> {
+        unreachable!("the stand-in never runs")
+    }
+}
+
 #[test]
 fn the_shipped_recipes_validate_against_the_schema_and_the_registry() {
     let dir = SchemaDir::new(repo_root().join("schemas"));
     let validator = dir.validator("rascal/recipe-v1.json").unwrap();
     let recipes = repo_root().join("crates/rascal-mask/recipes");
+    let mut registry = rascal_ops::registry().unwrap();
+    registry.register(Box::new(StandInSegment)).unwrap();
     let mut count = 0;
     for entry in std::fs::read_dir(&recipes).unwrap() {
         let path = entry.unwrap().path();
         if path.extension().is_some_and(|e| e == "toml") {
             let recipe = Recipe::read(&path).unwrap();
             recipe
-                .validate(&rascal_ops::registry().unwrap())
+                .validate(&registry)
                 .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
             let value = serde_json::to_value(&recipe).unwrap();
             if let Err(e) = validator.validate(&value) {

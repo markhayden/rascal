@@ -16,10 +16,11 @@ Runner = Callable[[dict[str, Any], Harness], types.CallToolResult]
 
 def catalogue(debug: bool = False) -> dict[str, tuple[ToolSpec, Runner]]:
     """Every tool by name; `debug` adds the tools that exist to test the pack itself."""
-    from rascal_tools.tools import echo_region
+    from rascal_tools.tools import echo_region, segment
 
     tools: dict[str, tuple[ToolSpec, Runner]] = {
-        echo_region.SPEC.name: (echo_region.SPEC, echo_region.run)
+        echo_region.SPEC.name: (echo_region.SPEC, echo_region.run),
+        segment.SPEC.name: (segment.SPEC, segment.run),
     }
     if debug:
         from rascal_tools.tools import echo_env

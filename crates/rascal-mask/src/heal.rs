@@ -101,7 +101,14 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         image: input_image,
         registry,
         packs: _packs,
+        recipe,
     } = run::run_recipe(&args.run)?;
+    // A prompt the recipe bound (a finder's) is not the filler's.
+    let filler_prompt = if run::declares_prompt(&recipe) {
+        None
+    } else {
+        args.run.prompt.as_deref()
+    };
     let registry = &registry;
     if outcome.status != Status::Ok {
         return stopped(
@@ -202,7 +209,7 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         &working_c,
         &rendering,
         grey.as_deref(),
-        args.run.prompt.as_deref(),
+        filler_prompt,
     )?;
     let request_identity = request_identity(&request);
     let frame_c = crop_frame.clone().unwrap_or_else(|| frame_f.clone());

@@ -10,6 +10,9 @@ dependencies = [
     "mcp>=1.30,<2",
     "pillow>=11",
     "numpy>=2",
+    # The segmenter (MODEL.md): the exported graphs run here, the prompt is tokenised here.
+    "onnxruntime>=1.20",
+    "tokenizers>=0.21",
 ]
 
 [project.scripts]

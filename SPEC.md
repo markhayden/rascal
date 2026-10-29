@@ -631,8 +631,11 @@ per invocation: step id, op, version, resolved params, input identities, output 
 envelope, duration) plus the projections `frames.json` and `locations.json` and the outputs
 named; with `--workspace` the artifacts and the journal go to that workspace instead. A recipe's `[inputs]` may declare any artifact type;
 the CLI binds them from `--location`, `--stroke`, `--protect`, `--mask` and `--prompt` (the last
-through a configured pack), and `heal` passes the same typed input map through unchanged; `--image` may name a path or a
-workspace `Image` id, so a composite can feed the next pass without re-import. The six shipped recipes run, literally as shipped, as acceptance fixtures.
+a `Text` input), and `heal` passes the same typed input map through unchanged; `--image` may name a path or a
+workspace `Image` id, so a composite can feed the next pass without re-import. A recipe's `[inputs]` may also
+declare `Text` inputs: `--prompt` binds `inputs.prompt`, a step's string parameter takes it by naming it as its value
+(`prompt = "inputs.prompt"`), the run substitutes the text and the journal records the resolved value; `heal` passes
+`--prompt` to the filler only when the recipe declares no `inputs.prompt`. The seven shipped recipes run, literally as shipped, as acceptance fixtures (`remove-prompt` through a pack).
 
 **`heal`** is the fixed typed graph below, with `F` the recipe's mask frame:
 
@@ -655,10 +658,11 @@ status; never a key.
 Shipped recipes, embedded and addressable by name as well as by path:
 
 - `seam`: as above. Input: an equirectangular image.
-- `remove`: `inputs.image`, `inputs.location` (a `bbox`, `polygon` or `stroke`, or the planes of
-  `segment` via `--prompt` when a pack is configured) → `rasterize` or `select` → `grow` (`px`,
-  `down_px`) → `close` → `subtract` (optional `inputs.protect`) → `feather`. Requires a location
-  or a prompt.
+- `remove`: `inputs.image`, `inputs.location` (a `bbox`, `polygon` or `stroke`) → `rasterize`
+  → `grow` (`px`, `down_px`) → `close` → `subtract` (optional `inputs.protect`) → `feather`.
+- `remove-prompt`: `inputs.image`, `inputs.prompt` (text, `--prompt`) → `segment` (a configured
+  pack's) → `select` (every plane) → the same `grow`, `close`, `subtract` and `feather`.
+  Requires a pack that serves `segment`.
 - `repair`: `inputs.stroke` → `tighten` → `feather`. For an area, `repair-area`: `inputs.location`
   (`bbox` or `polygon`) → `rasterize` → `feather`. The path fan is a later milestone.
 - `rect`: `inputs.image`, `inputs.location` (a `bbox`) → `rasterize`, one step. The utility
@@ -987,12 +991,13 @@ scripts/acceptance.sh                          # release acceptance: install, re
 # Python tool pack
 cd tools/python && uv sync --frozen                        # development only; may download
 uv run --frozen --offline --no-sync rascal-tools fetch     # model artifacts; network, explicit
-uv run --frozen --offline --no-sync pytest                 # offline; segmenter tests skip until fetched
+uv run --frozen --offline --no-sync pytest                 # offline; the segmenter case skips until fetched
 uv run --frozen --offline --no-sync ruff check . && uv run --frozen --offline --no-sync ruff format --check .
 
 # the binary
 rascal run seam pano.jpg --out run/
 rascal run remove room.jpg --location chairs.json --out run/
+rascal run remove-prompt room.jpg --prompt "chair" --config rascal.toml --out run/   # segment through the pack
 rascal run repair print.jpg --stroke scratch.json --out run/
 rascal run ./my-recipe.toml image.jpg --out run/
 rascal heal seam pano.jpg --filler local-inpaint --config rascal.toml --out run/

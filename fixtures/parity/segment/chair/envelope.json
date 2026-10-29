@@ -1,0 +1,62 @@
+{
+  "envelope_version": 1,
+  "images": [
+    {
+      "frame": "raw:480x320:flat",
+      "height": 320,
+      "identity": "",
+      "media_type": "image/png",
+      "parent": "raw:480x320:flat",
+      "width": 480
+    }
+  ],
+  "measurements": [
+    {
+      "name": "queries",
+      "unit": "count",
+      "value": 1.0
+    },
+    {
+      "frame": "raw:480x320:flat",
+      "name": "plane_px_0",
+      "unit": "px",
+      "value": 8033.0
+    },
+    {
+      "name": "mask_iou_predicted",
+      "unit": "ratio",
+      "value": 0.983
+    }
+  ],
+  "regions": [
+    {
+      "id": "seg-0",
+      "label": "a wooden chair",
+      "location": {
+        "frame": "raw:480x320:flat",
+        "kind": "polygon",
+        "polygon": [
+          [
+            0.2795,
+            0.2221
+          ],
+          [
+            0.5229,
+            0.2221
+          ],
+          [
+            0.5229,
+            0.788
+          ],
+          [
+            0.2795,
+            0.788
+          ]
+        ]
+      },
+      "score": 0.072
+    }
+  ],
+  "status": "ok",
+  "summary": "1 instance of 'a wooden chair': a wooden chair 0.07"
+}

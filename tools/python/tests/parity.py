@@ -28,9 +28,7 @@ PARITY = Path(__file__).resolve().parents[3] / "fixtures" / "parity"
 
 def requires_artifact(name: str) -> None:
     """Skips the test unless the named artifact is fetched and verified."""
-    artifacts = {
-        a.name: a for a in fetch.read_artifacts(Path(__file__).parents[1] / "artifacts.toml")
-    }
+    artifacts = {a.name: a for a in fetch.read_artifacts(fetch.ARTIFACTS)}
     artifact = artifacts.get(name)
     if artifact is None or not fetch.fetched(artifact):
         pytest.skip(f"artifact {name} is not fetched; run `rascal-tools fetch`")

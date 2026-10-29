@@ -336,6 +336,7 @@ pub const COMPONENTS: &[&str] = &[
     "Accepts",
     "ContextImage",
     "InputDecl",
+    "InputType",
     "RenderOut",
     "Outputs",
     "Step",
