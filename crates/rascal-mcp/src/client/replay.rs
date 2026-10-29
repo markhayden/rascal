@@ -74,14 +74,28 @@ impl Replay {
             let Some(note) = line.note.as_deref() else {
                 continue;
             };
-            if let Some(text) = note.strip_prefix(MANIFEST_NOTE)
-                && let Ok(stored) = serde_json::from_str::<StoredManifest>(text)
-            {
-                manifests.push(stored);
-            } else if let Some(text) = note.strip_prefix(STORED_NOTE)
-                && let Ok(stored) = serde_json::from_str::<StoredCall>(text)
-            {
-                calls.push(stored);
+            if let Some(text) = note.strip_prefix(MANIFEST_NOTE) {
+                manifests.push(serde_json::from_str::<StoredManifest>(text).map_err(|e| {
+                    Error::op(
+                        "replay",
+                        format!(
+                            "{}: journal line {}: a pack manifest note does not parse: {e}",
+                            journal.display(),
+                            line.seq
+                        ),
+                    )
+                })?);
+            } else if let Some(text) = note.strip_prefix(STORED_NOTE) {
+                calls.push(serde_json::from_str::<StoredCall>(text).map_err(|e| {
+                    Error::op(
+                        "replay",
+                        format!(
+                            "{}: journal line {}: a stored call note does not parse: {e}",
+                            journal.display(),
+                            line.seq
+                        ),
+                    )
+                })?);
             }
         }
         Ok(Replay {
@@ -97,11 +111,22 @@ impl Replay {
     }
 
     /// The tools a pack listed in the recorded run, as the registry needs them; the last
-    /// listing per tool wins.
-    pub fn tools_for(&self, pack: &str) -> Option<Vec<PackTool>> {
+    /// listing per tool wins. `None` when the run never started the pack.
+    pub fn tools_for(&self, pack: &str) -> Result<Option<Vec<PackTool>>> {
         let mut by_name: BTreeMap<String, PackTool> = BTreeMap::new();
         for stored in self.manifests.iter().filter(|m| m.pack == pack) {
-            let manifest = stored.manifest.with_annotation(&stored.rascal).ok()?;
+            let manifest = stored
+                .manifest
+                .with_annotation(&stored.rascal)
+                .map_err(|e| {
+                    Error::op(
+                        pack,
+                        format!(
+                            "--replay {}: a recorded manifest is rejected: {e}",
+                            self.dir.display()
+                        ),
+                    )
+                })?;
             by_name.insert(
                 manifest.name.clone(),
                 PackTool {
@@ -111,24 +136,39 @@ impl Replay {
                 },
             );
         }
-        (!by_name.is_empty()).then(|| by_name.into_values().collect())
+        Ok((!by_name.is_empty()).then(|| by_name.into_values().collect()))
     }
 
     /// The recorded call for a request by this pack (name and revision) and tool, when there
-    /// is one; the last wins.
+    /// is one whose outputs the recorded run holds; the last such wins. A stored note whose
+    /// outputs were never committed (the run failed after the call) is passed over.
     pub fn find(
         &self,
         request: &str,
         pack: &str,
         revision: Option<&str>,
         tool: &str,
-    ) -> Option<&StoredCall> {
-        self.calls.iter().rev().find(|c| {
+    ) -> Result<Option<StoredCall>> {
+        for stored in self.calls.iter().rev().filter(|c| {
             c.request == request
                 && c.pack == pack
                 && c.revision.as_deref() == revision
                 && c.tool == tool
-        })
+        }) {
+            let committed = stored
+                .outputs
+                .values()
+                .all(|o| self.workspace.load(&o.identity).is_ok());
+            if committed {
+                return Ok(Some(stored.clone()));
+            }
+            tracing::warn!(
+                request,
+                tool,
+                "a recorded call's outputs are not in the recorded run; passing it over"
+            );
+        }
+        Ok(None)
     }
 
     /// The recorded outputs, loaded from the recorded run's workspace by identity.

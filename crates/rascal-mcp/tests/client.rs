@@ -88,6 +88,15 @@ fn stderr_redaction_covers_values_bearer_and_named_assignments() {
         "a non-credential assignment stays: {out}"
     );
     assert_eq!(redact("plain text", &[]), "plain text");
+    // Credentials inside a URL's query string and in a comma list, with no value known.
+    let out = redact(
+        "POST https://h/v1?key=AIzaSy123&token=def,api_token:xyz done",
+        &[],
+    );
+    assert_eq!(
+        out,
+        "POST https://h/v1?key=[redacted]&token=[redacted],api_token:[redacted] done"
+    );
 }
 
 fn compat() -> serde_json::Value {
@@ -324,6 +333,13 @@ fn result_validation_rejects_each_bad_answer_by_name() {
         ("region a: ", {
             let mut e = good_envelope(&id);
             e["regions"][0]["location"]["polygon"] = serde_json::json!([[0.1, 0.1], [0.4, 0.1]]);
+            answer(e, vec![block()])
+        }),
+        // (A non-finite score cannot arrive: serde_json refuses NaN and out-of-range numbers
+        // before the validator sees them; the check stays as a guard.)
+        ("image 0 is image/jpeg, not image/png", {
+            let mut e = good_envelope(&id);
+            e["images"][0]["media_type"] = serde_json::json!("image/jpeg");
             answer(e, vec![block()])
         }),
     ];

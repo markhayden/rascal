@@ -14,7 +14,7 @@ pub mod op;
 pub mod replay;
 pub mod validate;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -23,7 +23,9 @@ use rascal_core::Error;
 use rascal_core::config::PackConfig;
 use rascal_core::error::Result;
 use rascal_core::op::Manifest;
-use rascal_core::pack::{CompatManifest, META_MANIFEST, META_RASCAL, PackAnnotation};
+use rascal_core::pack::{
+    CompatManifest, MAX_ANSWER_BYTES, META_MANIFEST, META_RASCAL, PackAnnotation,
+};
 use rascal_core::schemas::SchemaDir;
 use rmcp::ServiceError;
 use rmcp::model::{
@@ -31,6 +33,7 @@ use rmcp::model::{
     ClientRequest, ProtocolVersion, ServerResult, Tool,
 };
 use rmcp::service::{PeerRequestOptions, RoleClient, RunningService, serve_client_with_ct};
+use rmcp::transport::async_rw::AsyncRwTransport;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::Semaphore;
@@ -43,6 +46,9 @@ pub const GRACE: Duration = Duration::from_secs(5);
 
 /// The most stderr lines kept between reads; older lines are dropped and counted.
 const STDERR_LINES: usize = 256;
+
+/// The permits of a tool whose calls may overlap: in practice bounded by the pack.
+const CONCURRENT_PERMITS: usize = 64;
 
 /// One tool of a pack as rascal sees it: the native manifest built from the copied-shape
 /// manifest and the annotation block, and the two as they came.
@@ -151,12 +157,13 @@ struct Live {
     epoch: CancellationToken,
     /// One semaphore per tool: one permit when either the config or the manifest says serial.
     permits: BTreeMap<String, Arc<Semaphore>>,
-    stderr: Arc<Mutex<Stderr>>,
 }
 
+/// Captured stderr, redacted, kept on the pack (not the process) so a dying pack's last
+/// words are journaled with the call that saw it die.
 #[derive(Default)]
 struct Stderr {
-    lines: Vec<String>,
+    lines: VecDeque<String>,
     dropped: u64,
 }
 
@@ -170,6 +177,7 @@ pub struct Pack {
     /// Own runtime, so a synchronous op can call from any thread; `None` only while dropping.
     runtime: Option<tokio::runtime::Runtime>,
     live: tokio::sync::Mutex<Option<Arc<Live>>>,
+    stderr: Arc<Mutex<Stderr>>,
     tools: Mutex<Option<Vec<PackTool>>>,
     calls: AtomicU64,
     grace: Duration,
@@ -178,10 +186,10 @@ pub struct Pack {
 }
 
 impl Pack {
-    fn rt(&self) -> &tokio::runtime::Runtime {
+    fn rt(&self) -> Result<&tokio::runtime::Runtime> {
         self.runtime
             .as_ref()
-            .expect("the runtime lives as long as the pack")
+            .ok_or_else(|| Error::op(&self.name, "the pack is being dropped"))
     }
 }
 
@@ -201,7 +209,7 @@ impl Pack {
             .enable_all()
             .build()
             .map_err(|e| Error::op(name, format!("runtime: {e}")))?;
-        let secrets = env::secrets(&key_envs, std::env::vars());
+        let secrets = env::secrets(&key_envs, env::parent_environment());
         Ok(Pack {
             name: name.to_string(),
             config,
@@ -209,6 +217,7 @@ impl Pack {
             secrets,
             runtime: Some(runtime),
             live: tokio::sync::Mutex::new(None),
+            stderr: Arc::new(Mutex::new(Stderr::default())),
             tools: Mutex::new(None),
             calls: AtomicU64::new(0),
             grace: GRACE,
@@ -225,7 +234,7 @@ impl Pack {
         key_envs: Vec<String>,
         replay: Arc<replay::Replay>,
     ) -> Result<Pack> {
-        let tools = replay.tools_for(name).ok_or_else(|| {
+        let tools = replay.tools_for(name)?.ok_or_else(|| {
             Error::op(
                 name,
                 format!(
@@ -266,7 +275,7 @@ impl Pack {
 
     /// The environment the process gets.
     pub fn environment(&self) -> BTreeMap<String, String> {
-        env::allowlist(&self.config.env, &self.key_envs, std::env::vars())
+        env::allowlist(&self.config.env, &self.key_envs, env::parent_environment())
     }
 
     /// The tools, starting the process when they are not known yet.
@@ -274,7 +283,7 @@ impl Pack {
         if let Some(tools) = self.tools.lock().unwrap_or_else(|e| e.into_inner()).clone() {
             return Ok(tools);
         }
-        self.rt().block_on(async {
+        self.rt()?.block_on(async {
             self.ensure_live().await?;
             Ok(self
                 .tools
@@ -288,12 +297,13 @@ impl Pack {
     /// True while the process is up.
     pub fn is_live(&self) -> bool {
         self.rt()
-            .block_on(async { self.live.lock().await.is_some() })
+            .map(|rt| rt.block_on(async { self.live.lock().await.is_some() }))
+            .unwrap_or(false)
     }
 
     /// The process id while the process is up.
     pub fn pid(&self) -> Option<u32> {
-        self.rt().block_on(async {
+        self.rt().ok()?.block_on(async {
             self.live.lock().await.as_ref().and_then(|l| {
                 l.child
                     .lock()
@@ -304,21 +314,16 @@ impl Pack {
         })
     }
 
-    /// The redacted stderr lines captured since the last take, oldest first; a dropped count
-    /// becomes a line of its own.
+    /// The redacted stderr lines captured since the last take, oldest first, whether or not
+    /// the process is still up; a dropped count becomes a line of its own.
     pub fn take_stderr(&self) -> Vec<String> {
-        self.rt().block_on(async {
-            let Some(live) = self.live.lock().await.clone() else {
-                return Vec::new();
-            };
-            let mut stderr = live.stderr.lock().unwrap_or_else(|e| e.into_inner());
-            let mut lines = std::mem::take(&mut stderr.lines);
-            if stderr.dropped > 0 {
-                lines.insert(0, format!("[{} earlier lines dropped]", stderr.dropped));
-                stderr.dropped = 0;
-            }
-            lines
-        })
+        let mut stderr = self.stderr.lock().unwrap_or_else(|e| e.into_inner());
+        let mut lines: Vec<String> = std::mem::take(&mut stderr.lines).into();
+        if stderr.dropped > 0 {
+            lines.insert(0, format!("[{} earlier lines dropped]", stderr.dropped));
+            stderr.dropped = 0;
+        }
+        lines
     }
 
     /// Calls a tool with the arguments as rascal built them (`_harness` included). The answer
@@ -328,28 +333,46 @@ impl Pack {
         tool: &str,
         arguments: serde_json::Map<String, serde_json::Value>,
     ) -> CallOutcome {
-        self.rt().block_on(self.call_async(tool, arguments))
+        match self.rt() {
+            Ok(rt) => rt.block_on(self.call_async(tool, arguments)),
+            Err(e) => CallOutcome {
+                call: PackCall {
+                    pack: self.name.clone(),
+                    tool: tool.to_string(),
+                    target: self.config.command.join(" "),
+                    request_bytes: 0,
+                    response_bytes: 0,
+                    duration_ms: 0,
+                    status: "error".to_string(),
+                    outcome: e.to_string(),
+                },
+                result: Err(e),
+            },
+        }
     }
 
     /// Fails every in-flight call and shuts the process down, so the next use starts afresh.
     pub fn fail_in_flight(&self, reason: &str) {
-        self.rt().block_on(async {
-            let live = self.live.lock().await.clone();
-            if let Some(live) = live {
-                self.fail(&live, reason).await;
-            }
-        });
+        if let Ok(rt) = self.rt() {
+            rt.block_on(async {
+                let live = self.live.lock().await.clone();
+                if let Some(live) = live {
+                    self.fail(&live, reason).await;
+                }
+            });
+        }
     }
 
     /// Shuts the process down if it is up: the escalation, then the next use restarts it.
     pub fn shutdown(&self) {
-        self.rt().block_on(async {
-            let mut guard = self.live.lock().await;
-            if let Some(live) = guard.take() {
-                drop(guard);
-                self.stop(live).await;
-            }
-        });
+        if let Ok(rt) = self.rt() {
+            rt.block_on(async {
+                let mut guard = self.live.lock().await;
+                if let Some(live) = guard.take() {
+                    self.stop(live).await;
+                }
+            });
+        }
     }
 
     // --- the process ----------------------------------------------------------------------
@@ -372,7 +395,9 @@ impl Pack {
 
     async fn start(&self) -> Result<Live> {
         let name = &self.name;
-        let startup = Duration::from_secs(self.config.startup_timeout_s);
+        // One deadline for the whole startup: initialize and the listing together.
+        let deadline = Instant::now() + Duration::from_secs(self.config.startup_timeout_s);
+        let remaining = || deadline.saturating_duration_since(Instant::now());
         let mut command = tokio::process::Command::new(&self.config.command[0]);
         command
             .args(&self.config.command[1..])
@@ -393,25 +418,28 @@ impl Pack {
         else {
             return Err(Error::op(name, "the process has no piped stdio"));
         };
-        let captured = Arc::new(Mutex::new(Stderr::default()));
         let secrets = self.secrets.clone();
-        let sink = captured.clone();
+        let sink = self.stderr.clone();
         tokio::spawn(async move {
             let mut lines = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = lines.next_line().await {
                 let mut sink = sink.lock().unwrap_or_else(|e| e.into_inner());
                 if sink.lines.len() >= STDERR_LINES {
-                    sink.lines.remove(0);
+                    sink.lines.pop_front();
                     sink.dropped += 1;
                 }
-                sink.lines.push(env::redact(&line, &secrets));
+                sink.lines.push_back(env::redact(&line, &secrets));
             }
         });
         let info = ClientConfig::new(ClientCapabilities::default(), transport::implementation())
             .with_protocol_version(ProtocolVersion::V_2025_11_25);
         let ct = CancellationToken::new();
+        // The transport reads one answer per line; the SDK's default line limit (16 MiB) is
+        // below what a tool may declare, so the limit is the ceiling the manifests are held to.
+        let transport = AsyncRwTransport::new_client(stdout, stdin)
+            .with_max_line_length(MAX_ANSWER_BYTES as usize);
         let connected =
-            tokio::time::timeout(startup, serve_client_with_ct(info, (stdout, stdin), ct)).await;
+            tokio::time::timeout(remaining(), serve_client_with_ct(info, transport, ct)).await;
         let service = match connected {
             Ok(Ok(service)) => service,
             Ok(Err(e)) => {
@@ -450,7 +478,7 @@ impl Pack {
             Self::kill(&mut child, self.grace).await;
             return Err(Error::op(name, format!("refused at initialize: {why}")));
         }
-        let listed = tokio::time::timeout(startup, service.list_all_tools()).await;
+        let listed = tokio::time::timeout(remaining(), service.list_all_tools()).await;
         let listed = match listed {
             Ok(Ok(tools)) => tools,
             Ok(Err(e)) => {
@@ -487,26 +515,37 @@ impl Pack {
                 let concurrent = self.config.concurrent && t.compat.concurrent;
                 (
                     t.manifest.name.clone(),
-                    Arc::new(Semaphore::new(if concurrent { 64 } else { 1 })),
+                    Arc::new(Semaphore::new(if concurrent {
+                        CONCURRENT_PERMITS
+                    } else {
+                        1
+                    })),
                 )
             })
             .collect();
-        let known: Option<Vec<String>> = self
+        let known: Option<Vec<Manifest>> = self
             .tools
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .as_ref()
-            .map(|known| known.iter().map(|t| t.manifest.name.clone()).collect());
+            .map(|known| known.iter().map(|t| t.manifest.clone()).collect());
         match known {
             Some(before) => {
-                // A restart must serve the same tools the registry was built from.
-                let after: Vec<String> = tools.iter().map(|t| t.manifest.name.clone()).collect();
+                // A restart must serve the tools the registry was built from: the same names
+                // with the same manifests, ports and bounds included.
+                let after: Vec<Manifest> = tools.iter().map(|t| t.manifest.clone()).collect();
                 if before != after {
                     let _ = service.cancel().await;
                     Self::kill(&mut child, self.grace).await;
+                    let names =
+                        |m: &[Manifest]| m.iter().map(|t| t.name.clone()).collect::<Vec<_>>();
                     return Err(Error::op(
                         name,
-                        format!("the restarted pack lists {after:?}, not {before:?}"),
+                        format!(
+                            "the restarted pack does not list the tools it was registered with (before {:?}, after {:?}, or a manifest changed)",
+                            names(&before),
+                            names(&after)
+                        ),
                     ));
                 }
             }
@@ -520,7 +559,6 @@ impl Pack {
             child: Mutex::new(Some(child)),
             epoch: CancellationToken::new(),
             permits,
-            stderr: captured,
         })
     }
 
@@ -528,12 +566,13 @@ impl Pack {
     async fn fail(&self, live: &Arc<Live>, reason: &str) {
         tracing::warn!(pack = %self.name, reason, "pack failed; shutting it down");
         live.epoch.cancel();
+        // The slot is held for the whole escalation: a second failer waits here and finds
+        // nothing left to stop, and no restart can begin while the old process is going.
         let mut guard = self.live.lock().await;
         if guard.as_ref().is_some_and(|l| Arc::ptr_eq(l, live)) {
             guard.take();
+            self.stop(live.clone()).await;
         }
-        drop(guard);
-        self.stop(live.clone()).await;
     }
 
     /// The escalation: stdin close, grace, SIGTERM, grace, SIGKILL. Waits for the exit.
@@ -634,6 +673,13 @@ impl Pack {
             Ok(handle) => handle,
             Err(e) => {
                 drop(permit);
+                if live.epoch.is_cancelled() {
+                    call.status = "cancelled".to_string();
+                    return Err(Error::op(
+                        name,
+                        format!("{tool}: failed because another call on the pack failed"),
+                    ));
+                }
                 call.status = "died".to_string();
                 self.fail(&live, "the request could not be sent").await;
                 return Err(Error::op(name, format!("{tool}: could not send: {e}")));
@@ -749,11 +795,11 @@ impl Drop for Pack {
     }
 }
 
+/// The error's text, cut at a character boundary: the peer wrote part of it.
 fn summarize_init_error(e: &rmcp::service::ClientInitializeError) -> String {
     let text = e.to_string();
-    if text.len() > 300 {
-        format!("{}…", &text[..300])
-    } else {
-        text
+    match text.char_indices().nth(300) {
+        Some((at, _)) => format!("{}…", &text[..at]),
+        None => text,
     }
 }

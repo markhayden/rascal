@@ -318,3 +318,146 @@ fn a_base64_import_lands_like_a_path_import_and_nothing_but_the_protocol_reaches
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A configuration with the fake pack as `[packs.fake]`.
+fn pack_config(dir: &Path) -> PathBuf {
+    let path = dir.join("rascal.toml");
+    std::fs::write(
+        &path,
+        format!(
+            "config_version = 1\n[packs.fake]\ncommand = [{:?}, \"fake-pack\", \"exact\"]\ncall_timeout_s = 30\n",
+            env!("CARGO_BIN_EXE_rascal")
+        ),
+    )
+    .unwrap();
+    path
+}
+
+#[test]
+fn a_cancelled_pack_call_fails_with_its_class_and_the_pack_restarts() {
+    let dir = scratch("cancel");
+    let ws = dir.join("ws");
+    let cfg = pack_config(&dir);
+    let mut command = serve(&ws);
+    command.args(["--config", cfg.to_str().unwrap()]);
+    let mut client = Client::start(&mut command).unwrap();
+    let names: Vec<String> = client
+        .list_tools()
+        .unwrap()
+        .into_iter()
+        .map(|t| t.name)
+        .collect();
+    assert!(
+        names.contains(&"segment".to_string()),
+        "the pack's tool is served: {names:?}"
+    );
+    let floor = repo_root().join("fixtures/images/floor.png");
+    let imported = client
+        .call(
+            "workspace_import",
+            serde_json::json!({ "path": floor.to_str().unwrap() }),
+        )
+        .unwrap();
+    let image = imported.structured.unwrap()["artifacts"]["image"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    // A long call, cancelled by the client while in flight.
+    let id = client
+        .begin(
+            "tools/call",
+            serde_json::json!({ "name": "segment", "arguments": { "image": image, "prompt": "x", "delay_ms": 8000 } }),
+        )
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    client
+        .notify(
+            "notifications/cancelled",
+            serde_json::json!({ "requestId": id, "reason": "the test moved on" }),
+        )
+        .unwrap();
+    // The SDK sends no response for a cancelled request (the protocol allows either); what
+    // can be observed is the journal and the next call.
+    std::thread::sleep(std::time::Duration::from_millis(1500));
+    // The pack was shut down and restarts for the next call, which succeeds.
+    let again = client
+        .call(
+            "segment",
+            serde_json::json!({ "image": image, "prompt": "y" }),
+        )
+        .unwrap();
+    assert!(!again.is_error);
+    assert_eq!(again.structured.unwrap()["status"], "ok");
+    let journal = rascal_core::journal::Journal::read(&ws.join("journal.jsonl")).unwrap();
+    let statuses: Vec<String> = journal
+        .iter()
+        .filter_map(|l| {
+            l.note
+                .as_deref()?
+                .strip_prefix("pack call: ")
+                .map(str::to_string)
+        })
+        .map(|t| {
+            serde_json::from_str::<serde_json::Value>(&t).unwrap()["status"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        })
+        .collect();
+    assert_eq!(
+        statuses,
+        vec!["cancelled".to_string(), "ok".to_string()],
+        "{statuses:?}"
+    );
+    // Nothing of the cancelled call was published: one canonical image plus the second
+    // call's two planes.
+    let out = Command::new(env!("CARGO_BIN_EXE_rascal"))
+        .args([
+            "workspace",
+            "list",
+            ws.to_str().unwrap(),
+            "--type",
+            "Image",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    let rows: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(rows.len(), 3, "{rows:?}");
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_base64_import_over_the_sdks_default_line_limit_is_answered() {
+    // 2400x2400 of noise is about 17 MB as PNG and 23 MB as base64: over the 16 MiB line the
+    // SDK would otherwise read, under the 256 MiB rascal's transport carries.
+    let dir = scratch("large");
+    let ws = dir.join("ws");
+    let mut state = 0x2545_F491_4F6C_DD1Du64;
+    let noise = image::RgbImage::from_fn(2400, 2400, |_, _| {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        image::Rgb([state as u8, (state >> 8) as u8, (state >> 16) as u8])
+    });
+    let mut bytes = Vec::new();
+    image::DynamicImage::ImageRgb8(noise)
+        .write_to(
+            &mut std::io::Cursor::new(&mut bytes),
+            image::ImageFormat::Png,
+        )
+        .unwrap();
+    assert!(bytes.len() > 16 << 20, "{} bytes", bytes.len());
+    let encoded = rascal_core::panel::base64(&bytes);
+    let mut client = Client::start(&mut serve(&ws)).unwrap();
+    let result = client
+        .call("workspace_import", serde_json::json!({ "base64": encoded }))
+        .unwrap();
+    assert!(!result.is_error);
+    let structured = result.structured.unwrap();
+    assert_eq!(structured["status"], "ok");
+    assert_eq!(structured["frame"]["id"], "raw:2400x2400:flat");
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -18,9 +18,8 @@ use rascal_core::registry::OpRegistry;
 use rascal_core::workspace::Workspace;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, ErrorData,
-    InitializeResult, ListToolsResult, PaginatedRequestParams, ProtocolVersion, ServerCapabilities,
-    Tool,
+    CallToolRequestParams, CallToolResponse, CallToolResult, ErrorData, InitializeResult,
+    ListToolsResult, PaginatedRequestParams, ProtocolVersion, ServerCapabilities, Tool,
 };
 use rmcp::service::{RequestContext, RoleServer};
 use tokio::sync::Semaphore;
@@ -70,9 +69,9 @@ struct Inner {
     registry: OpRegistry,
     /// Calls run under this permit: one by default, `--concurrency n` for more.
     permits: Arc<Semaphore>,
-    /// The packs behind the registry's pack ops: a client's cancellation fails their
-    /// in-flight calls and shuts them down.
-    packs: Vec<Arc<Pack>>,
+    /// The pack behind each pack op, by tool name: a client's cancellation of a call fails
+    /// that pack's in-flight calls and shuts it down, and no other's.
+    packs: BTreeMap<String, Arc<Pack>>,
     /// The largest image `workspace_read` returns.
     max_image_bytes: u64,
     /// A hook for the dash writer, supplied by the binary (the page template lives there).
@@ -80,33 +79,37 @@ struct Inner {
 }
 
 impl Server {
-    /// A server over a workspace.
-    pub fn new(workspace: Arc<Workspace>, registry: OpRegistry, concurrency: usize) -> Server {
-        Server {
+    /// A server over a workspace: the registry's ops and the five workspace tools, `dash`
+    /// writing the run page (the binary supplies it; the page template lives there), and the
+    /// packs whose tools the registry holds.
+    pub fn new(
+        workspace: Arc<Workspace>,
+        registry: OpRegistry,
+        concurrency: usize,
+        dash: Option<DashWriter>,
+        packs: &[Arc<Pack>],
+    ) -> Result<Server> {
+        let mut by_tool = BTreeMap::new();
+        for pack in packs {
+            for tool in pack.tools()? {
+                by_tool.insert(tool.manifest.name, pack.clone());
+            }
+        }
+        Ok(Server {
             inner: Arc::new(Inner {
                 workspace,
                 registry,
                 permits: Arc::new(Semaphore::new(concurrency.max(1))),
-                packs: Vec::new(),
+                packs: by_tool,
                 max_image_bytes: 64 << 20,
-                dash: None,
+                dash,
             }),
-        }
+        })
     }
 
-    /// With the packs whose tools the registry holds, so a cancelled call fails them.
-    pub fn with_packs(mut self, packs: Vec<Arc<Pack>>) -> Server {
-        Arc::get_mut(&mut self.inner).expect("not yet shared").packs = packs;
-        self
-    }
-
-    /// With the run page writer `workspace_dash` calls.
-    pub fn with_dash(
-        mut self,
-        dash: impl Fn(&std::path::Path) -> Result<PathBuf> + Send + Sync + 'static,
-    ) -> Server {
-        Arc::get_mut(&mut self.inner).expect("not yet shared").dash = Some(Arc::new(dash));
-        self
+    /// The pack a tool belongs to, when it is a pack's.
+    pub fn pack_for(&self, tool: &str) -> Option<&Arc<Pack>> {
+        self.inner.packs.get(tool)
     }
 
     /// Every tool, in a stable order: the ops by name, then the workspace tools.
@@ -138,8 +141,13 @@ impl Server {
     /// Serves over stdio until the client goes away.
     pub async fn serve_stdio(self) -> Result<()> {
         use rmcp::ServiceExt;
+        // One request per line; the limit is what a pack answer may carry, so an import of a
+        // large image as base64 is not dropped by the SDK's default (16 MiB).
+        let (stdin, stdout) = rmcp::transport::io::stdio();
+        let transport = rmcp::transport::async_rw::AsyncRwTransport::new_server(stdin, stdout)
+            .with_max_line_length(rascal_core::pack::MAX_ANSWER_BYTES as usize);
         let service = self
-            .serve(rmcp::transport::stdio())
+            .serve(transport)
             .await
             .map_err(|e| Error::op("serve", format!("mcp: {e}")))?;
         service
@@ -149,10 +157,12 @@ impl Server {
         Ok(())
     }
 
+    /// Runs one tool; `cancel` is checked before an op's commit, as the CLI's flag is.
     fn call(
         &self,
         name: &str,
         args: &serde_json::Map<String, serde_json::Value>,
+        cancel: &rascal_core::workspace::Cancel,
     ) -> Result<CallToolResult> {
         let inner = &self.inner;
         match name {
@@ -280,20 +290,24 @@ impl Server {
                         })?;
                         inputs.insert(port.name.clone(), inner.workspace.load(id)?);
                     } else if key == "constants" {
-                        params.insert(
-                            key.clone(),
-                            toml::Value::String(value.as_str().unwrap_or_default().to_string()),
-                        );
+                        let set = value.as_str().ok_or_else(|| {
+                            Error::usage(format!("{op_name}: constants names a set (a string)"))
+                        })?;
+                        params.insert(key.clone(), toml::Value::String(set.to_string()));
                     } else if let Some(param) = manifest.param(key) {
                         params.insert(key.clone(), json_param(param, value)?);
                     } else {
                         return Err(Error::usage(format!("{op_name}: unknown argument {key}")));
                     }
                 }
-                let invocation =
-                    inner
-                        .workspace
-                        .invoke(op_name, op_name, &inner.registry, &inputs, &params)?;
+                let invocation = inner.workspace.invoke_with(
+                    op_name,
+                    op_name,
+                    &inner.registry,
+                    &inputs,
+                    &params,
+                    Some(cancel),
+                )?;
                 let mut envelope = serde_json::to_value(&invocation.output.envelope)
                     .map_err(|e| Error::op("serve", e.to_string()))?;
                 // The envelope's artifact table names outputs by port; a client needs the ids
@@ -501,7 +515,7 @@ impl ServerHandler for Server {
             None => 0,
         };
         let all = self.tools();
-        let end = (start + PAGE).min(all.len());
+        let end = start.saturating_add(PAGE).min(all.len());
         let tools = all.get(start..end).unwrap_or_default().to_vec();
         let next_cursor = (end < all.len()).then(|| end.to_string());
         Ok(ListToolsResult {
@@ -525,23 +539,20 @@ impl ServerHandler for Server {
         };
         let server = self.clone();
         // The permit travels with the blocking call, so a cancelled call still counts until
-        // it returns; a cancellation fails every pack's in-flight calls, which brings a pack
-        // op back promptly.
+        // it returns. A cancellation sets the op's flag (nothing is published after it) and,
+        // for a pack op, fails that pack's in-flight calls, which brings the op back promptly.
+        let cancel = Arc::new(rascal_core::workspace::Cancel::new(false));
+        let flag = cancel.clone();
         let task = tokio::task::spawn_blocking(move || {
             let _permit = permit;
-            server.call(&name, &args)
+            server.call(&name, &args, &flag)
         });
         let result = tokio::select! {
             r = task => r.map_err(|e| ErrorData::internal_error(format!("the call panicked: {e}"), None))?,
             () = context.ct.cancelled() => {
-                let packs = self.inner.packs.clone();
-                if !packs.is_empty() {
-                    let _ = tokio::task::spawn_blocking(move || {
-                        for pack in &packs {
-                            pack.fail_in_flight("cancelled by the client");
-                        }
-                    })
-                    .await;
+                cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+                if let Some(pack) = self.pack_for(&request.name).cloned() {
+                    let _ = tokio::task::spawn_blocking(move || pack.fail_in_flight("cancelled by the client")).await;
                 }
                 return Err(ErrorData::new(rmcp::model::ErrorCode::INTERNAL_ERROR, "cancelled", Some(serde_json::json!({ "class": "cancelled" }))));
             }
@@ -560,16 +571,4 @@ impl ServerHandler for Server {
             Err(e) => Err(operational(&e)),
         }
     }
-}
-
-/// The text content blocks a client that shows text only would see: used by tests.
-pub fn texts(result: &CallToolResult) -> Vec<String> {
-    result
-        .content
-        .iter()
-        .filter_map(|b| match b {
-            ContentBlock::Text(t) => Some(t.text.clone()),
-            _ => None,
-        })
-        .collect()
 }

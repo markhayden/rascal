@@ -32,6 +32,19 @@ pub const MAX_IMAGES: u32 = 64;
 pub const MAX_IMAGE_BYTES: u64 = 64 << 20;
 /// The largest envelope a pack tool may declare.
 pub const MAX_ENVELOPE_BYTES: u64 = 16 << 20;
+/// The largest answer a pack may send on one line of the wire, and the largest request
+/// `rascal serve` reads: what the transports are built to carry. A tool's declared images and
+/// envelope, base64 included, must fit.
+pub const MAX_ANSWER_BYTES: u64 = 256 << 20;
+
+/// The wire size of a tool's largest possible answer: its images as base64 plus its envelope.
+pub fn answer_bytes(bounds: &Bounds) -> u64 {
+    u64::from(bounds.max_images)
+        .saturating_mul(bounds.max_image_bytes)
+        .saturating_mul(4)
+        .div_ceil(3)
+        .saturating_add(bounds.max_envelope_bytes)
+}
 
 /// The ceilings a pack tool's declared bounds must stay under: rascal decodes what a pack
 /// returns, so a manifest may not promise more than rascal will accept.
@@ -63,6 +76,12 @@ pub fn check_bounds(bounds: &Bounds) -> std::result::Result<(), String> {
     }
     if bounds.max_images > 0 && (bounds.max_long_edge == 0 || bounds.max_image_bytes == 0) {
         return Err("a tool that returns images needs max_long_edge and max_image_bytes".into());
+    }
+    let answer = answer_bytes(bounds);
+    if answer > MAX_ANSWER_BYTES {
+        return Err(format!(
+            "max_images × max_image_bytes as base64 plus max_envelope_bytes is {answer} bytes, over the {MAX_ANSWER_BYTES} one answer may carry"
+        ));
     }
     Ok(())
 }

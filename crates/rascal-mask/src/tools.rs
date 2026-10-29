@@ -108,7 +108,10 @@ pub fn call(
     }
     let ws = Arc::new(Workspace::open(workspace)?);
     let (registry, packs) = crate::packs::registry_for(Some(&config), &ws, None)?;
-    let served: Vec<String> = packs[0]
+    let served: Vec<String> = packs
+        .iter()
+        .find(|p| p.name() == pack)
+        .ok_or_else(|| Error::op("tools", format!("packs.{pack} was not built")))?
         .tools()?
         .iter()
         .map(|t| t.manifest.name.clone())

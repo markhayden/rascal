@@ -176,11 +176,23 @@ impl Client {
         method: &str,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, Failure> {
+        let id = self.begin(method, params)?;
+        self.finish(id)
+    }
+
+    /// Sends a request and returns its id without waiting, so a notification (a
+    /// cancellation) can follow it before [`Client::finish`] reads the response.
+    pub fn begin(&mut self, method: &str, params: serde_json::Value) -> Result<u64, Failure> {
         let id = self.next_id;
         self.next_id += 1;
         self.send(
             &serde_json::json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }),
         )?;
+        Ok(id)
+    }
+
+    /// Reads until the response with this id arrives (other traffic is skipped).
+    pub fn finish(&mut self, id: u64) -> Result<serde_json::Value, Failure> {
         loop {
             let message = self.receive()?;
             if message.get("id").and_then(|v| v.as_u64()) != Some(id) {

@@ -32,11 +32,15 @@ pub struct Port {
 impl Port {
     /// The index an output name carries for a many port: `plane_3` is `Some(3)` for `plane`.
     pub fn index_of(&self, output: &str) -> Option<usize> {
-        output
-            .strip_prefix(&self.name)?
-            .strip_prefix('_')?
-            .parse()
-            .ok()
+        let digits = output.strip_prefix(&self.name)?.strip_prefix('_')?;
+        // Exactly the decimal form `nth` writes: no sign, no leading zero, no spaces.
+        if digits.is_empty()
+            || !digits.bytes().all(|b| b.is_ascii_digit())
+            || (digits.len() > 1 && digits.starts_with('0'))
+        {
+            return None;
+        }
+        digits.parse().ok()
     }
 
     /// The name of the `n`th artifact of a many port.

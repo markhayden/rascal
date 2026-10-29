@@ -693,7 +693,7 @@ mask = "mask.mask"
 }
 
 #[test]
-fn invalid_args_is_journaled_and_is_a_usage_error() {
+fn invalid_args_is_journaled_and_carries_its_envelope_as_a_usage_exit() {
     let f = frame();
     let registry = registry();
     for (mode, expect) in [
@@ -831,4 +831,75 @@ fn the_frame_table_is_what_ops_see() {
     let context = Context { frames: &table };
     assert_eq!(context.frames.require(&f.id).unwrap().id, f.id);
     assert!(context.frames.require("nope").is_err());
+}
+
+#[test]
+fn many_output_ports_take_numbered_artifacts_and_require_at_least_one() {
+    use rascal_core::artifact::ArtifactType;
+    use rascal_core::op::{ArtifactRef, Bounds, Cost, CostTier, Envelope, Manifest, Port};
+    let port = |name: &str, many: bool| Port {
+        name: name.to_string(),
+        artifact_type: ArtifactType::Image,
+        required: true,
+        purpose: "p".to_string(),
+        many,
+    };
+    let plane = port("plane", true);
+    assert_eq!(plane.index_of("plane_3"), Some(3));
+    assert_eq!(plane.index_of("plane_0"), Some(0));
+    assert_eq!(plane.nth(7), "plane_7");
+    for bad in [
+        "plane", "plane_", "plane_x", "plane_01", "plane_-1", "planes_1", "plane_1 ",
+    ] {
+        assert_eq!(plane.index_of(bad), None, "{bad}");
+    }
+    let mut manifest = Manifest::new(
+        "probe",
+        "1.0.0",
+        "p",
+        "w",
+        "n",
+        "o",
+        Cost {
+            tier: CostTier::Cheap,
+            seconds: 0.0,
+        },
+        vec![port("image", false)],
+        vec![plane.clone()],
+        vec![],
+    );
+    manifest.returns = Bounds::standard();
+    manifest.check().unwrap();
+    assert!(manifest.output("plane_2").is_some());
+    assert!(
+        manifest.output("plane").is_none(),
+        "a many port has no bare artifact"
+    );
+    assert!(manifest.output_schema["patternProperties"]["^plane_[0-9]+$"].is_object());
+    assert_eq!(manifest.output_schema["allOf"][0]["required"][0], "plane_0");
+    let identity = "sha256:".to_string() + &"0".repeat(64);
+    let artifact = |id: &str| ArtifactRef {
+        artifact_type: ArtifactType::Image,
+        id: id.to_string(),
+        identity: identity.clone(),
+    };
+    let mut envelope = Envelope::ok("none");
+    let e = envelope.check(&manifest).unwrap_err();
+    assert!(e.contains("needs at least one artifact (plane_0)"), "{e}");
+    envelope
+        .artifacts
+        .insert("plane_0".into(), artifact("plane_0"));
+    envelope
+        .artifacts
+        .insert("plane_1".into(), artifact("plane_1"));
+    envelope.check(&manifest).unwrap();
+    envelope
+        .artifacts
+        .insert("plane_x".into(), artifact("plane_x"));
+    let e = envelope.check(&manifest).unwrap_err();
+    assert!(e.contains("undeclared output plane_x"), "{e}");
+    // A many input port is refused at the manifest check.
+    let mut bad = manifest.clone();
+    bad.inputs[0].many = true;
+    assert!(bad.check().unwrap_err().contains("only an output may be"));
 }

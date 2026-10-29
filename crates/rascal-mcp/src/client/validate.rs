@@ -91,10 +91,13 @@ pub fn validate(
     }
     // Blocks: exactly one image block per `images` entry, in order, PNG, decoding to the
     // declared size within the bounds.
-    let blocks: Vec<&ContentBlock> = result
+    let blocks: Vec<&rmcp::model::ImageContent> = result
         .content
         .iter()
-        .filter(|b| matches!(b, ContentBlock::Image(_)))
+        .filter_map(|b| match b {
+            ContentBlock::Image(image) => Some(image),
+            _ => None,
+        })
         .collect();
     if blocks.len() != envelope.images.len() {
         return Err(fail(format!(
@@ -105,9 +108,6 @@ pub fn validate(
     }
     let mut images = Vec::with_capacity(blocks.len());
     for (i, (block, listed)) in blocks.iter().zip(&envelope.images).enumerate() {
-        let ContentBlock::Image(block) = block else {
-            unreachable!("filtered")
-        };
         if block.mime_type != PNG {
             return Err(fail(format!(
                 "image block {i} is {}, not {PNG}",

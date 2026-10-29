@@ -107,8 +107,13 @@ one for `workspace_read`). Validation stays in the envelope as `invalid_args` wi
 a caller's mistake outside any envelope (an unknown tool or id, a malformed argument) is a
 JSON-RPC invalid-params error; an operational failure is a JSON-RPC internal error whose
 `data.class` names rascal's error class (`io`, `op`, `image`, `format`, `mask_invariant`,
-`usage`). Calls are serial per workspace by default; `--concurrency n` lets `n` run at once,
-each still committing in turn. Tracing goes to stderr only, never to the protocol stream. The
+`usage`, `operational` for anything else, and `cancelled` when the client cancelled the call:
+nothing is published after a cancellation reaches the op). Calls are serial per workspace by
+default; `--concurrency n` lets `n` run at once, each still committing in turn. One request is
+one line of at most 256 MiB (a longer line is dropped by the transport and gets no answer), so
+a `workspace_import` of base64 bytes fits any image rascal decodes; a `path` import reads any
+file the server process can, as the spec says, so give a host only the workspace it should
+touch. Tracing goes to stderr only, never to the protocol stream. The
 testkit's independent client (`crates/rascal-testkit/src/mcp_client.rs`), written against the
 protocol document and nothing of rascal's, drives the server in `tests/serve.rs`.
 
@@ -142,8 +147,11 @@ manifest shape, `schemas/copied/manifest-v1.json`) and `rascal` (the annotation 
 `schemas/rascal/pack-annotation-v1.json`: the typed ports, the parameters, the constant sets).
 rascal builds the native manifest from the two, checks it as it checks every op's, and refuses
 bounds over its ceilings (64 images, 64 MiB per image, 16 MiB per envelope, the image side
-limit). A refusal names the tool and the reason; the pack is stopped. The listing is journaled
-(`pack manifest:` notes), so a replay knows the tools without the pack.
+limit, and the whole answer, images as base64 plus the envelope, under 256 MiB, which is the
+one line the transport carries). A refusal names the tool and the reason; the pack is stopped.
+`startup_timeout_s` covers initialize and the listing together. The listing is journaled
+(`pack manifest:` notes), so a replay knows the tools without the pack; a restart after a
+failure must list the same tools with the same manifests, or it is refused.
 
 **A call** carries the step's parameters by name, each `Image` port's workspace id, each
 `Location` port's location object, and `_harness` (`schemas/rascal/pack-context-v1.json`): the
@@ -172,8 +180,11 @@ for a call that already failed goes nowhere.
 bytes, duration, status `ok | timeout | cancelled | died | error`, outcome; never a key), the
 pack's stderr as `pack stderr:` notes with credential redaction (every credential-shaped value
 of the parent's environment, anything after `Bearer`, anything after a `key=`, `token:` or
-similar), and one `pack stored:` note per successful call: the request identity, the pack and
-its revision, the tool, the envelope and the outputs by identity.
+similar; a dying pack's last lines are kept for the call that saw it die), and one `pack
+stored:` note per successful call: the request identity (over the pack, the tool, the
+parameters and the inputs' identities, never a workspace id), the pack and its revision, the
+tool, the envelope and the outputs by identity. The note precedes the commit; a replay passes
+over a stored call whose outputs the recorded run does not hold.
 
 **Replay** (`rascal run … --replay <run or workspace>`, and `heal --replay`): no pack is
 started; the tools come from the recorded run's `pack manifest:` notes and each call is answered
@@ -194,8 +205,10 @@ rascal tools call fake segment --config rascal.toml --workspace ws/ \
 
 **The fake pack** (`rascal fake-pack <behaviour>` with the `testkit` feature, or the testkit's
 `fake-pack` binary) serves `segment` with one selectable behaviour: `exact`, `bad-schema`,
-`over-bounds`, `block-mismatch`, `foreign-frame`, `wrong-size`, `non-png`, `slow`, `die`,
-`stderr`, `env`, `no-annotation`, `old-version`; `--concurrent` marks its manifest concurrent.
+`over-bounds`, `block-mismatch`, `foreign-frame`, `wrong-size`, `non-png`, `slow`,
+`big-plane`, `die`, `ignore-signals`, `mutate <marker>`, `stderr`, `mute`, `env`,
+`no-annotation`, `old-version`; `--concurrent` marks its manifest concurrent and `--name=<tool>` renames the
+tool.
 `crates/rascal-mask/tests/packs.rs` drives each through the client; `tests/isolation.rs` is the
 isolation suite (G5): instruction-like filenames, prompts and tool output never alter control
 flow, ids never resolve outside the registry, a pack sees the allowlisted environment only.

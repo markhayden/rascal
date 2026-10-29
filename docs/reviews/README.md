@@ -29,3 +29,4 @@ findings plus new findings, most severe first.
 | M0 | [m0-checkpoint.md](m0-checkpoint.md) | two reviews; every must-have fixed the same day; open only the CI run after the first push |
 | M1 | [m1-checkpoint.md](m1-checkpoint.md) | two reviews; the must-fix and every should-fix landed in two commits; four nits recorded with owners |
 | M2 | [m2-checkpoint.md](m2-checkpoint.md) | two reviews; no must-fix; six should-fix and the eight proposed tests landed in one commit; three nits recorded |
+| M3 | [m3-checkpoint.md](m3-checkpoint.md) | two reviews; two must-fix (the transport's line limit, a byte-index panic) and twelve should-fix landed in one commit with the proposed tests; three items recorded |

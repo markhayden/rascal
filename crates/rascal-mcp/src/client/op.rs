@@ -215,12 +215,20 @@ impl Op for PackOp {
             .iter()
             .map(|(k, a)| (k.as_str(), a.identity().as_str().to_string()))
             .collect();
+        // The request's identity: the pack, the tool, the parameters and the inputs by
+        // identity. Never a workspace id (an argument's value for a port), which depends on
+        // the workspace's allocation history and would make a relocated run miss its recording.
+        let parameters: serde_json::Map<String, serde_json::Value> = arguments
+            .iter()
+            .filter(|(k, _)| self.tool.manifest.input(k).is_none())
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
         let request = canonical::identity_of(
             "pack-request",
             &serde_json::json!({
                 "pack": pack_name,
                 "tool": name,
-                "arguments": arguments,
+                "parameters": parameters,
                 "inputs": input_identities,
             }),
         )
@@ -231,7 +239,7 @@ impl Op for PackOp {
         // A recorded run answers instead of the pack.
         if let Some(replay) = self.pack.replay() {
             let stored = replay
-                .find(&request, &pack_name, revision.as_deref(), &name)
+                .find(&request, &pack_name, revision.as_deref(), &name)?
                 .ok_or_else(|| {
                     Error::op(
                         &name,
@@ -241,7 +249,7 @@ impl Op for PackOp {
                         ),
                     )
                 })?;
-            let outputs = replay.outputs(stored)?;
+            let outputs = replay.outputs(&stored)?;
             self.workspace.note(format!(
                 "pack call replayed from the recorded call of packs.{pack_name} {name} for request {request}; the pack was not started"
             ))?;

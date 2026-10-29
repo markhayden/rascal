@@ -26,9 +26,15 @@ pub fn serve(args: &ServeArgs) -> Result<()> {
         .transpose()?;
     let workspace = Arc::new(Workspace::open(&args.workspace)?);
     let (registry, packs) = crate::packs::registry_for(config.as_ref(), &workspace, None)?;
-    let server = Server::new(workspace, registry, args.concurrency)
-        .with_packs(packs.clone())
-        .with_dash(|root| crate::dash::write(root, &root.join("dash.html")));
+    let server = Server::new(
+        workspace,
+        registry,
+        args.concurrency,
+        Some(Arc::new(|root: &std::path::Path| {
+            crate::dash::write(root, &root.join("dash.html"))
+        })),
+        &packs,
+    )?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()

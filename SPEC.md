@@ -780,7 +780,7 @@ validation: each tool carries in its MCP `_meta` the copied-shape `manifest`
 (`schemas/copied/manifest-v1.json`) and rascal's annotation block `rascal`
 (`schemas/rascal/pack-annotation-v1.json`: typed ports, parameters, constant sets); the native
 manifest is built from the two, checked as every op's is, and its bounds must stay under
-rascal's ceilings (ADR 0019). A finder's variable outputs are **many ports**: an output port
+rascal's ceilings, the whole answer under the 256 MiB one line of the wire carries (ADR 0019). A finder's variable outputs are **many ports**: an output port
 marked `many` takes any number of artifacts named `<port>_<n>` from 0, required meaning at
 least one; a tool's regions become `Location` artifacts and its images `Image` artifacts with
 the `plane` role, in order, on the many ports of those types. A call carries the op's arguments

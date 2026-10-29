@@ -52,31 +52,55 @@ pub fn secrets(
 
 /// `text` with every secret value replaced, and with the value after `Bearer`, or after a
 /// `name=` or `name:` whose name is credential-shaped (`token`, `password` and `secret` too),
-/// replaced.
+/// replaced. Words are split at whitespace and at the URL and list separators `?`, `&`, `;`
+/// and `,`, so a credential inside a query string is found too.
 pub fn redact(text: &str, secrets: &[String]) -> String {
     let mut out = text.to_string();
     for secret in secrets {
         out = out.replace(secret, "[redacted]");
     }
-    let mut words: Vec<String> = Vec::new();
+    let is_separator = |c: char| c.is_whitespace() || matches!(c, '?' | '&' | ';' | ',');
+    let mut result = String::with_capacity(out.len());
     let mut previous_bearer = false;
-    for word in out.split(' ') {
+    let mut rest = out.as_str();
+    while !rest.is_empty() {
+        let end = rest.find(is_separator).unwrap_or(rest.len());
+        let (word, tail) = rest.split_at(end);
         let lower = word.to_ascii_lowercase();
-        let redacted = if previous_bearer && !word.is_empty() {
-            "[redacted]".to_string()
+        if previous_bearer && !word.is_empty() {
+            result.push_str("[redacted]");
         } else if let Some(at) = word.find(['=', ':'])
             && at > 0
             && at + 1 < word.len()
             && credential_shaped(&lower[..at])
         {
-            format!("{}{}[redacted]", &word[..at], &word[at..=at])
+            result.push_str(&word[..=at]);
+            result.push_str("[redacted]");
         } else {
-            word.to_string()
-        };
-        previous_bearer = lower == "bearer";
-        words.push(redacted);
+            result.push_str(word);
+        }
+        if !word.is_empty() {
+            previous_bearer = lower == "bearer";
+        }
+        // The separator itself, if any.
+        let mut chars = tail.chars();
+        match chars.next() {
+            Some(c) => {
+                result.push(c);
+                rest = chars.as_str();
+            }
+            None => rest = tail,
+        }
     }
-    words.join(" ")
+    result
+}
+
+/// The parent's environment as strings; a variable that is not Unicode is skipped (it could
+/// not be declared by a plain name either).
+pub fn parent_environment() -> Vec<(String, String)> {
+    std::env::vars_os()
+        .filter_map(|(k, v)| Some((k.into_string().ok()?, v.into_string().ok()?)))
+        .collect()
 }
 
 fn credential_shaped(name: &str) -> bool {

@@ -12,14 +12,19 @@
 //! | `foreign-frame` | a region in a frame the call did not pass |
 //! | `wrong-size` | a plane whose pixels are not the size `images` says |
 //! | `non-png` | an image block whose media type is not PNG |
+//! | `big-plane` | a first plane over the manifest's `max_image_bytes` (and over the SDK's default line limit) |
 //! | `slow` | sleeps until cancelled, then answers an error (`exact` with `delay_ms` past the timeout is the late answer: the sleep ignores cancellation) |
-//! | `die` | exits in the middle of the call |
-//! | `stderr` | writes a line with a token and a bearer value to stderr, then answers as `exact` |
+//! | `die` | writes a line to stderr, then exits in the middle of the call |
+//! | `ignore-signals` | answers as `exact`, but ignores stdin closing and SIGTERM, so only SIGKILL ends it |
+//! | `mutate <marker file>` | as `die`; on the second start (the marker exists) lists `segment` with other bounds |
+//! | `stderr` | writes a line with a token, a bearer value and the prompt to stderr, then answers as `exact` |
+//! | `mute` | never answers `initialize` (reads nothing, writes nothing) |
 //! | `env` | answers as `exact` with the names of its environment variables in the summary |
 //! | `no-annotation` | lists the tool without rascal's annotation block |
 //! | `old-version` | speaks revision 2025-06-18 only |
 //!
-//! `--concurrent` anywhere in the arguments marks the tool concurrent in its manifest.
+//! `--concurrent` anywhere in the arguments marks the tool concurrent in its manifest;
+//! `--name=<tool>` serves the tool under another name.
 
 use std::borrow::Cow;
 use std::sync::Arc;
@@ -67,7 +72,7 @@ image = "inputs.image"
 "#;
 
 /// The behaviours by name, as the first argument selects them.
-pub const BEHAVIOURS: [&str; 13] = [
+pub const BEHAVIOURS: [&str; 17] = [
     "exact",
     "bad-schema",
     "over-bounds",
@@ -75,9 +80,13 @@ pub const BEHAVIOURS: [&str; 13] = [
     "foreign-frame",
     "wrong-size",
     "non-png",
+    "big-plane",
     "slow",
     "die",
+    "ignore-signals",
+    "mutate",
     "stderr",
+    "mute",
     "env",
     "no-annotation",
     "old-version",
@@ -87,13 +96,17 @@ pub const BEHAVIOURS: [&str; 13] = [
 struct Fake {
     behaviour: String,
     concurrent: bool,
+    /// The tool's name (`segment` unless `--name=`).
+    name: String,
+    /// `mutate`'s marker: present on a restart, which then lists other bounds.
+    mutated: bool,
 }
 
 /// The copied-shape manifest of `segment`.
-fn compat_manifest(concurrent: bool) -> serde_json::Value {
+fn compat_manifest(name: &str, concurrent: bool, mutated: bool) -> serde_json::Value {
     serde_json::json!({
         "manifest_version": 1,
-        "name": "segment",
+        "name": name,
         "version": "0.1.0",
         "purpose": "Finds the instances a prompt names in an image and returns a polygon and a plane for each.",
         "when_to_use": "When the region to mask is an object named in words rather than drawn.",
@@ -102,7 +115,7 @@ fn compat_manifest(concurrent: bool) -> serde_json::Value {
         "cost": { "tier": "expensive", "seconds": 2.0 },
         "returns": {
             "max_images": 8, "max_long_edge": 8192, "max_image_bytes": 16777216,
-            "max_summary_bytes": 1024, "max_regions": 8, "max_region_label_bytes": 256,
+            "max_summary_bytes": 1024, "max_regions": if mutated { 4 } else { 8 }, "max_region_label_bytes": 256,
             "max_measurements": 8, "max_transforms": 0, "max_envelope_bytes": 1048576
         },
         "model_schema": { "type": "object", "properties": { "prompt": { "type": "string" } } },
@@ -133,7 +146,7 @@ fn annotation() -> serde_json::Value {
     })
 }
 
-fn tool(behaviour: &str, concurrent: bool) -> Tool {
+fn tool(fake: &Fake) -> Tool {
     let schema: serde_json::Map<String, serde_json::Value> =
         serde_json::from_value(serde_json::json!({
             "type": "object",
@@ -146,13 +159,16 @@ fn tool(behaviour: &str, concurrent: bool) -> Tool {
         }))
         .expect("a schema object");
     let mut tool = Tool::new(
-        "segment",
+        fake.name.clone(),
         "Finds the instances a prompt names in an image.",
         Arc::new(schema),
     );
     let mut meta = serde_json::Map::new();
-    meta.insert("manifest".to_string(), compat_manifest(concurrent));
-    if behaviour != "no-annotation" {
+    meta.insert(
+        "manifest".to_string(),
+        compat_manifest(&fake.name, fake.concurrent, fake.mutated),
+    );
+    if fake.behaviour != "no-annotation" {
         meta.insert("rascal".to_string(), annotation());
     }
     tool.meta = Some(rmcp::model::MetaObject(meta));
@@ -269,6 +285,26 @@ fn plane_png(width: u32, height: u32, bbox: [f64; 4]) -> Vec<u8> {
     bytes
 }
 
+/// A square of pseudo-random RGB noise as a PNG: it does not compress, so its size is about
+/// three bytes per pixel.
+fn noise_png(width: u32, height: u32) -> Vec<u8> {
+    let mut state = 0x9E37_79B9_7F4A_7C15u64;
+    let image = image::RgbImage::from_fn(width, height, |_, _| {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        image::Rgb([state as u8, (state >> 8) as u8, (state >> 16) as u8])
+    });
+    let mut bytes = Vec::new();
+    image::DynamicImage::ImageRgb8(image)
+        .write_to(
+            &mut std::io::Cursor::new(&mut bytes),
+            image::ImageFormat::Png,
+        )
+        .expect("encoding a PNG in memory");
+    bytes
+}
+
 /// The `i`th instance's box: a column of boxes down the left half.
 fn instance_bbox(i: usize) -> [f64; 4] {
     let top = 0.1 + 0.2 * (i % 4) as f64;
@@ -296,6 +332,8 @@ impl Fake {
         ))];
         for i in 0..count {
             let b = instance_bbox(i);
+            // `big-plane`: the first plane is 2400x2400 of noise, over the manifest's 16 MiB.
+            let big = self.behaviour == "big-plane" && i == 0;
             let polygon = [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]];
             let region_frame = if self.behaviour == "foreign-frame" && i == 0 {
                 "raw:1x1:flat".to_string()
@@ -317,8 +355,13 @@ impl Fake {
                 "frame": frame, "parent": frame, "width": width, "height": height,
                 "media_type": "image/png", "identity": ""
             }));
+            let png = if big {
+                noise_png(2400, 2400)
+            } else {
+                plane_png(pw, ph, b)
+            };
             content.push(ContentBlock::image(
-                base64_encode(&plane_png(pw, ph, b)),
+                base64_encode(&png),
                 if self.behaviour == "non-png" && i == 0 {
                     "image/jpeg"
                 } else {
@@ -381,7 +424,7 @@ impl ServerHandler for Fake {
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
         Ok(ListToolsResult {
-            tools: vec![tool(&self.behaviour, self.concurrent)],
+            tools: vec![tool(self)],
             next_cursor: None,
             ..Default::default()
         })
@@ -392,7 +435,7 @@ impl ServerHandler for Fake {
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, ErrorData> {
-        if request.name.as_ref() != "segment" {
+        if request.name.as_ref() != self.name {
             return Err(ErrorData::invalid_params(
                 format!("no tool {}", request.name),
                 Some(serde_json::json!({ "class": "usage" })),
@@ -412,10 +455,14 @@ impl ServerHandler for Fake {
                     Some(serde_json::json!({ "class": "cancelled" })),
                 ));
             }
-            "die" => std::process::exit(7),
+            "die" | "mutate" => {
+                eprintln!("fake-pack: fatal: the model failed to load (token=SECRET-TOKEN-VALUE)");
+                std::process::exit(7)
+            }
             "stderr" => {
                 eprintln!(
-                    "fake-pack: calling upstream with token=SECRET-TOKEN-VALUE and Authorization: Bearer SECRET-BEARER-VALUE"
+                    "fake-pack: calling upstream with token=SECRET-TOKEN-VALUE and Authorization: Bearer SECRET-BEARER-VALUE for prompt {}",
+                    args["prompt"].as_str().unwrap_or("")
                 );
             }
             _ => {}
@@ -430,9 +477,14 @@ impl ServerHandler for Fake {
 /// after the program name: the behaviour, and `--concurrent`.
 pub async fn serve(args: &[String]) -> i32 {
     let concurrent = args.iter().any(|a| a == "--concurrent");
-    let behaviour = args
+    let name = args
         .iter()
-        .find(|a| !a.starts_with("--"))
+        .find_map(|a| a.strip_prefix("--name="))
+        .unwrap_or("segment")
+        .to_string();
+    let mut positional = args.iter().filter(|a| !a.starts_with("--"));
+    let behaviour = positional
+        .next()
         .cloned()
         .unwrap_or_else(|| "exact".to_string());
     if !BEHAVIOURS.contains(&behaviour.as_str()) {
@@ -442,13 +494,42 @@ pub async fn serve(args: &[String]) -> i32 {
         );
         return 64;
     }
+    // `mutate` keeps a marker across restarts: the second start lists other bounds.
+    let mut mutated = false;
+    if behaviour == "mutate" {
+        let Some(marker) = positional.next() else {
+            eprintln!("fake-pack: mutate takes a marker file path");
+            return 64;
+        };
+        mutated = std::path::Path::new(marker).exists();
+        if !mutated && std::fs::write(marker, "started once").is_err() {
+            eprintln!("fake-pack: cannot write the marker {marker}");
+            return 3;
+        }
+    }
+    if behaviour == "mute" {
+        tokio::time::sleep(std::time::Duration::from_secs(120)).await;
+        return 0;
+    }
+    // `ignore-signals`: SIGTERM is handled and ignored; stdin closing is outlived.
+    let ignoring = behaviour == "ignore-signals";
+    let _sigterm = if ignoring {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok()
+    } else {
+        None
+    };
     let fake = Fake {
         behaviour,
         concurrent,
+        name,
+        mutated,
     };
     match fake.serve(stdio()).await {
         Ok(service) => {
             let _ = service.waiting().await;
+            if ignoring {
+                tokio::time::sleep(std::time::Duration::from_secs(120)).await;
+            }
             0
         }
         Err(e) => {
