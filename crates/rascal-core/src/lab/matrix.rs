@@ -28,6 +28,7 @@ pub struct Matrix {
     /// The corpus manifest, relative to this file.
     pub corpus: String,
     /// The protocol, relative to this file; required, and its digest is recorded.
+    #[serde(default)]
     pub protocol: String,
     /// The draw seed; the protocol's must match.
     pub seed: u64,
@@ -184,9 +185,10 @@ impl Matrix {
     /// The matrix against its protocol and corpus, and every arm's recipe against the
     /// registry: names and seeds agree; every protocol arm is a matrix arm; every image is in
     /// the corpus and every protocol image is in the matrix; every override names a step and
-    /// a parameter (or `constants`) of its recipe; no finder's input derives from another
-    /// finder's output. `finders` names the ops that are pack tools (everything else in the
-    /// registry is deterministic); `load` resolves an arm's `recipe`.
+    /// a parameter (or `constants`) of its recipe; every per-image input is one `heal` binds
+    /// from a file and every required input of every arm's recipe is bound; no finder's input
+    /// derives from another finder's output. `finders` names the ops that are pack tools
+    /// (everything else in the registry is deterministic); `load` resolves an arm's `recipe`.
     pub fn validate(
         &self,
         protocol: &Protocol,
@@ -246,6 +248,25 @@ impl Matrix {
             recipe
                 .validate(registry)
                 .map_err(|e| usage(format!("arm {}: recipe {}: {e}", arm.name, arm.recipe)))?;
+            for image in &self.image {
+                for name in image.inputs.keys() {
+                    if !FILE_INPUTS.contains(&name.as_str()) {
+                        return Err(usage(format!(
+                            "image {}: inputs.{name} is not one heal binds from a file ({})",
+                            image.id,
+                            FILE_INPUTS.join(", ")
+                        )));
+                    }
+                }
+                for (name, decl) in &recipe.inputs {
+                    if name != "image" && !decl.optional && !image.inputs.contains_key(name) {
+                        return Err(usage(format!(
+                            "image {}: arm {} needs inputs.{name}, which the image does not bind",
+                            image.id, arm.name
+                        )));
+                    }
+                }
+            }
             reject_dependent_finders(&recipe, finders)
                 .map_err(|m| usage(format!("arm {}: recipe {}: {m}", arm.name, arm.recipe)))?;
             recipes.push(recipe);
@@ -259,6 +280,9 @@ impl Matrix {
         })
     }
 }
+
+/// The recipe inputs `heal` binds from a file beside the matrix.
+pub const FILE_INPUTS: [&str; 4] = ["location", "stroke", "protect", "mask"];
 
 fn check_override_key(key: &str) -> std::result::Result<(), String> {
     match key.split_once('.') {

@@ -58,10 +58,16 @@
     },
     "FillerEntry": {
       "additionalProperties": false,
-      "description": "The filler entry as the identity sees it: never the key.",
+      "description": "The filler entry as the identity sees it: what changes the work, never its name in the\nconfiguration and never the key.",
       "properties": {
-        "name": {
-          "type": "string"
+        "max_side": {
+          "description": "The filler's largest side, which windows the heal graph.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "paste": {
           "type": "string"
@@ -72,13 +78,16 @@
         "revision": {
           "type": "string"
         },
+        "send_mask": {
+          "description": "Whether the grey rendering is sent with an image-input profile.",
+          "type": "boolean"
+        },
         "target": {
           "description": "The command as configured, or the URL.",
           "type": "string"
         }
       },
       "required": [
-        "name",
         "target",
         "profile",
         "paste",

@@ -137,6 +137,62 @@ fn pairs_writes_a_blind_page_and_decode_reports_the_outcome_per_group() {
     );
     assert!(!page.contains("a_side") && !page.contains("fake-filler"));
     assert!(page.contains(&rascal_core::lab::bytes_digest(&assignment_bytes)));
+    // The page's script holds exactly the assignment's digest and pair ids in order, and
+    // each pair has the four buttons.
+    let ids_line = page
+        .lines()
+        .find(|l| l.trim_start().starts_with("const ids = "))
+        .unwrap();
+    let ids: Vec<String> = serde_json::from_str(
+        ids_line
+            .trim()
+            .trim_start_matches("const ids = ")
+            .trim_end_matches(';'),
+    )
+    .unwrap();
+    assert_eq!(
+        ids,
+        assignment
+            .pair
+            .iter()
+            .map(|p| p.id.clone())
+            .collect::<Vec<_>>()
+    );
+    let digest_line = page
+        .lines()
+        .find(|l| l.trim_start().starts_with("const digest = "))
+        .unwrap();
+    let digest: String = serde_json::from_str(
+        digest_line
+            .trim()
+            .trim_start_matches("const digest = ")
+            .trim_end_matches(';'),
+    )
+    .unwrap();
+    assert_eq!(digest, rascal_core::lab::bytes_digest(&assignment_bytes));
+    for pair in &assignment.pair {
+        for pick in ["left", "right", "same", "neither"] {
+            assert!(page.contains(&format!(
+                "<button data-pair=\"{}\" data-pick=\"{pick}\">",
+                pair.id
+            )));
+        }
+    }
+    assert!(
+        text(&out.stdout).contains("pairs page: 4 pairs"),
+        "{}",
+        text(&out.stdout)
+    );
+    // --arms with one name, three names or the same arm twice.
+    for arms in ["fan-ramp", "fan-ramp,thin,wide", "thin,thin"] {
+        let out = rascal(&["lab", "pairs", lab.to_str().unwrap(), "--arms", arms]);
+        assert_eq!(out.status.code(), Some(64), "{arms}: {}", text(&out.stderr));
+        assert!(
+            text(&out.stderr).contains("--arms"),
+            "{arms}: {}",
+            text(&out.stderr)
+        );
+    }
     // The order on the page is the assignment's.
     let positions: Vec<usize> = assignment
         .pair
@@ -254,6 +310,49 @@ fn pairs_writes_a_blind_page_and_decode_reports_the_outcome_per_group() {
     ]);
     assert_eq!(out.status.code(), Some(64));
     assert!(text(&out.stderr).contains("is picked twice"));
+    // A cell whose latest attempt is not ok is refused by pairs.
+    let first = &assignment.pair[0];
+    let attempt = lab
+        .join("cells")
+        .join(first.left.cell.strip_prefix("sha256:").unwrap())
+        .join("attempts/1/attempt.json");
+    let sound = std::fs::read_to_string(&attempt).unwrap();
+    std::fs::write(&attempt, sound.replace("\"ok\"", "\"stopped\"")).unwrap();
+    let out = rascal(&[
+        "lab",
+        "pairs",
+        lab.to_str().unwrap(),
+        "--arms",
+        "fan-ramp,thin",
+    ]);
+    assert_eq!(out.status.code(), Some(64), "{}", text(&out.stderr));
+    assert!(
+        text(&out.stderr).contains("is stopped, not ok"),
+        "{}",
+        text(&out.stderr)
+    );
+    std::fs::write(&attempt, sound).unwrap();
+    // A foreign assignment copied into this lab is refused by decode.
+    let assignment_path = lab.join("pairs/assignment.json");
+    let original = std::fs::read_to_string(&assignment_path).unwrap();
+    std::fs::write(
+        &assignment_path,
+        original.replace("\"lab\": \"seam-demo\"", "\"lab\": \"other\""),
+    )
+    .unwrap();
+    let out = rascal(&[
+        "lab",
+        "decode",
+        lab.to_str().unwrap(),
+        picks.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(64), "{}", text(&out.stderr));
+    assert!(
+        text(&out.stderr).contains("an assignment of lab other"),
+        "{}",
+        text(&out.stderr)
+    );
+    std::fs::write(&assignment_path, original).unwrap();
     // A protocol edited after the run: pairs and decode refuse the lab.
     let protocol = lab.join("protocol.toml");
     let original = std::fs::read_to_string(&protocol).unwrap();

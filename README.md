@@ -64,6 +64,11 @@ rascal export --compat run/journal.jsonl --step rasterize --out e.json
 rascal dash run/ --out run/dash.html                     # the run page: timings, envelopes, every artifact; --serve for loopback
 rascal serve --workspace ws/                              # every op as an MCP tool over stdio, plus import/list/describe/read/dash
 rascal tools call fake segment --config rascal.toml --workspace ws/ --image photo.png --prompt "the chair"   # a pack's tool from the shell
+rascal tools setup --bundle bundle-macos-arm64/ --into ~/rascal-tools   # the Python pack installed offline from its bundle
+rascal corpus verify corpus.toml --root ~/rascal/corpus                 # every image's file against its digest
+rascal lab run matrix.toml --config rascal.toml --out lab/seam-01/      # every cell healed once; resume makes no external call
+rascal lab pairs lab/seam-01/ --arms fan-ramp,thin                      # the blind pairs page; the judge saves picks.json
+rascal lab decode lab/seam-01/ picks.json                               # wins, losses and the outcome per group
 ```
 
 Replace (screens, signs), retouch, extend and isolate are later milestones.
@@ -84,7 +89,7 @@ exchange documents without translation; rascal is fully standalone and depends o
 
 ## Status
 
-Pre-release. M0 (scaffold) is done; M1 (core) is in progress, and `rascal run rect` works end to end. The design is in [SPEC.md](SPEC.md), the build order
+Pre-release. M0 to M4 are merged (the scaffold, the core, the seam, MCP, the refinements); M5 (the Python pack and its bundle), M6 (the lab) and M7's Poisson paste are on branches awaiting the owner's checkpoint review. The design is in [SPEC.md](SPEC.md), the build order
 in [PLAN.md](PLAN.md), the decisions in [docs/adr/](docs/adr/README.md), and the current state
 of each part in [docs/architecture.md](docs/architecture.md#status).
 

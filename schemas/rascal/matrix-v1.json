@@ -117,6 +117,7 @@
       "type": "string"
     },
     "protocol": {
+      "default": "",
       "description": "The protocol, relative to this file; required, and its digest is recorded.",
       "type": "string"
     },
@@ -136,7 +137,6 @@
     "version",
     "name",
     "corpus",
-    "protocol",
     "seed"
   ],
   "title": "Matrix",

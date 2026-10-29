@@ -64,15 +64,21 @@ pub struct CellComponents {
     pub finders: Vec<FinderDescriptor>,
 }
 
-/// The filler entry as the identity sees it: never the key.
+/// The filler entry as the identity sees it: what changes the work, never its name in the
+/// configuration and never the key.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FillerEntry {
-    pub name: String,
     /// The command as configured, or the URL.
     pub target: String,
     pub profile: String,
     pub paste: String,
+    /// The filler's largest side, which windows the heal graph.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_side: Option<u32>,
+    /// Whether the grey rendering is sent with an image-input profile.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub send_mask: bool,
     pub revision: String,
 }
 

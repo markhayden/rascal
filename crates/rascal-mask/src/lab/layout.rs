@@ -163,8 +163,13 @@ impl LabDir {
             .trim()
             .parse()
             .map_err(|_| Error::op("lab", format!("{}: not an attempt number", path.display())))?;
-        let record = read_json(&self.attempt_dir(identity, attempt).join("attempt.json"))?;
+        let record = self.attempt(identity, attempt)?;
         Ok(Some(Latest { attempt, record }))
+    }
+
+    /// One attempt's record.
+    pub fn attempt(&self, identity: &str, attempt: u32) -> Result<AttemptRecord> {
+        read_json(&self.attempt_dir(identity, attempt).join("attempt.json"))
     }
 
     /// `cells/<hex>/attempts/<n>`.

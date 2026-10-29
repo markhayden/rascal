@@ -109,10 +109,13 @@ pub fn pairs(root: &Path, arms: &str) -> Result<PathBuf> {
     for (n, pair) in assignment.pair.iter().enumerate() {
         let image_of = |shown: &Shown| -> Result<String> {
             let attempt = lab.attempt_dir(&shown.cell, shown.attempt);
-            let record = lab.latest(&shown.cell)?.map(|l| l.record);
-            let result = record
-                .and_then(|r| r.result)
-                .unwrap_or_else(|| "run/result.png".to_string());
+            let record = lab.attempt(&shown.cell, shown.attempt)?;
+            let result = record.result.ok_or_else(|| {
+                Error::usage(format!(
+                    "cell {} attempt {} has no result ({})",
+                    shown.cell, shown.attempt, record.status
+                ))
+            })?;
             let path = attempt.join(result);
             let bytes = std::fs::read(&path).map_err(|source| Error::Io { path, source })?;
             Ok(panel::png_data_uri(&bytes))
@@ -154,10 +157,15 @@ pub fn pairs(root: &Path, arms: &str) -> Result<PathBuf> {
             &serde_json::to_string(&ids).map_err(|e| Error::op("lab", e.to_string()))?,
         );
     let index = dir.join("index.html");
-    std::fs::write(&index, page).map_err(|source| Error::Io {
+    std::fs::write(&index, &page).map_err(|source| Error::Io {
         path: index.clone(),
         source,
     })?;
+    println!(
+        "pairs page: {} pairs, {:.1} MB with every result embedded",
+        assignment.pair.len(),
+        page.len() as f64 / 1e6
+    );
     Ok(index)
 }
 
@@ -167,6 +175,7 @@ pub fn decode(root: &Path, picks: &Path) -> Result<Decode> {
         root: root.to_path_buf(),
     };
     let (protocol, _) = protocol_of(&lab)?;
+    let record = lab.record()?;
     let assignment_path = lab.root.join("pairs").join("assignment.json");
     let bytes = std::fs::read(&assignment_path).map_err(|source| Error::Io {
         path: assignment_path.clone(),
@@ -176,6 +185,16 @@ pub fn decode(root: &Path, picks: &Path) -> Result<Decode> {
         path: assignment_path.clone(),
         source,
     })?;
+    if assignment.lab != record.name || assignment.protocol_digest != record.protocol_digest {
+        return Err(Error::usage(format!(
+            "{}: an assignment of lab {} under protocol {}, not this lab ({} under {})",
+            assignment_path.display(),
+            assignment.lab,
+            assignment.protocol_digest,
+            record.name,
+            record.protocol_digest
+        )));
+    }
     let digest = rascal_core::lab::bytes_digest(&bytes);
     let text = std::fs::read(picks).map_err(|source| Error::Io {
         path: picks.to_path_buf(),

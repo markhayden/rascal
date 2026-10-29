@@ -1,6 +1,6 @@
 {
   "cell_version": 1,
-  "identity": "sha256:0606cb635dbfa40d795bae76be75597cac736a091d2ac906e4d79017b250e861",
+  "identity": "sha256:895886dff1ac43cacf3ae1fa091e7a8931b9d8c1bbdbae50fffe29d07db528e5",
   "arm": "thin",
   "image": "sky-02",
   "protocol_digest": "sha256:d7957270f0291d039ebb3ffd100e3b9b9574a75e3495fd6d104e0f9c97fcb766",
@@ -89,7 +89,6 @@
       "ramp": "1.0.0"
     },
     "filler": {
-      "name": "fake",
       "target": "/Users/markhayden/go/src/github.com/markhayden/rascal/target/debug/rascal fake-filler exact {image} {mask} {out}",
       "profile": "grey",
       "paste": "feather",

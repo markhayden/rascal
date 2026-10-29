@@ -65,18 +65,24 @@ names the thing that is wrong. `crates/rascal-mask/tests/lab_config.rs` has the 
 rascal lab run matrix.toml --config rascal.toml --out lab/<name>/ [--corpus-root <dir>] [--redo <arm>] [--no-dash]
 ```
 
-A **cell** is one arm on one image. Before anything runs, the matrix is validated, the
-corpus images the matrix uses are verified (a missing or changed file stops the run), and
-every cell's **identity** is computed: the SHA-256 over the image's digest, every bound input
-file's digest, the overrides as applied, the recipe as it runs, the constant set each step
-selects, the version of every op involved, the filler entry (command or URL, profile, paste
-mode, `revision`; never the key), and, for every finder the arm would invoke, its invocation
+A **cell** is one arm on one image. The run has two phases. First the matrix is validated
+(every per-image input is one `heal` binds from a file, and every required input of every
+arm's recipe is bound), the corpus images the matrix uses are verified (a missing or changed
+file stops the run), and every cell's **identity** is computed and its record written, so
+nothing that could be refused is found after a filler has been paid for: the SHA-256 over the
+image's digest, every bound input file's digest, the overrides as applied, the recipe as it
+runs, the constant set each step selects (the op's default when the step names none), the
+version of every op involved, the filler entry (command or URL, profile, paste mode,
+`max_side`, `send_mask`, `revision`; never its name in the configuration and never the key),
+and, for every finder the arm would invoke, its invocation
 descriptor (the pack name, the bundle digest when the pack was installed from a bundle, the
 pack entry's `revision`, its declared `env` names, the tool, the resolved arguments and the
 semantic identity of each input: an initial input's digest, or the binding of a deterministic
 op over the initial inputs). Both `revision` fields are required for lab use. Changing only a
 prompt, a finder parameter or a `revision` is a new cell; nothing else changing is the same
-cell. The lab directory holds `lab.json` (name, protocol digest, matrix), `ledger.jsonl` (one
+cell; a bound file's name is not in it, its bytes are. Then every cell runs. The lab
+directory holds `lab.json` (name, protocol digest, matrix, the current cells by arm and
+image), `ledger.jsonl` (one
 line per external call: cell, attempt, arm, image, filler or pack, outcome, duration, the
 arm's `spend_usd_per_call`), `workspace/` (the packs' journal), and `cells/<identity>/` with
 `cell.json` (the record with every component), `attempts/<n>/` (the resolved `recipe.toml`,
@@ -85,7 +91,8 @@ run page, and `attempt.json`: `ok`, `stopped` or `failed`, with the reason) and 
 attempt in use.
 
 A second `lab run --out` on the same directory resumes: a cell whose `latest` attempt is `ok`
-is reused and makes no external call; one that stopped or failed runs again as a new attempt.
+is reused and makes no external call (the configured packs are still started for their
+listings, which is not a call); one that stopped or failed runs again as a new attempt.
 `--redo <arm>` adds an attempt to every cell of that arm and never overwrites one. The run
 refuses a directory holding another lab, or this lab under a changed protocol (a protocol
 change after a run is a new lab name), and any other non-empty directory. A failed cell does
@@ -105,14 +112,17 @@ the protocol's groups name, each with a complete `latest` attempt, and writes
 `pairs/assignment.json` (the lab, the protocol digest, the arms, the seed, and per pair the
 image id, the group, the cell and attempt on each side and which side arm `a` took) and
 `pairs/index.html`, a static page with both results embedded as PNG data and nothing that
-names an arm, a side's cell or the configuration. The page order and each pair's sides are
+names an arm, a side's cell or the configuration; the command prints the page's size, which on
+full panoramas runs to hundreds of megabytes (the spec asks for embedding and forbids a silent
+resize). The page order and each pair's sides are
 drawn from the protocol's seed (splitmix64; the order by Fisher–Yates, then one bit per pair),
 so the same lab draws the same page. The judge picks `left`, `right`, `same` or `neither` per
 pair and saves `picks.json` (version, the assignment file's digest, one pick per pair id);
 the page offers the file and shows its text.
 
-`lab decode` reads the picks against `pairs/assignment.json` and the lab's `protocol.toml`
-(kept beside `lab.json` by the run; an edited one is refused). Picks whose assignment digest
+`lab decode` reads the picks against `pairs/assignment.json` (which must be this lab's, under
+this protocol) and the lab's `protocol.toml` (kept beside `lab.json` by the run; an edited one
+is refused). Picks whose assignment digest
 differs (stale or foreign), a pair with no pick, a pair picked twice, a pair not in the
 assignment or a pick that is not one of the four are refused naming the pair. Per group it
 prints pairs, decided (`left` or `right`), wins (arm `a`'s side), losses, `same`, `neither`,

@@ -79,212 +79,96 @@ fn the_outcome_rules_on_constructed_pick_sets() {
     let p = protocol(3);
     let a = assignment(&p);
     let digest = "sha256:assignment";
-    // Sky: 4 wins, 2 losses of 6 decided (2/3): preferred. Structured: 1 win, 1 loss, 1 same:
-    // 2 decided, under min_decided 3: inconclusive.
-    let d = decode(
-        &p,
-        &a,
-        digest,
-        &full(
-            ["left"; 6]
-                .map(|_| "left")
-                .into_iter()
-                .enumerate()
-                .map(|(i, s)| if i < 4 { s } else { "right" })
-                .collect::<Vec<_>>()
-                .try_into()
-                .unwrap(),
+    // (sky picks, structured picks, expected sky outcome and counts, expected structured).
+    // Arm a is on the left of every pair, so "left" is a win and "right" a loss.
+    type Counts = (&'static str, u32, u32, u32, u32, u32);
+    let cases: Vec<([&str; 6], [&str; 3], Counts, &str)> = vec![
+        // 4 wins of 6 decided (2/3, inclusive): preferred. 2 decided under min 3: inconclusive.
+        (
+            ["left", "left", "left", "left", "right", "right"],
             ["left", "right", "same"],
+            ("preferred", 6, 4, 2, 0, 0),
+            "inconclusive",
         ),
-    )
-    .unwrap();
-    assert_eq!(d.arms, ["a".to_string(), "b".to_string()]);
-    let sky = &d.groups[0];
-    assert_eq!(
+        // 3 wins, 3 losses: not preferred, losses 1/2 not below 1/3: worse.
         (
-            sky.pairs,
-            sky.decided,
-            sky.wins,
-            sky.losses,
-            sky.same,
-            sky.neither
-        ),
-        (6, 6, 4, 2, 0, 0)
-    );
-    assert_eq!(sky.outcome, "preferred");
-    let structured = &d.groups[1];
-    assert_eq!(
-        (
-            structured.decided,
-            structured.wins,
-            structured.losses,
-            structured.same
-        ),
-        (2, 1, 1, 1)
-    );
-    assert_eq!(structured.outcome, "inconclusive");
-    // Sky: 3 wins, 3 losses: not preferred, losses 1/2 not below 1/3: worse.
-    let d = decode(
-        &p,
-        &a,
-        digest,
-        &full(
             ["left", "left", "left", "right", "right", "right"],
             ["left", "left", "left"],
+            ("worse", 6, 3, 3, 0, 0),
+            "preferred",
         ),
-    )
-    .unwrap();
-    assert_eq!(d.groups[0].outcome, "worse");
-    assert_eq!(d.groups[1].outcome, "preferred");
-    // Sky: 3 wins, 1 loss, 2 same: 4 decided, wins 3/4 ≥ 2/3: preferred; same ignored.
-    let d = decode(
-        &p,
-        &a,
-        digest,
-        &full(
+        // same and neither are not decided: 4 decided, 3 wins (3/4): preferred.
+        (
             ["left", "left", "left", "right", "same", "same"],
             ["neither", "neither", "neither"],
+            ("preferred", 4, 3, 1, 2, 0),
+            "inconclusive",
         ),
-    )
-    .unwrap();
-    assert_eq!((d.groups[0].decided, d.groups[0].outcome), (4, "preferred"));
-    assert_eq!(
+        // 5 decided, 3 wins (3/5 < 2/3), 2 losses (2/5 ≥ 1/3): worse.
         (
-            d.groups[1].decided,
-            d.groups[1].neither,
-            d.groups[1].outcome
-        ),
-        (0, 3, "inconclusive")
-    );
-    // Sky: 2 wins, 1 loss, 3 neither: 3 decided, wins 2/3: preferred (the bound is inclusive).
-    let d = decode(
-        &p,
-        &a,
-        digest,
-        &full(
-            ["left", "left", "right", "neither", "neither", "neither"],
-            ["left", "left", "right"],
-        ),
-    )
-    .unwrap();
-    assert_eq!(d.groups[0].outcome, "preferred");
-    // Sky: 3 wins, 1 loss, of 6 decided? 3 wins 2 losses 1 neither: 5 decided, wins 3/5 < 2/3,
-    // losses 2/5 ≥ 1/3: worse. 3 wins 1 loss 2 neither: 4 decided, wins 3/4: preferred.
-    let d = decode(
-        &p,
-        &a,
-        digest,
-        &full(
             ["left", "left", "left", "right", "right", "neither"],
             ["left", "left", "right"],
+            ("worse", 5, 3, 2, 0, 1),
+            "preferred",
         ),
-    )
-    .unwrap();
-    assert_eq!(d.groups[0].outcome, "worse");
-    // Not worse: 3 wins, 1 loss, 2 ... no: wins 3/6 with 1 loss and 2 same: decided 4, wins
-    // 3/4 preferred. A not_worse case: 2 wins, 1 loss, 1 same, 2 neither on a 4-decided?
-    // decided 3: wins 2/3 preferred. Use 6 decided, 3 wins, 1 loss impossible; take 5
-    // decided: 3 wins, 1 loss ... = 4. So: 6 decided with 3 wins and 1 loss cannot be; a
-    // not_worse outcome needs losses < 1/3 and wins < 2/3: 4 decided, 2 wins, 1 loss, 1 ...
-    // no, decided counts only wins and losses. 7 decided is impossible here; with min 3 and
-    // sky's 6 pairs: 6 decided, 3 wins, 3 losses is worse. not_worse needs e.g. 4 wins of 7.
+    ];
+    for (sky, structured, (outcome, decided, wins, losses, same, neither), structured_outcome) in
+        cases
+    {
+        let d = decode(&p, &a, digest, &full(sky, structured)).unwrap();
+        assert_eq!(d.arms, ["a".to_string(), "b".to_string()]);
+        let g = &d.groups[0];
+        assert_eq!(
+            (
+                g.outcome, g.pairs, g.decided, g.wins, g.losses, g.same, g.neither
+            ),
+            (outcome, 6, decided, wins, losses, same, neither),
+            "sky {sky:?}"
+        );
+        assert_eq!(
+            d.groups[1].outcome, structured_outcome,
+            "structured {structured:?}"
+        );
+    }
+    // Under the spec's default fractions `not_worse` alone is unreachable: wins and losses
+    // sum to the decided pairs, so losses below one third means wins above two thirds, which
+    // is `preferred`. Every split of up to twenty decided pairs says so.
     let wide = Protocol::parse(
-        "version = 1\nname = \"t\"\nseed = 1\narms = [\"a\", \"b\"]\nmin_decided = 3\n[[group]]\nname = \"g\"\nimages = [\"i1\", \"i2\", \"i3\", \"i4\", \"i5\", \"i6\", \"i7\"]\n",
+        "version = 1\nname = \"t\"\nseed = 1\narms = [\"a\", \"b\"]\nmin_decided = 1\n[[group]]\nname = \"g\"\nimages = [\"i1\", \"i2\", \"i3\", \"i4\", \"i5\", \"i6\", \"i7\", \"i8\", \"i9\", \"i10\", \"i11\", \"i12\", \"i13\", \"i14\", \"i15\", \"i16\", \"i17\", \"i18\", \"i19\", \"i20\"]\n",
         "t",
     )
     .unwrap();
     let wa = assignment(&wide);
-    let d = decode(
-        &wide,
-        &wa,
-        digest,
-        &picks(&[
-            ("i1", "left"),
-            ("i2", "left"),
-            ("i3", "left"),
-            ("i4", "left"),
-            ("i5", "right"),
-            ("i6", "right"),
-            ("i7", "same"),
-        ]),
-    )
-    .unwrap();
-    // 6 decided, 4 wins (2/3): preferred.
-    assert_eq!(d.groups[0].outcome, "preferred");
-    let d = decode(
-        &wide,
-        &wa,
-        digest,
-        &picks(&[
-            ("i1", "left"),
-            ("i2", "left"),
-            ("i3", "left"),
-            ("i4", "left"),
-            ("i5", "right"),
-            ("i6", "right"),
-            ("i7", "right"),
-        ]),
-    )
-    .unwrap();
-    // 7 decided, 4 wins (4/7 < 2/3), 3 losses (3/7 ≥ 1/3): worse.
-    assert_eq!(d.groups[0].outcome, "worse");
-    let d = decode(
-        &wide,
-        &wa,
-        digest,
-        &picks(&[
-            ("i1", "left"),
-            ("i2", "left"),
-            ("i3", "left"),
-            ("i4", "left"),
-            ("i5", "right"),
-            ("i6", "right"),
-            ("i7", "left"),
-        ]),
-    )
-    .unwrap();
-    // 7 decided, 5 wins (5/7 ≥ 2/3): preferred.
-    assert_eq!(d.groups[0].outcome, "preferred");
-    let d = decode(
-        &wide,
-        &wa,
-        digest,
-        &picks(&[
-            ("i1", "left"),
-            ("i2", "left"),
-            ("i3", "left"),
-            ("i4", "right"),
-            ("i5", "right"),
-            ("i6", "same"),
-            ("i7", "same"),
-        ]),
-    )
-    .unwrap();
-    // 5 decided, 3 wins (3/5 < 2/3), 2 losses (2/5 ≥ 1/3): worse.
-    assert_eq!(d.groups[0].outcome, "worse");
-    let d = decode(
-        &wide,
-        &wa,
-        digest,
-        &picks(&[
-            ("i1", "left"),
-            ("i2", "left"),
-            ("i3", "left"),
-            ("i4", "right"),
-            ("i5", "same"),
-            ("i6", "same"),
-            ("i7", "same"),
-        ]),
-    )
-    .unwrap();
-    // 4 decided, 3 wins (3/4): preferred.
-    assert_eq!(d.groups[0].outcome, "preferred");
-    // not_worse: 7 decided, 4 wins is worse (3 losses); 6 decided 3 wins 3 losses worse; the
-    // not_worse band is wins/decided < 2/3 and losses/decided < 1/3, so decided ≥ 4 with a
-    // same: 5 decided, 3 wins (3/5), 2 losses (2/5) no. 8 would be 5 wins (5/8 < 2/3), 3
-    // losses (3/8 ≥ 1/3) no. With the default rules not_worse needs wins + losses with
-    // losses < decided/3 and wins < 2·decided/3, impossible since wins + losses = decided.
-    // So not_worse is reachable only under a protocol whose fractions leave a gap.
+    let ids: Vec<String> = (1..=20).map(|i| format!("i{i}")).collect();
+    for wins in 0..=20u32 {
+        for losses in 0..=(20 - wins) {
+            let list: Vec<(&str, &str)> = ids
+                .iter()
+                .enumerate()
+                .map(|(i, id)| {
+                    let i = i as u32;
+                    (
+                        id.as_str(),
+                        if i < wins {
+                            "left"
+                        } else if i < wins + losses {
+                            "right"
+                        } else {
+                            "same"
+                        },
+                    )
+                })
+                .collect();
+            let d = decode(&wide, &wa, digest, &picks(&list)).unwrap();
+            let outcome = d.groups[0].outcome;
+            assert!(
+                ["preferred", "worse", "inconclusive"].contains(&outcome),
+                "{wins} wins, {losses} losses: {outcome}"
+            );
+        }
+    }
+    // A protocol whose fractions leave a gap can report not_worse: 7 decided, 5 wins (5/7
+    // below 3/4), 2 losses (2/7 below 1/3).
     let gap = Protocol::parse(
         "version = 1\nname = \"t\"\nseed = 1\narms = [\"a\", \"b\"]\nmin_decided = 3\n[rules]\npreferred = [3, 4]\nnot_worse = [1, 3]\n[[group]]\nname = \"g\"\nimages = [\"i1\", \"i2\", \"i3\", \"i4\", \"i5\", \"i6\", \"i7\"]\n",
         "t",
@@ -306,7 +190,6 @@ fn the_outcome_rules_on_constructed_pick_sets() {
         ]),
     )
     .unwrap();
-    // 7 decided, 5 wins (5/7 < 3/4), 2 losses (2/7 < 1/3): not_worse.
     assert_eq!(d.groups[0].outcome, "not_worse");
 }
 

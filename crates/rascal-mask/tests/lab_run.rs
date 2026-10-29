@@ -159,7 +159,7 @@ fn every_cell_runs_once_resumes_without_a_call_and_redo_adds_an_attempt() {
         assert!(cell_dir.join("attempts/1/recipe.toml").is_file());
         assert_eq!(cell.protocol_digest.len(), 71);
         assert_eq!(cell.components.filler.revision, "fake exact");
-        assert_eq!(cell.components.filler.name, "fake");
+        assert!(cell.components.filler.target.contains("fake-filler"));
         assert!(cell.components.op_versions.contains_key("fan") || cell.arm == "finder");
         if cell.arm == "thin" {
             assert_eq!(cell.components.constants["fan"], "fan-thin-v1");
@@ -280,9 +280,9 @@ fn the_refusals_name_the_field_the_binding_the_protocol_the_directory_and_the_im
     )
     .unwrap();
     let out = run(&no_protocol, &config, &dir.join("lab-a"), &[]);
-    assert_eq!(out.status.code(), Some(3), "{}", text(&out.stderr));
+    assert_eq!(out.status.code(), Some(64), "{}", text(&out.stderr));
     assert!(
-        text(&out.stderr).contains("protocol"),
+        text(&out.stderr).contains("protocol is required"),
         "{}",
         text(&out.stderr)
     );

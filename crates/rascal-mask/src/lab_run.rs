@@ -1,12 +1,13 @@
 //! `rascal lab run <matrix> --config <rascal.toml> --out <lab dir>` (SPEC.md "The lab"): the
-//! matrix validated, the corpus verified, then one cell per arm and image. A cell's identity
-//! is computed from its components before anything runs (the image's digest, every bound
-//! input's digest, the overrides, the recipe as it runs, the constant sets, the op versions,
-//! the filler entry without its key, and every finder's invocation descriptor); a cell whose
-//! `latest` attempt is complete is reused and makes no external call; `--redo <arm>` adds an
-//! attempt to every cell of that arm and never overwrites one. Each attempt runs `heal` in
-//! its own run directory; every filler or pack call the run journaled is a ledger line with
-//! the arm's spend.
+//! matrix validated, the corpus verified, then one cell per arm and image in two phases.
+//! First every cell's identity is computed from its components and its record written (the
+//! image's digest, every bound input's digest, the overrides, the recipe as it runs, the
+//! constant sets, the op versions, the filler entry without its key, and every finder's
+//! invocation descriptor), so nothing that could be refused is found after a filler has been
+//! paid for. Then each cell runs: one whose `latest` attempt is complete is reused and makes
+//! no external call; `--redo <arm>` adds an attempt to every cell of that arm and never
+//! overwrites one. Each attempt runs `heal` in its own run directory; every filler or pack
+//! call the run journaled is a ledger line with the arm's spend.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -29,7 +30,7 @@ use rascal_core::workspace::Workspace;
 use rascal_mask::lab::layout::LabDir;
 use rascal_mask::lab::resolve_matrix;
 use rascal_mcp::client::Pack;
-use rascal_mcp::provision::install_dir_of;
+use rascal_mcp::provision::{PACK_NAME, install_dir_of};
 
 use crate::heal::{self, HealArgs};
 use crate::run::RunArgs;
@@ -60,6 +61,15 @@ pub struct LabRunReport {
 /// The journal note prefixes of external calls, with the ledger's kind for each.
 const CALL_NOTES: [(&str, &str); 2] = [("filler call: ", "filler"), ("pack call: ", "pack")];
 
+/// A cell ready to run: its record, the recipe as it runs and the files it binds.
+struct Planned {
+    cell: CellRecord,
+    arm_index: usize,
+    image_index: usize,
+    recipe: Recipe,
+    inputs: BTreeMap<String, PathBuf>,
+}
+
 pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
     let config = Config::read(&args.config)?;
     let matrix_dir = args
@@ -69,8 +79,13 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
         .unwrap_or_default();
 
     // The lab directory first, from the matrix's name and the protocol's digest: a new one, or
-    // an earlier run of this lab to resume.
+    // an earlier run of this lab to resume. `--redo` must name an arm before anything exists.
     let matrix = Matrix::read(&args.matrix)?;
+    if let Some(redo) = &args.redo
+        && matrix.arm(redo).is_none()
+    {
+        return Err(Error::usage(format!("--redo {redo}: no such arm")));
+    }
     let (_, protocol_digest) = Protocol::read(&matrix_dir.join(&matrix.protocol))?;
     let record = LabRecord {
         lab_version: 1,
@@ -93,7 +108,8 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
     }
 
     // The registry the arms validate against: the shipped ops and the configured packs'
-    // tools, the latter being the finders. The packs journal into the lab's own workspace.
+    // tools, the latter being the finders. The packs journal into the lab's own workspace;
+    // starting them is not an external call.
     let workspace_dir = args.out.join("workspace");
     std::fs::create_dir_all(&workspace_dir).map_err(|source| Error::Io {
         path: workspace_dir.clone(),
@@ -165,7 +181,6 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
         filler_entries.insert(
             arm.name.as_str(),
             FillerEntry {
-                name: arm.filler.clone(),
                 target: entry
                     .command
                     .as_ref()
@@ -174,6 +189,8 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
                     .unwrap_or_default(),
                 profile: entry.profile.clone(),
                 paste: entry.paste.clone(),
+                max_side: entry.max_side,
+                send_mask: entry.send_mask,
                 revision,
             },
         );
@@ -188,30 +205,33 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
         validated.matrix.arm.len(),
         if resumed { ", resumed" } else { "" }
     );
-    if let Some(redo) = &args.redo
-        && validated.matrix.arm(redo).is_none()
-    {
-        return Err(Error::usage(format!("--redo {redo}: no such arm")));
-    }
 
-    let mut report = LabRunReport::default();
+    // Phase one: every cell's identity, before any cell runs.
+    let mut planned = Vec::new();
     let mut current = BTreeMap::new();
-    for image in &validated.matrix.image {
-        for (index, arm) in validated.matrix.arm.iter().enumerate() {
-            let mut recipe = validated.recipes[index].clone();
+    for (image_index, image) in validated.matrix.image.iter().enumerate() {
+        let inputs = input_files(image, &matrix_dir)?;
+        for (arm_index, arm) in validated.matrix.arm.iter().enumerate() {
+            let mut recipe = validated.recipes[arm_index].clone();
             for (key, value) in &image.overrides {
                 apply_override(&mut recipe, &registry, key, value).map_err(|m| {
                     Error::usage(format!("image {}: override {key}: {m}", image.id))
                 })?;
             }
-            let inputs = input_files(image, &matrix_dir)?;
+            // Only the inputs the arm's recipe declares are bound; the matrix validation
+            // checked that every required one is.
+            let bound: BTreeMap<String, (PathBuf, String)> = inputs
+                .iter()
+                .filter(|(name, _)| recipe.inputs.contains_key(*name))
+                .map(|(name, value)| (name.clone(), value.clone()))
+                .collect();
             let components = components(
                 &validated
                     .corpus
                     .image(&image.id)
                     .map(|i| i.sha256.clone())
                     .unwrap_or_default(),
-                &inputs,
+                &bound,
                 arm,
                 image,
                 &recipe,
@@ -230,127 +250,142 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
             };
             lab.write_cell(&cell)?;
             current.insert(format!("{}/{}", arm.name, image.id), cell.identity.clone());
-            let short = &cell.identity[7..19];
-            let redo = args.redo.as_deref() == Some(arm.name.as_str());
-            if !redo && let Some(latest) = lab.latest(&cell.identity)? {
-                if latest.record.status == "ok" {
-                    println!(
-                        "cell {} × {} {short}: reused attempt {} (no external call)",
-                        arm.name, image.id, latest.attempt
-                    );
-                    report.reused += 1;
-                    continue;
-                }
-                println!(
-                    "cell {} × {} {short}: attempt {} was {}; running again",
-                    arm.name, image.id, latest.attempt, latest.record.status
-                );
-            }
-            let attempt = lab.next_attempt(&cell.identity)?;
-            let dir = lab.attempt_dir(&cell.identity, attempt);
-            std::fs::create_dir_all(&dir).map_err(|source| Error::Io {
-                path: dir.clone(),
-                source,
-            })?;
-            let recipe_path = dir.join("recipe.toml");
-            let text = toml::to_string(&recipe).map_err(|e| Error::op("lab", e.to_string()))?;
-            std::fs::write(&recipe_path, text).map_err(|source| Error::Io {
-                path: recipe_path.clone(),
-                source,
-            })?;
-            let run_dir = dir.join("run");
-            let heal_args = HealArgs {
-                run: RunArgs {
-                    recipe: recipe_path.display().to_string(),
-                    image: image_files[image.id.as_str()].clone(),
-                    out: run_dir.clone(),
-                    bbox: None,
-                    location: inputs.get("location").map(|(p, _)| p.clone()),
-                    stroke: inputs.get("stroke").map(|(p, _)| p.clone()),
-                    protect: inputs.get("protect").map(|(p, _)| p.clone()),
-                    mask: inputs.get("mask").map(|(p, _)| p.clone()),
-                    prompt: None,
-                    config: Some(args.config.clone()),
-                    workspace: None,
-                    projection: None,
-                    strict: false,
-                    replay: None,
-                },
-                filler: arm.filler.clone(),
-                no_dash: args.no_dash,
-                replay: None,
-            };
-            let outcome = heal::heal(&heal_args);
-            let calls = calls_in(&run_dir.join("journal.jsonl"));
-            for (kind, target, outcome_text, duration_ms) in &calls {
-                lab.ledger_append(&LedgerLine {
-                    ledger_version: 1,
-                    cell: cell.identity.clone(),
-                    attempt,
-                    arm: arm.name.clone(),
-                    image: image.id.clone(),
-                    kind: kind.to_string(),
-                    target: target.clone(),
-                    outcome: outcome_text.clone(),
-                    duration_ms: *duration_ms,
-                    spend_usd: if *kind == "filler" {
-                        arm.spend_usd_per_call
-                    } else {
-                        0.0
-                    },
-                })?;
-                report.calls += 1;
-                if *kind == "filler" {
-                    report.spend_usd += arm.spend_usd_per_call;
-                }
-            }
-            let (status, result, stopped_at, reason) = match &outcome {
-                Ok(heal) if heal.status == Status::Ok => {
-                    let result = heal.result.as_ref().map(|path| {
-                        path.strip_prefix(&dir)
-                            .unwrap_or(path)
-                            .display()
-                            .to_string()
-                    });
-                    ("ok", result, None, None)
-                }
-                Ok(heal) => (
-                    "stopped",
-                    None,
-                    heal.stopped_at.clone(),
-                    heal.reason.clone(),
-                ),
-                Err(e) => ("failed", None, None, Some(e.to_string())),
-            };
-            lab.finish_attempt(
-                &cell.identity,
-                &AttemptRecord {
-                    attempt_version: 1,
-                    attempt,
-                    status: status.to_string(),
-                    run: "run".to_string(),
-                    result,
-                    stopped_at,
-                    reason: reason.clone(),
-                    calls: calls.len() as u32,
-                },
-            )?;
-            match status {
-                "ok" => report.ran += 1,
-                "stopped" => report.stopped += 1,
-                _ => report.failed += 1,
-            }
-            println!(
-                "cell {} × {} {short}: attempt {attempt} {status}{} ({} call{})",
-                arm.name,
-                image.id,
-                reason.map(|r| format!(": {r}")).unwrap_or_default(),
-                calls.len(),
-                if calls.len() == 1 { "" } else { "s" }
-            );
+            planned.push(Planned {
+                cell,
+                arm_index,
+                image_index,
+                recipe,
+                inputs: bound.into_iter().map(|(n, (p, _))| (n, p)).collect(),
+            });
         }
     }
     lab.set_current(current)?;
+
+    // Phase two: the runs.
+    let mut report = LabRunReport::default();
+    for plan in &planned {
+        let arm = &validated.matrix.arm[plan.arm_index];
+        let image = &validated.matrix.image[plan.image_index];
+        let cell = &plan.cell;
+        let short = &cell.identity[7..19];
+        let redo = args.redo.as_deref() == Some(arm.name.as_str());
+        if !redo && let Some(latest) = lab.latest(&cell.identity)? {
+            if latest.record.status == "ok" {
+                println!(
+                    "cell {} × {} {short}: reused attempt {} (no external call)",
+                    arm.name, image.id, latest.attempt
+                );
+                report.reused += 1;
+                continue;
+            }
+            println!(
+                "cell {} × {} {short}: attempt {} was {}; running again",
+                arm.name, image.id, latest.attempt, latest.record.status
+            );
+        }
+        let attempt = lab.next_attempt(&cell.identity)?;
+        let dir = lab.attempt_dir(&cell.identity, attempt);
+        std::fs::create_dir_all(&dir).map_err(|source| Error::Io {
+            path: dir.clone(),
+            source,
+        })?;
+        let recipe_path = dir.join("recipe.toml");
+        let text = toml::to_string(&plan.recipe).map_err(|e| Error::op("lab", e.to_string()))?;
+        std::fs::write(&recipe_path, text).map_err(|source| Error::Io {
+            path: recipe_path.clone(),
+            source,
+        })?;
+        let run_dir = dir.join("run");
+        let heal_args = HealArgs {
+            run: RunArgs {
+                recipe: recipe_path.display().to_string(),
+                image: image_files[image.id.as_str()].clone(),
+                out: run_dir.clone(),
+                bbox: None,
+                location: plan.inputs.get("location").cloned(),
+                stroke: plan.inputs.get("stroke").cloned(),
+                protect: plan.inputs.get("protect").cloned(),
+                mask: plan.inputs.get("mask").cloned(),
+                prompt: None,
+                config: Some(args.config.clone()),
+                workspace: None,
+                projection: None,
+                strict: false,
+                replay: None,
+            },
+            filler: arm.filler.clone(),
+            no_dash: args.no_dash,
+            replay: None,
+        };
+        let outcome = heal::heal(&heal_args);
+        let calls = calls_in(&run_dir.join("journal.jsonl"));
+        for (kind, target, outcome_text, duration_ms) in &calls {
+            lab.ledger_append(&LedgerLine {
+                ledger_version: 1,
+                cell: cell.identity.clone(),
+                attempt,
+                arm: arm.name.clone(),
+                image: image.id.clone(),
+                kind: kind.to_string(),
+                target: target.clone(),
+                outcome: outcome_text.clone(),
+                duration_ms: *duration_ms,
+                spend_usd: if *kind == "filler" {
+                    arm.spend_usd_per_call
+                } else {
+                    0.0
+                },
+            })?;
+            report.calls += 1;
+            if *kind == "filler" {
+                report.spend_usd += arm.spend_usd_per_call;
+            }
+        }
+        let (status, result, stopped_at, reason) = match &outcome {
+            Ok(heal) if heal.status == Status::Ok => {
+                let result = heal.result.as_ref().map(|path| {
+                    path.strip_prefix(&dir)
+                        .unwrap_or(path)
+                        .display()
+                        .to_string()
+                });
+                ("ok", result, None, None)
+            }
+            Ok(heal) => (
+                "stopped",
+                None,
+                heal.stopped_at.clone(),
+                heal.reason.clone(),
+            ),
+            Err(e) => ("failed", None, None, Some(e.to_string())),
+        };
+        lab.finish_attempt(
+            &cell.identity,
+            &AttemptRecord {
+                attempt_version: 1,
+                attempt,
+                status: status.to_string(),
+                run: "run".to_string(),
+                result,
+                stopped_at,
+                reason: reason.clone(),
+                calls: calls.len() as u32,
+            },
+        )?;
+        match status {
+            "ok" => report.ran += 1,
+            "stopped" => report.stopped += 1,
+            _ => report.failed += 1,
+        }
+        println!(
+            "cell {} × {} {short}: attempt {attempt} {status}{} ({} call{})",
+            arm.name,
+            image.id,
+            reason.map(|r| format!(": {r}")).unwrap_or_default(),
+            calls.len(),
+            if calls.len() == 1 { "" } else { "s" }
+        );
+    }
     println!(
         "lab {}: {} ran, {} reused, {} stopped, {} failed; {} external call{}, spend {:.2} USD",
         record.name,
@@ -376,19 +411,14 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
 }
 
 /// A matrix image's bound input files by recipe input name: the path (relative to the
-/// matrix) and its digest. Only the inputs `heal` binds from files are allowed.
+/// matrix) and its digest. The names were checked by the matrix validation; the files must
+/// exist.
 fn input_files(
     image: &MatrixImage,
     matrix_dir: &Path,
 ) -> Result<BTreeMap<String, (PathBuf, String)>> {
     let mut out = BTreeMap::new();
     for (name, file) in &image.inputs {
-        if !["location", "stroke", "protect", "mask"].contains(&name.as_str()) {
-            return Err(Error::usage(format!(
-                "image {}: inputs.{name} is not one heal binds from a file (location, stroke, protect, mask)",
-                image.id
-            )));
-        }
         let path = matrix_dir.join(file);
         let digest = if path.is_dir() {
             // A stored mask: its record names its identity.
@@ -426,10 +456,15 @@ fn components(
     let mut op_versions = BTreeMap::new();
     let mut descriptors = Vec::new();
     for step in &recipe.step {
-        if let Some(set) = &step.constants {
-            constants.insert(step.id.clone(), set.clone());
-        }
         let manifest = registry.require(&step.op)?.manifest();
+        // The set the step selects, or the op's default (the first it lists).
+        if let Some(set) = step
+            .constants
+            .clone()
+            .or_else(|| manifest.constants.first().cloned())
+        {
+            constants.insert(step.id.clone(), set);
+        }
         op_versions.insert(step.op.clone(), manifest.version.clone());
         if !finders.contains(&step.op.as_str()) {
             continue;
@@ -447,7 +482,7 @@ fn components(
                 pack.name()
             ))
         })?;
-        let bundle_digest = install_dir_of(&pack.config().command, "rascal-tools")
+        let bundle_digest = install_dir_of(&pack.config().command, PACK_NAME)
             .map(|dir| dir.join("bundle.toml"))
             .filter(|p| p.is_file())
             .map(|p| rascal_core::lab::file_digest(&p))

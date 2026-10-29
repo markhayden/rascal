@@ -1036,7 +1036,7 @@ dependent-finder rejection, is unit-tested here; its CLI form is 6.2's scenario.
       `protocol` and the dependent-finder rejection naming the binding; `fan-thin-v1` yields `thin` on every row of the step-sky fixture at three image widths
       (the effective upper width is `max(thin, wide_max · w)`).
 
-**Verification.** `cargo test -p rascal-mask -- lab::config`.
+**Verification.** `cargo test -p rascal-mask --test lab_config --test corpus_cli` and `cargo test -p rascal-ops --test fan_thin_widths`.
 
 **Dependencies.** 1.6, 0.5, 2.1. **Files.** `crates/rascal-mask/src/lab/{corpus,protocol,matrix}.rs`,
 `crates/rascal-ops/constants/fan-thin-v1.toml`, `schemas/rascal/`, `examples/`. **Size.** S.
@@ -1058,7 +1058,7 @@ directory.
 - [ ] Identity changes on prompt, parameter or revision changes only; resume skips complete
       cells; `--redo` adds an attempt and keeps the old one.
 
-**Verification.** `cargo test -p rascal-mask --features testkit --test lab_run`.
+**Verification.** `cargo test -p rascal-mask --features testkit --test lab_run --test lab_identity`.
 
 **Dependencies.** 6.1, 2.8, 4.4, 5.3. **Files.** `crates/rascal-mask/src/lab/{run,cell,ledger}.rs`. **Size.** M.
 
@@ -1076,7 +1076,7 @@ writes `picks.json`; `rascal lab decode lab/demo/ picks.json` prints the per-gro
 - [ ] Decode rejects a foreign or stale picks file; the outcome rules on constructed pick sets;
       the page embeds images and no key; the two schemas through the harness.
 
-**Verification.** `cargo test -p rascal-mask -- lab::pairs lab::decode`.
+**Verification.** `cargo test -p rascal-core --test lab_decode` and `cargo test -p rascal-mask --features testkit --test lab_pairs`.
 
 **Dependencies.** 6.2. **Files.** `crates/rascal-mask/src/lab/{pairs,decode}.rs`, `crates/rascal-mask/pages/pairs.html`,
 `schemas/rascal/`, `docs/lab.md`. **Size.** M; tag `m6.1`.

@@ -203,6 +203,23 @@ fn a_protocol_is_checked_for_its_arms_rules_and_groups() {
         let err = Protocol::parse(&bad, "t").unwrap_err().to_string();
         assert!(err.contains(needle), "{needle}: {err}");
     }
+    for (bad, needle) in [
+        (
+            sound.replace("name = \"seam-demo\"", "name = \"\""),
+            "name is empty",
+        ),
+        (
+            sound[..sound.find("[[group]]").unwrap()].to_string(),
+            "at least one group",
+        ),
+        (
+            sound.replace("images = [\"sky-01\", \"sky-02\"]", "images = []"),
+            "has no images",
+        ),
+    ] {
+        let err = Protocol::parse(&bad, "t").unwrap_err().to_string();
+        assert!(err.contains(needle), "{needle}: {err}");
+    }
     // Defaults: min_decided 10 and the spec's fractions.
     let minimal = "version = 1\nname = \"x\"\nseed = 1\narms = [\"a\", \"b\"]\n[[group]]\nname = \"g\"\nimages = [\"i\"]\n";
     let p = Protocol::parse(minimal, "t").unwrap();
@@ -294,6 +311,55 @@ fn a_matrix_is_refused_naming_what_is_wrong() {
                 )
             }),
             "no parameter nope",
+        ),
+        (
+            "empty-name",
+            Box::new(|t| t.replace("name = \"seam-demo\"", "name = \"\"")),
+            "name is empty",
+        ),
+        (
+            "no-images",
+            Box::new(|t| {
+                let start = t.find("[[image]]").unwrap();
+                let end = t.find("[[arm]]").unwrap();
+                format!("{}{}", &t[..start], &t[end..])
+            }),
+            "at least one image",
+        ),
+        (
+            "no-arms",
+            Box::new(|t| t[..t.find("[[arm]]").unwrap()].to_string()),
+            "at least one arm",
+        ),
+        (
+            "repeated-image",
+            Box::new(|t| t.replace("id = \"sky-02\"", "id = \"sky-01\"")),
+            "repeated",
+        ),
+        (
+            "repeated-arm",
+            Box::new(|t| t.replace("name = \"fan-ramp\"", "name = \"thin\"")),
+            "repeated",
+        ),
+        (
+            "empty-filler",
+            Box::new(|t| t.replace("filler = \"fake\"\nspend", "filler = \"\"\nspend")),
+            "recipe and filler are required",
+        ),
+        (
+            "nan-spend",
+            Box::new(|t| t.replace("spend_usd_per_call = 0.0", "spend_usd_per_call = nan")),
+            "not a number",
+        ),
+        (
+            "bogus-input",
+            Box::new(|t| {
+                t.replace(
+                    "[[image]]\nid = \"sky-01\"\n",
+                    "[[image]]\nid = \"sky-01\"\ninputs = { bogus = \"x\" }\n",
+                )
+            }),
+            "inputs.bogus is not one heal binds",
         ),
     ];
     for (name, edit, needle) in cases {
