@@ -117,9 +117,9 @@ fn invalid_args_exits_64_with_and_without_strict_and_is_in_the_journal() {
         );
         assert!(String::from_utf8_lossy(&out.stderr).contains("x0 < x1"));
         let lines = journal(&out_dir);
-        assert_eq!(lines.len(), 1, "{lines:?}");
-        assert_eq!(lines[0]["envelope"]["status"], "invalid_args");
-        assert_eq!(lines[0]["step"], "find");
+        assert_eq!(lines.len(), 2, "import, find: {lines:?}");
+        assert_eq!(lines[1]["envelope"]["status"], "invalid_args");
+        assert_eq!(lines[1]["step"], "find");
         assert!(
             !out_dir.join("artifacts").exists()
                 || std::fs::read_dir(out_dir.join("artifacts"))
@@ -162,10 +162,18 @@ fn not_applicable_exits_1_under_strict_and_0_without_and_names_the_requirement()
             "{err}"
         );
         let lines = journal(&out_dir);
-        // One op line for find, one note for the blocked requirement, nothing for mask.
-        assert_eq!(lines.len(), 2, "{lines:?}");
-        assert_eq!(lines[0]["envelope"]["status"], "not_applicable");
-        assert_eq!(lines[1]["event"], "note");
+        // The import, one op line for find, one note for the blocked requirement, nothing for mask.
+        assert_eq!(lines.len(), 3, "{lines:?}");
+        assert_eq!(lines[1]["envelope"]["status"], "not_applicable");
+        assert_eq!(lines[2]["event"], "note");
+        assert!(
+            lines[2]["note"]
+                .as_str()
+                .unwrap()
+                .contains("(not_applicable: "),
+            "{}",
+            lines[2]["note"]
+        );
         assert!(
             !out_dir.join("artifacts").exists()
                 || std::fs::read_dir(out_dir.join("artifacts"))

@@ -25,5 +25,6 @@ pub mod rendering;
 pub mod schema_drift;
 pub mod schemas;
 pub mod series;
+pub mod workspace;
 
 pub use error::Error;

@@ -41,22 +41,43 @@ pub fn render(registry: &OpRegistry, args: &RenderArgs) -> Result<PathBuf> {
     ));
     std::fs::create_dir_all(&scratch).map_err(|e| Error::io(&scratch, e))?;
     let result = (|| {
-        let mut run = Run::open(&scratch)?;
+        let run = Run::open(&scratch)?;
         let frame = frame_of(&mask);
-        run.frames.insert(frame.clone());
         let mut inputs = BTreeMap::new();
         inputs.insert("mask".to_string(), Artifact::Mask(Arc::new(mask.clone())));
-        if let Some(path) = &args.image {
-            let (image, image_frame, _) = Image::import(path, Some(frame.projection))?;
-            if image_frame.id != frame.id {
-                return Err(Error::usage(format!(
-                    "{}: the image is in frame {} but the mask is in {}",
-                    path.display(),
-                    image_frame.id,
-                    frame.id
-                )));
+        match &args.image {
+            Some(path) => {
+                let (_, image_frame, image) = run.workspace.import(path, Some(frame.projection))?;
+                if image_frame.id != frame.id {
+                    return Err(Error::usage(format!(
+                        "{}: the image is in frame {} but the mask is in {}",
+                        path.display(),
+                        image_frame.id,
+                        frame.id
+                    )));
+                }
+                inputs.insert("image".to_string(), image);
             }
-            inputs.insert("image".to_string(), Artifact::Image(Arc::new(image)));
+            None => {
+                // The frame must be known to the scratch workspace: a blank canonical image of
+                // the mask's size stands in. REPLACED BY 1.7a's follow-up in 1.9 (frames from
+                // the workspace the mask came from).
+                let blank = image::DynamicImage::ImageLuma8(image::GrayImage::new(
+                    frame.width,
+                    frame.height,
+                ));
+                run.workspace.add_canonical(
+                    Image::new(
+                        "blank",
+                        blank,
+                        &frame,
+                        rascal_core::image::Role::Canonical,
+                        None,
+                    ),
+                    &frame,
+                    "blank",
+                )?;
+            }
         }
         let mut params = Params::new();
         params.insert("for".to_string(), toml::Value::String(args.profile.clone()));

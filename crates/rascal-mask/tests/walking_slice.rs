@@ -120,18 +120,28 @@ fn the_scenario_writes_a_mask_a_rendering_and_a_journal() {
     // The inputs, the tables and the journal: one line per invocation, nothing else.
     assert!(run.join("frames.json").is_file() && run.join("locations.json").is_file());
     assert_eq!(
-        std::fs::read_dir(run.join("inputs")).unwrap().count(),
+        std::fs::read_dir(run.join("images")).unwrap().count(),
         2,
         "the canonical PNG and its record"
     );
+    for name in ["CURRENT", "registry", "ops", "journal.jsonl"] {
+        assert!(
+            run.join(name).exists(),
+            "a run directory is a workspace: {name}"
+        );
+    }
     let lines = journal(&run);
     let steps: Vec<&str> = lines
         .iter()
         .map(|l| l["step"].as_str().unwrap_or("-"))
         .collect();
-    assert_eq!(steps, ["rasterize", "outputs.render.grey"]);
+    assert_eq!(
+        steps,
+        ["import", "locate", "rasterize", "outputs.render.grey"]
+    );
     assert_eq!(lines[0]["seq"], 1);
-    assert_eq!(lines[1]["seq"], 2);
+    assert_eq!(lines[3]["seq"], 4);
+    let lines: Vec<serde_json::Value> = lines.into_iter().skip(2).collect();
     assert_eq!(lines[0]["envelope"]["status"], "ok");
     assert!(
         lines[0]["inputs"]["image"]
@@ -355,9 +365,11 @@ fn the_four_exit_codes() {
     );
     for name in ["g", "h"] {
         let lines = journal(&scratch.join(name));
-        assert_eq!(lines.len(), 1);
-        assert_eq!(lines[0]["envelope"]["status"], "not_applicable");
-        assert!(lines[0]["outputs"].as_object().unwrap().is_empty());
+        assert_eq!(lines.len(), 3, "import, locate, rasterize: {lines:?}");
+        let last = lines.last().unwrap();
+        assert_eq!(last["step"], "rasterize");
+        assert_eq!(last["envelope"]["status"], "not_applicable");
+        assert!(last["outputs"].as_object().unwrap().is_empty());
         let published = std::fs::read_dir(scratch.join(name).join("artifacts"))
             .map(|d| d.count())
             .unwrap_or(0);

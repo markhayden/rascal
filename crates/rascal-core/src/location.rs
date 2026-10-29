@@ -329,8 +329,9 @@ fn segments_cross(a: [f64; 2], b: [f64; 2], c: [f64; 2], d: [f64; 2]) -> bool {
     (o1 * o2 < 0.0) && (o3 * o4 < 0.0)
 }
 
-/// A location as a run or workspace lists it in `locations.json`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// A location as the registry lists it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct LocationEntry {
     pub id: String,
     pub identity: String,

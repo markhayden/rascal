@@ -623,10 +623,11 @@ render = [{ for = "grey", out = "seam-grey.png" }]
 Bindings are `<step id>.<output name>` or `inputs.<name>`, typed; validation fails on a type
 mismatch, an unknown op or parameter, an unbound input, or a requirement pointing at a missing or
 failed step, with the step id in the message. Defaults are resolved at validation and the
-resolved values are what provenance records. `rascal run` writes, under `--out`: `inputs/` (the
-canonical images), `frames.json`, `locations.json`, `artifacts/`, the outputs named, and
-`journal.jsonl` with one line per step (step id, op, version, resolved params, input identities,
-output identities, envelope, duration). A recipe's `[inputs]` may declare any artifact type;
+resolved values are what provenance records. `rascal run` writes, under `--out`, a workspace (`images/` with the
+canonical images, `artifacts/`, `ops/`, `registry/`, `CURRENT`, `journal.jsonl` with one line
+per invocation: step id, op, version, resolved params, input identities, output identities,
+envelope, duration) plus the projections `frames.json` and `locations.json` and the outputs
+named; with `--workspace` the artifacts and the journal go to that workspace instead. A recipe's `[inputs]` may declare any artifact type;
 the CLI binds them from `--location`, `--stroke`, `--protect`, `--mask` and `--prompt` (the last
 through a configured pack), and `heal` passes the same typed input map through unchanged; `--image` may name a path or a
 workspace `Image` id, so a composite can feed the next pass without re-import. The six shipped recipes run, literally as shipped, as acceptance fixtures.

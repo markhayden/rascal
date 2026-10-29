@@ -68,7 +68,7 @@ which parts exist; it is updated in the same commit as the code it describes.
 | Op trait, manifest, envelope, registry | rascal-core | done: the full manifest with derived schemas and bounds, parameter resolution, the native envelope, registry checks at registration, shared input validation, `ops list` and `ops describe` | M1 task 1.4 |
 | renderings | rascal-core, rascal-ops | done: the five profiles with roles, polarity and parameters; `render` with `--image`, `--threshold`, `--colour`, `--strength` | M1 task 1.5 |
 | recipes with typed bindings | rascal-core | done: every validation error with its step id, constant sets, defaults resolved into the journal, the recipe and config schemas, the binding flags | M1 task 1.6 |
-| workspace, journal, repair | rascal-core | journal only, written under `--out`; no workspace | M1 tasks 1.7a, 1.7b |
+| workspace, journal, repair | rascal-core | generations, staging locks, the commit protocol with the spec's sync order (ADR 0017), operation records, one journal line per invocation, `workspace list` and `import`, per-op subcommands; repair in 1.7b | M1 tasks 1.7a, 1.7b |
 | primitives, `cut`, `put`, `line`, `rect`, `stroke`, `rasterize` | rascal-ops | `rect`; `rasterize` for bbox and whole_image | M1 tasks 1.8a, 1.8b |
 | `inspect`, compatibility export | rascal-core, rascal-mask | not started | M1 task 1.9 |
 | the run page and tracing | rascal-mask | not started | M1 task 1.10 |

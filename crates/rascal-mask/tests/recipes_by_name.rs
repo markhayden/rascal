@@ -80,8 +80,9 @@ fn by_name_and_by_path_agree_on_semantic_content() {
     let ja: Vec<_> = journal(&a).into_iter().map(semantic).collect();
     let jb: Vec<_> = journal(&b).into_iter().map(semantic).collect();
     assert_eq!(ja, jb);
+    let rasterize = ja.iter().find(|l| l["step"] == "rasterize").unwrap();
     assert_eq!(
-        ja[0]["params"]["use_case"], "custom",
+        rasterize["params"]["use_case"], "custom",
         "the resolved default is in the journal"
     );
     let _ = std::fs::remove_dir_all(&dir);

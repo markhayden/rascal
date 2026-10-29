@@ -26,7 +26,7 @@ rascal-ops = { path = "crates/rascal-ops", version = "0.1.0" }
 rascal-mcp = { path = "crates/rascal-mcp", version = "0.1.0" }
 rascal-testkit = { path = "crates/rascal-testkit", version = "0.1.0" }
 
-clap = { version = "4.6", features = ["derive"] }
+clap = { version = "4.6", features = ["derive", "string"] }
 thiserror = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

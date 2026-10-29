@@ -11,7 +11,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -20,11 +19,10 @@ use crate::artifact::{Artifact, ArtifactType};
 use crate::error::{Error, Result};
 use crate::frame::FrameTable;
 use crate::image::Image;
-use crate::journal::{Event, Journal, JournalLine};
-use crate::location::LocationEntry;
 use crate::mask::{Mask, UseCase};
-use crate::op::{self, Context, Envelope, Inputs, Params, Provenance, Status};
+use crate::op::{self, Inputs, Params, Status};
 use crate::registry::OpRegistry;
+use crate::workspace::Workspace;
 
 /// A declared recipe input.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -400,72 +398,55 @@ pub struct Outcome {
     pub renders: Vec<(String, PathBuf)>,
 }
 
-/// A run directory under construction: `inputs/`, `frames.json`, `locations.json`,
-/// `artifacts/`, the named outputs and `journal.jsonl`. REPLACED BY 1.7a (the workspace).
+/// A run: a workspace (the run directory itself, or one given with `--workspace`) plus the
+/// run-level projections `frames.json` and `locations.json` and the named outputs under the
+/// run directory.
 pub struct Run {
+    /// The run directory, where the named outputs and the projections go.
     pub dir: PathBuf,
-    pub frames: FrameTable,
-    pub locations: Vec<LocationEntry>,
-    journal: Journal,
+    /// The workspace artifacts and the journal live in; the run directory unless given.
+    pub workspace: Arc<Workspace>,
 }
 
 impl Run {
-    /// Opens a prepared run directory.
+    /// Opens a run whose workspace is the run directory.
     pub fn open(dir: &Path) -> Result<Run> {
         Ok(Run {
             dir: dir.to_path_buf(),
-            frames: FrameTable::default(),
-            locations: Vec::new(),
-            journal: Journal::open(&dir.join("journal.jsonl"))?,
+            workspace: Arc::new(Workspace::open(dir)?),
         })
     }
 
+    /// Opens a run over an existing workspace.
+    pub fn open_in(dir: &Path, workspace: Arc<Workspace>) -> Result<Run> {
+        std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
+        Ok(Run {
+            dir: dir.to_path_buf(),
+            workspace,
+        })
+    }
+
+    /// The frames the workspace knows now.
+    pub fn frames(&self) -> Result<FrameTable> {
+        self.workspace.frames()
+    }
+
     /// Appends a note to the journal.
-    pub fn note(&mut self, text: impl Into<String>) -> Result<()> {
-        self.journal.note(text).map(|_| ())
+    pub fn note(&self, text: impl Into<String>) -> Result<()> {
+        self.workspace.note(text)
     }
 
-    /// Stores an artifact where its kind lives: canonical images under `inputs/`, other
-    /// images and masks under `artifacts/`, locations in `locations.json`.
-    pub fn store(&mut self, id: &str, artifact: &Artifact) -> Result<()> {
-        match artifact {
-            Artifact::Image(image) if image.record.role == crate::image::Role::Canonical => {
-                image.write(&self.dir.join("inputs")).map(|_| ())
-            }
-            Artifact::Image(image) => image.write(&self.dir.join("artifacts")).map(|_| ()),
-            Artifact::Mask(mask) => mask.write(&self.dir.join("artifacts").join(mask.dir_name())),
-            Artifact::BandProfile(profile) => {
-                let dir = self.dir.join("artifacts");
-                std::fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
-                profile.write(&dir.join(format!("{}.profile.json", profile.identity().hex())))
-            }
-            Artifact::Series(series) => {
-                let dir = self.dir.join("artifacts");
-                std::fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
-                series.write(&dir.join(format!("{}.series.json", series.identity().hex())))
-            }
-            Artifact::Location { location, identity } => {
-                if !self
-                    .locations
-                    .iter()
-                    .any(|l| l.identity == identity.as_str())
-                {
-                    self.locations.push(LocationEntry {
-                        id: id.to_string(),
-                        identity: identity.as_str().to_string(),
-                        location: location.clone(),
-                    });
-                }
-                Ok(())
-            }
-        }
-    }
-
-    /// Writes `frames.json` and `locations.json`.
+    /// Writes `frames.json` and `locations.json` from the workspace's snapshot.
     pub fn write_tables(&self) -> Result<()> {
+        let snapshot = self.workspace.snapshot()?;
         for (name, value) in [
-            ("frames.json", serde_json::to_value(&self.frames)),
-            ("locations.json", serde_json::to_value(&self.locations)),
+            (
+                "frames.json",
+                serde_json::to_value(FrameTable {
+                    frames: snapshot.frames.clone(),
+                }),
+            ),
+            ("locations.json", serde_json::to_value(&snapshot.locations)),
         ] {
             let path = self.dir.join(name);
             let value = value.map_err(|source| Error::Json {
@@ -481,178 +462,19 @@ impl Run {
         Ok(())
     }
 
-    /// Runs one op, journals the invocation whatever happens, and returns its output. Inputs
-    /// are validated against the manifest; parameters are resolved (defaults filled, kinds and
-    /// bounds checked) and a bad value is an `invalid_args` envelope, journaled, then a usage
-    /// error. The envelope is checked against the manifest before it is returned.
+    /// Runs one op against the workspace; see `Workspace::invoke`.
     pub fn invoke(
-        &mut self,
+        &self,
         step_id: &str,
         op_name: &str,
         registry: &OpRegistry,
         inputs: &Inputs,
         params: &Params,
     ) -> Result<op::Output> {
-        let op = registry.require(op_name)?;
-        let manifest = op.manifest();
-        op::validate_inputs(&manifest, inputs)?;
-        let input_identities: BTreeMap<String, String> = inputs
-            .iter()
-            .map(|(k, a)| (k.clone(), a.identity().as_str().to_string()))
-            .collect();
-        let started = Instant::now();
-        let mut given = params.clone();
-        let constants = given.remove("constants");
-        if let Some(c) = &constants {
-            let name = c.as_str().unwrap_or_default();
-            if !manifest.constants.iter().any(|k| k == name) {
-                let mut envelope = Envelope::invalid_args(format!("no constant set {name}"));
-                envelope.provenance = Provenance {
-                    tool: manifest.name.clone(),
-                    version: manifest.version.clone(),
-                    duration_ms: 0,
-                };
-                self.journal_op(
-                    step_id,
-                    &manifest,
-                    params,
-                    input_identities,
-                    BTreeMap::new(),
-                    Some(envelope),
-                    0,
-                )?;
-                return Err(Error::usage(format!(
-                    "step {step_id}: {}: no constant set {name}",
-                    manifest.name
-                )));
-            }
-        }
-        let resolved = match manifest.resolve_params(&given) {
-            Ok(mut resolved) => {
-                match constants {
-                    Some(c) => {
-                        resolved.insert("constants".to_string(), c);
-                    }
-                    None => {
-                        if let Some(first) = manifest.constants.first() {
-                            resolved.insert(
-                                "constants".to_string(),
-                                toml::Value::String(first.clone()),
-                            );
-                        }
-                    }
-                }
-                resolved
-            }
-            Err(message) => {
-                let mut envelope = Envelope::invalid_args(message.clone());
-                envelope.provenance = Provenance {
-                    tool: manifest.name.clone(),
-                    version: manifest.version.clone(),
-                    duration_ms: 0,
-                };
-                self.journal_op(
-                    step_id,
-                    &manifest,
-                    params,
-                    input_identities,
-                    BTreeMap::new(),
-                    Some(envelope),
-                    0,
-                )?;
-                return Err(Error::usage(format!(
-                    "step {step_id}: {}: {message}",
-                    manifest.name
-                )));
-            }
-        };
-        let context = Context {
-            frames: &self.frames,
-        };
-        let result = op.run(&context, inputs, &resolved);
-        let duration_ms = started.elapsed().as_millis() as u64;
-        let (envelope, outputs) = match &result {
-            Ok(output) => {
-                let mut envelope = output.envelope.clone();
-                envelope.provenance = Provenance {
-                    tool: manifest.name.clone(),
-                    version: manifest.version.clone(),
-                    duration_ms,
-                };
-                (
-                    Some(envelope),
-                    output
-                        .outputs
-                        .iter()
-                        .map(|(k, a)| (k.clone(), a.identity().as_str().to_string()))
-                        .collect(),
-                )
-            }
-            Err(error) => {
-                let mut envelope = Envelope::invalid_args(error.to_string());
-                envelope.summary = format!("failed: {error}");
-                envelope.provenance = Provenance {
-                    tool: manifest.name.clone(),
-                    version: manifest.version.clone(),
-                    duration_ms,
-                };
-                (Some(envelope), BTreeMap::new())
-            }
-        };
-        self.journal_op(
-            step_id,
-            &manifest,
-            &resolved,
-            input_identities,
-            outputs,
-            envelope.clone(),
-            duration_ms,
-        )?;
-        let mut output = result?;
-        if let Some(envelope) = envelope {
-            output.envelope = envelope;
-        }
-        output
-            .envelope
-            .check(&manifest)
-            .map_err(|m| Error::op(&manifest.name, format!("envelope rejected: {m}")))?;
-        if output.envelope.status == Status::InvalidArgs {
-            return Err(Error::usage(format!(
-                "step {step_id}: {}: {}",
-                manifest.name,
-                output.envelope.reason.clone().unwrap_or_default()
-            )));
-        }
-        Ok(output)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn journal_op(
-        &mut self,
-        step_id: &str,
-        manifest: &op::Manifest,
-        params: &Params,
-        inputs: BTreeMap<String, String>,
-        outputs: BTreeMap<String, String>,
-        envelope: Option<Envelope>,
-        duration_ms: u64,
-    ) -> Result<()> {
-        self.journal
-            .append(JournalLine {
-                journal_version: 1,
-                seq: 0,
-                event: Event::Op,
-                step: Some(step_id.to_string()),
-                op: Some(manifest.name.clone()),
-                version: Some(manifest.version.clone()),
-                params: Some(serde_json::to_value(params).unwrap_or_default()),
-                inputs,
-                outputs,
-                envelope,
-                duration_ms: Some(duration_ms),
-                note: None,
-            })
-            .map(|_| ())
+        Ok(self
+            .workspace
+            .invoke(step_id, op_name, registry, inputs, params)?
+            .output)
     }
 }
 
@@ -664,7 +486,7 @@ impl Recipe {
         &self,
         registry: &OpRegistry,
         inputs: BTreeMap<String, Artifact>,
-        run: &mut Run,
+        run: &Run,
     ) -> Result<Outcome> {
         for (name, decl) in &self.inputs {
             match inputs.get(name) {
@@ -686,9 +508,7 @@ impl Recipe {
         }
         let mut bindings: BTreeMap<String, Artifact> = BTreeMap::new();
         for (name, artifact) in inputs {
-            let id = format!("inputs.{name}");
-            run.store(&id, &artifact)?;
-            bindings.insert(id, artifact);
+            bindings.insert(format!("inputs.{name}"), artifact);
         }
         let mut outcome = Outcome {
             status: Status::Ok,
@@ -744,7 +564,12 @@ impl Recipe {
                 let reason = output.envelope.reason.clone().unwrap_or_default();
                 unmet.insert(
                     step.id.clone(),
-                    format!("{:?}: {reason}", output.envelope.status).to_lowercase(),
+                    format!(
+                        "{}: {reason}",
+                        serde_json::to_string(&output.envelope.status)
+                            .unwrap_or_default()
+                            .trim_matches('"')
+                    ),
                 );
                 if outcome.status == Status::Ok {
                     outcome.status = output.envelope.status;
@@ -754,9 +579,7 @@ impl Recipe {
                 continue;
             }
             for (name, artifact) in output.outputs {
-                let id = format!("{}.{name}", step.id);
-                run.store(&id, &artifact)?;
-                bindings.insert(id, artifact);
+                bindings.insert(format!("{}.{name}", step.id), artifact);
             }
         }
         if outcome.status == Status::Ok {

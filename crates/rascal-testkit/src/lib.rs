@@ -4,4 +4,5 @@
 //!
 //! Builders arrive with the tasks that need them; at task 1.1 the synthetic images.
 
+pub mod fs_shim;
 pub mod images;

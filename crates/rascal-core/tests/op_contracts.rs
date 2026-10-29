@@ -521,11 +521,29 @@ fn recipe(text: &str) -> Recipe {
     Recipe::parse(text, "test").unwrap()
 }
 
-fn inputs(frame: &Frame) -> BTreeMap<String, Artifact> {
+/// The recipe inputs, with the image added to the run's workspace so its frame is known.
+fn inputs(run: &Run, frame: &Frame) -> BTreeMap<String, Artifact> {
+    let Artifact::Image(img) = image(frame, Role::Canonical, None) else {
+        panic!()
+    };
+    let (_, artifact) = run
+        .workspace
+        .add_canonical((*img).clone(), frame, "flat")
+        .unwrap();
     let mut inputs = BTreeMap::new();
-    inputs.insert("image".to_string(), image(frame, Role::Canonical, None));
+    inputs.insert("image".to_string(), artifact);
     inputs.insert("location".to_string(), location(frame));
     inputs
+}
+
+/// A mask in the run's workspace frame, for direct invocations.
+fn seed(run: &Run, frame: &Frame) {
+    let Artifact::Image(img) = image(frame, Role::Canonical, None) else {
+        panic!()
+    };
+    run.workspace
+        .add_canonical((*img).clone(), frame, "flat")
+        .unwrap();
 }
 
 fn listing(dir: &Path) -> Vec<String> {
@@ -575,9 +593,8 @@ mask = "mask.mask"
     );
     r.validate(&registry).unwrap();
     let dir = scratch("na");
-    let mut run = Run::open(&dir).unwrap();
-    run.frames.insert(f.clone());
-    let outcome = r.run(&registry, inputs(&f), &mut run).unwrap();
+    let run = Run::open(&dir).unwrap();
+    let outcome = r.run(&registry, inputs(&run, &f), &run).unwrap();
     assert_eq!(outcome.status, Status::NotApplicable);
     assert_eq!(outcome.stopped_at.as_deref(), Some("p"));
     assert_eq!(outcome.reason.as_deref(), Some("the probe refuses"));
@@ -589,14 +606,14 @@ mask = "mask.mask"
         "{artifacts:?}"
     );
     let lines = rascal_core::journal::Journal::read(&dir.join("journal.jsonl")).unwrap();
-    assert_eq!(lines.len(), 2);
-    assert_eq!(lines[1].step.as_deref(), Some("p"));
+    assert_eq!(lines.len(), 3, "import, mask, p");
+    assert_eq!(lines[2].step.as_deref(), Some("p"));
     assert_eq!(
-        lines[1].envelope.as_ref().unwrap().status,
+        lines[2].envelope.as_ref().unwrap().status,
         Status::NotApplicable
     );
-    assert!(lines[1].outputs.is_empty());
-    assert_eq!(lines[1].envelope.as_ref().unwrap().provenance.tool, "probe");
+    assert!(lines[2].outputs.is_empty());
+    assert_eq!(lines[2].envelope.as_ref().unwrap().provenance.tool, "probe");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -633,9 +650,8 @@ mask = "mask.mask"
     );
     r.validate(&registry).unwrap();
     let dir = scratch("req");
-    let mut run = Run::open(&dir).unwrap();
-    run.frames.insert(f.clone());
-    let outcome = r.run(&registry, inputs(&f), &mut run).unwrap();
+    let run = Run::open(&dir).unwrap();
+    let outcome = r.run(&registry, inputs(&run, &f), &run).unwrap();
     assert_eq!(outcome.status, Status::NotApplicable);
     assert_eq!(
         outcome.stopped_at.as_deref(),
@@ -704,8 +720,7 @@ mask = "mask.mask"
 "#
         ));
         let dir = scratch("ia");
-        let mut run = Run::open(&dir).unwrap();
-        run.frames.insert(f.clone());
+        let run = Run::open(&dir).unwrap();
         if mode.starts_with("amount = 99") {
             // Out of bounds is caught by validation before anything runs.
             let e = r.validate(&registry).unwrap_err().to_string();
@@ -713,7 +728,7 @@ mask = "mask.mask"
             continue;
         }
         r.validate(&registry).unwrap();
-        let e = r.run(&registry, inputs(&f), &mut run).unwrap_err();
+        let e = r.run(&registry, inputs(&run, &f), &run).unwrap_err();
         assert!(matches!(e, rascal_core::Error::Usage { .. }), "{e:?}");
         assert!(e.to_string().contains(expect), "{e}");
         let lines = rascal_core::journal::Journal::read(&dir.join("journal.jsonl")).unwrap();
@@ -730,8 +745,8 @@ fn an_undeclared_output_is_refused_by_the_envelope_check() {
     let f = frame();
     let registry = registry();
     let dir = scratch("lie");
-    let mut run = Run::open(&dir).unwrap();
-    run.frames.insert(f.clone());
+    let run = Run::open(&dir).unwrap();
+    seed(&run, &f);
     let mut inputs: Inputs = BTreeMap::new();
     inputs.insert("mask".into(), mask(&f));
     let mut params = Params::new();
@@ -754,9 +769,9 @@ fn a_frame_mismatch_between_mask_and_image_is_refused_by_the_runner() {
     let other = Frame::raw(40, 31, Projection::Flat);
     let registry = registry();
     let dir = scratch("frames");
-    let mut run = Run::open(&dir).unwrap();
-    run.frames.insert(f.clone());
-    run.frames.insert(other.clone());
+    let run = Run::open(&dir).unwrap();
+    seed(&run, &f);
+    seed(&run, &other);
     let mut inputs: Inputs = BTreeMap::new();
     inputs.insert("mask".into(), mask(&f));
     inputs.insert("image".into(), image(&other, Role::Canonical, None));
@@ -775,8 +790,8 @@ fn a_bad_rect_box_is_invalid_args_from_the_op() {
     let f = frame();
     let registry = registry();
     let dir = scratch("rectbad");
-    let mut run = Run::open(&dir).unwrap();
-    run.frames.insert(f.clone());
+    let run = Run::open(&dir).unwrap();
+    seed(&run, &f);
     let mut inputs: Inputs = BTreeMap::new();
     inputs.insert("image".into(), image(&f, Role::Canonical, None));
     let mut params = Params::new();
@@ -796,7 +811,7 @@ fn a_bad_rect_box_is_invalid_args_from_the_op() {
     assert!(e.to_string().contains("x0 < x1"), "{e}");
     let lines = rascal_core::journal::Journal::read(&dir.join("journal.jsonl")).unwrap();
     assert_eq!(
-        lines[0].envelope.as_ref().unwrap().status,
+        lines.last().unwrap().envelope.as_ref().unwrap().status,
         Status::InvalidArgs
     );
     let _ = std::fs::remove_dir_all(&dir);

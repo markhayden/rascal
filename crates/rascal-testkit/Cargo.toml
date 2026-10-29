@@ -8,6 +8,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+rascal-core = { workspace = true }
 image = { workspace = true }
 
 [lints]

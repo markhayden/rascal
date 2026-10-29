@@ -6,6 +6,7 @@ mod inspect;
 mod ops;
 mod render;
 mod run;
+mod workspace_cmd;
 
 use std::path::PathBuf;
 
@@ -55,12 +56,20 @@ enum Command {
         /// The configuration file (rascal.toml).
         #[arg(long)]
         config: Option<PathBuf>,
+        /// Keep artifacts and the journal in this workspace instead of a private one under --out.
+        #[arg(long)]
+        workspace: Option<PathBuf>,
         /// The image's projection; without it an exactly 2:1 image is taken as equirectangular.
         #[arg(long)]
         projection: Option<ProjectionArg>,
         /// Exit 1 when the recipe stops at a step that is not applicable.
         #[arg(long)]
         strict: bool,
+    },
+    /// A workspace: list what it holds, or import an image into it.
+    Workspace {
+        #[command(subcommand)]
+        command: WorkspaceCommand,
     },
     /// The op catalogue: every manifest as a client sees it.
     Ops {
@@ -101,6 +110,26 @@ enum Command {
 }
 
 #[derive(Subcommand, Debug)]
+enum WorkspaceCommand {
+    /// Every frame, location and artifact in the current generation.
+    List {
+        dir: PathBuf,
+        /// Only this type: Frame, Location, Image, Mask, BandProfile, Series.
+        #[arg(long = "type")]
+        type_filter: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Import an image as a canonical image in its raw frame; prints its id.
+    Import {
+        dir: PathBuf,
+        image: PathBuf,
+        #[arg(long)]
+        projection: Option<ProjectionArg>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 enum OpsCommand {
     /// Every op: name, version and purpose, or every manifest with --json.
     List {
@@ -130,9 +159,23 @@ impl From<ProjectionArg> for Projection {
     }
 }
 
+/// Built-in command names that an op may not shadow.
+const RESERVED: &[&str] = &["run", "render", "inspect", "ops", "workspace", "help"];
+
 fn main() {
-    let cli = match Cli::try_parse() {
-        Ok(cli) => cli,
+    let registry = match rascal_ops::registry() {
+        Ok(registry) => registry,
+        Err(error) => {
+            eprintln!("rascal: {error}");
+            std::process::exit(exit::OPERATIONAL);
+        }
+    };
+    use clap::{CommandFactory, FromArgMatches};
+    let command = Cli::command()
+        .subcommands(workspace_cmd::op_commands(&registry, RESERVED))
+        .subcommand_help_heading("Commands (ops take --workspace; see `rascal ops list`)");
+    let matches = match command.try_get_matches() {
+        Ok(matches) => matches,
         Err(error) => match error.kind() {
             ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => {
                 let code = if error.print().is_err() {
@@ -148,11 +191,18 @@ fn main() {
             }
         },
     };
-    let registry = match rascal_ops::registry() {
-        Ok(registry) => registry,
+    // An op subcommand is not in the derive; it is dispatched by name.
+    if let Some((name, sub)) = matches.subcommand()
+        && !RESERVED.contains(&name)
+        && registry.get(name).is_some()
+    {
+        std::process::exit(workspace_cmd::run_op(&registry, name, sub));
+    }
+    let cli = match Cli::from_arg_matches(&matches) {
+        Ok(cli) => cli,
         Err(error) => {
-            eprintln!("rascal: {error}");
-            std::process::exit(exit::OPERATIONAL);
+            eprint!("{error}");
+            std::process::exit(exit::USAGE);
         }
     };
     let code = match cli.command {
@@ -167,6 +217,7 @@ fn main() {
             mask,
             prompt,
             config,
+            workspace,
             projection,
             strict,
         } => {
@@ -181,6 +232,7 @@ fn main() {
                 mask,
                 prompt,
                 config,
+                workspace,
                 projection: projection.map(Into::into),
                 strict,
             };
@@ -213,6 +265,27 @@ fn main() {
                 }
                 Err(error) => {
                     eprintln!("rascal run: {error}");
+                    exit::code_for(&error)
+                }
+            }
+        }
+        Command::Workspace { command } => {
+            let result = match command {
+                WorkspaceCommand::List {
+                    dir,
+                    type_filter,
+                    json,
+                } => workspace_cmd::list(&dir, type_filter.as_deref(), json),
+                WorkspaceCommand::Import {
+                    dir,
+                    image,
+                    projection,
+                } => workspace_cmd::import(&dir, &image, projection.map(Into::into)),
+            };
+            match result {
+                Ok(()) => exit::OK,
+                Err(error) => {
+                    eprintln!("rascal workspace: {error}");
                     exit::code_for(&error)
                 }
             }

@@ -4,7 +4,6 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use image::DynamicImage;
 use rascal_core::artifact::{Artifact, ArtifactType};
@@ -263,27 +262,25 @@ fn resolved_defaults_and_the_constant_set_appear_in_the_journal() {
     let dir = std::env::temp_dir().join(format!("rascal-recipe-journal-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let mut run = Run::open(&dir).unwrap();
-    run.frames.insert(frame.clone());
+    let run = Run::open(&dir).unwrap();
     let pixels = DynamicImage::ImageRgb8(rascal_testkit::images::flat(40, 30, 90));
-    let mut inputs = BTreeMap::new();
-    inputs.insert(
-        "image".to_string(),
-        Artifact::Image(Arc::new(Image::new(
-            "i",
-            pixels,
+    let (_, artifact) = run
+        .workspace
+        .add_canonical(
+            Image::new("i", pixels, &frame, Role::Canonical, None),
             &frame,
-            Role::Canonical,
-            None,
-        ))),
-    );
+            "flat",
+        )
+        .unwrap();
+    let mut inputs = BTreeMap::new();
+    inputs.insert("image".to_string(), artifact);
     let location = Location::bbox(&frame.id, [0.1, 0.1, 0.5, 0.5]).unwrap();
     let identity = location.identity(&frame.identity);
     inputs.insert(
         "location".to_string(),
         Artifact::Location { location, identity },
     );
-    let outcome = recipe.run(&registry, inputs, &mut run).unwrap();
+    let outcome = recipe.run(&registry, inputs, &run).unwrap();
     assert_eq!(outcome.status, rascal_core::op::Status::Ok);
     let lines = rascal_core::journal::Journal::read(&dir.join("journal.jsonl")).unwrap();
     let by_step = |id: &str| {

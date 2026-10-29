@@ -27,7 +27,7 @@ with green CI on both platforms, and then the tag.
 - [x] 1.4 Op contracts
 - [x] 1.5 Renderings and the `render` op
 - [x] 1.6 Recipes with typed bindings
-- [ ] 1.7a Workspace generations and the commit protocol
+- [x] 1.7a Workspace generations and the commit protocol
 - [ ] 1.7b Repair, recovery and the journal projection
 - [ ] 1.8a Primitives, `cut`/`put` and the Plan
 - [ ] 1.8b `line`, `stroke` and the full `rasterize`

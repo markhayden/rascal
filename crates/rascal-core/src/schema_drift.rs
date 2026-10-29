@@ -91,6 +91,8 @@ pub fn inventory() -> Vec<BoundaryType> {
     use crate::profile::BandProfile;
     use crate::recipe::Recipe;
     use crate::series::Series;
+    use crate::workspace::record::OperationRecord;
+    use crate::workspace::registry::Generation;
     vec![
         boundary_type!(
             Frame,
@@ -138,6 +140,18 @@ pub fn inventory() -> Vec<BoundaryType> {
             "rascal/config-v1.json",
             Source::Generated,
             ["config-v1/minimal.json", "config-v1/full.json"]
+        ),
+        boundary_type!(
+            Generation,
+            "rascal/generation-v1.json",
+            Source::Generated,
+            ["generation-v1/after-rect.json"]
+        ),
+        boundary_type!(
+            OperationRecord,
+            "rascal/operation-v1.json",
+            Source::Generated,
+            ["operation-v1/rasterize.json"]
         ),
         BoundaryType {
             // A step's parameters are the op's own keys, so Step is open on purpose.
@@ -205,6 +219,8 @@ pub const COMPONENTS: &[&str] = &[
     "RenderOut",
     "Outputs",
     "Step",
+    "ArtifactEntry",
+    "LocationEntry",
     "Refinement",
     "ParamKind",
     "CostTier",

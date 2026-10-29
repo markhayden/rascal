@@ -9,13 +9,13 @@ use rascal_core::Error;
 use rascal_core::artifact::Artifact;
 use rascal_core::error::Result;
 use rascal_core::frame::Projection;
-use rascal_core::image::Image;
 use rascal_core::location::Location;
 use rascal_core::mask::Mask;
 use rascal_core::op::Status;
 use rascal_core::outdir::{self, OutKind};
 use rascal_core::recipe::{Recipe, Run};
 use rascal_core::registry::OpRegistry;
+use rascal_core::workspace::Workspace;
 
 /// The recipes embedded in the binary, by name.
 const SHIPPED: &[(&str, &str)] = &[("rect", include_str!("../recipes/rect.toml"))];
@@ -48,6 +48,7 @@ pub struct RunArgs {
     pub mask: Option<PathBuf>,
     pub prompt: Option<String>,
     pub config: Option<PathBuf>,
+    pub workspace: Option<PathBuf>,
     pub projection: Option<Projection>,
     pub strict: bool,
 }
@@ -114,39 +115,31 @@ pub fn run(registry: &OpRegistry, args: &RunArgs) -> Result<RunReport> {
         ));
     }
     let out = outdir::prepare(&args.out, OutKind::RunDir)?;
-    let mut run = Run::open(&out)?;
+    let run = match &args.workspace {
+        Some(dir) => Run::open_in(&out, Arc::new(Workspace::open(dir)?))?,
+        None => Run::open(&out)?,
+    };
 
-    let (image, frame, assumed) =
-        Image::import(&args.image, args.projection.or(recipe.projection))?;
-    if assumed {
-        run.note(format!(
-            "projection assumed equirectangular: {} is exactly 2:1 and --projection was not given",
-            args.image.display()
-        ))?;
-    }
-    let frame = run.frames.insert(frame).clone();
+    let (_, frame, image) = run
+        .workspace
+        .import(&args.image, args.projection.or(recipe.projection))?;
     let mut inputs: BTreeMap<String, Artifact> = BTreeMap::new();
-    inputs.insert("image".to_string(), Artifact::Image(Arc::new(image)));
+    inputs.insert("image".to_string(), image);
     if let Some(bbox) = bbox {
         let location = Location::bbox(&frame.id, bbox)?;
         location.validate(&frame)?;
-        let identity = location.identity(&frame.identity);
-        inputs.insert(
-            "location".to_string(),
-            Artifact::Location { location, identity },
-        );
+        let (_, artifact) = run.workspace.add_location(location)?;
+        inputs.insert("location".to_string(), artifact);
     }
     if let Some(path) = &args.location {
-        inputs.insert(
-            "location".to_string(),
-            location_from_file(path, &frame, None)?,
-        );
+        let location = location_from_file(path, &frame, None)?;
+        let (_, artifact) = run.workspace.add_location(location)?;
+        inputs.insert("location".to_string(), artifact);
     }
     if let Some(path) = &args.stroke {
-        inputs.insert(
-            "stroke".to_string(),
-            location_from_file(path, &frame, Some("stroke"))?,
-        );
+        let location = location_from_file(path, &frame, Some("stroke"))?;
+        let (_, artifact) = run.workspace.add_location(location)?;
+        inputs.insert("stroke".to_string(), artifact);
     }
     for (name, path) in [("protect", &args.protect), ("mask", &args.mask)] {
         if let Some(path) = path {
@@ -163,9 +156,9 @@ pub fn run(registry: &OpRegistry, args: &RunArgs) -> Result<RunReport> {
         }
     }
 
-    let outcome = recipe.run(registry, inputs, &mut run)?;
+    let outcome = recipe.run(registry, inputs, &run)?;
     let mask_dir = match outcome.outputs.get("mask") {
-        Some(Artifact::Mask(mask)) => Some(mask.path_in(&out.join("artifacts"))),
+        Some(Artifact::Mask(mask)) => Some(mask.path_in(&run.workspace.root.join("artifacts"))),
         _ => None,
     };
     Ok(RunReport {
@@ -183,7 +176,7 @@ fn location_from_file(
     path: &Path,
     frame: &rascal_core::frame::Frame,
     kind: Option<&str>,
-) -> Result<Artifact> {
+) -> Result<Location> {
     let text = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
     let mut value: serde_json::Value =
         serde_json::from_str(&text).map_err(|source| Error::Json {
@@ -220,6 +213,5 @@ fn location_from_file(
             location.kind()
         )));
     }
-    let identity = location.identity(&frame.identity);
-    Ok(Artifact::Location { location, identity })
+    Ok(location)
 }
