@@ -570,3 +570,118 @@ fn ramp_then_apply_meets_the_sides_of_the_step_sky_canvas_at_the_line() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Task 2.4's CLI scenario: `rascal window --image img --mask m --max_side 1024` on the
+/// full-height band returns a full-height window with context only sideways; with
+/// `--max_side 100` on a wide band it is not applicable naming the sizes.
+#[test]
+fn window_on_a_full_height_band_is_full_height_and_a_small_max_side_is_not_applicable() {
+    let dir = scratch("window");
+    let ws = dir.join("ws");
+    let sky = repo_root().join("fixtures/images/step-sky.png");
+    let out = rascal(&[
+        "workspace",
+        "import",
+        ws.to_str().unwrap(),
+        sky.to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let port = |out: &std::process::Output, name: &str| -> String {
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .find_map(|l| {
+                l.strip_prefix(&format!("{name}: "))
+                    .map(|r| r.split_whitespace().next().unwrap().to_string())
+            })
+            .unwrap_or_else(|| panic!("no {name} in {}", String::from_utf8_lossy(&out.stdout)))
+    };
+    let w = ws.to_str().unwrap();
+    let out = rascal(&[
+        "line",
+        "--workspace",
+        w,
+        "--image",
+        "img-1",
+        "--column",
+        "0.5",
+        "--width_px",
+        "2",
+    ]);
+    let line_id = port(&out, "location");
+    let out = rascal(&[
+        "fan",
+        "--workspace",
+        w,
+        "--image",
+        "img-1",
+        "--line",
+        &line_id,
+    ]);
+    let band_id = port(&out, "band");
+    let out = rascal(&["profile", "--workspace", w, "--band", &band_id]);
+    let mask_id = port(&out, "mask");
+    let out = rascal(&[
+        "window",
+        "--workspace",
+        w,
+        "--image",
+        "img-1",
+        "--mask",
+        &mask_id,
+        "--max_side",
+        "1024",
+        "--json",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    let json = &stdout[stdout.find('{').unwrap()..=stdout.rfind('}').unwrap()];
+    let envelope: serde_json::Value = serde_json::from_str(json).unwrap();
+    assert_eq!(envelope["status"], "ok");
+    let summary = envelope["summary"].as_str().unwrap();
+    // The band and its feather span the full 300 px height and most of the width, so the
+    // window is full height and, with context sideways, capped to the whole 400 px width.
+    assert!(
+        summary.contains("[0, 0, 400, 300)") && summary.contains("into crop:1"),
+        "{summary}"
+    );
+    let crop_image = port(&out, "image");
+    let out = rascal(&["workspace", "list", w, "--type", "Image", "--json"]);
+    let rows: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(
+        rows.iter().find(|r| r["id"] == crop_image).unwrap()["frame"],
+        "crop:1"
+    );
+    let out = rascal(&["workspace", "list", w, "--type", "Frame"]);
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("crop:1"),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    // A max_side under the support's height: not applicable, naming both sizes.
+    let out = rascal(&[
+        "window",
+        "--workspace",
+        w,
+        "--image",
+        "img-1",
+        "--mask",
+        &mask_id,
+        "--max_side",
+        "100",
+    ]);
+    assert_eq!(out.status.code(), Some(0));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("not_applicable") && err.contains("x300") && err.contains("max_side is 100"),
+        "{err}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

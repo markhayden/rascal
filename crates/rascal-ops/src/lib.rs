@@ -18,6 +18,8 @@ pub mod rasterize;
 pub mod rect;
 pub mod render;
 pub mod stroke;
+pub mod unwindow;
+pub mod window;
 
 use rascal_core::registry::OpRegistry;
 
@@ -36,6 +38,8 @@ pub fn register_all(registry: &mut OpRegistry) -> rascal_core::error::Result<()>
     registry.register(Box::new(feather::Feather))?;
     registry.register(Box::new(ramp::Ramp))?;
     registry.register(Box::new(apply::Apply))?;
+    registry.register(Box::new(window::Window))?;
+    registry.register(Box::new(unwindow::Unwindow))?;
     Ok(())
 }
 

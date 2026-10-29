@@ -39,7 +39,7 @@ with green CI on both platforms, and then the tag.
 - [x] 2.1 `fan` and the band profile
 - [x] 2.2 `profile` and `feather`
 - [x] 2.3 `ramp` and `apply`
-- [ ] 2.4 `window` and `unwindow`
+- [x] 2.4 `window` and `unwindow`
 - [ ] 2.5 `paste` (feather and hard)
 - [ ] 2.6 `measure` v1
 - [ ] 2.7 Fillers and the fake fillers
