@@ -109,13 +109,17 @@ pub fn op_commands(registry: &OpRegistry, reserved: &[&str]) -> Vec<Command> {
                     port.artifact_type,
                     if port.required { ", required" } else { "" }
                 );
-                command = command.arg(
-                    Arg::new(format!("port:{}", port.name))
-                        .long(port.name.clone())
-                        .value_name("ID")
-                        .required(port.required)
-                        .help(help),
-                );
+                let mut arg = Arg::new(format!("port:{}", port.name))
+                    .long(port.name.clone())
+                    .value_name("ID")
+                    .required(port.required);
+                arg = if port.many {
+                    arg.action(ArgAction::Append)
+                        .help(format!("{help}; repeat for each instance, in order"))
+                } else {
+                    arg.help(help)
+                };
+                command = command.arg(arg);
             }
             for param in &m.params {
                 let help = format!(
@@ -192,7 +196,19 @@ fn run_op_inner(registry: &OpRegistry, name: &str, matches: &ArgMatches) -> Resu
     let ws = Workspace::open(dir)?;
     let mut inputs: Inputs = BTreeMap::new();
     for port in &manifest.inputs {
-        if let Some(id) = matches.get_one::<String>(&format!("port:{}", port.name)) {
+        let given: Vec<String> = if port.many {
+            matches
+                .get_many::<String>(&format!("port:{}", port.name))
+                .map(|v| v.cloned().collect())
+                .unwrap_or_default()
+        } else {
+            matches
+                .get_one::<String>(&format!("port:{}", port.name))
+                .cloned()
+                .into_iter()
+                .collect()
+        };
+        for (n, id) in given.iter().enumerate() {
             let path = Path::new(id);
             let artifact = if port.artifact_type == ArtifactType::Image && path.is_file() {
                 // A path names an image to import first; the import is journaled like any other.
@@ -210,7 +226,12 @@ fn run_op_inner(registry: &OpRegistry, name: &str, matches: &ArgMatches) -> Resu
             } else {
                 ws.load(id)?
             };
-            inputs.insert(port.name.clone(), artifact);
+            let name = if port.many {
+                port.nth(n)
+            } else {
+                port.name.clone()
+            };
+            inputs.insert(name, artifact);
         }
     }
     let mut params = Params::new();
@@ -340,6 +361,37 @@ fn parse_param(kind: ParamKind, text: &str) -> Result<toml::Value> {
                         .parse::<f64>()
                         .map(toml::Value::Float)
                         .map_err(|_| bad("a list of numbers"))
+                })
+                .collect::<Result<_>>()?,
+        ),
+        ParamKind::IntegerList => toml::Value::Array(
+            text.split(',')
+                .filter(|p| !p.trim().is_empty())
+                .map(|p| {
+                    p.trim()
+                        .parse::<i64>()
+                        .map(toml::Value::Integer)
+                        .map_err(|_| bad("a list of integers separated by ','"))
+                })
+                .collect::<Result<_>>()?,
+        ),
+        ParamKind::BoxList => toml::Value::Array(
+            text.split(';')
+                .filter(|b| !b.trim().is_empty())
+                .map(|b| {
+                    let items: Vec<toml::Value> = b
+                        .split(',')
+                        .map(|p| {
+                            p.trim()
+                                .parse::<f64>()
+                                .map(toml::Value::Float)
+                                .map_err(|_| bad("a list of x0,y0,x1,y1 boxes separated by ';'"))
+                        })
+                        .collect::<Result<_>>()?;
+                    if items.len() != 4 {
+                        return Err(bad("a list of x0,y0,x1,y1 boxes separated by ';'"));
+                    }
+                    Ok(toml::Value::Array(items))
                 })
                 .collect::<Result<_>>()?,
         ),

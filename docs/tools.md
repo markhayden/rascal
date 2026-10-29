@@ -13,7 +13,7 @@ catalogue; `rascal ops describe <op> [--json]` prints one manifest as a client s
 | `purpose`, `when_to_use`, `when_not_to_use`, `output_guidance` | the four sentences an agent reads before calling |
 | `cost` | `tier` (cheap, moderate, expensive) and rough `seconds` per call |
 | `inputs`, `outputs` | typed ports: name, artifact type (`Image`, `Location`, `Mask`, `BandProfile`, `Series`, `Plan`), required, purpose; an output port may be `many`: it takes any number of artifacts named `<port>_0`, `<port>_1`, … (a finder's instances), and required then means at least one |
-| `params` | each with a kind (number, integer, boolean, string, number array, choice), required or a default, bounds, length or choices |
+| `params` | each with a kind (number, integer, boolean, string, number array, point list, integer list, box list, choice), required or a default, bounds, length or choices |
 | `returns` | bounds on the envelope: images, regions, measurements, transforms, summary bytes |
 | `input_schema`, `output_schema` | JSON Schemas derived from `params` and `outputs` |
 
@@ -70,6 +70,9 @@ before accepting it.
 | `inspect` | inspect | Mask, Image | the overlay (an inspection Image) and a Series of the core's width per row; `rascal inspect` adds `--json`, `--out` and `--replay` | 1.9 |
 | `grow` | refine | Mask; `px`, `down_px` | the same mask with its core dilated by a disc of radius `px` and, with `down_px`, unioned with itself shifted down by every row up to `down_px` (a shadow); cleared under protect; blend cleared, profile and prescriptions removed (`refinement` in the envelope) | 4.1 |
 | `shrink` | refine | Mask; `px` | the same mask with its core eroded by a disc of radius `px`, cleared under protect; not applicable when nothing survives; blend cleared, profile and prescriptions removed | 4.1 |
+| `subtract` | refine | Mask, Mask (`subtract`) or Location; `grow_px` | the same mask with protect enlarged by the second mask's support (core or blend) or the location's interior, dilated by `grow_px`; core and blend cleared there; the profile and prescriptions kept, since `apply` honours protect; exactly one of the two second inputs | 4.2 |
+| `select` | refine | Image[] (`plane`, the instance planes of a finder, a `many` port); `keep`, `drop`, `exclude` | a new Mask in the planes' frame: the union of the kept instances (`keep` names them, else all but `drop`), cleared inside every `exclude` box; blend and protect empty; not applicable when nothing is left | 4.2 |
+| `invert` | refine | Mask; `to` | a new Mask in the target frame (`to`: a frame id on the mask's chain, or `raw` for its root, the default): protect = the old support and protect mapped through the chain (a `cut:` mask lands on the two edge spans, a `crop:` mask on its bbox), core = every other pixel, blend empty | 4.2 |
 | `close` | refine | Mask; `radius_px` | the same mask with its core closed (dilated then eroded) by a disc of `radius_px`, so gaps and notches narrower than the disc fill; cleared under protect; blend cleared, profile and prescriptions removed | 4.1 |
 
 The pixel primitives every op is built from live in `rascal_ops::primitives`: row smoothing
@@ -81,14 +84,17 @@ An op subcommand's image port takes a workspace id or a path (a path is imported
 port takes an id or a mask directory, and `--out <file>` also writes a lone image output as a
 PNG.
 
-A point-list parameter is written `[[x, y], …]` in a recipe and `x,y;x,y` on the command line.
+A point-list parameter is written `[[x, y], …]` in a recipe and `x,y;x,y` on the command
+line; an integer list `[0, 2]` and `0,2`; a box list `[[x0, y0, x1, y1], …]` and
+`x0,y0,x1,y1;…`. A `many` input port (`select`'s `plane`) takes `plane_0`, `plane_1`, … in a
+recipe through one binding, `plane = "<step>.plane"`, which expands to every instance the step
+produced; on the command line `--plane` is repeated, in order; over MCP it is an array of ids.
 
 `scripts/check-docs.sh` (part of `just check`) reads the catalogue, the render profiles and the run-page panels from
 the binary and fails when an op or profile is missing from these pages, or when a documented
 name no longer exists.
 
-The remaining ops arrive with their tasks (PLAN.md): `subtract`, `select`, `invert`,
-`tighten` in M4; `segment` from the Python pack in M5 (the client that runs
+The remaining ops arrive with their tasks (PLAN.md): `tighten` in M4; `segment` from the Python pack in M5 (the client that runs
 it, and a fake pack that serves it, are below).
 
 ## The server

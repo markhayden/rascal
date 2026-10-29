@@ -22,8 +22,9 @@ and what a replayed run does about pack calls it cannot make.
 - **Many ports.** An output `Port` may be `many`: its artifacts are `<port>_0`, `<port>_1`, …
   and required means at least one. The derived output schema names them as
   `patternProperties`. A pack tool's regions land on its many `Location` port and its images on
-  its many `Image` port, in order; a single port of the type takes exactly one. Input ports are
-  never many in v1; `select` (M4) will bind a many output by prefix.
+  its many `Image` port, in order; a single port of the type takes exactly one. A many input
+  port (`select`'s planes, M4) binds a many output by prefix: `plane = "segment.plane"` in a
+  recipe expands to every `segment.plane_<n>`.
 - **Replay never calls.** At startup the listing is journaled (`pack manifest:`), and each
   successful call journals its request identity (`sha256` over pack, tool, arguments and input
   identities), envelope and outputs (`pack stored:`). Under `--replay`, a pack is constructed

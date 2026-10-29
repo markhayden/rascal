@@ -224,7 +224,28 @@ impl Recipe {
         }
         let index = self.step[..upto].iter().position(|s| s.id == source)?;
         let manifest = registry.get(&self.step[index].op)?.manifest();
-        manifest.output(name).map(|p| p.artifact_type)
+        manifest
+            .output(name)
+            .or_else(|| manifest.outputs.iter().find(|p| p.many && p.name == name))
+            .map(|p| p.artifact_type)
+    }
+
+    /// Whether a binding names a many output port as a whole (`<step>.<port>`), which only a
+    /// many input may take.
+    fn binding_is_many(&self, binding: &str, upto: usize, registry: &OpRegistry) -> bool {
+        let Some((source, name)) = binding.split_once('.') else {
+            return false;
+        };
+        if source == "inputs" {
+            return false;
+        }
+        let Some(index) = self.step[..upto].iter().position(|s| s.id == source) else {
+            return false;
+        };
+        registry
+            .get(&self.step[index].op)
+            .map(|op| op.manifest())
+            .is_some_and(|m| m.outputs.iter().any(|p| p.many && p.name == name))
     }
 
     /// Checks the recipe against the registry: every op known, every step id unique, every
@@ -255,9 +276,14 @@ impl Recipe {
                 .ok_or_else(|| self.fail(&step.id, format!("unknown op {}", step.op)))?;
             let manifest = op.manifest();
             for (port, binding) in &step.inputs {
-                let declared = manifest.input(port).ok_or_else(|| {
-                    self.fail(&step.id, format!("op {} has no input {port}", step.op))
-                })?;
+                // A step names a port by its bare name, a many port included.
+                let declared = manifest
+                    .inputs
+                    .iter()
+                    .find(|p| &p.name == port)
+                    .ok_or_else(|| {
+                        self.fail(&step.id, format!("op {} has no input {port}", step.op))
+                    })?;
                 let bound = self
                     .binding_type(binding, index, registry)
                     .ok_or_else(|| self.fail(&step.id, format!("input {port} is bound to {binding}, which is not an earlier step's output or a declared input")))?;
@@ -268,6 +294,21 @@ impl Recipe {
                             "input {port} must be a {}, but {binding} is a {bound}",
                             declared.artifact_type
                         ),
+                    ));
+                }
+                let many_binding = self.binding_is_many(binding, index, registry);
+                if declared.many != many_binding {
+                    return Err(self.fail(
+                        &step.id,
+                        if declared.many {
+                            format!(
+                                "input {port} takes every artifact of a many output: bind it as <step>.<port>, not {binding}"
+                            )
+                        } else {
+                            format!(
+                                "input {port} takes one artifact, but {binding} is a many output: bind one of its <port>_<n>"
+                            )
+                        },
                     ));
                 }
             }
@@ -545,6 +586,23 @@ impl Recipe {
             let mut step_inputs: Inputs = BTreeMap::new();
             let mut blocked: Option<String> = None;
             for (port, binding) in &step.inputs {
+                // A many input binds every `<binding>_<n>` of an earlier step's many output,
+                // renamed to `<port>_<n>`.
+                let expanded: Vec<(String, Artifact)> = bindings
+                    .iter()
+                    .filter_map(|(name, a)| {
+                        let n: usize = name
+                            .strip_prefix(binding)?
+                            .strip_prefix('_')?
+                            .parse()
+                            .ok()?;
+                        Some((format!("{port}_{n}"), a.clone()))
+                    })
+                    .collect();
+                if !expanded.is_empty() && !bindings.contains_key(binding) {
+                    step_inputs.extend(expanded);
+                    continue;
+                }
                 match bindings.get(binding) {
                     Some(a) => {
                         step_inputs.insert(port.clone(), a.clone());

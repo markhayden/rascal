@@ -189,6 +189,16 @@
           "const": "point_list",
           "description": "Two or more `[x, y]` points as fractions of the frame.",
           "type": "string"
+        },
+        {
+          "const": "integer_list",
+          "description": "Any number of non-negative integers (indices); may be empty.",
+          "type": "string"
+        },
+        {
+          "const": "box_list",
+          "description": "Any number of `[x0, y0, x1, y1]` boxes as fractions of the frame; may be empty.",
+          "type": "string"
         }
       ]
     },
@@ -200,7 +210,7 @@
           "$ref": "#/$defs/ArtifactType"
         },
         "many": {
-          "description": "An output port that takes any number of artifacts, named `<port>_<n>` from 0 (a\nfinder's instances); required means at least one. Never an input port in v1.",
+          "description": "A port that takes any number of artifacts, named `<port>_<n>` from 0 (a finder's\ninstances); required means at least one. An output port of a finder, an input port of\nan op over instances (`select`); a recipe binds a many input as `<port> = \"<step>.<port>\"`.",
           "type": "boolean"
         },
         "name": {

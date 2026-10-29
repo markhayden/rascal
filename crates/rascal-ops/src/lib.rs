@@ -11,6 +11,7 @@ pub mod fan;
 pub mod feather;
 pub mod grow;
 pub mod inspect;
+pub mod invert;
 pub mod line;
 pub mod measure;
 pub mod paste;
@@ -22,8 +23,10 @@ pub mod rasterize;
 pub mod rect;
 pub(crate) mod refine;
 pub mod render;
+pub mod select;
 pub mod shrink;
 pub mod stroke;
+pub mod subtract;
 pub mod unwindow;
 pub mod window;
 
@@ -51,6 +54,9 @@ pub fn register_all(registry: &mut OpRegistry) -> rascal_core::error::Result<()>
     registry.register(Box::new(grow::Grow))?;
     registry.register(Box::new(shrink::Shrink))?;
     registry.register(Box::new(close::Close))?;
+    registry.register(Box::new(subtract::Subtract))?;
+    registry.register(Box::new(select::Select))?;
+    registry.register(Box::new(invert::Invert))?;
     Ok(())
 }
 
@@ -96,6 +102,34 @@ pub(crate) fn float(params: &toml::Table, name: &str) -> Option<f64> {
     params
         .get(name)
         .and_then(|v| v.as_float().or_else(|| v.as_integer().map(|i| i as f64)))
+}
+
+/// Reads an integer-list parameter; absent is empty.
+pub(crate) fn integers(params: &toml::Table, name: &str) -> Vec<i64> {
+    params
+        .get(name)
+        .and_then(|v| v.as_array())
+        .map(|items| items.iter().filter_map(|i| i.as_integer()).collect())
+        .unwrap_or_default()
+}
+
+/// Reads a box-list parameter; absent is empty.
+pub(crate) fn boxes(params: &toml::Table, name: &str) -> Vec<[f64; 4]> {
+    params
+        .get(name)
+        .and_then(|v| v.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|b| {
+                    let a = b.as_array()?;
+                    let n =
+                        |v: &toml::Value| v.as_float().or_else(|| v.as_integer().map(|i| i as f64));
+                    Some([n(a.first()?)?, n(a.get(1)?)?, n(a.get(2)?)?, n(a.get(3)?)?])
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Reads a parameter as a float array of fixed length.

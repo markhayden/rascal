@@ -23,8 +23,9 @@ pub struct Port {
     pub required: bool,
     /// What the port is for.
     pub purpose: String,
-    /// An output port that takes any number of artifacts, named `<port>_<n>` from 0 (a
-    /// finder's instances); required means at least one. Never an input port in v1.
+    /// A port that takes any number of artifacts, named `<port>_<n>` from 0 (a finder's
+    /// instances); required means at least one. An output port of a finder, an input port of
+    /// an op over instances (`select`); a recipe binds a many input as `<port> = "<step>.<port>"`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub many: bool,
 }
@@ -63,6 +64,10 @@ pub enum ParamKind {
     Choice,
     /// Two or more `[x, y]` points as fractions of the frame.
     PointList,
+    /// Any number of non-negative integers (indices); may be empty.
+    IntegerList,
+    /// Any number of `[x0, y0, x1, y1]` boxes as fractions of the frame; may be empty.
+    BoxList,
 }
 
 /// A parameter an op accepts in a recipe step or on the command line.
@@ -196,6 +201,20 @@ impl Param {
                     serde_json::json!({ "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 }),
                 );
             }
+            ParamKind::IntegerList => {
+                schema.insert("type".into(), "array".into());
+                schema.insert(
+                    "items".into(),
+                    serde_json::json!({ "type": "integer", "minimum": 0 }),
+                );
+            }
+            ParamKind::BoxList => {
+                schema.insert("type".into(), "array".into());
+                schema.insert(
+                    "items".into(),
+                    serde_json::json!({ "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }),
+                );
+            }
         }
         if let Some(default) = &self.default {
             schema.insert("default".into(), default.clone());
@@ -216,6 +235,17 @@ impl Param {
             (ParamKind::NumberArray, toml::Value::Array(items)) => {
                 toml::Value::Array(items.iter().map(to_float).collect())
             }
+            (ParamKind::BoxList, toml::Value::Array(boxes)) => toml::Value::Array(
+                boxes
+                    .iter()
+                    .map(|b| match b {
+                        toml::Value::Array(items) => {
+                            toml::Value::Array(items.iter().map(to_float).collect())
+                        }
+                        other => other.clone(),
+                    })
+                    .collect(),
+            ),
             _ => value.clone(),
         }
     }
@@ -284,6 +314,46 @@ impl Param {
                         "{name} must be one of {}, got {s}",
                         self.choices.join(", ")
                     ));
+                }
+            }
+            ParamKind::IntegerList => {
+                let items = value
+                    .as_array()
+                    .ok_or_else(|| format!("{name} must be a list of integers"))?;
+                for item in items {
+                    let i = item
+                        .as_integer()
+                        .ok_or_else(|| format!("{name} must be a list of integers"))?;
+                    if i < 0 {
+                        return Err(format!("{name} must hold non-negative integers, got {i}"));
+                    }
+                }
+            }
+            ParamKind::BoxList => {
+                let boxes = value
+                    .as_array()
+                    .ok_or_else(|| format!("{name} must be a list of [x0, y0, x1, y1] boxes"))?;
+                for b in boxes {
+                    let items = b.as_array().filter(|a| a.len() == 4).ok_or_else(|| {
+                        format!("{name} must be a list of [x0, y0, x1, y1] boxes")
+                    })?;
+                    let mut v = [0.0; 4];
+                    for (slot, item) in v.iter_mut().zip(items) {
+                        let n = item
+                            .as_float()
+                            .or_else(|| item.as_integer().map(|i| i as f64))
+                            .ok_or_else(|| format!("{name} must hold numbers"))?;
+                        if !n.is_finite() {
+                            return Err(format!("{name} must hold finite numbers"));
+                        }
+                        *slot = n;
+                    }
+                    if !(v[0] < v[2] && v[1] < v[3]) {
+                        return Err(format!(
+                            "{name}: a box needs x0 < x1 and y0 < y1, got {},{},{},{}",
+                            v[0], v[1], v[2], v[3]
+                        ));
+                    }
                 }
             }
             ParamKind::PointList => {
@@ -517,9 +587,16 @@ impl Manifest {
         schema
     }
 
-    /// The declared input port.
+    /// The declared input port: by name, or for a many port by `<port>_<n>`.
     pub fn input(&self, name: &str) -> Option<&Port> {
-        self.inputs.iter().find(|p| p.name == name)
+        self.inputs
+            .iter()
+            .find(|p| p.name == name && !p.many)
+            .or_else(|| {
+                self.inputs
+                    .iter()
+                    .find(|p| p.many && p.index_of(name).is_some())
+            })
     }
 
     /// The declared output port: by name, or for a many port by `<port>_<n>`.
@@ -583,12 +660,6 @@ impl Manifest {
         for port in &self.inputs {
             if !seen.insert(port.name.as_str()) {
                 return Err(format!("{name}: input {} is declared twice", port.name));
-            }
-            if port.many {
-                return Err(format!(
-                    "{name}: input {} is many; only an output may be",
-                    port.name
-                ));
             }
         }
         seen.clear();
@@ -1060,7 +1131,31 @@ fn regex_escape(name: &str) -> String {
 /// declared type (a rendering is an `Image` and is never a `Mask`), no unknown port, and every
 /// mask and image in the same invocation in the mask's frame.
 pub fn validate_inputs(manifest: &Manifest, inputs: &Inputs) -> Result<()> {
-    for port in &manifest.inputs {
+    for port in manifest.inputs.iter().filter(|p| p.many) {
+        if port.required && !inputs.contains_key(&port.nth(0)) {
+            return Err(Error::usage_for(
+                &manifest.name,
+                format!(
+                    "input {} needs at least one artifact ({})",
+                    port.name,
+                    port.nth(0)
+                ),
+            ));
+        }
+        for (name, artifact) in inputs {
+            if port.index_of(name).is_some() && artifact.artifact_type() != port.artifact_type {
+                return Err(Error::usage_for(
+                    &manifest.name,
+                    format!(
+                        "input {name} must be a {}, got a {}",
+                        port.artifact_type,
+                        artifact.artifact_type()
+                    ),
+                ));
+            }
+        }
+    }
+    for port in manifest.inputs.iter().filter(|p| !p.many) {
         match inputs.get(&port.name) {
             Some(artifact) if artifact.artifact_type() != port.artifact_type => {
                 let role = match artifact {

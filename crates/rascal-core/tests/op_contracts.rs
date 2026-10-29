@@ -898,8 +898,22 @@ fn many_output_ports_take_numbered_artifacts_and_require_at_least_one() {
         .insert("plane_x".into(), artifact("plane_x"));
     let e = envelope.check(&manifest).unwrap_err();
     assert!(e.contains("undeclared output plane_x"), "{e}");
-    // A many input port is refused at the manifest check.
-    let mut bad = manifest.clone();
-    bad.inputs[0].many = true;
-    assert!(bad.check().unwrap_err().contains("only an output may be"));
+    // A many input port: `plane_0`, `plane_1`, … bind to it; required means at least one.
+    let mut over_instances = manifest.clone();
+    over_instances.inputs[0] = Port {
+        name: "plane".to_string(),
+        artifact_type: ArtifactType::Image,
+        required: true,
+        purpose: "p".to_string(),
+        many: true,
+    };
+    over_instances.check().unwrap();
+    assert!(over_instances.input("plane_4").is_some());
+    assert!(over_instances.input("plane").is_none());
+    let e = rascal_core::op::validate_inputs(&over_instances, &Default::default()).unwrap_err();
+    assert!(
+        e.to_string()
+            .contains("needs at least one artifact (plane_0)"),
+        "{e}"
+    );
 }

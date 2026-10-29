@@ -80,7 +80,8 @@ not run and the run stops naming the requirement; `rascal run` exits 1 under `--
 without. A bad parameter value is `invalid_args` in the journal and exit 64.
 
 A recipe may call a configured pack's tool (`[packs.*]` in `--config`; `docs/tools.md` "The
-packs") as a step like any other; its `many` outputs bind as `<step>.<port>_<n>`. `--replay`
+packs") as a step like any other; its `many` outputs bind one at a time as `<step>.<port>_<n>`,
+or all at once to a `many` input (`select`'s `plane = "segment.plane"`). `--replay`
 names a recorded run: no pack is started and each pack step is answered from that run's journal
 when the request is the same, or fails naming the request.
 

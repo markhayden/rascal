@@ -285,10 +285,28 @@ impl Server {
                 let mut params: Params = Params::new();
                 for (key, value) in args {
                     if let Some(port) = manifest.inputs.iter().find(|p| &p.name == key) {
-                        let id = value.as_str().ok_or_else(|| {
-                            Error::usage(format!("{}: an artifact id (a string)", port.name))
-                        })?;
-                        inputs.insert(port.name.clone(), inner.workspace.load(id)?);
+                        if port.many {
+                            let ids = value.as_array().ok_or_else(|| {
+                                Error::usage(format!(
+                                    "{}: a list of artifact ids (strings)",
+                                    port.name
+                                ))
+                            })?;
+                            for (n, id) in ids.iter().enumerate() {
+                                let id = id.as_str().ok_or_else(|| {
+                                    Error::usage(format!(
+                                        "{}: an artifact id (a string)",
+                                        port.name
+                                    ))
+                                })?;
+                                inputs.insert(port.nth(n), inner.workspace.load(id)?);
+                            }
+                        } else {
+                            let id = value.as_str().ok_or_else(|| {
+                                Error::usage(format!("{}: an artifact id (a string)", port.name))
+                            })?;
+                            inputs.insert(port.name.clone(), inner.workspace.load(id)?);
+                        }
                     } else if key == "constants" {
                         let set = value.as_str().ok_or_else(|| {
                             Error::usage(format!("{op_name}: constants names a set (a string)"))
@@ -350,10 +368,18 @@ fn tool_schema(manifest: &rascal_core::op::Manifest) -> serde_json::Map<String, 
     for port in &manifest.inputs {
         properties.insert(
             port.name.clone(),
-            serde_json::json!({
-                "type": "string",
-                "description": format!("{} ({} artifact id)", port.purpose, port.artifact_type),
-            }),
+            if port.many {
+                serde_json::json!({
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": format!("{} ({} artifact ids, in order)", port.purpose, port.artifact_type),
+                })
+            } else {
+                serde_json::json!({
+                    "type": "string",
+                    "description": format!("{} ({} artifact id)", port.purpose, port.artifact_type),
+                })
+            },
         );
         if port.required {
             required.push(serde_json::Value::String(port.name.clone()));
@@ -435,6 +461,41 @@ fn json_param(param: &Param, value: &serde_json::Value) -> Result<toml::Value> {
                     v.as_f64()
                         .map(toml::Value::Float)
                         .ok_or_else(|| bad("an array of numbers"))
+                })
+                .collect::<Result<_>>()?,
+        ),
+        ParamKind::IntegerList => toml::Value::Array(
+            value
+                .as_array()
+                .ok_or_else(|| bad("a list of integers"))?
+                .iter()
+                .map(|v| {
+                    v.as_i64()
+                        .map(toml::Value::Integer)
+                        .ok_or_else(|| bad("a list of integers"))
+                })
+                .collect::<Result<_>>()?,
+        ),
+        ParamKind::BoxList => toml::Value::Array(
+            value
+                .as_array()
+                .ok_or_else(|| bad("a list of [x0, y0, x1, y1] boxes"))?
+                .iter()
+                .map(|b| {
+                    let items = b
+                        .as_array()
+                        .filter(|a| a.len() == 4)
+                        .ok_or_else(|| bad("a list of [x0, y0, x1, y1] boxes"))?;
+                    Ok(toml::Value::Array(
+                        items
+                            .iter()
+                            .map(|v| {
+                                v.as_f64()
+                                    .map(toml::Value::Float)
+                                    .ok_or_else(|| bad("a list of [x0, y0, x1, y1] boxes"))
+                            })
+                            .collect::<Result<_>>()?,
+                    ))
                 })
                 .collect::<Result<_>>()?,
         ),

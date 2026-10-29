@@ -189,11 +189,11 @@ fn a_listed_tool_becomes_a_native_manifest_or_is_refused_by_name() {
     huge["returns"]["max_images"] = serde_json::json!(1000);
     let e = PackTool::from_tool(&tool_with(meta(huge, Some(annotation()))), None).unwrap_err();
     assert!(e.to_string().contains("max_images 1000 is over"), "{e}");
-    // A many input port is refused.
+    // A many input port (a tool over instances) is accepted and looked up by `<port>_<n>`.
     let mut many_in = annotation();
     many_in["inputs"][0]["many"] = serde_json::json!(true);
-    let e = PackTool::from_tool(&tool_with(meta(compat(), Some(many_in))), None).unwrap_err();
-    assert!(e.to_string().contains("only an output may be"), "{e}");
+    let over = PackTool::from_tool(&tool_with(meta(compat(), Some(many_in))), None).unwrap();
+    assert!(over.manifest.input("image_2").is_some_and(|p| p.many));
     // Typed shapes agree with the compiled types.
     let _: CompatManifest = serde_json::from_value(compat()).unwrap();
     let _: PackAnnotation = serde_json::from_value(annotation()).unwrap();

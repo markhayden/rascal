@@ -58,7 +58,7 @@ with green CI on both platforms, and then the tag.
 
 ## M4 Refine
 - [x] 4.1 `grow`, `shrink`, `close`
-- [ ] 4.2 `subtract`, `select`, `invert`
+- [x] 4.2 `subtract`, `select`, `invert`
 - [ ] 4.3 `tighten`
 - [ ] 4.4 The `remove`, `repair`, `repair-area`, `protect` recipes and the acceptance script → tag `m4.1`
 - [ ] 4.5 The segmenter decision

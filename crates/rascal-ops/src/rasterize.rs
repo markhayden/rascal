@@ -95,55 +95,15 @@ impl Op for Rasterize {
                 Err(_) => return Ok(Output::invalid_args(format!("unknown use_case {text}"))),
             },
         };
-        let (width, height) = (frame.width, frame.height);
-        let core = match location {
-            Location::Bbox { bbox, .. } => {
-                let Some(rect) = bbox_pixels(*bbox, width, height) else {
-                    return Ok(Output::not_applicable(
-                        "the box covers no pixel of the frame",
-                    ));
-                };
-                let mut core = GrayImage::new(width, height);
-                for y in rect.1..rect.3 {
-                    for x in rect.0..rect.2 {
-                        core.put_pixel(x, y, image::Luma([255]));
-                    }
-                }
-                core
-            }
-            Location::WholeImage { .. } => GrayImage::from_pixel(width, height, image::Luma([255])),
-            Location::Polygon { polygon, .. } => fill_polygon(polygon, width, height),
-            Location::Line {
-                column: Some(c),
-                width_px,
-                ..
-            } => {
-                let centre = c * f64::from(width);
-                let half = width_px / 2.0;
-                GrayImage::from_fn(width, height, |x, _| {
-                    let d = (f64::from(x) + 0.5 - centre).abs();
-                    image::Luma([if d <= half { 255 } else { 0 }])
-                })
-            }
-            Location::Line {
-                path: Some(path),
-                width_px,
-                ..
-            } => dilate_path(path, width_px / 2.0, width, height),
-            Location::Line { .. } => {
-                return Ok(Output::invalid_args(
-                    "line: give exactly one of column and path",
-                ));
-            }
-            Location::Stroke {
-                path, radius_px, ..
-            } => dilate_path(path, *radius_px, width, height),
-            Location::View { .. } | Location::Absent { .. } => {
+        let core = match location_core(location, frame) {
+            Ok(Some(core)) => core,
+            Ok(None) => {
                 return Ok(Output::not_applicable(format!(
                     "a {} location has no interior to rasterize",
                     location.kind()
                 )));
             }
+            Err(reason) => return Ok(Output::invalid_args(reason)),
         };
         if core.pixels().all(|p| p[0] == 0) {
             return Ok(Output::not_applicable(format!(
@@ -167,6 +127,57 @@ impl Op for Rasterize {
             outputs,
         ))
     }
+}
+
+/// The binary plane a location covers in its frame, by the rules of the catalogue: a bbox and
+/// a polygon as drawn, `whole_image` everything, a column line as a band `width_px` wide, a
+/// path line dilated by `width_px / 2`, a stroke by `radius_px`. `Ok(None)` for a kind with no
+/// interior (`view`, `absent`); `Err` with the reason for a malformed line. A box that covers
+/// no pixel centre is an empty plane.
+pub fn location_core(
+    location: &Location,
+    frame: &rascal_core::frame::Frame,
+) -> std::result::Result<Option<GrayImage>, String> {
+    let (width, height) = (frame.width, frame.height);
+    Ok(Some(match location {
+        Location::Bbox { bbox, .. } => {
+            let mut core = GrayImage::new(width, height);
+            if let Some(rect) = bbox_pixels(*bbox, width, height) {
+                for y in rect.1..rect.3 {
+                    for x in rect.0..rect.2 {
+                        core.put_pixel(x, y, image::Luma([255]));
+                    }
+                }
+            }
+            core
+        }
+        Location::WholeImage { .. } => GrayImage::from_pixel(width, height, image::Luma([255])),
+        Location::Polygon { polygon, .. } => fill_polygon(polygon, width, height),
+        Location::Line {
+            column: Some(c),
+            width_px,
+            ..
+        } => {
+            let centre = c * f64::from(width);
+            let half = width_px / 2.0;
+            GrayImage::from_fn(width, height, |x, _| {
+                let d = (f64::from(x) + 0.5 - centre).abs();
+                image::Luma([if d <= half { 255 } else { 0 }])
+            })
+        }
+        Location::Line {
+            path: Some(path),
+            width_px,
+            ..
+        } => dilate_path(path, width_px / 2.0, width, height),
+        Location::Line { .. } => {
+            return Err("line: give exactly one of column and path".to_string());
+        }
+        Location::Stroke {
+            path, radius_px, ..
+        } => dilate_path(path, *radius_px, width, height),
+        Location::View { .. } | Location::Absent { .. } => return Ok(None),
+    }))
 }
 
 /// The integer pixel rectangle `[x0, x1) × [y0, y1)` a normalised box covers, clipped to the
