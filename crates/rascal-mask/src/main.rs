@@ -6,6 +6,8 @@ mod exit;
 mod export;
 mod heal;
 mod inspect;
+mod lab_run;
+use rascal_mask::lab;
 mod measure;
 mod ops;
 mod packs;
@@ -156,6 +158,16 @@ enum Command {
     Workspace {
         #[command(subcommand)]
         command: WorkspaceCommand,
+    },
+    /// The corpus: verify a manifest's files against their digests.
+    Corpus {
+        #[command(subcommand)]
+        command: CorpusCommand,
+    },
+    /// The lab: run a matrix of arms over corpus images, each cell healed once.
+    Lab {
+        #[command(subcommand)]
+        command: LabCommand,
     },
     /// The op catalogue: every manifest as a client sees it.
     Ops {
@@ -344,6 +356,59 @@ impl From<ProjectionArg> for Projection {
             ProjectionArg::Equirectangular => Projection::Equirectangular,
         }
     }
+}
+
+#[derive(Subcommand, Debug)]
+enum CorpusCommand {
+    /// Every image's file under the corpus root against its SHA-256; a missing or changed
+    /// file is reported by id and the command fails after the whole list.
+    Verify {
+        /// The corpus manifest (corpus.toml).
+        manifest: PathBuf,
+        /// The corpus root; default RASCAL_CORPUS, else ~/rascal/corpus.
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum LabCommand {
+    /// Run every cell of a matrix (one arm on one image) through heal; a cell already
+    /// complete in the lab directory is reused and makes no external call.
+    Run {
+        /// The matrix (matrix.toml); its corpus and protocol are beside it.
+        matrix: PathBuf,
+        /// The configuration file (rascal.toml) naming the fillers and packs.
+        #[arg(long)]
+        config: PathBuf,
+        /// The lab directory: new, or an earlier run of this lab to resume.
+        #[arg(long)]
+        out: PathBuf,
+        /// The corpus root; default RASCAL_CORPUS, else ~/rascal/corpus.
+        #[arg(long)]
+        corpus_root: Option<PathBuf>,
+        /// Add an attempt to every cell of this arm, keeping the earlier ones.
+        #[arg(long)]
+        redo: Option<String>,
+        /// Do not write the run page in each cell's run directory.
+        #[arg(long)]
+        no_dash: bool,
+    },
+    /// Write the blind pairs page for two arms: pairs/assignment.json and pairs/index.html.
+    Pairs {
+        /// The lab directory of a finished lab run.
+        lab: PathBuf,
+        /// The two arms compared, a,b; wins are a's.
+        #[arg(long)]
+        arms: String,
+    },
+    /// Decode a picks file the pairs page wrote: wins, losses and the outcome per group.
+    Decode {
+        /// The lab directory holding pairs/assignment.json.
+        lab: PathBuf,
+        /// The picks.json the page saved.
+        picks: PathBuf,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -657,6 +722,57 @@ fn main() {
         }
         #[cfg(feature = "testkit")]
         Command::FakePack { args } => rascal_testkit::fake_pack::main(&args),
+        Command::Corpus { command } => {
+            let result = match command {
+                CorpusCommand::Verify { manifest, root } => {
+                    lab::corpus_verify(&manifest, root.as_deref()).map(|()| exit::OK)
+                }
+            };
+            match result {
+                Ok(code) => code,
+                Err(error) => {
+                    eprintln!("rascal corpus: {error}");
+                    exit::code_for(&error)
+                }
+            }
+        }
+        Command::Lab { command } => {
+            let result = match command {
+                LabCommand::Run {
+                    matrix,
+                    config,
+                    out,
+                    corpus_root,
+                    redo,
+                    no_dash,
+                } => lab_run::lab_run(&lab_run::LabRunArgs {
+                    matrix,
+                    config,
+                    out,
+                    corpus_root,
+                    redo,
+                    no_dash,
+                })
+                .map(|_| exit::OK),
+                LabCommand::Pairs { lab, arms } => lab::pairs::pairs(&lab, &arms).map(|page| {
+                    println!("pairs: {}", page.display());
+                    exit::OK
+                }),
+                LabCommand::Decode { lab, picks } => {
+                    lab::pairs::decode(&lab, &picks).map(|decode| {
+                        lab::pairs::print_decode(&decode);
+                        exit::OK
+                    })
+                }
+            };
+            match result {
+                Ok(code) => code,
+                Err(error) => {
+                    eprintln!("rascal lab: {error}");
+                    exit::code_for(&error)
+                }
+            }
+        }
         Command::Workspace { command } => {
             let result = match command {
                 WorkspaceCommand::List {

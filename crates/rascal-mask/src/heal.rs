@@ -40,6 +40,8 @@ pub struct HealReport {
     pub stopped_at: Option<String>,
     pub reason: Option<String>,
     pub result: Option<PathBuf>,
+    /// The source image's canonical PNG in the workspace, when the heal completed.
+    pub source: Option<PathBuf>,
     pub dash: Option<PathBuf>,
     pub renders: Vec<(String, PathBuf)>,
 }
@@ -360,6 +362,7 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         stopped_at: None,
         reason: None,
         result: Some(result),
+        source: Some(run.workspace.image_path(&input_b)),
         dash,
         renders: outcome.renders,
     })
@@ -386,6 +389,7 @@ fn stopped(
         stopped_at,
         reason,
         result: None,
+        source: None,
         dash,
         renders,
     })

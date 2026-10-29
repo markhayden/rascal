@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rascal pairs</title>
+<style>
+  :root { --bg: #fbfaf8; --fg: #1f1d1a; --muted: #6b6560; --line: #e2ddd6; --accent: #b0158f; --card: #ffffff; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #16151a; --fg: #ebe7e1; --muted: #9b958d; --line: #2d2b31; --accent: #e06bcd; --card: #1f1e24; } }
+  html { color-scheme: light dark; }
+  body { margin: 0; padding: 24px max(16px, 3vw); background: var(--bg); color: var(--fg); font: 14px/1.45 ui-sans-serif, system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; } h2 { font-size: 15px; margin: 24px 0 8px; }
+  .meta { color: var(--muted); }
+  .pair { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin: 12px 0; }
+  .sides { display: flex; gap: 12px; flex-wrap: wrap; } .sides figure { margin: 0; flex: 1 1 320px; min-width: 0; }
+  .sides img.full { width: 100%; height: auto; border: 1px solid var(--line); background: #888; }
+  figcaption { font-size: 12px; color: var(--muted); }
+  .scroll { max-height: 70vh; overflow: auto; display: inline-block; max-width: 100%; vertical-align: top; border: 1px solid var(--line); background: #888; }
+  .scroll img { display: block; max-width: none; image-rendering: auto; }
+  .scroll img.fit { width: 100%; }
+  .look canvas { display: block; width: 100%; height: 60vh; border: 1px solid var(--line); background: #333; cursor: grab; touch-action: none; }
+  .look canvas.dragging { cursor: grabbing; }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  .tools button, .tools select { padding: 4px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); cursor: pointer; font: inherit; }
+  .tools button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .tools .hint { color: var(--muted); font-size: 12px; }
+  .picks button { padding: 6px 14px; margin: 8px 8px 0 0; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); cursor: pointer; }
+  .picks button.chosen { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .done { position: sticky; top: 0; background: var(--card); border-bottom: 1px solid var(--line); padding: 8px 0; margin: 0 0 12px; z-index: 1; }
+  textarea { width: 100%; min-height: 120px; font: 12px ui-monospace, monospace; }
+  a.save { display: inline-block; margin-right: 12px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<h1>rascal pairs <span class="meta">{{LAB}}</span></h1>
+<p class="meta">{{SUMMARY}} Pick the better result of each pair, or <em>same</em> when they are as good, or <em>neither</em> when both fail. The arms are not named and the sides were drawn; judge the pictures. Each pair opens at its <em>focus</em>, the region the two results changed, at full size with the two sides scrolling together; hold <kbd>f</kbd> to swap the sides in place. <em>Whole</em> shows the images entire. For a panorama, <em>look around</em> views both from inside the sphere, aimed at the focus: drag to turn, wheel to zoom.</p>
+<div class="done"><span id="progress">0 of {{COUNT}} picked</span> · <a class="save" id="save" download="picks.json" href="#">Save picks.json</a> <span class="meta">(or copy the text at the bottom into a file)</span></div>
+<!-- pair -->
+<section class="pair" id="pair-{{ID}}" data-pair="{{ID}}" data-width="{{WIDTH}}" data-height="{{HEIGHT}}" data-focus="{{FOCUS}}" data-projection="{{PROJECTION}}">
+<h2>Pair {{N}} of {{COUNT}}: {{ID}}</h2>
+<p class="meta note">{{NOTE}}</p>
+<div class="tools">
+  <button class="view on" data-view="focus">focus</button>
+  <button class="view" data-view="whole">whole</button>
+  <button class="view look-button" data-view="look">look around</button>
+  <select class="zoom" title="focus scale"><option value="1">1:1</option><option value="2">2:1</option><option value="fit">fit width</option></select>
+  <button class="aim">aim at the focus</button>
+  <span class="hint">hold f to swap the sides</span>
+</div>
+<div class="sides view-focus">
+  <figure><div class="scroll"><img class="crop" src="{{LEFT_CROP}}" alt="left, at the focus"></div><figcaption>left</figcaption></figure>
+  <figure><div class="scroll"><img class="crop" src="{{RIGHT_CROP}}" alt="right, at the focus"></div><figcaption>right</figcaption></figure>
+</div>
+<div class="sides view-whole" hidden>
+  <figure><img class="full" src="{{LEFT}}" alt="left, whole"><figcaption>left</figcaption></figure>
+  <figure><img class="full" src="{{RIGHT}}" alt="right, whole"><figcaption>right</figcaption></figure>
+</div>
+<div class="sides view-look look" hidden>
+  <figure><canvas data-side="0"></canvas><figcaption>left</figcaption></figure>
+  <figure><canvas data-side="1"></canvas><figcaption>right</figcaption></figure>
+  <p class="meta look-note" hidden></p>
+</div>
+<div class="picks">{{BUTTONS}}</div>
+</section>
+<!-- /pair -->
+<h2>picks.json</h2>
+<textarea id="out" readonly></textarea>
+<script>
+  // The page knows the assignment's digest and the pair ids, never the arms or the sides.
+  const digest = {{DIGEST}};
+  const ids = {{IDS}};
+  const picks = {};
+  function render() {
+    const list = ids.filter((id) => picks[id]).map((id) => ({ pair: id, pick: picks[id] }));
+    const text = JSON.stringify({ picks_version: 1, assignment_digest: digest, pick: list }, null, 2) + "\n";
+    document.getElementById("out").value = text;
+    document.getElementById("progress").textContent = list.length + " of " + ids.length + " picked";
+    const save = document.getElementById("save");
+    if (save.href.startsWith("blob:")) { URL.revokeObjectURL(save.href); }
+    save.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+  }
+  document.querySelectorAll(".picks button").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.pair;
+      picks[id] = button.dataset.pick;
+      button.parentElement.querySelectorAll("button").forEach((b) => b.classList.toggle("chosen", b === button));
+      render();
+    });
+  });
+  render();
+
+  // --- the views ---------------------------------------------------------------------------
+  // The focus view: the two crops at 1:1 in boxes that scroll together, opened at their
+  // middle; without a focus the crops are the whole images. Holding f swaps the sides in
+  // place so the same spot can be compared without moving the eye.
+  const sections = Array.from(document.querySelectorAll("section.pair"));
+  const look = makeLook();
+  for (const section of sections) {
+    const crops = Array.from(section.querySelectorAll("img.crop"));
+    const fulls = Array.from(section.querySelectorAll("img.full"));
+    const boxes = Array.from(section.querySelectorAll(".scroll"));
+    const focus = section.dataset.focus ? section.dataset.focus.split(",").map(Number) : null;
+    if (!focus) { crops.forEach((crop, i) => { crop.src = fulls[i].src; }); }
+    let syncing = false;
+    boxes.forEach((box, i) => {
+      box.addEventListener("scroll", () => {
+        if (syncing) { return; }
+        syncing = true;
+        const other = boxes[1 - i];
+        other.scrollLeft = box.scrollLeft;
+        other.scrollTop = box.scrollTop;
+        syncing = false;
+      });
+    });
+    const centre = () => { for (const box of boxes) {
+      box.scrollLeft = (box.scrollWidth - box.clientWidth) / 2;
+      box.scrollTop = (box.scrollHeight - box.clientHeight) / 2;
+    } };
+    const zoom = section.querySelector(".zoom");
+    const applyZoom = () => {
+      for (const crop of crops) {
+        crop.classList.toggle("fit", zoom.value === "fit");
+        crop.style.width = zoom.value === "fit" ? "" : (crop.naturalWidth * Number(zoom.value)) + "px";
+      }
+      centre();
+    };
+    zoom.addEventListener("change", applyZoom);
+    Promise.all(crops.map((crop) => crop.decode().catch(() => {}))).then(applyZoom);
+
+    const views = Array.from(section.querySelectorAll("button.view"));
+    const panes = { focus: section.querySelector(".view-focus"), whole: section.querySelector(".view-whole"), look: section.querySelector(".view-look") };
+    const equirect = section.dataset.projection === "equirectangular";
+    section.querySelector(".look-button").hidden = !equirect;
+    section.querySelector(".aim").hidden = true;
+    const show = (name) => {
+      for (const view of views) { view.classList.toggle("on", view.dataset.view === name); }
+      for (const [key, pane] of Object.entries(panes)) { pane.hidden = key !== name; }
+      zoom.hidden = name !== "focus";
+      section.querySelector(".hint").hidden = name !== "focus";
+      section.querySelector(".aim").hidden = name !== "look";
+      if (name === "look") { look.open(section, fulls, focus); }
+      else { look.close(section); }
+    };
+    for (const view of views) { view.addEventListener("click", () => show(view.dataset.view)); }
+    section.querySelector(".aim").addEventListener("click", () => look.aim(section, focus));
+  }
+  let swapped = false;
+  const swap = (on) => {
+    if (swapped === on) { return; }
+    swapped = on;
+    for (const section of sections) {
+      const crops = Array.from(section.querySelectorAll("img.crop"));
+      const fulls = Array.from(section.querySelectorAll("img.full"));
+      [crops[0].src, crops[1].src] = [crops[1].src, crops[0].src];
+      [fulls[0].src, fulls[1].src] = [fulls[1].src, fulls[0].src];
+    }
+    look.swap();
+  };
+  document.addEventListener("keydown", (e) => { if (e.key === "f" && !e.repeat && e.target.tagName !== "TEXTAREA") { swap(true); } });
+  document.addEventListener("keyup", (e) => { if (e.key === "f") { swap(false); } });
+  window.addEventListener("blur", () => swap(false));
+
+  // The look-around view: each side's whole image is an equirectangular texture sampled by
+  // a fragment shader from inside the sphere; both sides share one orientation. One WebGL2
+  // context draws into the sides' canvases, and only the open pair keeps textures.
+  function makeLook() {
+    const glCanvas = document.createElement("canvas");
+    const gl = glCanvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false });
+    const state = new Map();
+    let program = null;
+    let uniforms = null;
+    function setup() {
+      if (program || !gl) { return; }
+      const vs = `#version 300 es
+        in vec2 p; out vec2 v;
+        void main() { v = p; gl_Position = vec4(p, 0.0, 1.0); }`;
+      const fs = `#version 300 es
+        precision highp float; in vec2 v; out vec4 o;
+        uniform sampler2D tex; uniform float yaw; uniform float pitch; uniform float tanHalf; uniform float aspect;
+        const float PI = 3.141592653589793;
+        void main() {
+          vec3 d = normalize(vec3(v.x * tanHalf * aspect, v.y * tanHalf, 1.0));
+          float cp = cos(pitch), sp = sin(pitch);
+          d = vec3(d.x, d.y * cp + d.z * sp, -d.y * sp + d.z * cp);
+          float cy = cos(yaw), sy = sin(yaw);
+          d = vec3(d.x * cy + d.z * sy, d.y, -d.x * sy + d.z * cy);
+          float lon = atan(d.x, d.z);
+          float lat = asin(clamp(d.y, -1.0, 1.0));
+          o = texture(tex, vec2(lon / (2.0 * PI) + 0.5, 0.5 - lat / PI));
+        }`;
+      const compile = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
+      program = gl.createProgram();
+      gl.attachShader(program, compile(gl.VERTEX_SHADER, vs));
+      gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fs));
+      gl.linkProgram(program);
+      gl.useProgram(program);
+      const quad = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+      const p = gl.getAttribLocation(program, "p");
+      gl.enableVertexAttribArray(p);
+      gl.vertexAttribPointer(p, 2, gl.FLOAT, false, 0, 0);
+      uniforms = { yaw: gl.getUniformLocation(program, "yaw"), pitch: gl.getUniformLocation(program, "pitch"), tanHalf: gl.getUniformLocation(program, "tanHalf"), aspect: gl.getUniformLocation(program, "aspect") };
+    }
+    function texture(img) {
+      const max = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      let source = img;
+      if (img.naturalWidth > max || img.naturalHeight > max) {
+        const scale = max / Math.max(img.naturalWidth, img.naturalHeight);
+        const c = document.createElement("canvas");
+        c.width = Math.floor(img.naturalWidth * scale);
+        c.height = Math.floor(img.naturalHeight * scale);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        source = c;
+      }
+      const t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB8, gl.RGB, gl.UNSIGNED_BYTE, source);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      return { t, scaled: source !== img };
+    }
+    function aimAt(s, focus) {
+      const width = Number(s.section.dataset.width), height = Number(s.section.dataset.height);
+      const cx = focus ? ((focus[0] + focus[2] / 2) % width) : width / 2;
+      const cy = focus ? focus[1] + focus[3] / 2 : height / 2;
+      s.yaw = (cx / width - 0.5) * 2 * Math.PI;
+      s.pitch = (0.5 - cy / height) * Math.PI;
+      s.fov = Math.PI / 180 * 70;
+    }
+    function draw(s) {
+      if (!gl || !s.textures) { return; }
+      const dpr = window.devicePixelRatio || 1;
+      s.canvases.forEach((canvas, i) => {
+        const w = Math.max(1, Math.floor(canvas.clientWidth * dpr)), h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
+        if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+        if (glCanvas.width !== w || glCanvas.height !== h) { glCanvas.width = w; glCanvas.height = h; }
+        gl.viewport(0, 0, w, h);
+        gl.bindTexture(gl.TEXTURE_2D, s.textures[s.swapped ? 1 - i : i].t);
+        gl.uniform1f(uniforms.yaw, s.yaw);
+        gl.uniform1f(uniforms.pitch, s.pitch);
+        gl.uniform1f(uniforms.tanHalf, Math.tan(s.fov / 2));
+        gl.uniform1f(uniforms.aspect, w / h);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        canvas.getContext("2d").drawImage(glCanvas, 0, 0);
+      });
+    }
+    function attach(s) {
+      let drag = null;
+      for (const canvas of s.canvases) {
+        canvas.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); canvas.classList.add("dragging"); });
+        canvas.addEventListener("pointermove", (e) => {
+          if (!drag) { return; }
+          const perPixel = s.fov / canvas.clientWidth;
+          s.yaw -= (e.clientX - drag.x) * perPixel;
+          s.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, s.pitch + (e.clientY - drag.y) * perPixel));
+          drag = { x: e.clientX, y: e.clientY };
+          draw(s);
+        });
+        const stop = () => { drag = null; canvas.classList.remove("dragging"); };
+        canvas.addEventListener("pointerup", stop);
+        canvas.addEventListener("pointercancel", stop);
+        canvas.addEventListener("wheel", (e) => {
+          e.preventDefault();
+          s.fov = Math.max(Math.PI / 180 * 15, Math.min(Math.PI / 180 * 120, s.fov * Math.exp(e.deltaY * 0.002)));
+          draw(s);
+        }, { passive: false });
+      }
+    }
+    return {
+      open(section, fulls, focus) {
+        const note = section.querySelector(".look-note");
+        if (!gl) { note.textContent = "This browser has no WebGL2; the look-around view needs it."; note.hidden = false; return; }
+        setup();
+        for (const [other, s] of state) { if (other !== section) { this.close(other); } }
+        let s = state.get(section);
+        if (!s) {
+          s = { section, canvases: Array.from(section.querySelectorAll("canvas")), textures: null, swapped: false, yaw: 0, pitch: 0, fov: 1 };
+          attach(s);
+          aimAt(s, focus);
+          state.set(section, s);
+        }
+        if (!s.textures) {
+          Promise.all(fulls.map((img) => img.decode().catch(() => {}))).then(() => {
+            if (!state.has(section) || s.textures) { return; }
+            s.textures = fulls.map(texture);
+            const scaled = s.textures.some((t) => t.scaled);
+            note.textContent = scaled ? "The image is wider than this GPU's largest texture; the view is drawn from a scaled copy. Judge detail in the focus view." : "";
+            note.hidden = !scaled;
+            draw(s);
+          });
+        } else { draw(s); }
+      },
+      close(section) {
+        const s = state.get(section);
+        if (!s) { return; }
+        if (s.textures) { for (const t of s.textures) { gl.deleteTexture(t.t); } s.textures = null; }
+      },
+      aim(section, focus) { const s = state.get(section); if (s) { aimAt(s, focus); draw(s); } },
+      swap() { for (const s of state.values()) { s.swapped = !s.swapped; draw(s); } },
+      redraw() { for (const s of state.values()) { draw(s); } },
+    };
+  }
+  window.addEventListener("resize", () => look.redraw());
+</script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "`cells/<identity>/attempts/<n>/attempt.json`.",
+  "properties": {
+    "attempt": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "attempt_version": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "calls": {
+      "description": "External calls this attempt made.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "result": {
+      "description": "The result image, relative to the attempt, when the heal completed.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "run": {
+      "description": "The run directory, relative to the attempt.",
+      "type": "string"
+    },
+    "source": {
+      "description": "The source image the heal started from (its canonical PNG in the run directory),\nrelative to the attempt, when the heal completed; the pairs page finds the focus of a\npair by what each result changed in it.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "description": "`ok`, `stopped` (a step was not applicable) or `failed`.",
+      "type": "string"
+    },
+    "stopped_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "attempt_version",
+    "attempt",
+    "status",
+    "run",
+    "calls"
+  ],
+  "title": "AttemptRecord",
+  "type": "object"
+}

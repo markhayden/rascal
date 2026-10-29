@@ -31,3 +31,5 @@ findings plus new findings, most severe first.
 | M2 | [m2-checkpoint.md](m2-checkpoint.md) | two reviews; no must-fix; six should-fix and the eight proposed tests landed in one commit; three nits recorded |
 | M3 | [m3-checkpoint.md](m3-checkpoint.md) | two reviews; two must-fix (the transport's line limit, a byte-index panic) and twelve should-fix landed in one commit with the proposed tests; three items recorded |
 | M4 | [m4-checkpoint.md](m4-checkpoint.md) | two reviews; one must-fix (closing eroded from the image border) and seven should-fix landed in one commit with the proposed tests; three items recorded |
+| M5 | [m5-checkpoint.md](m5-checkpoint.md) | two reviews (5.1 and 5.3; 5.2 waits on the owner); one must-fix (`setup` writing into the current directory) and nine should-fix landed in one commit with the proposed tests; two items recorded |
+| M6 | [m6-checkpoint.md](m6-checkpoint.md) | two reviews (6.1 to 6.3; 6.4 is the owner's round); no must-fix; three should-fix and the proposed identity, resume and key-absence tests landed in one commit; one owner decision (the `not_worse` rule) and three items recorded |

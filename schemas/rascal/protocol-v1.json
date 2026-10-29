@@ -1,0 +1,122 @@
+{
+  "$defs": {
+    "Group": {
+      "additionalProperties": false,
+      "description": "A group of corpus images judged together.",
+      "properties": {
+        "images": {
+          "description": "Corpus image ids.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "images"
+      ],
+      "type": "object"
+    },
+    "Rules": {
+      "additionalProperties": false,
+      "description": "The outcome rules, as fractions of the decided pairs (`[numerator, denominator]`).",
+      "properties": {
+        "not_worse": {
+          "description": "`not_worse` when losses over decided pairs is below this.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "preferred": {
+          "description": "`preferred` when wins over decided pairs is at least this.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "required": [
+        "preferred",
+        "not_worse"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "`protocol.toml`.",
+  "properties": {
+    "arms": {
+      "description": "The two arms compared, by matrix arm name: `[a, b]`; wins are a's.",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+    },
+    "group": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Group"
+      },
+      "type": "array"
+    },
+    "min_decided": {
+      "default": 10,
+      "description": "Fewer decided pairs than this in a group is `inconclusive`.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "name": {
+      "description": "The lab's name; a protocol change after a run is a new name.",
+      "type": "string"
+    },
+    "rules": {
+      "$ref": "#/$defs/Rules",
+      "default": {
+        "not_worse": [
+          1,
+          3
+        ],
+        "preferred": [
+          2,
+          3
+        ]
+      }
+    },
+    "seed": {
+      "description": "The seed `lab pairs` draws the order and the sides from; the matrix repeats it.",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "version": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version",
+    "name",
+    "seed",
+    "arms"
+  ],
+  "title": "Protocol",
+  "type": "object"
+}

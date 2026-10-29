@@ -1,0 +1,101 @@
+{
+  "$defs": {
+    "Pair": {
+      "additionalProperties": false,
+      "description": "One pair: an image, the two cells shown, and which side arm `a` took.",
+      "properties": {
+        "a_side": {
+          "description": "`left` or `right`: the side arm `a` is on.",
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "id": {
+          "description": "The pair id: the image id.",
+          "type": "string"
+        },
+        "left": {
+          "$ref": "#/$defs/Shown"
+        },
+        "right": {
+          "$ref": "#/$defs/Shown"
+        }
+      },
+      "required": [
+        "id",
+        "group",
+        "left",
+        "right",
+        "a_side"
+      ],
+      "type": "object"
+    },
+    "Shown": {
+      "additionalProperties": false,
+      "description": "A cell's attempt as shown on one side.",
+      "properties": {
+        "attempt": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cell": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cell",
+        "attempt"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "`pairs/assignment.json`: what `decode` needs and the page must not show.",
+  "properties": {
+    "arms": {
+      "description": "The two arms compared, `[a, b]`: wins are a's.",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+    },
+    "assignment_version": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "lab": {
+      "type": "string"
+    },
+    "pair": {
+      "description": "In page order.",
+      "items": {
+        "$ref": "#/$defs/Pair"
+      },
+      "type": "array"
+    },
+    "protocol_digest": {
+      "type": "string"
+    },
+    "seed": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "assignment_version",
+    "lab",
+    "protocol_digest",
+    "arms",
+    "seed",
+    "pair"
+  ],
+  "title": "Assignment",
+  "type": "object"
+}

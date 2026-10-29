@@ -19,6 +19,9 @@ use sha2::{Digest, Sha256};
 
 use crate::client::env::BASELINE;
 
+/// The Python pack's distribution name: the launcher under `.venv/bin`.
+pub const PACK_NAME: &str = "rascal-tools";
+
 /// The platform this binary runs on, in the bundle's vocabulary, when it is one a bundle
 /// exists for.
 pub fn host_platform() -> Option<&'static str> {

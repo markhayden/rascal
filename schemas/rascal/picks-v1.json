@@ -1,0 +1,48 @@
+{
+  "$defs": {
+    "Pick": {
+      "additionalProperties": false,
+      "description": "One pick: `left`, `right`, `same` or `neither` for a pair.",
+      "properties": {
+        "pair": {
+          "type": "string"
+        },
+        "pick": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pair",
+        "pick"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "`picks.json`, as the page writes it.",
+  "properties": {
+    "assignment_digest": {
+      "description": "`sha256:<hex>` of the assignment file the picks were made on.",
+      "type": "string"
+    },
+    "pick": {
+      "items": {
+        "$ref": "#/$defs/Pick"
+      },
+      "type": "array"
+    },
+    "picks_version": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "picks_version",
+    "assignment_digest",
+    "pick"
+  ],
+  "title": "Picks",
+  "type": "object"
+}

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One line of `ledger.jsonl`: an external call.",
+  "properties": {
+    "arm": {
+      "type": "string"
+    },
+    "attempt": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "cell": {
+      "type": "string"
+    },
+    "duration_ms": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "image": {
+      "type": "string"
+    },
+    "kind": {
+      "description": "`filler` or `pack`.",
+      "type": "string"
+    },
+    "ledger_version": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "outcome": {
+      "type": "string"
+    },
+    "spend_usd": {
+      "format": "double",
+      "type": "number"
+    },
+    "target": {
+      "description": "The filler or pack entry's name.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ledger_version",
+    "cell",
+    "attempt",
+    "arm",
+    "image",
+    "kind",
+    "target",
+    "outcome",
+    "duration_ms",
+    "spend_usd"
+  ],
+  "title": "LedgerLine",
+  "type": "object"
+}

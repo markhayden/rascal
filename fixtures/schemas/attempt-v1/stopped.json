@@ -1,0 +1,9 @@
+{
+  "attempt_version": 1,
+  "attempt": 2,
+  "status": "stopped",
+  "run": "run",
+  "stopped_at": "window",
+  "reason": "the support is taller than max_side",
+  "calls": 0
+}

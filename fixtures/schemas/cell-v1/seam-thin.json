@@ -1,0 +1,98 @@
+{
+  "cell_version": 1,
+  "identity": "sha256:895886dff1ac43cacf3ae1fa091e7a8931b9d8c1bbdbae50fffe29d07db528e5",
+  "arm": "thin",
+  "image": "sky-02",
+  "protocol_digest": "sha256:d7957270f0291d039ebb3ffd100e3b9b9574a75e3495fd6d104e0f9c97fcb766",
+  "components": {
+    "image": "sha256:6b2cc035c6a965b3acc1b302f368c5976fe2073d0dc5edb651f3e8f56993d3c4",
+    "overrides": {
+      "fan.constants": "fan-thin-v1"
+    },
+    "recipe": {
+      "inputs": {
+        "image": {
+          "type": "Image"
+        }
+      },
+      "name": "seam",
+      "outputs": {
+        "image": "cut.image",
+        "mask": "ramp.mask",
+        "plan": "cut.plan",
+        "render": [
+          {
+            "for": "grey",
+            "out": "seam-grey.png"
+          }
+        ]
+      },
+      "projection": "equirectangular",
+      "step": [
+        {
+          "id": "cut",
+          "inputs": {
+            "image": "inputs.image"
+          },
+          "op": "cut",
+          "strip": 0.07
+        },
+        {
+          "column": 0.5,
+          "id": "line",
+          "inputs": {
+            "image": "cut.image"
+          },
+          "op": "line",
+          "width_px": 2.0
+        },
+        {
+          "constants": "fan-thin-v1",
+          "id": "fan",
+          "inputs": {
+            "image": "cut.image",
+            "line": "line.location"
+          },
+          "op": "fan"
+        },
+        {
+          "constants": "profile-v1",
+          "id": "band",
+          "inputs": {
+            "band": "fan.band"
+          },
+          "op": "profile"
+        },
+        {
+          "constants": "ramp-v1",
+          "id": "ramp",
+          "inputs": {
+            "image": "cut.image",
+            "mask": "band.mask"
+          },
+          "op": "ramp"
+        }
+      ],
+      "use_case": "seam",
+      "version": 1
+    },
+    "constants": {
+      "band": "profile-v1",
+      "fan": "fan-thin-v1",
+      "ramp": "ramp-v1"
+    },
+    "op_versions": {
+      "cut": "1.0.0",
+      "fan": "1.0.0",
+      "line": "1.0.0",
+      "profile": "1.0.0",
+      "ramp": "1.0.0"
+    },
+    "filler": {
+      "target": "/Users/markhayden/go/src/github.com/markhayden/rascal/target/debug/rascal fake-filler exact {image} {mask} {out}",
+      "profile": "grey",
+      "paste": "feather",
+      "revision": "fake exact"
+    }
+  }
+}

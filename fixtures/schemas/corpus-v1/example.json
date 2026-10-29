@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "image": [
+    {
+      "id": "sky-01",
+      "file": "step-sky.png",
+      "sha256": "sha256:87ec3a6e932b4b331ed9a2569de9010989cbd10ae3552dca9b81c485971759e7",
+      "group": "sky",
+      "licence": "synthetic, made by the testkit; CC0"
+    },
+    {
+      "id": "sky-02",
+      "file": "step-pano.png",
+      "sha256": "sha256:6b2cc035c6a965b3acc1b302f368c5976fe2073d0dc5edb651f3e8f56993d3c4",
+      "group": "sky",
+      "licence": "synthetic, made by the testkit; CC0"
+    },
+    {
+      "id": "structured-01",
+      "file": "floor.png",
+      "sha256": "sha256:40ec7298d2c908c6652ebcdd96215dd45ba98c8b7d909ba1767078d63e9a7a50",
+      "group": "structured",
+      "licence": "synthetic, made by the testkit; CC0"
+    },
+    {
+      "id": "structured-02",
+      "file": "chair-blob.png",
+      "sha256": "sha256:40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+      "group": "structured",
+      "licence": "synthetic, made by the testkit; CC0"
+    }
+  ]
+}

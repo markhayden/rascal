@@ -13,35 +13,11 @@ use rascal_core::location::Location;
 use rascal_core::mask::Mask;
 use rascal_core::op::Status;
 use rascal_core::outdir::{self, OutKind};
-use rascal_core::recipe::{Recipe, Run};
+use rascal_core::recipe::Run;
 use rascal_core::registry::OpRegistry;
 use rascal_core::workspace::Workspace;
 
-/// The recipes embedded in the binary, by name.
-const SHIPPED: &[(&str, &str)] = &[
-    ("rect", include_str!("../recipes/rect.toml")),
-    ("seam", include_str!("../recipes/seam.toml")),
-    ("remove", include_str!("../recipes/remove.toml")),
-    ("repair", include_str!("../recipes/repair.toml")),
-    ("repair-area", include_str!("../recipes/repair-area.toml")),
-    ("protect", include_str!("../recipes/protect.toml")),
-];
-
-/// A shipped recipe by name, or a recipe file by path.
-pub fn load_recipe(name_or_path: &str) -> Result<Recipe> {
-    if let Some((_, text)) = SHIPPED.iter().find(|(name, _)| *name == name_or_path) {
-        return Recipe::parse(text, &format!("shipped recipe {name_or_path}"));
-    }
-    let path = Path::new(name_or_path);
-    if path.is_file() {
-        return Recipe::read(path);
-    }
-    let names: Vec<&str> = SHIPPED.iter().map(|(n, _)| *n).collect();
-    Err(Error::usage(format!(
-        "{name_or_path}: not a shipped recipe ({}) and not a file",
-        names.join(", ")
-    )))
-}
+pub use rascal_mask::recipes::load_recipe;
 
 /// What `run` was asked to do.
 pub struct RunArgs {

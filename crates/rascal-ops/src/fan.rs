@@ -304,8 +304,17 @@ pub struct Settings {
 impl Settings {
     /// The default set's settings, for tests and the lab.
     pub fn fan_v1() -> Settings {
-        let table = set("fan-v1").expect("embedded");
-        let c = |k: &str| constant(table, k).expect("fan-v1 is complete");
+        Settings::embedded("fan-v1")
+    }
+
+    /// `fan-thin-v1`: the fixed-width arm, `wide_max 0.0`.
+    pub fn fan_thin_v1() -> Settings {
+        Settings::embedded("fan-thin-v1")
+    }
+
+    fn embedded(name: &str) -> Settings {
+        let table = set(name).expect("embedded");
+        let c = |k: &str| constant(table, k).expect("the embedded set is complete");
         Settings {
             ref_width: c("ref_width"),
             thin_px: c("thin_px"),

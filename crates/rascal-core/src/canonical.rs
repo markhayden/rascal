@@ -12,7 +12,7 @@
 //!   adaptive filtering. "Byte-identical" images are images with identical decoded samples,
 //!   so the encoder settings are a convention for reproducible files, not part of identity.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use image::codecs::png::{CompressionType, FilterType, PngEncoder};
 use image::{DynamicImage, ImageEncoder};
@@ -90,6 +90,28 @@ pub fn write_png(path: &Path, image: &DynamicImage) -> Result<()> {
             path: path.to_path_buf(),
             source,
         })
+}
+
+/// Encodes an image as PNG bytes with the canonical encoder settings.
+pub fn encode_png(image: &DynamicImage) -> Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    let encoder = PngEncoder::new_with_quality(
+        std::io::Cursor::new(&mut bytes),
+        CompressionType::Default,
+        FilterType::Adaptive,
+    );
+    encoder
+        .write_image(
+            image.as_bytes(),
+            image.width(),
+            image.height(),
+            image.color().into(),
+        )
+        .map_err(|source| Error::Image {
+            path: PathBuf::from("<memory>"),
+            source,
+        })?;
+    Ok(bytes)
 }
 
 /// Writes an 8-bit grey plane as a PNG with the canonical encoder settings.

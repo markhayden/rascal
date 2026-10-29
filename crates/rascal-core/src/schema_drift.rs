@@ -85,6 +85,11 @@ pub fn inventory() -> Vec<BoundaryType> {
     use crate::frame::{Frame, Plan};
     use crate::image::ImageRecord;
     use crate::journal::JournalLine;
+    use crate::lab::cell::{AttemptRecord, CellRecord, LabRecord, LedgerLine};
+    use crate::lab::corpus::Corpus;
+    use crate::lab::matrix::Matrix;
+    use crate::lab::pairs::{Assignment, Picks};
+    use crate::lab::protocol::Protocol;
     use crate::location::Location;
     use crate::mask::{InspectReport, MaskRecord};
     use crate::op::{Envelope, Manifest};
@@ -102,6 +107,60 @@ pub fn inventory() -> Vec<BoundaryType> {
             "rascal/repair-v1.json",
             Source::Generated,
             ["repair-v1/after-crash.json"]
+        ),
+        boundary_type!(
+            Corpus,
+            "rascal/corpus-v1.json",
+            Source::Generated,
+            ["corpus-v1/example.json"]
+        ),
+        boundary_type!(
+            Protocol,
+            "rascal/protocol-v1.json",
+            Source::Generated,
+            ["protocol-v1/example.json"]
+        ),
+        boundary_type!(
+            Matrix,
+            "rascal/matrix-v1.json",
+            Source::Generated,
+            ["matrix-v1/example.json"]
+        ),
+        boundary_type!(
+            LabRecord,
+            "rascal/lab-v1.json",
+            Source::Generated,
+            ["lab-v1/demo.json"]
+        ),
+        boundary_type!(
+            CellRecord,
+            "rascal/cell-v1.json",
+            Source::Generated,
+            ["cell-v1/seam-thin.json"]
+        ),
+        boundary_type!(
+            AttemptRecord,
+            "rascal/attempt-v1.json",
+            Source::Generated,
+            ["attempt-v1/ok.json", "attempt-v1/stopped.json"]
+        ),
+        boundary_type!(
+            LedgerLine,
+            "rascal/ledger-v1.json",
+            Source::Generated,
+            ["ledger-v1/filler.json"]
+        ),
+        boundary_type!(
+            Assignment,
+            "rascal/assignment-v1.json",
+            Source::Generated,
+            ["assignment-v1/demo.json"]
+        ),
+        boundary_type!(
+            Picks,
+            "rascal/picks-v1.json",
+            Source::Generated,
+            ["picks-v1/demo.json"]
         ),
         boundary_type!(
             InspectReport,
@@ -260,6 +319,18 @@ pub const COMPONENTS: &[&str] = &[
     "Windows",
     "WorkspaceConfig",
     "CorpusConfig",
+    "CorpusImage",
+    "Group",
+    "Rules",
+    "MatrixImage",
+    "Arm",
+    "Override",
+    "CellComponents",
+    "FillerEntry",
+    "FinderDescriptor",
+    "Pair",
+    "Shown",
+    "Pick",
     "FillerConfig",
     "PackConfig",
     "Accepts",

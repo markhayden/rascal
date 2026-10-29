@@ -1,0 +1,64 @@
+{
+  "assignment_version": 1,
+  "lab": "seam-demo",
+  "protocol_digest": "sha256:d7957270f0291d039ebb3ffd100e3b9b9574a75e3495fd6d104e0f9c97fcb766",
+  "arms": [
+    "fan-ramp",
+    "thin"
+  ],
+  "seed": 20261028,
+  "pair": [
+    {
+      "id": "sky-01",
+      "group": "sky",
+      "left": {
+        "cell": "sha256:d077a8ed6b6c5f530a6d1a17a780e616bde65ddc80f1fc4a5dbaa1d896ae2c61",
+        "attempt": 1
+      },
+      "right": {
+        "cell": "sha256:405d982a5d70bb1396f47035d6a7321821999cab453e6c3374de90114f7fd45a",
+        "attempt": 1
+      },
+      "a_side": "left"
+    },
+    {
+      "id": "structured-01",
+      "group": "structured",
+      "left": {
+        "cell": "sha256:ccfd8b51d86886fdfa05a716ec4dac29ace75971653d0ed0e2c9b58c130a1a4a",
+        "attempt": 1
+      },
+      "right": {
+        "cell": "sha256:11f5553214eadc41969660c77fa9f5b7af751ec0b61631bd9aa0bd98a0340f53",
+        "attempt": 1
+      },
+      "a_side": "right"
+    },
+    {
+      "id": "sky-02",
+      "group": "sky",
+      "left": {
+        "cell": "sha256:0606cb635dbfa40d795bae76be75597cac736a091d2ac906e4d79017b250e861",
+        "attempt": 1
+      },
+      "right": {
+        "cell": "sha256:f59996d5e1e7bedcf6e7b183e3951c985f394a5c9642d098474f14a7337efa7c",
+        "attempt": 1
+      },
+      "a_side": "right"
+    },
+    {
+      "id": "structured-02",
+      "group": "structured",
+      "left": {
+        "cell": "sha256:cb7f71ec7114a9915196a173f240c98aa4acf99b383b640e4041aa9c9982e56f",
+        "attempt": 1
+      },
+      "right": {
+        "cell": "sha256:0fcc987e8d1d38567b1bda92cfa24c9e92975376b300e255db8cabdddff85283",
+        "attempt": 1
+      },
+      "a_side": "left"
+    }
+  ]
+}
