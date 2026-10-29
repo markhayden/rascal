@@ -109,9 +109,9 @@ included, so the result keeps what the fill drew and matches what the base shows
 pixel on the image border has one fewer neighbour and one fewer term. The solve is conjugate
 gradients in `f32` from the fill as the initial guess, converged when the residual is within
 `tol` of the right-hand side (`poisson-v1`: `tol 1e-4`, `max_iter 2000`); reaching `max_iter`
-is an operational error (exit 3), never a quiet fallback to `feather`. The solution is clamped
-to `[0, 255]` and then feathered like any fill, `(1 − w) · base + w · solution`, so the blend
-zone still fades and `w = 0` pixels are untouched. Two refusals: a `wrap` frame (there is no
+is an operational error (exit 3), never a quiet fallback to `feather`. The solution stays in
+`f32`, clamped to `[0, 255]`, and is blended like any fill, `(1 − w) · base + w · solution`,
+rounded once at the end, so the blend zone still fades and `w = 0` pixels are untouched. Two refusals: a `wrap` frame (there is no
 wrap adjacency in v1; `heal seam` pastes in the cut canvas, which is bounded) is `invalid_args`,
 and a mask whose `w > 0` pixels cover the whole image has nothing to anchor to and is
 `not_applicable`. The envelope reports `domain_px` and `iterations`; `docs/results/poisson-bench.md`

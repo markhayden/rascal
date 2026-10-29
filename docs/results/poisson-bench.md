@@ -13,7 +13,7 @@ cargo test --release -p rascal-ops --test poisson -- --ignored --nocapture bench
 
 | date | machine | domain | iterations (max over channels) | solve |
 |---|---|---|---|---|
-| 2026-10-29 | Apple M4 Max, 64 GiB, macOS 27.0, Rust 1.99.1 | 1,008,016 px | 1421 | 5.25 s |
+| 2026-10-29 | Apple M4 Max, 64 GiB, macOS 27.0, Rust 1.99.1 | 1,008,016 px | 1421 | 5.25 s and 5.58 s over two runs |
 
 What the number says. Conjugate gradients on a square grid needs iterations in proportion to
 the domain's side, so a seam band (narrow, long) converges in far fewer than a square of the

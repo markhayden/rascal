@@ -4,8 +4,9 @@
 //! linear-gradient fill on a matching linear base is reproduced to one level; an offset fill
 //! loses its seam under poisson where feather keeps it; a component with no neighbour
 //! outside the domain is not applicable; a tiny `max_iter` is an operational error; a wrap
-//! frame is refused; an RGBA base keeps its alpha. The ignored benchmark records the solve
-//! time for a 1000×1000 domain (`docs/results/poisson-bench.md`).
+//! frame is refused; an RGBA base keeps its alpha; a protected pixel inside the core is a
+//! Dirichlet hole that anchors the solve. The ignored benchmark records the solve time for a
+//! 1000×1000 domain (`docs/results/poisson-bench.md`).
 #![allow(clippy::unwrap_used)]
 
 use std::collections::BTreeMap;
@@ -18,7 +19,7 @@ use rascal_core::image::{Image, Role};
 use rascal_core::mask::{Mask, Source, UseCase};
 use rascal_core::op::{Context, Inputs, Op, Output, Params, Status};
 use rascal_ops::paste::Paste;
-use rascal_ops::poisson::{Settings, Solve, solve};
+use rascal_ops::poisson::{Settings, Solve, solution_image, solve};
 
 const W: u32 = 48;
 const H: u32 = 32;
@@ -118,7 +119,9 @@ fn composite(out: &Output) -> RgbImage {
 
 fn solved(base: &RgbImage, fill: &RgbImage, m: &Mask) -> RgbImage {
     match solve(base, fill, m, &Settings::v1()).unwrap() {
-        Solve::Solved { solution, .. } => solution,
+        Solve::Solved { solution, .. } => {
+            solution_image(&solution, base.width(), base.height()).unwrap()
+        }
         Solve::Unanchored { .. } => panic!("unanchored"),
     }
 }
@@ -308,6 +311,52 @@ fn a_component_with_no_neighbour_outside_the_domain_is_not_applicable() {
         Solve::Solved { domain_px, .. } => assert_eq!(domain_px, u64::from(W) * 6),
         Solve::Unanchored { .. } => panic!("the row beneath anchors the top rows"),
     }
+}
+
+#[test]
+fn a_protected_pixel_inside_the_core_is_a_hole_the_solve_anchors_to() {
+    let f = frame();
+    let base = constant(W, H, 50);
+    let fill = constant(W, H, 200);
+    let protect = |m: &mut Mask, x: u32, y: u32| {
+        let mut p = GrayImage::new(W, H);
+        p.put_pixel(x, y, Luma([255]));
+        m.protect_union(&p).unwrap();
+    };
+    // A block with one protected pixel inside: the domain loses that pixel, the composite
+    // is the base exactly, and the protected pixel is untouched.
+    let mut m = block_mask(&f, 14, 10, 34, 22);
+    let editable = (0..H)
+        .flat_map(|y| (0..W).map(move |x| (x, y)))
+        .filter(|&(x, y)| m.weight(x, y) > 0.0)
+        .count() as u64;
+    protect(&mut m, 20, 15);
+    match solve(&base, &fill, &m, &Settings::v1()).unwrap() {
+        Solve::Solved { domain_px, .. } => assert_eq!(domain_px, editable - 1),
+        Solve::Unanchored { .. } => panic!("anchored by the ring"),
+    }
+    let out = run_op(
+        &f,
+        DynamicImage::ImageRgb8(base.clone()),
+        DynamicImage::ImageRgb8(fill.clone()),
+        &m,
+        "poisson",
+    );
+    assert_eq!(out.envelope.status, Status::Ok, "{}", out.envelope.summary);
+    assert_eq!(composite(&out), base);
+    // The whole image as core with one protected pixel: that hole is the anchor, so the
+    // solve runs instead of being not applicable.
+    let mut whole = block_mask(&f, 0, 0, W, H);
+    protect(&mut whole, 5, 5);
+    let out = run_op(
+        &f,
+        DynamicImage::ImageRgb8(base.clone()),
+        DynamicImage::ImageRgb8(fill),
+        &whole,
+        "poisson",
+    );
+    assert_eq!(out.envelope.status, Status::Ok, "{}", out.envelope.summary);
+    assert_eq!(composite(&out), base);
 }
 
 #[test]

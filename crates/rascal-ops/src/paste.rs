@@ -3,8 +3,9 @@
 //! `w > 0` are written, so `out = base` wherever `w = 0`, protected pixels included. Modes:
 //! `feather` blends by `w`, `hard` writes the fill where the core is set and not protected,
 //! `poisson` solves the gradient-domain blend (`poisson`) over the unprotected `w > 0`
-//! pixels and then blends the clamped solution by `w`, so the blend zone still fades. A wrap
-//! frame has no adjacency the solve could use and is refused under `poisson`.
+//! pixels and then blends the clamped `f32` solution by `w`, rounding once at the end, so the
+//! blend zone still fades. A wrap frame has no adjacency the solve could use and is refused
+//! under `poisson`.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -38,7 +39,7 @@ impl Op for Paste {
             "A fill composited onto the base through the mask: feather blends by the effective weight, hard writes the core, poisson blends in the gradient domain.",
             "After a filler returns its result for the mask's frame, or after apply, to produce the composite; the last step of the heal graph before put. poisson when the fill's tone or level does not match the base at the mask's edge: it keeps the fill's gradients and takes its values from the base around the mask.",
             "When the fill is not the mask's frame and size (window or put first); poisson on a wrap frame (cut the band first; the seam canvas is bounded) or on a mask whose every w > 0 pixel is cut off from the base (nothing to anchor to).",
-            "An Image in the mask's frame with the composite role. Pixels with effective weight 0 are copied from the base without arithmetic, protected pixels included; feather: (1 − w) · base + w · fill; hard: fill where the core is set and not protected; poisson: the Poisson solve over the unprotected w > 0 pixels with the fill's gradients and the base's values at the edge, clamped, then (1 − w) · base + w · solution. A base's alpha is kept; a fill's alpha is ignored and the summary says so. poisson reports the domain size and the iterations; a solve that does not converge within poisson-v1's ceiling is an operational error.",
+            "An Image in the mask's frame with the composite role. Pixels with effective weight 0 are copied from the base without arithmetic, protected pixels included; feather: (1 − w) · base + w · fill; hard: fill where the core is set and not protected; poisson: the Poisson solve over the unprotected w > 0 pixels with the fill's gradients and the base's values at the edge, clamped, then (1 − w) · base + w · solution. A base's alpha is kept; a fill's alpha is ignored and the summary says so. poisson reports the domain size and the iterations, takes seconds rather than the other modes' fraction of one on a domain of a million pixels, and a solve that does not converge within poisson-v1's ceiling is an operational error.",
             Cost {
                 tier: CostTier::Cheap,
                 seconds: 0.1,
@@ -143,12 +144,11 @@ impl Op for Paste {
                         iterations,
                     } => {
                         solved = Some((domain_px, iterations));
-                        paste_pixels(
-                            &base.pixels,
-                            &DynamicImage::ImageRgb8(solution),
-                            mask,
-                            Mode::Feather,
-                        )
+                        let width = mask.dimensions().0 as usize;
+                        composite(&base.pixels, mask, Mode::Feather, |x, y| {
+                            let at = (y as usize * width + x as usize) * 3;
+                            [solution[at], solution[at + 1], solution[at + 2]]
+                        })
                     }
                 }
             }
@@ -206,24 +206,38 @@ impl Mode {
 /// The contract on pixels: a copy of `base` with only `w > 0` pixels written (feather) or
 /// only unprotected core pixels (hard), arithmetic per RGB channel in `f32`, rounded and
 /// clamped; a base's alpha is kept, a fill's ignored. Returns the composite and how many
-/// pixels were written. `Poisson` here is the feather of an already-solved fill: the op
-/// solves first (`poisson::solve`) and passes the solution in as the fill.
+/// pixels were written. `Poisson` is the feather of the solved fill, which the op blends
+/// through `composite` with the `f32` solution; given an 8-bit fill it is feather.
 pub fn paste_pixels(
     base: &DynamicImage,
     fill: &DynamicImage,
     mask: &Mask,
     mode: Mode,
 ) -> (DynamicImage, u64) {
-    let (w, h) = mask.dimensions();
     let fill_rgb = fill.to_rgb8();
+    composite(base, mask, mode, |x, y| {
+        let f = fill_rgb.get_pixel(x, y);
+        [f32::from(f[0]), f32::from(f[1]), f32::from(f[2])]
+    })
+}
+
+/// The paste over a fill given per pixel in `f32`: the arithmetic of the contract, rounded
+/// and clamped once at the end.
+fn composite(
+    base: &DynamicImage,
+    mask: &Mask,
+    mode: Mode,
+    fill_at: impl Fn(u32, u32) -> [f32; 3],
+) -> (DynamicImage, u64) {
+    let (w, h) = mask.dimensions();
     let mut written = 0u64;
     let mut blend = |x: u32, y: u32, dst: &mut [u8]| {
         let weight = mask.weight(x, y);
-        let f = fill_rgb.get_pixel(x, y);
         match mode {
             Mode::Feather | Mode::Poisson if weight > 0.0 => {
+                let f = fill_at(x, y);
                 for ch in 0..3 {
-                    let v = (1.0 - weight) * f32::from(dst[ch]) + weight * f32::from(f[ch]);
+                    let v = (1.0 - weight) * f32::from(dst[ch]) + weight * f[ch];
                     dst[ch] = v.round().clamp(0.0, 255.0) as u8;
                 }
                 written += 1;
@@ -231,7 +245,10 @@ pub fn paste_pixels(
             Mode::Hard
                 if mask.core.get_pixel(x, y)[0] != 0 && mask.protect.get_pixel(x, y)[0] == 0 =>
             {
-                dst[..3].copy_from_slice(&f.0);
+                let f = fill_at(x, y);
+                for ch in 0..3 {
+                    dst[ch] = f[ch].round().clamp(0.0, 255.0) as u8;
+                }
                 written += 1;
             }
             _ => {}
