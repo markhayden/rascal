@@ -40,7 +40,7 @@ with green CI on both platforms, and then the tag.
 - [x] 2.2 `profile` and `feather`
 - [x] 2.3 `ramp` and `apply`
 - [x] 2.4 `window` and `unwindow`
-- [ ] 2.5 `paste` (feather and hard)
+- [x] 2.5 `paste` (feather and hard)
 - [ ] 2.6 `measure` v1
 - [ ] 2.7 Fillers and the fake fillers
 - [ ] 2.8 `heal`'s typed graph and the shipped `seam` recipe → tag `m2.1`

@@ -78,6 +78,7 @@ which parts exist; it is updated in the same commit as the code it describes.
 | `profile` and `feather` | rascal-ops | done: the band core at `half`, the per-row and the one-sigma feather by distance transform with finite support, the `sigma_px` series, protect wins | M2 task 2.2 |
 | `ramp` and `apply` | rascal-ops | done: the step on the profile's windows as a prescription, apply with the `w > 0` rule, `ramp-v1` | M2 task 2.3 |
 | `window` and `unwindow` | rascal-ops | done: the window contract (support, context, square, caps, slide), the `crop:` frame reused by identity, the cropped planes, exact unwindow | M2 task 2.4 |
+| `paste` (feather and hard) | rascal-ops, rascal-mask | done: the paste contract on pixels, both modes, alpha rules, poisson registered as not applicable until M7, `rascal paste` on files | M2 task 2.5 |
 | the refine ops and the remove, repair, protect recipes | rascal-ops, rascal-mask | not started | M4 |
 | the Python pack | tools/python | not started | M5 |
 | the lab | rascal-mask | not started | M6 |

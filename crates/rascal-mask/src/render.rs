@@ -100,7 +100,7 @@ pub fn render(registry: &OpRegistry, args: &RenderArgs) -> Result<PathBuf> {
 }
 
 /// PNG unless the destination says `.jpg` or `.jpeg`.
-fn write_by_extension(path: &Path, pixels: &image::DynamicImage) -> Result<()> {
+pub(crate) fn write_by_extension(path: &Path, pixels: &image::DynamicImage) -> Result<()> {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
@@ -121,7 +121,7 @@ fn write_by_extension(path: &Path, pixels: &image::DynamicImage) -> Result<()> {
 /// The frame a stored mask is in, rebuilt from its record: a mask in a raw frame carries
 /// its size and the frame id names the projection. A mask in a derived frame needs its
 /// workspace, which `rascal <op> --workspace` provides.
-pub fn frame_of(mask: &Mask) -> Frame {
+pub(crate) fn frame_of(mask: &Mask) -> Frame {
     let (width, height) = mask.dimensions();
     let projection = if mask.record.frame.ends_with(":equirectangular") {
         Projection::Equirectangular

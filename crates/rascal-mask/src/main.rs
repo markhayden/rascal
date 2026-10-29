@@ -6,6 +6,7 @@ mod exit;
 mod export;
 mod inspect;
 mod ops;
+mod paste;
 mod render;
 mod run;
 mod workspace_cmd;
@@ -129,6 +130,24 @@ enum Command {
         #[arg(long)]
         out: PathBuf,
     },
+    /// Composite a fill onto a base through a stored mask (feather, hard; poisson with M7).
+    Paste {
+        /// The base image, in the mask's frame.
+        base: PathBuf,
+        /// The fill, in the mask's frame and size.
+        fill: PathBuf,
+        /// The mask directory (`<id>.mask/`).
+        mask: PathBuf,
+        /// feather (default), hard, or poisson.
+        #[arg(long, default_value = "feather")]
+        mode: String,
+        /// The file to write; overwritten if it exists. PNG, or JPEG for .jpg.
+        #[arg(long)]
+        out: PathBuf,
+        /// Exit 1 when the paste is not applicable (poisson before M7).
+        #[arg(long)]
+        strict: bool,
+    },
     /// Render a stored mask for one consumer.
     Render {
         /// The mask directory (`<id>.mask/`).
@@ -217,6 +236,7 @@ const RESERVED: &[&str] = &[
     "render",
     "inspect",
     "export",
+    "paste",
     "dash",
     "ops",
     "workspace",
@@ -463,6 +483,45 @@ fn main() {
                 exit::code_for(&error)
             }
         },
+        Command::Paste {
+            base,
+            fill,
+            mask,
+            mode,
+            out,
+            strict,
+        } => {
+            let args = paste::PasteArgs {
+                base,
+                fill,
+                mask,
+                mode,
+                out,
+            };
+            match paste::paste(&registry, &args) {
+                Ok((path, Status::Ok, _)) => {
+                    println!("{}", path.display());
+                    exit::OK
+                }
+                Ok((_, status, reason)) => {
+                    eprintln!(
+                        "rascal paste: {}: {reason}; nothing written",
+                        serde_json::to_string(&status)
+                            .unwrap_or_default()
+                            .trim_matches('"')
+                    );
+                    if strict {
+                        exit::NOT_APPLICABLE
+                    } else {
+                        exit::OK
+                    }
+                }
+                Err(error) => {
+                    eprintln!("rascal paste: {error}");
+                    exit::code_for(&error)
+                }
+            }
+        }
         Command::Render {
             mask,
             profile,

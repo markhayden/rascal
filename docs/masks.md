@@ -91,6 +91,16 @@ the right and the right toward the left, rounded and clamped; a pixel with `w = 
 or outside the mask's support) is byte-identical. The ramp is zero at and beyond the band's
 half-width.
 
+## Paste
+
+`paste` composites a fill onto a base through the mask. The output starts as a copy of the
+base and only pixels with `w > 0` are written, so `out = base` wherever `w = 0`, protected
+pixels included: the preservation guarantee of a standalone paste. `feather` writes
+`(1 − w) · base + w · fill`; `hard` writes the fill where the core is set and not protected;
+`poisson`, the gradient-domain blend, arrives with M7 and is not applicable until then.
+Arithmetic is per RGB channel in `f32`, rounded and clamped; a base's alpha is kept, a fill's
+alpha is ignored and the summary says so.
+
 ## Identity
 
 `sha256:` over the three planes' pixel digests, the use case, the frame identity, the profile's
