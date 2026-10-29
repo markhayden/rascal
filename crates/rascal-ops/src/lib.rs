@@ -15,6 +15,7 @@ pub mod invert;
 pub mod line;
 pub mod measure;
 pub mod paste;
+pub mod poisson;
 pub mod primitives;
 pub mod profile;
 pub mod put;

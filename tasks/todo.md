@@ -78,6 +78,6 @@ with green CI on both platforms, and then the tag.
 - [ ] Checkpoint M6 → tag `m6`
 
 ## M7 Poisson and release
-- [ ] 7.1 The solver and `paste --mode poisson`
+- [x] 7.1 The solver and `paste --mode poisson`
 - [ ] 7.2 The final timing run and the release
 - [ ] Checkpoint M7 → tag `m7` → tag `v0.1.0`

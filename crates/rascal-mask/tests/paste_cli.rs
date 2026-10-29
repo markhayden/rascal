@@ -1,5 +1,6 @@
 //! Task 2.5's CLI scenario: `rascal paste base.png fill.png <mask> --mode hard --out c.png`;
-//! a diff of `c.png` against `base.png` is nonzero only inside the core.
+//! a diff of `c.png` against `base.png` is nonzero only inside the core. Task 7.1's: the
+//! spec's constant-fill case under `--mode poisson` returns the base.
 #![allow(clippy::unwrap_used)]
 
 use std::path::{Path, PathBuf};
@@ -24,7 +25,7 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 #[test]
-fn a_hard_paste_changes_only_the_core_and_poisson_is_not_applicable() {
+fn a_hard_paste_changes_only_the_core_and_poisson_returns_the_base_for_a_constant_fill() {
     let dir = scratch("hard");
     let floor = repo_root().join("fixtures/images/floor.png");
     let run = dir.join("run");
@@ -108,18 +109,26 @@ fn a_hard_paste_changes_only_the_core_and_poisson_is_not_applicable() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert_eq!(image::open(&composite).unwrap().to_rgb8(), got);
-    // poisson is not applicable until M7: exit 0 with the reason on stderr, 1 under --strict,
-    // and nothing written.
-    let other = dir.join("p.png");
+    // The spec's constant case under poisson: a constant fill on a constant base of another
+    // value returns the base exactly (zero source gradients, the boundary from the base).
+    let flat = dir.join("flat.png");
+    image::RgbImage::from_fn(w, h, |_, _| image::Rgb([40, 90, 140]))
+        .save(&flat)
+        .unwrap();
+    let grey = dir.join("grey.png");
+    image::RgbImage::from_fn(w, h, |_, _| image::Rgb([200, 200, 200]))
+        .save(&grey)
+        .unwrap();
+    let poisson = dir.join("p.png");
     let out = rascal(&[
         "paste",
-        floor.to_str().unwrap(),
-        fill_path.to_str().unwrap(),
+        flat.to_str().unwrap(),
+        grey.to_str().unwrap(),
         mask_dir.to_str().unwrap(),
         "--mode",
         "poisson",
         "--out",
-        other.to_str().unwrap(),
+        poisson.to_str().unwrap(),
     ]);
     assert_eq!(
         out.status.code(),
@@ -127,21 +136,12 @@ fn a_hard_paste_changes_only_the_core_and_poisson_is_not_applicable() {
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(String::from_utf8_lossy(&out.stderr).contains("M7"));
-    assert!(!other.exists());
-    let out = rascal(&[
-        "paste",
-        floor.to_str().unwrap(),
-        fill_path.to_str().unwrap(),
-        mask_dir.to_str().unwrap(),
-        "--mode",
-        "poisson",
-        "--out",
-        other.to_str().unwrap(),
-        "--strict",
-    ]);
-    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(
+        image::open(&poisson).unwrap().to_rgb8(),
+        image::open(&flat).unwrap().to_rgb8()
+    );
     // A fill of another size is a usage error.
+    let other = dir.join("other.png");
     let small = dir.join("small.png");
     image::RgbImage::new(10, 10).save(&small).unwrap();
     let out = rascal(&[

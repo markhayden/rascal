@@ -8,7 +8,7 @@ dir = "ws"
 [fillers.local-inpaint]
 command = ["python", "fill.py", "{image}", "{mask}", "{out}"]
 profile = "grey"                                 # the rendering it takes: grey or binary (mask input), alpha or tinted (image input)
-paste = "feather"                                # how its result is composited: feather, hard, poisson (M7)
+paste = "feather"                                # how its result is composited: feather, hard or poisson (docs/masks.md)
 timeout_s = 120
 revision = "fill.py 2026-10-28"                  # free text the lab hashes into cell identity; required for lab use
 

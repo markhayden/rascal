@@ -1,6 +1,6 @@
 //! Task 2.5: `paste`. Each mode writes only `w > 0` unprotected pixels; a fill equal to base
 //! returns base; a fill that differs from base at every pixel still leaves `w = 0` pixels
-//! equal to base; an RGBA base keeps its alpha; poisson is not applicable until M7.
+//! equal to base; an RGBA base keeps its alpha. The poisson mode has its own file.
 #![allow(clippy::unwrap_used)]
 
 use std::collections::BTreeMap;
@@ -136,7 +136,7 @@ fn each_mode_writes_only_where_it_may_and_leaves_w_zero_pixels_equal_to_base() {
                 let core = m.core.get_pixel(x, y)[0] != 0;
                 let protected = m.protect.get_pixel(x, y)[0] != 0;
                 match mode_enum {
-                    Mode::Feather => {
+                    Mode::Feather | Mode::Poisson => {
                         if w <= 0.0 {
                             assert_eq!(
                                 g, b,
@@ -200,7 +200,7 @@ fn each_mode_writes_only_where_it_may_and_leaves_w_zero_pixels_equal_to_base() {
 }
 
 #[test]
-fn an_rgba_base_keeps_its_alpha_a_fill_alpha_is_ignored_and_poisson_waits_for_m7() {
+fn an_rgba_base_keeps_its_alpha_and_a_fill_alpha_is_ignored() {
     let f = frame();
     let m = mask(&f);
     let base = RgbaImage::from_fn(W, H, |x, y| {
@@ -236,9 +236,6 @@ fn an_rgba_base_keeps_its_alpha_a_fill_alpha_is_ignored_and_poisson_waits_for_m7
             assert_eq!(p[0], expected, "{x},{y}");
         }
     }
-    let out = run(&table, &ins, "poisson");
-    assert_eq!(out.envelope.status, Status::NotApplicable);
-    assert!(out.envelope.reason.as_deref().unwrap().contains("M7"));
     // Sizes must agree.
     let small = RgbImage::new(W / 2, H);
     let (table, ins) = inputs(

@@ -2,7 +2,10 @@
 //! "Operations", the paste contract). `out` starts as a copy of `base`; only pixels with
 //! `w > 0` are written, so `out = base` wherever `w = 0`, protected pixels included. Modes:
 //! `feather` blends by `w`, `hard` writes the fill where the core is set and not protected,
-//! `poisson` is the M7 milestone and is not applicable until then.
+//! `poisson` solves the gradient-domain blend (`poisson`) over the unprotected `w > 0`
+//! pixels and then blends the clamped `f32` solution by `w`, rounding once at the end, so the
+//! blend zone still fades. A wrap frame has no adjacency the solve could use and is refused
+//! under `poisson`.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -11,29 +14,32 @@ use image::{DynamicImage, GenericImageView};
 use rascal_core::Error;
 use rascal_core::artifact::{Artifact, ArtifactType};
 use rascal_core::error::Result;
+use rascal_core::frame::Topology;
 use rascal_core::image::{Image, Role};
 use rascal_core::mask::Mask;
 use rascal_core::op::{
     Context, Cost, CostTier, Inputs, Manifest, Op, Output, Param, ParamKind, Params, Port,
 };
 
+use crate::poisson::{self, Settings, Solve};
+
 /// The op.
 pub struct Paste;
 
 const NAME: &str = "paste";
 
-/// The modes a manifest lists; `poisson` is accepted and answers `not_applicable` until M7.
+/// The modes a manifest lists.
 pub const MODES: [&str; 3] = ["feather", "hard", "poisson"];
 
 impl Op for Paste {
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,
-            "1.0.0",
-            "A fill composited onto the base through the mask: feather blends by the effective weight, hard writes the core.",
-            "After a filler returns its result for the mask's frame, or after apply, to produce the composite; the last step of the heal graph before put.",
-            "When the fill is not the mask's frame and size (window or put first); for a seamless gradient-domain blend (poisson arrives with M7).",
-            "An Image in the mask's frame with the composite role. Pixels with effective weight 0 are copied from the base without arithmetic, protected pixels included; feather: (1 − w) · base + w · fill; hard: fill where the core is set and not protected. A base's alpha is kept; a fill's alpha is ignored and the summary says so.",
+            "1.1.0",
+            "A fill composited onto the base through the mask: feather blends by the effective weight, hard writes the core, poisson blends in the gradient domain.",
+            "After a filler returns its result for the mask's frame, or after apply, to produce the composite; the last step of the heal graph before put. poisson when the fill's tone or level does not match the base at the mask's edge: it keeps the fill's gradients and takes its values from the base around the mask.",
+            "When the fill is not the mask's frame and size (window or put first); poisson on a wrap frame (cut the band first; the seam canvas is bounded) or on a mask whose every w > 0 pixel is cut off from the base (nothing to anchor to).",
+            "An Image in the mask's frame with the composite role. Pixels with effective weight 0 are copied from the base without arithmetic, protected pixels included; feather: (1 − w) · base + w · fill; hard: fill where the core is set and not protected; poisson: the Poisson solve over the unprotected w > 0 pixels with the fill's gradients and the base's values at the edge, clamped, then (1 − w) · base + w · solution. A base's alpha is kept; a fill's alpha is ignored and the summary says so. poisson reports the domain size and the iterations, takes seconds rather than the other modes' fraction of one on a domain of a million pixels, and a solve that does not converge within poisson-v1's ceiling is an operational error.",
             Cost {
                 tier: CostTier::Cheap,
                 seconds: 0.1,
@@ -71,13 +77,14 @@ impl Op for Paste {
             vec![
                 Param::optional(
                     "mode",
-                    "feather: blend by the effective weight; hard: the fill where the core is set; poisson: the gradient-domain blend of M7.",
+                    "feather: blend by the effective weight; hard: the fill where the core is set; poisson: the gradient-domain blend, then the feather of its solution.",
                     ParamKind::Choice,
                     serde_json::json!("feather"),
                 )
                 .choices(&MODES),
             ],
         )
+        .with_constants(&["poisson-v1"])
     }
 
     fn run(&self, context: &Context<'_>, inputs: &Inputs, params: &Params) -> Result<Output> {
@@ -107,31 +114,74 @@ impl Op for Paste {
         let mode = match mode {
             "feather" => Mode::Feather,
             "hard" => Mode::Hard,
-            "poisson" => {
-                return Ok(Output::not_applicable(
-                    "poisson paste arrives with milestone M7; use feather or hard",
-                ));
-            }
+            "poisson" => Mode::Poisson,
             other => return Ok(Output::invalid_args(format!("unknown mode {other}"))),
         };
-        let (pixels, written) = paste_pixels(&base.pixels, &fill.pixels, mask, mode);
+        // poisson: solve first, then feather the clamped solution by w.
+        let mut solved = None;
+        let (pixels, written) = match mode {
+            Mode::Poisson => {
+                if frame.topology == Topology::Wrap {
+                    return Ok(Output::invalid_args(format!(
+                        "poisson paste refuses the wrap frame {}: cut the band first, the seam canvas is bounded",
+                        frame.id
+                    )));
+                }
+                match poisson::solve(
+                    &base.pixels.to_rgb8(),
+                    &fill.pixels.to_rgb8(),
+                    mask,
+                    &Settings::v1(),
+                )? {
+                    Solve::Unanchored { component_px } => {
+                        return Ok(Output::not_applicable(format!(
+                            "poisson paste has nothing to anchor to: {component_px} editable pixels form a component with no neighbour outside the mask's w > 0 pixels"
+                        )));
+                    }
+                    Solve::Solved {
+                        solution,
+                        domain_px,
+                        iterations,
+                    } => {
+                        solved = Some((domain_px, iterations));
+                        let width = mask.dimensions().0 as usize;
+                        composite(&base.pixels, mask, Mode::Feather, |x, y| {
+                            let at = (y as usize * width + x as usize) * 3;
+                            [solution[at], solution[at + 1], solution[at + 2]]
+                        })
+                    }
+                }
+            }
+            Mode::Feather | Mode::Hard => paste_pixels(&base.pixels, &fill.pixels, mask, mode),
+        };
         let out = Image::new("paste.image", pixels, frame, Role::Composite, None);
         let fill_alpha = if matches!(fill.pixels, DynamicImage::ImageRgba8(_)) {
             "; the fill's alpha was ignored"
         } else {
             ""
         };
+        let solve_note = solved
+            .map(|(domain_px, iterations)| {
+                format!(" ({domain_px} pixels solved in {iterations} iterations)")
+            })
+            .unwrap_or_default();
         let mut outputs = BTreeMap::new();
         outputs.insert("image".to_string(), Artifact::Image(Arc::new(out)));
-        Ok(Output::ok(
+        let mut output = Output::ok(
             format!(
-                "{} paste in {}: {written} pixels written, every w = 0 pixel copied from the base{fill_alpha}",
+                "{} paste in {}: {written} pixels written{solve_note}, every w = 0 pixel copied from the base{fill_alpha}",
                 mode.name(),
                 frame.id
             ),
             outputs,
         )
-        .with_measurement("written_px", written as f64, "px", Some(&frame.id)))
+        .with_measurement("written_px", written as f64, "px", Some(&frame.id));
+        if let Some((domain_px, iterations)) = solved {
+            output = output
+                .with_measurement("domain_px", domain_px as f64, "px", Some(&frame.id))
+                .with_measurement("iterations", iterations as f64, "iterations", None);
+        }
+        Ok(output)
     }
 }
 
@@ -140,6 +190,7 @@ impl Op for Paste {
 pub enum Mode {
     Feather,
     Hard,
+    Poisson,
 }
 
 impl Mode {
@@ -147,6 +198,7 @@ impl Mode {
         match self {
             Mode::Feather => "feather",
             Mode::Hard => "hard",
+            Mode::Poisson => "poisson",
         }
     }
 }
@@ -154,23 +206,38 @@ impl Mode {
 /// The contract on pixels: a copy of `base` with only `w > 0` pixels written (feather) or
 /// only unprotected core pixels (hard), arithmetic per RGB channel in `f32`, rounded and
 /// clamped; a base's alpha is kept, a fill's ignored. Returns the composite and how many
-/// pixels were written.
+/// pixels were written. `Poisson` is the feather of the solved fill, which the op blends
+/// through `composite` with the `f32` solution; given an 8-bit fill it is feather.
 pub fn paste_pixels(
     base: &DynamicImage,
     fill: &DynamicImage,
     mask: &Mask,
     mode: Mode,
 ) -> (DynamicImage, u64) {
-    let (w, h) = mask.dimensions();
     let fill_rgb = fill.to_rgb8();
+    composite(base, mask, mode, |x, y| {
+        let f = fill_rgb.get_pixel(x, y);
+        [f32::from(f[0]), f32::from(f[1]), f32::from(f[2])]
+    })
+}
+
+/// The paste over a fill given per pixel in `f32`: the arithmetic of the contract, rounded
+/// and clamped once at the end.
+fn composite(
+    base: &DynamicImage,
+    mask: &Mask,
+    mode: Mode,
+    fill_at: impl Fn(u32, u32) -> [f32; 3],
+) -> (DynamicImage, u64) {
+    let (w, h) = mask.dimensions();
     let mut written = 0u64;
     let mut blend = |x: u32, y: u32, dst: &mut [u8]| {
         let weight = mask.weight(x, y);
-        let f = fill_rgb.get_pixel(x, y);
         match mode {
-            Mode::Feather if weight > 0.0 => {
+            Mode::Feather | Mode::Poisson if weight > 0.0 => {
+                let f = fill_at(x, y);
                 for ch in 0..3 {
-                    let v = (1.0 - weight) * f32::from(dst[ch]) + weight * f32::from(f[ch]);
+                    let v = (1.0 - weight) * f32::from(dst[ch]) + weight * f[ch];
                     dst[ch] = v.round().clamp(0.0, 255.0) as u8;
                 }
                 written += 1;
@@ -178,7 +245,10 @@ pub fn paste_pixels(
             Mode::Hard
                 if mask.core.get_pixel(x, y)[0] != 0 && mask.protect.get_pixel(x, y)[0] == 0 =>
             {
-                dst[..3].copy_from_slice(&f.0);
+                let f = fill_at(x, y);
+                for ch in 0..3 {
+                    dst[ch] = f[ch].round().clamp(0.0, 255.0) as u8;
+                }
                 written += 1;
             }
             _ => {}
