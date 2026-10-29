@@ -1099,8 +1099,10 @@ release gate waits on criterion 6 passing or on the owner's recorded, dated scop
 `docs/owner-decisions.md`.
 
 **Acceptance.**
-- [ ] The results document exists with the protocol digest, the outcome per group and the
-      measures; criterion 6 is marked met, or the gate is recorded as open.
+- [x] The results document exists with the protocol digest, the outcome per group and the
+      measures; criterion 6 is marked met, or the gate is recorded as open. (`seam-01`,
+      2026-10-29: sky `worse`, structured `inconclusive`; the gate is open and `seam-02` is
+      the refit, `docs/results/seam-01.md`.)
 
 **Verification.** Owner. **Dependencies.** 6.3. **Files.** `docs/results/seam-01.md`. **Size.** S
 (code), the owner's time otherwise.
