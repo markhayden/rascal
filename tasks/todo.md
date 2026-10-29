@@ -33,7 +33,7 @@ with green CI on both platforms, and then the tag.
 - [x] 1.8b `line`, `stroke` and the full `rasterize`
 - [x] 1.9 `inspect`, compatibility export, self-contained runs, docs coverage
 - [x] 1.10 The run page and tracing → tag `m1.2`
-- [ ] Checkpoint M1 → tag `m1`
+- [x] Checkpoint M1 → tag `m1` (reviews in docs/reviews/m1-checkpoint.md)
 
 ## M2 Seam
 - [ ] 2.1 `fan` and the band profile
