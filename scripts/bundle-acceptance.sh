@@ -85,5 +85,5 @@ else
 fi
 
 echo "bundle: the Rust install test against this bundle"
-RASCAL_BUNDLE="$scratch/bundle" cargo test --quiet -p rascal-mask --test tools_setup -- a_built_bundle
+RASCAL_BUNDLE="$scratch/bundle" RASCAL_BUNDLE_REQUIRED=1 cargo test --quiet -p rascal-mask --test tools_setup -- a_built_bundle
 echo "bundle ok: $platform"

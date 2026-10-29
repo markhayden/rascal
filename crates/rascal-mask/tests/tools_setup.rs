@@ -4,7 +4,7 @@
 //! touching the current directory, and refuses a machine without uv before writing; with
 //! `RASCAL_BUNDLE` naming a bundle built by `scripts/build-bundle.sh` for this machine, it
 //! installs into a clean directory with no network and the installed pack answers
-//! `echo_region` (skipped with a note outside CI, a failure in CI).
+//! `echo_region` (skipped with a note otherwise; the acceptance script requires it).
 #![allow(clippy::unwrap_used)]
 
 use std::path::{Path, PathBuf};
@@ -208,9 +208,11 @@ fn setup_refuses_a_tampered_bundle_a_missing_one_another_platform_and_no_destina
 #[test]
 fn a_built_bundle_installs_offline_and_the_installed_pack_answers() {
     let Some(bundle) = std::env::var_os("RASCAL_BUNDLE") else {
+        // The ordinary suite has no bundle; the acceptance script builds one and requires
+        // this test to run against it.
         assert!(
-            std::env::var_os("CI").is_none(),
-            "RASCAL_BUNDLE is not set in CI; scripts/bundle-acceptance.sh sets it"
+            std::env::var_os("RASCAL_BUNDLE_REQUIRED").is_none(),
+            "RASCAL_BUNDLE_REQUIRED is set but RASCAL_BUNDLE is not; scripts/bundle-acceptance.sh sets both"
         );
         eprintln!("skipped: RASCAL_BUNDLE is not set (scripts/build-bundle.sh makes one)");
         return;
