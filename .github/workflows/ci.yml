@@ -39,6 +39,14 @@ jobs:
       - name: Scripts are executable
         run: |
           for f in scripts/*.sh scripts/hooks/pre-commit; do test -x "$f" || { echo "$f is not executable"; exit 1; }; done
+      - name: Install uv (the Python pack's tool)
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.23"
+          enable-cache: true
+          cache-dependency-glob: "tools/python/uv.lock"
+      - name: Sync the Python pack's environment from its lock
+        run: uv sync --frozen --project tools/python
       - run: just check
       - run: just deny-advisories
       - name: Smoke the debug binary

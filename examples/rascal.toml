@@ -31,7 +31,7 @@ revision = "vendor model 2026-10"
 # PATH, HOME, LANG, LC_ALL, TMPDIR plus `env`, minus every filler's key_env and every *_KEY,
 # *_TOKEN, *_SECRET name; removal wins over declaration.
 [packs.rascal-tools]
-command = ["/opt/rascal-tools/.venv/bin/rascal-tools", "serve"]
+command = ["/opt/rascal-tools/.venv/bin/rascal-tools", "serve"]   # the pack's own environment; in a checkout, tools/python/.venv/bin/rascal-tools
 env = ["RASCAL_TOOLS_MODELS"]
 accepts = "path"                                 # or base64
 concurrent = false                               # effective only when the tool's manifest agrees

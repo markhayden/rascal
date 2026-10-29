@@ -241,3 +241,23 @@ impl PackContext {
         self.frames.iter().map(|f| (f.id.clone(), f)).collect()
     }
 }
+
+/// The Python pack's bundle manifest, `bundle.toml` (SPEC.md "The Python pack and its
+/// bundle"): what `rascal tools setup` verifies before it installs. Every file in the bundle
+/// is listed with its digest; nothing else is installed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BundleManifest {
+    pub bundle_version: u32,
+    /// The pack's distribution name (`rascal-tools`).
+    pub pack: String,
+    pub pack_version: String,
+    /// The interpreter line the bundle was built for (`3.12`).
+    pub python: String,
+    /// `macos-arm64` or `linux-x86_64`.
+    pub platform: String,
+    /// The pack wheel's path inside the bundle.
+    pub wheel: String,
+    /// Every file in the bundle by relative path, with its `sha256:<hex>` digest.
+    pub files: BTreeMap<String, String>,
+}

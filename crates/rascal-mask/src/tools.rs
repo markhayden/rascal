@@ -1,7 +1,9 @@
-//! `rascal tools list --config rascal.toml` and `rascal tools call <pack> <tool> …`: the
-//! configured packs from the shell. `list` starts every pack and prints its tools as a client
-//! sees them; `call` starts one pack and runs one tool as an op subcommand would, with the
-//! same arguments (`--image <id or path>`, the tool's parameters, `--json`, `--out`).
+//! `rascal tools list --config rascal.toml`, `rascal tools call <pack> <tool> …` and
+//! `rascal tools setup --bundle <dir>`: the configured packs from the shell. `list` starts
+//! every pack and prints its tools as a client sees them; `call` starts one pack and runs one
+//! tool as an op subcommand would, with the same arguments (`--image <id or path>`, the
+//! tool's parameters, `--json`, `--out`); `setup` installs the Python pack from its bundle
+//! with no network (`rascal_mcp::provision`).
 
 use std::path::Path;
 use std::sync::Arc;
@@ -11,6 +13,7 @@ use rascal_core::config::Config;
 use rascal_core::error::Result;
 use rascal_core::workspace::Workspace;
 use rascal_mcp::client::Pack;
+use rascal_mcp::provision::{Bundle, install_dir_of, prerequisites, same_dir};
 
 /// Prints every configured pack's tools: the op view (name, version, purpose, ports,
 /// parameters, bounds) or, with `--json`, the native manifests by pack.
@@ -145,4 +148,112 @@ pub fn call(
         return Err(Error::usage("tools call: no tool"));
     };
     Ok(crate::workspace_cmd::run_op(&registry, name, sub))
+}
+
+/// `rascal tools setup --bundle <dir> [--into <dir>] [--config rascal.toml [--pack <name>]]`:
+/// the bundle verified, the platform checked, the destination checked, uv and the interpreter
+/// found, the files copied, the environment synced offline, the launcher smoked, and the pack
+/// entry to write printed. With `--config` and no `--into`, the install directory is the one
+/// the entry's command points at (`<dir>/.venv/bin/rascal-tools`, a relative `<dir>` taken
+/// from the configuration file's directory).
+pub fn setup(
+    bundle: &Path,
+    into: Option<&Path>,
+    config: Option<&Path>,
+    pack: Option<&str>,
+) -> Result<()> {
+    let bundle = Bundle::open(bundle)?;
+    bundle.check_platform()?;
+    let configured = match config {
+        Some(path) => {
+            let config = Config::read(path)?;
+            let (name, entry) = match pack {
+                Some(name) => config.packs.get_key_value(name).ok_or_else(|| {
+                    Error::usage(format!("no [packs.{name}] in {}", path.display()))
+                })?,
+                None => {
+                    let mut candidates: Vec<_> = config
+                        .packs
+                        .iter()
+                        .filter(|(_, e)| {
+                            install_dir_of(&e.command, &bundle.manifest.pack).is_some()
+                        })
+                        .collect();
+                    match candidates.len() {
+                        1 => candidates.remove(0),
+                        0 => {
+                            return Err(Error::usage(format!(
+                                "{}: no pack entry's command is <dir>/.venv/bin/{}; give --into",
+                                path.display(),
+                                bundle.manifest.pack
+                            )));
+                        }
+                        _ => {
+                            return Err(Error::usage(format!(
+                                "{}: several pack entries install {}; give --pack",
+                                path.display(),
+                                bundle.manifest.pack
+                            )));
+                        }
+                    }
+                }
+            };
+            let dir = install_dir_of(&entry.command, &bundle.manifest.pack).ok_or_else(|| {
+                Error::usage(format!(
+                    "[packs.{name}]: command[0] is not <dir>/.venv/bin/{} with a directory before .venv; give --into",
+                    bundle.manifest.pack
+                ))
+            })?;
+            let dir = if dir.is_absolute() {
+                dir
+            } else {
+                path.parent()
+                    .map(Path::to_path_buf)
+                    .unwrap_or_default()
+                    .join(dir)
+            };
+            Some((name.clone(), dir))
+        }
+        None => None,
+    };
+    let into = match (into, &configured) {
+        (Some(into), _) => into.to_path_buf(),
+        (None, Some((_, dir))) => dir.clone(),
+        (None, None) => return Err(Error::usage("give --into <dir> or --config rascal.toml")),
+    };
+    bundle.check_destination(&into)?;
+    bundle.verify()?;
+    println!(
+        "bundle: {} {} for {}, Python {}, {} files verified, digest {}",
+        bundle.manifest.pack,
+        bundle.manifest.pack_version,
+        bundle.manifest.platform,
+        bundle.manifest.python,
+        bundle.manifest.files.len(),
+        bundle.digest
+    );
+    let prerequisites = prerequisites(&bundle.manifest.python)?;
+    println!(
+        "prerequisites: {} and {}",
+        prerequisites.uv_version,
+        prerequisites.python.display()
+    );
+    let installed = bundle.install(&into, &prerequisites)?;
+    println!(
+        "installed: {} ({})",
+        installed.launcher.display(),
+        installed.version_line
+    );
+    let command = format!(
+        "command = [{:?}, \"serve\"]",
+        installed.launcher.display().to_string()
+    );
+    match configured {
+        Some((name, dir)) if same_dir(&dir, &into) => {
+            println!("[packs.{name}] already points here")
+        }
+        Some((name, _)) => println!("[packs.{name}]: set {command}"),
+        None => println!("[packs.{}]: {command}", bundle.manifest.pack),
+    }
+    Ok(())
 }

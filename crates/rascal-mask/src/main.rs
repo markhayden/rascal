@@ -374,6 +374,23 @@ enum ToolsCommand {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// Install the Python pack from a bundle with no network: verify every digest, copy the
+    /// listed files, sync the environment from the wheelhouse, smoke the launcher.
+    Setup {
+        /// The bundle directory (scripts/build-bundle.sh, or the release's bundle archive unpacked).
+        #[arg(long)]
+        bundle: PathBuf,
+        /// Where to install: a new or empty directory, or the bundle itself (in place).
+        /// Without it, the directory the configured pack's command points at.
+        #[arg(long)]
+        into: Option<PathBuf>,
+        /// The configuration file (rascal.toml) whose pack entry names the install.
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// The pack entry in the configuration, when there are several.
+        #[arg(long)]
+        pack: Option<String>,
+    },
 }
 
 /// Built-in command names that an op may not shadow.
@@ -622,6 +639,13 @@ fn main() {
                     workspace,
                     args,
                 } => tools::call(&pack, &tool, &config, &workspace, &args),
+                ToolsCommand::Setup {
+                    bundle,
+                    into,
+                    config,
+                    pack,
+                } => tools::setup(&bundle, into.as_deref(), config.as_deref(), pack.as_deref())
+                    .map(|()| exit::OK),
             };
             match result {
                 Ok(code) => code,

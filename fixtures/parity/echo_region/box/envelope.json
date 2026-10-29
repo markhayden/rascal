@@ -1,0 +1,40 @@
+{
+  "envelope_version": 1,
+  "images": [
+    {
+      "frame": "raw:64x48:flat",
+      "height": 48,
+      "identity": "",
+      "media_type": "image/png",
+      "parent": "raw:64x48:flat",
+      "width": 64
+    }
+  ],
+  "measurements": [
+    {
+      "frame": "raw:64x48:flat",
+      "name": "plane_px",
+      "unit": "px",
+      "value": 576.0
+    }
+  ],
+  "regions": [
+    {
+      "id": "echo-0",
+      "label": "echo",
+      "location": {
+        "bbox": [
+          0.125,
+          0.25,
+          0.5,
+          0.75
+        ],
+        "frame": "raw:64x48:flat",
+        "kind": "bbox"
+      },
+      "score": 1.0
+    }
+  ],
+  "status": "ok",
+  "summary": "echoed the box [0.125, 0.25, 0.5, 0.75] as one region and one plane"
+}

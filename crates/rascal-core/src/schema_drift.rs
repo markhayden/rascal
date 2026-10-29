@@ -88,7 +88,7 @@ pub fn inventory() -> Vec<BoundaryType> {
     use crate::location::Location;
     use crate::mask::{InspectReport, MaskRecord};
     use crate::op::{Envelope, Manifest};
-    use crate::pack::{PackAnnotation, PackContext};
+    use crate::pack::{BundleManifest, PackAnnotation, PackContext};
     use crate::profile::BandProfile;
     use crate::recipe::Recipe;
     use crate::replay::ReplayReport;
@@ -173,6 +173,12 @@ pub fn inventory() -> Vec<BoundaryType> {
             "rascal/pack-annotation-v1.json",
             Source::Generated,
             ["pack-annotation-v1/segment.json"]
+        ),
+        boundary_type!(
+            BundleManifest,
+            "rascal/bundle-v1.json",
+            Source::Generated,
+            ["bundle-v1/macos-arm64.json"]
         ),
         boundary_type!(
             PackContext,
