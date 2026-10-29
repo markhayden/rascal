@@ -284,3 +284,60 @@ fn a_run_with_a_shared_workspace_keeps_artifacts_there() {
     assert_eq!(masks, 1);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn workspace_repair_reports_what_it_did() {
+    let dir = scratch("repair");
+    let ws = dir.join("ws");
+    let floor = repo_root().join("fixtures/images/floor.png");
+    assert!(
+        rascal(&[
+            "workspace",
+            "import",
+            ws.to_str().unwrap(),
+            floor.to_str().unwrap()
+        ])
+        .status
+        .success()
+    );
+    assert!(
+        rascal(&[
+            "rect",
+            "--workspace",
+            ws.to_str().unwrap(),
+            "--image",
+            "img-1",
+            "--bbox",
+            "0.2,0.2,0.4,0.5"
+        ])
+        .status
+        .success()
+    );
+    std::fs::write(ws.join("ops/deadbeef.json"), "{}").unwrap();
+    let out = rascal(&["workspace", "repair", ws.to_str().unwrap(), "--json"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(
+        report["orphans_removed"],
+        serde_json::json!(["ops/deadbeef.json"])
+    );
+    assert_eq!(
+        report["journal_lines"], 3,
+        "the note, the import and the rect"
+    );
+    let journal = std::fs::read_to_string(ws.join("journal.jsonl")).unwrap();
+    assert!(
+        journal
+            .lines()
+            .next()
+            .unwrap()
+            .contains("journal rebuilt by repair")
+    );
+    let out = rascal(&["workspace", "repair", ws.to_str().unwrap()]);
+    assert!(String::from_utf8_lossy(&out.stdout).contains("0 orphans removed"));
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -48,6 +48,31 @@ pub fn import(dir: &Path, image: &Path, projection: Option<Projection>) -> Resul
     Ok(())
 }
 
+/// Repairs a workspace and prints the report.
+pub fn repair(dir: &Path, json: bool) -> Result<()> {
+    let report = Workspace::repair(dir)?;
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).unwrap_or_default()
+        );
+    } else {
+        println!(
+            "repaired {}: {} abandoned staging removed, {} orphans removed, {} missing entries dropped{}, journal rebuilt with {} lines",
+            dir.display(),
+            report.abandoned_staging_removed.len(),
+            report.orphans_removed.len(),
+            report.missing_dropped.len(),
+            report
+                .repaired_generation
+                .map(|g| format!(" (generation {g})"))
+                .unwrap_or_default(),
+            report.journal_lines
+        );
+    }
+    Ok(())
+}
+
 /// The per-op subcommands, one per manifest (built-in command names are skipped).
 pub fn op_commands(registry: &OpRegistry, reserved: &[&str]) -> Vec<Command> {
     registry

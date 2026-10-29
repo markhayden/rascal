@@ -18,6 +18,7 @@
 pub mod commit;
 pub mod record;
 pub mod registry;
+pub mod repair;
 pub mod staging;
 pub mod sync;
 
@@ -66,7 +67,13 @@ pub struct Invocation {
     pub committed: Option<Committed>,
     /// The artifacts published, by output port, with their new local ids.
     pub ids: BTreeMap<String, String>,
+    /// Cancellation was requested. Before the writer lock, nothing was published and
+    /// `committed` is `None`; after it, the commit ran to completion and `committed` is set.
+    pub cancelled: bool,
 }
+
+/// A cancellation request, checked once before the writer lock is taken.
+pub type Cancel = std::sync::atomic::AtomicBool;
 
 const DIRS: [&str; 5] = ["images", "artifacts", "ops", "registry", "staging"];
 
@@ -76,6 +83,22 @@ impl Workspace {
     /// artifact missing on disk refuses the workspace until `repair` has run.
     pub fn open(root: &Path) -> Result<Workspace> {
         Workspace::open_with(root, Arc::new(RealFs))
+    }
+
+    /// Opens without the missing-payload refusal, for repair.
+    pub fn open_unchecked(root: &Path) -> Result<Workspace> {
+        let fs: Arc<dyn Fs> = Arc::new(RealFs);
+        for dir in DIRS {
+            fs.create_dir_all(&root.join(dir))?;
+        }
+        Ok(Workspace {
+            root: root.to_path_buf(),
+            fs,
+        })
+    }
+
+    pub(crate) fn fs_handle(&self) -> Arc<dyn Fs> {
+        self.fs.clone()
     }
 
     /// Opens with a filesystem of the caller's choosing (tests inject a recording one).
@@ -373,6 +396,20 @@ impl Workspace {
         inputs: &Inputs,
         params: &Params,
     ) -> Result<Invocation> {
+        self.invoke_with(step_id, op_name, registry, inputs, params, None)
+    }
+
+    /// `invoke` with a cancellation flag.
+    #[allow(clippy::too_many_arguments)]
+    pub fn invoke_with(
+        &self,
+        step_id: &str,
+        op_name: &str,
+        registry: &OpRegistry,
+        inputs: &Inputs,
+        params: &Params,
+        cancel: Option<&Cancel>,
+    ) -> Result<Invocation> {
         let op = registry.require(op_name)?;
         let manifest = op.manifest();
         op::validate_inputs(&manifest, inputs)?;
@@ -507,6 +544,7 @@ impl Workspace {
                 output,
                 committed: None,
                 ids: BTreeMap::new(),
+                cancelled: false,
             });
         }
         let mut record = OperationRecord::new(
@@ -523,21 +561,39 @@ impl Workspace {
         // New frames an op introduced (cut, window) are those its outputs are in and the
         // snapshot does not know.
         let new_frames: Vec<Frame> = Vec::new();
-        let (committed, ids) = self.publish(&output.outputs, new_frames, &mut record, started)?;
-        self.journal_line(
-            step_id,
-            &manifest,
-            &resolved,
-            input_identities,
-            output_identities,
-            Some(output.envelope.clone()),
-            duration_ms,
-        )?;
-        Ok(Invocation {
-            output,
-            committed: Some(committed),
-            ids,
-        })
+        let published =
+            self.publish_cancellable(&output.outputs, new_frames, &mut record, started, cancel)?;
+        let cancelled = cancel.is_some_and(|c| c.load(std::sync::atomic::Ordering::SeqCst));
+        match published {
+            Some((committed, ids)) => {
+                self.journal_line(
+                    step_id,
+                    &manifest,
+                    &resolved,
+                    input_identities,
+                    output_identities,
+                    Some(output.envelope.clone()),
+                    duration_ms,
+                )?;
+                Ok(Invocation {
+                    output,
+                    committed: Some(committed),
+                    ids,
+                    cancelled,
+                })
+            }
+            None => {
+                self.note(format!(
+                    "step {step_id}: cancelled before the writer lock; nothing published"
+                ))?;
+                Ok(Invocation {
+                    output,
+                    committed: None,
+                    ids: BTreeMap::new(),
+                    cancelled: true,
+                })
+            }
+        }
     }
 
     /// Journals a committed built-in record (import, locate).
@@ -618,6 +674,19 @@ impl Workspace {
         record: &mut OperationRecord,
         started: Instant,
     ) -> Result<(Committed, BTreeMap<String, String>)> {
+        self.publish_cancellable(outputs, frames, record, started, None)?
+            .ok_or_else(|| Error::usage("cancelled"))
+    }
+
+    /// `publish`, returning `None` when cancellation was requested before the writer lock.
+    fn publish_cancellable(
+        &self,
+        outputs: &BTreeMap<String, Artifact>,
+        frames: Vec<Frame>,
+        record: &mut OperationRecord,
+        started: Instant,
+        cancel: Option<&Cancel>,
+    ) -> Result<Option<(Committed, BTreeMap<String, String>)>> {
         let staging = Staging::create(&self.root.join("staging"), &staging::token())?;
         let fs = self.fs.clone();
         let result = (|| {
@@ -689,12 +758,27 @@ impl Workspace {
                 pending.push(item);
             }
             record.duration_ms = started.elapsed().as_millis() as u64;
-            commit::commit(self, fs.as_ref(), &staging.dir, &pending, &frames, record)
+            commit::commit(
+                self,
+                fs.as_ref(),
+                &staging.dir,
+                &pending,
+                &frames,
+                record,
+                cancel,
+            )
         })();
-        if result.is_err() {
-            staging.discard();
+        match result {
+            Ok(Some(done)) => Ok(Some(done)),
+            Ok(None) => {
+                staging.discard();
+                Ok(None)
+            }
+            Err(e) => {
+                staging.discard();
+                Err(e)
+            }
         }
-        result
     }
 
     /// Lists the snapshot: `(kind, id, identity, frame)` for every frame, location and artifact.

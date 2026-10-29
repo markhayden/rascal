@@ -40,15 +40,39 @@ Ops stage in parallel and commit in turn.
 ## Staging and locks
 
 A staging directory's `lock` is held for the op's lifetime. On open, a staging directory whose
-lock can be taken has no owner and is removed; one that cannot is active and left alone. A
-generation that names an artifact missing on disk refuses the workspace until `rascal workspace
-repair` has run (task 1.7b).
+lock can be taken has no owner and is removed (never one this process owns, nor one younger
+than a few seconds); one that cannot is active and left alone. A generation that names an
+artifact missing on disk refuses the workspace until `rascal workspace repair` has run.
+
+## Cancellation
+
+A cancellation request is honoured once, before the writer lock is taken: nothing is published,
+the owner removes its staging directory, and the journal notes it. Once the lock is held the
+commit runs to completion and the op reports `committed` together with `cancelled`.
+
+## Repair
+
+`rascal workspace repair ws/ [--json]` puts right what a crash or a kill can leave behind, and
+reports what it did:
+
+- abandoned staging directories are removed;
+- an entry whose payload is missing on disk is dropped from a new, repaired generation (its
+  record stays, so the history says what happened);
+- files under `images/`, `artifacts/` and `ops/` that the current generation does not name are
+  orphans (a commit that never reached its pointer rename) and are removed;
+- the journal is rebuilt as a projection of the committed records in commit order, with a
+  first line saying it was rebuilt; a rebuilt journal holds only committed invocations.
+
+A run killed between the pointer rename and the journal append therefore repairs to a journal
+whose identities equal those of an uninterrupted run of the same recipe; a run killed earlier
+repairs to the previous generation with the failed commit's files gone.
 
 ## Commands
 
 ```
 rascal workspace import ws/ photo.jpg [--projection flat|equirectangular]   # prints the id and the frame
 rascal workspace list ws/ [--type Mask] [--json]
+rascal workspace repair ws/ [--json]
 rascal <op> --workspace ws/ --<port> <id> [--<param> <value>] [--constants <set>] [--strict]
 rascal run <recipe> <image> --out run/ [--workspace ws/]
 ```

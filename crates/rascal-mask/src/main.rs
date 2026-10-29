@@ -120,6 +120,13 @@ enum WorkspaceCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Remove abandoned staging and orphans, drop entries whose payload is missing, rebuild
+    /// the journal from the records.
+    Repair {
+        dir: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
     /// Import an image as a canonical image in its raw frame; prints its id.
     Import {
         dir: PathBuf,
@@ -281,6 +288,7 @@ fn main() {
                     image,
                     projection,
                 } => workspace_cmd::import(&dir, &image, projection.map(Into::into)),
+                WorkspaceCommand::Repair { dir, json } => workspace_cmd::repair(&dir, json),
             };
             match result {
                 Ok(()) => exit::OK,

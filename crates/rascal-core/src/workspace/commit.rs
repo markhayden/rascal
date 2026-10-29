@@ -59,7 +59,9 @@ pub struct Committed {
     pub seq: u64,
 }
 
-/// Runs the commit sequence and returns the commit and the local ids by output port.
+/// Runs the commit sequence and returns the commit and the local ids by output port, or
+/// `None` when cancellation was requested before the writer lock: nothing is published.
+#[allow(clippy::too_many_arguments)]
 pub fn commit(
     ws: &Workspace,
     fs: &dyn Fs,
@@ -67,9 +69,16 @@ pub fn commit(
     pending: &[Pending],
     frames: &[Frame],
     record: &mut OperationRecord,
-) -> Result<(Committed, BTreeMap<String, String>)> {
+    cancel: Option<&crate::workspace::Cancel>,
+) -> Result<Option<(Committed, BTreeMap<String, String>)>> {
     // 1. Everything staged is durable before anything moves.
     sync_tree(fs, staging_dir)?;
+
+    // Cancellation is honoured here and nowhere later: once the lock is held the commit runs
+    // to completion whatever the flag says.
+    if cancel.is_some_and(|c| c.load(std::sync::atomic::Ordering::SeqCst)) {
+        return Ok(None);
+    }
 
     // 2. The writer lock, held only across the commit.
     let lock_path = ws.root.join("lock");
@@ -81,7 +90,7 @@ pub fn commit(
 
     // 7. The staging directory has nothing left of value.
     let _ = fs.remove_dir_all(staging_dir);
-    Ok(committed)
+    Ok(Some(committed))
 }
 
 fn commit_locked(
