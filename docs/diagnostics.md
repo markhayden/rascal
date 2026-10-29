@@ -29,6 +29,9 @@ built from `journal.jsonl` and the operation records, from the template in
 
 The page names every journal line and no other, and embeds every artifact the journal names as
 a `data:` URI (PNG for images and mask planes, JSON for locations, plans, profiles and series),
+shown in place by the thumbnails; a link that opens an artifact in a new tab turns the same
+bytes into a `blob:` URL on its first click, since browsers refuse to navigate a tab to a
+`data:` URI,
 so the file stands alone. Each artifact is embedded once, in an asset table keyed by identity
 (a mask's planes under `<identity>/core`, `/blend`, `/protect`), however many journal lines name
 it; thumbnails and links take theirs from the table by key. After `rascal workspace repair` the
