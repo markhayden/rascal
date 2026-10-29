@@ -116,6 +116,11 @@ pub struct AttemptRecord {
     /// The result image, relative to the attempt, when the heal completed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub result: Option<String>,
+    /// The source image the heal started from (its canonical PNG in the run directory),
+    /// relative to the attempt, when the heal completed; the pairs page finds the focus of a
+    /// pair by what each result changed in it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stopped_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

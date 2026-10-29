@@ -1,6 +1,6 @@
 //! Task 6.3's scenario: after `lab run` on the example lab, `rascal lab pairs lab/ --arms
-//! fan-ramp,thin` writes the assignment and a page that embeds every result, names the pair
-//! ids and never an arm or a side; picks written the way the page writes them decode to the
+//! fan-ramp,thin` writes the assignment and a page that embeds every result whole and at the
+//! pair's focus, names the pair ids and never an arm or a side; picks written the way the page writes them decode to the
 //! per-group table and the outcome; stale, foreign, missing and duplicated picks are refused.
 #![cfg(feature = "testkit")]
 #![allow(clippy::unwrap_used)]
@@ -117,9 +117,68 @@ fn pairs_writes_a_blind_page_and_decode_reports_the_outcome_per_group() {
         ["fan-ramp".to_string(), "thin".to_string()]
     );
     assert_eq!(assignment.lab, "seam-demo");
-    // The page: eight embedded images, every pair id, the digest, and nothing that names an
-    // arm, a side's cell or the filler's command.
-    assert_eq!(page.matches("data:image/png;base64,").count(), 8);
+    // The page: every result whole and at the pair's focus, every pair id, the digest, and
+    // nothing that names an arm, a side's cell or the filler's command. Three pairs have a
+    // focus through the wrap edge (the fake filler blurs the band); on the flat floor the
+    // blur changes nothing, so that pair has none and shows the whole images: fourteen
+    // embedded images. The seam recipe declares every image equirectangular.
+    assert_eq!(page.matches("data:image/png;base64,").count(), 14);
+    for pair in &assignment.pair {
+        let section = page
+            .lines()
+            .find(|l| l.contains(&format!("id=\"pair-{}\"", pair.id)))
+            .unwrap();
+        let focus = section
+            .split("data-focus=\"")
+            .nth(1)
+            .and_then(|rest| rest.split('"').next())
+            .unwrap();
+        if pair.id == "structured-01" {
+            assert_eq!(focus, "", "{}", pair.id);
+            assert!(page.contains("No pixel differs from the source in either result (320×200)"));
+        } else {
+            let parts: Vec<u32> = focus.split(',').map(|n| n.parse().unwrap()).collect();
+            assert_eq!(parts.len(), 4, "{}: focus {focus}", pair.id);
+            let width: u32 = section
+                .split("data-width=\"")
+                .nth(1)
+                .and_then(|rest| rest.split('"').next())
+                .unwrap()
+                .parse()
+                .unwrap();
+            assert!(
+                parts[0] + parts[2] > width && parts[2] < width,
+                "{}: focus {focus} through the wrap edge of {width}",
+                pair.id
+            );
+        }
+        assert!(
+            section.contains("data-projection=\"equirectangular\""),
+            "{}: {section}",
+            pair.id
+        );
+    }
+    // Each attempt records the source image it healed, under its run directory.
+    for pair in &assignment.pair {
+        let attempt: rascal_core::lab::cell::AttemptRecord = serde_json::from_str(
+            &std::fs::read_to_string(
+                lab.join("cells")
+                    .join(pair.left.cell.strip_prefix("sha256:").unwrap())
+                    .join("attempts/1/attempt.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let source = attempt.source.unwrap();
+        assert!(source.starts_with("run/images/"), "{source}");
+        assert!(
+            lab.join("cells")
+                .join(pair.left.cell.strip_prefix("sha256:").unwrap())
+                .join("attempts/1")
+                .join(&source)
+                .is_file()
+        );
+    }
     for pair in &assignment.pair {
         assert!(
             page.contains(&format!("data-pair=\"{}\"", pair.id)),
@@ -328,6 +387,29 @@ fn pairs_writes_a_blind_page_and_decode_reports_the_outcome_per_group() {
     assert_eq!(out.status.code(), Some(64), "{}", text(&out.stderr));
     assert!(
         text(&out.stderr).contains("is stopped, not ok"),
+        "{}",
+        text(&out.stderr)
+    );
+    // An ok attempt that records no source image is refused by pairs too.
+    std::fs::write(
+        &attempt,
+        sound
+            .lines()
+            .filter(|l| !l.contains("\"source\""))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
+    .unwrap();
+    let out = rascal(&[
+        "lab",
+        "pairs",
+        lab.to_str().unwrap(),
+        "--arms",
+        "fan-ramp,thin",
+    ]);
+    assert_eq!(out.status.code(), Some(64), "{}", text(&out.stderr));
+    assert!(
+        text(&out.stderr).contains("records no source image"),
         "{}",
         text(&out.stderr)
     );

@@ -875,14 +875,16 @@ so every descriptor is computable from the initial inputs and the resolved invoc
 Concrete intermediate identities are recorded inside the attempt. Changing only a prompt, a finder parameter or a pack `revision` is a new cell;
 a key hit makes no external call; a dependent-finder recipe is rejected by `lab run` with the
 offending binding named; tests say so. `rascal lab run` writes
-`lab/<name>/cells/<identity>/attempts/<n>/` with the run directory, the result image and
-`cell.json`; `latest` points at the attempt in use; a ledger records every external call. Resume
+`lab/<name>/cells/<identity>/attempts/<n>/` with the run directory, the result image (and the
+source it started from, named by the attempt record) and `cell.json`; `latest` points at the attempt in use; a ledger records every external call. Resume
 reuses a cell only when its identity matches and `latest` is complete; `--redo <arm>` adds an
 attempt and never overwrites one. `rascal lab pairs --arms a,b` writes `pairs/assignment.json`
 (version, pair ids, the two cell identities and attempts per pair, the side assignment drawn
 from `seed`, the protocol digest) and `pairs/index.html` (static, images embedded, order drawn
-from `seed`); the page writes `picks.json` (version, assignment digest, one of `left | right |
-same | neither` per pair id). `rascal lab decode` rejects picks whose assignment digest does not
+from `seed`; each pair shown at its focus, the region both results changed in the source, at
+full size with the sides scrolling together, whole, and for an equirectangular frame from
+inside the sphere with one orientation for both sides); the page writes `picks.json` (version,
+assignment digest, one of `left | right | same | neither` per pair id). `rascal lab decode` rejects picks whose assignment digest does not
 match or that are missing, duplicated or foreign, and reports per group: decided pairs (`left`
 or `right`), wins, losses, `same`, `neither`, and the outcome under the protocol.
 

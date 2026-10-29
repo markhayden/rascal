@@ -1075,6 +1075,9 @@ writes `picks.json`; `rascal lab decode lab/demo/ picks.json` prints the per-gro
 **Acceptance.**
 - [ ] Decode rejects a foreign or stale picks file; the outcome rules on constructed pick sets;
       the page embeds images and no key; the two schemas through the harness.
+- [ ] The page shows each pair at its focus (the region both results changed, through the
+      wrap edge of a panorama) at full size, whole, and from inside the sphere for an
+      equirectangular frame; the attempt record names the source image.
 
 **Verification.** `cargo test -p rascal-core --test lab_decode` and `cargo test -p rascal-mask --features testkit --test lab_pairs`.
 

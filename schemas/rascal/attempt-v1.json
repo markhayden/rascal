@@ -36,6 +36,13 @@
       "description": "The run directory, relative to the attempt.",
       "type": "string"
     },
+    "source": {
+      "description": "The source image the heal started from (its canonical PNG in the run directory),\nrelative to the attempt, when the heal completed; the pairs page finds the focus of a\npair by what each result changed in it.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "status": {
       "description": "`ok`, `stopped` (a step was not applicable) or `failed`.",
       "type": "string"

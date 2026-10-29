@@ -2,13 +2,17 @@
 //! "The lab"). `pairs` takes the two arms' current cells for every protocol image, draws the
 //! page order and the sides from the protocol's seed, writes `pairs/assignment.json` and the
 //! static `pairs/index.html` with both results embedded and nothing that names an arm; the
-//! page writes `picks.json`. `decode` checks the picks against the assignment's digest and
+//! page shows each pair at its focus (the region both results changed, at full size), whole,
+//! and for an equirectangular image from inside the sphere, and writes `picks.json`. `decode` checks the picks against the assignment's digest and
 //! reports wins, losses and the outcome per group under the protocol's rules.
 
 use std::path::{Path, PathBuf};
 
+use image::DynamicImage;
 use rascal_core::Error;
 use rascal_core::error::Result;
+use rascal_core::frame::{FrameTable, Projection, Topology};
+use rascal_core::lab::focus::{Changes, Focus};
 use rascal_core::lab::pairs::{self, Assignment, Candidate, Decode, Picks, Shown};
 use rascal_core::lab::protocol::Protocol;
 use rascal_core::panel;
@@ -16,6 +20,92 @@ use rascal_core::panel;
 use crate::lab::layout::LabDir;
 
 const TEMPLATE: &str = include_str!("../../pages/pairs.html");
+/// The per-pair block of the template lies between these markers.
+const PAIR_OPEN: &str = "<!-- pair -->";
+const PAIR_CLOSE: &str = "<!-- /pair -->";
+
+/// One side of a pair as loaded: the source the heal started from, its result, and the raw
+/// frame they share.
+struct Side {
+    source: DynamicImage,
+    result: DynamicImage,
+    projection: Projection,
+    topology: Topology,
+}
+
+/// Loads a side's images from its attempt; refuses an attempt that records no source.
+fn load_side(lab: &LabDir, shown: &Shown) -> Result<Side> {
+    let attempt = lab.attempt_dir(&shown.cell, shown.attempt);
+    let record = lab.attempt(&shown.cell, shown.attempt)?;
+    let file = |name: &str, path: Option<String>| -> Result<DynamicImage> {
+        let path = path.ok_or_else(|| {
+            Error::usage(format!(
+                "cell {} attempt {} records no {name} image ({}); run the lab again",
+                shown.cell, shown.attempt, record.status
+            ))
+        })?;
+        rascal_core::image::decode_limited(&attempt.join(path))
+    };
+    let result = file("result", record.result.clone())?;
+    let source = file("source", record.source.clone())?;
+    let frames_path = attempt.join(&record.run).join("frames.json");
+    let bytes = std::fs::read(&frames_path).map_err(|source| Error::Io {
+        path: frames_path.clone(),
+        source,
+    })?;
+    let frames: FrameTable = serde_json::from_slice(&bytes).map_err(|source| Error::Json {
+        path: frames_path.clone(),
+        source,
+    })?;
+    let raw = frames
+        .frames
+        .iter()
+        .find(|f| f.is_raw())
+        .ok_or_else(|| Error::op("lab", format!("{}: no raw frame", frames_path.display())))?;
+    Ok(Side {
+        source,
+        result,
+        projection: raw.projection,
+        topology: raw.topology,
+    })
+}
+
+/// The focus of a pair: the union of what the two results changed in their shared source.
+fn focus_of(left: &Side, right: &Side) -> Result<Option<Focus>> {
+    let mut changes = Changes::between(&left.source, &left.result)?;
+    changes.join(&Changes::between(&right.source, &right.result)?)?;
+    Ok(changes.focus(left.topology))
+}
+
+fn data_uri(image: &DynamicImage) -> Result<String> {
+    Ok(panel::png_data_uri(&rascal_core::canonical::encode_png(
+        image,
+    )?))
+}
+
+/// What the page says about a pair's focus.
+fn focus_note(focus: Option<&Focus>, width: u32, height: u32) -> String {
+    match focus {
+        None => format!(
+            "No pixel differs from the source in either result ({width}×{height}); the focus is the whole image."
+        ),
+        Some(f) if f.width == width && f.height == height => {
+            format!("The changes reach across the whole image ({width}×{height}).")
+        }
+        Some(f) => format!(
+            "Focus: {}×{} of {width}×{height} at column {}, row {}{}, with the changes of both sides inside.",
+            f.width,
+            f.height,
+            f.x,
+            f.y,
+            if f.x + f.width > width {
+                " (through the wrap edge)"
+            } else {
+                ""
+            }
+        ),
+    }
+}
 
 /// The lab's protocol, kept beside `lab.json` by `lab run`, with its digest checked against
 /// the record.
@@ -33,6 +123,17 @@ fn protocol_of(lab: &LabDir) -> Result<(Protocol, String)> {
         ));
     }
     Ok((protocol, digest))
+}
+
+/// The template around and between the pair markers: head, the per-pair block, tail.
+fn split_template() -> Result<(&'static str, &'static str, &'static str)> {
+    let (head, rest) = TEMPLATE
+        .split_once(PAIR_OPEN)
+        .ok_or_else(|| Error::op("lab", format!("pairs.html: no {PAIR_OPEN} marker")))?;
+    let (block, tail) = rest
+        .split_once(PAIR_CLOSE)
+        .ok_or_else(|| Error::op("lab", format!("pairs.html: no {PAIR_CLOSE} marker")))?;
+    Ok((head, block, tail))
 }
 
 /// Writes the assignment and the page; returns the page's path.
@@ -105,36 +206,63 @@ pub fn pairs(root: &Path, arms: &str) -> Result<PathBuf> {
     })?;
     let assignment_digest = rascal_core::lab::bytes_digest(text.as_bytes());
 
+    let (head, block, tail) = split_template()?;
     let mut blocks = Vec::with_capacity(assignment.pair.len());
     for (n, pair) in assignment.pair.iter().enumerate() {
-        let image_of = |shown: &Shown| -> Result<String> {
-            let attempt = lab.attempt_dir(&shown.cell, shown.attempt);
-            let record = lab.attempt(&shown.cell, shown.attempt)?;
-            let result = record.result.ok_or_else(|| {
-                Error::usage(format!(
-                    "cell {} attempt {} has no result ({})",
-                    shown.cell, shown.attempt, record.status
-                ))
-            })?;
-            let path = attempt.join(result);
-            let bytes = std::fs::read(&path).map_err(|source| Error::Io { path, source })?;
-            Ok(panel::png_data_uri(&bytes))
+        let left = load_side(&lab, &pair.left)?;
+        let right = load_side(&lab, &pair.right)?;
+        let (width, height) = (left.result.width(), left.result.height());
+        if (right.result.width(), right.result.height()) != (width, height)
+            || right.projection != left.projection
+        {
+            return Err(Error::usage(format!(
+                "pair {}: the sides are {width}×{height} {} and {}×{} {}; not one image",
+                pair.id,
+                left.projection.name(),
+                right.result.width(),
+                right.result.height(),
+                right.projection.name()
+            )));
+        }
+        let focus = focus_of(&left, &right)?;
+        let crop = |side: &Side| -> Result<String> {
+            match &focus {
+                Some(f) => data_uri(&DynamicImage::ImageRgb8(f.crop(&side.result))),
+                None => Ok(String::new()),
+            }
         };
         let id = panel::escape(&pair.id);
         let buttons: String = pairs::PICKS
             .iter()
             .map(|pick| format!("<button data-pair=\"{id}\" data-pick=\"{pick}\">{pick}</button>"))
             .collect();
-        blocks.push(format!(
-            "<section class=\"pair\" id=\"pair-{id}\"><h2>Pair {} of {}: {id}</h2><div class=\"sides\"><figure><img src=\"{}\" alt=\"left\"><figcaption>left</figcaption></figure><figure><img src=\"{}\" alt=\"right\"><figcaption>right</figcaption></figure></div><div class=\"picks\">{buttons}</div></section>",
-            n + 1,
-            assignment.pair.len(),
-            image_of(&pair.left)?,
-            image_of(&pair.right)?
-        ));
+        blocks.push(
+            block
+                .replace("{{ID}}", &id)
+                .replace("{{N}}", &(n + 1).to_string())
+                .replace("{{COUNT}}", &assignment.pair.len().to_string())
+                .replace("{{WIDTH}}", &width.to_string())
+                .replace("{{HEIGHT}}", &height.to_string())
+                .replace(
+                    "{{FOCUS}}",
+                    &focus
+                        .map(|f| format!("{},{},{},{}", f.x, f.y, f.width, f.height))
+                        .unwrap_or_default(),
+                )
+                .replace("{{PROJECTION}}", left.projection.name())
+                .replace(
+                    "{{NOTE}}",
+                    &panel::escape(&focus_note(focus.as_ref(), width, height)),
+                )
+                .replace("{{LEFT_CROP}}", &crop(&left)?)
+                .replace("{{RIGHT_CROP}}", &crop(&right)?)
+                .replace("{{LEFT}}", &data_uri(&left.result)?)
+                .replace("{{RIGHT}}", &data_uri(&right.result)?)
+                .replace("{{BUTTONS}}", &buttons),
+        );
     }
     let ids: Vec<&str> = assignment.pair.iter().map(|p| p.id.as_str()).collect();
-    let page = TEMPLATE
+    let page = format!("{head}{}{tail}", blocks.join("\n"))
         .replace("{{LAB}}", &panel::escape(&record.name))
         .replace(
             "{{SUMMARY}}",
@@ -146,7 +274,6 @@ pub fn pairs(root: &Path, arms: &str) -> Result<PathBuf> {
             )),
         )
         .replace("{{COUNT}}", &assignment.pair.len().to_string())
-        .replace("{{PAIRS}}", &blocks.join("\n"))
         .replace(
             "{{DIGEST}}",
             &serde_json::to_string(&assignment_digest)

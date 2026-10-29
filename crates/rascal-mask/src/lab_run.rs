@@ -341,23 +341,28 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
                 report.spend_usd += arm.spend_usd_per_call;
             }
         }
-        let (status, result, stopped_at, reason) = match &outcome {
-            Ok(heal) if heal.status == Status::Ok => {
-                let result = heal.result.as_ref().map(|path| {
-                    path.strip_prefix(&dir)
-                        .unwrap_or(path)
-                        .display()
-                        .to_string()
-                });
-                ("ok", result, None, None)
-            }
+        let relative = |path: &PathBuf| {
+            path.strip_prefix(&dir)
+                .unwrap_or(path)
+                .display()
+                .to_string()
+        };
+        let (status, result, source, stopped_at, reason) = match &outcome {
+            Ok(heal) if heal.status == Status::Ok => (
+                "ok",
+                heal.result.as_ref().map(relative),
+                heal.source.as_ref().map(relative),
+                None,
+                None,
+            ),
             Ok(heal) => (
                 "stopped",
+                None,
                 None,
                 heal.stopped_at.clone(),
                 heal.reason.clone(),
             ),
-            Err(e) => ("failed", None, None, Some(e.to_string())),
+            Err(e) => ("failed", None, None, None, Some(e.to_string())),
         };
         lab.finish_attempt(
             &cell.identity,
@@ -367,6 +372,7 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
                 status: status.to_string(),
                 run: "run".to_string(),
                 result,
+                source,
                 stopped_at,
                 reason: reason.clone(),
                 calls: calls.len() as u32,
