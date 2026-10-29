@@ -73,7 +73,8 @@ which parts exist; it is updated in the same commit as the code it describes.
 | `inspect`, compatibility export | rascal-core, rascal-mask | done: the inspect op and pages, `--replay`, the export projection with its two refusals, self-contained runs, the docs-coverage check | M1 task 1.9 |
 | the run page and tracing | rascal-core, rascal-mask | done: `rascal dash` (`--out`, `--serve` on loopback, `--panels`), the panel registry with the envelope and artifacts panels, `RASCAL_LOG` spans per op | M1 task 1.10 |
 | the MCP transport and the independent client | rascal-mcp, rascal-testkit | done: ADR 0015 (`rmcp` 3.8.0, revision 2025-11-25 only), the shared wire shapes, the independent client proven against a fake server | M3 task 3.1 |
-| `rascal serve` and the pack client | rascal-mcp, rascal-mask | not started | M3 tasks 3.2 and 3.3 |
+| `rascal serve` | rascal-mcp, rascal-mask | done: one tool per op with ordinary arguments, the five workspace tools, the envelope as structured content with image blocks in correspondence, the error mapping, serial by default with `--concurrency` | M3 task 3.2 |
+| the pack client and the isolation suite | rascal-mcp, rascal-mask | not started | M3 task 3.3 |
 | `fan` and the band profile | rascal-ops, rascal-mask | done: the two rulers and the half-width rule, `fan-v1` and `fan-thin-v1` embedded, constant sets as parameter defaults, the step-sky fixture and golden profile, the profile panel | M2 task 2.1 |
 | `profile` and `feather` | rascal-ops | done: the band core at `half`, the per-row and the one-sigma feather by distance transform with finite support, the `sigma_px` series, protect wins | M2 task 2.2 |
 | `ramp` and `apply` | rascal-ops | done: the step on the profile's windows as a prescription, apply with the `w > 0` rule, `ramp-v1` | M2 task 2.3 |

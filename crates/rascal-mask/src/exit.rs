@@ -14,7 +14,7 @@ pub const USAGE: i32 = 64;
 /// The exit code for a core error.
 pub fn code_for(error: &Error) -> i32 {
     match error {
-        Error::Usage { .. } | Error::Recipe { .. } => USAGE,
+        Error::Usage { .. } | Error::InvalidArgs { .. } | Error::Recipe { .. } => USAGE,
         _ => OPERATIONAL,
     }
 }

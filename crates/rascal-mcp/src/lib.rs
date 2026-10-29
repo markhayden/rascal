@@ -3,4 +3,5 @@
 //! (task 3.2) and the client that drives tool packs (task 3.3). The transport is `rmcp`.
 
 pub mod jsonrpc;
+pub mod server;
 pub mod transport;

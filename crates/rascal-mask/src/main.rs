@@ -11,6 +11,7 @@ mod ops;
 mod paste;
 mod render;
 mod run;
+mod serve;
 mod workspace_cmd;
 
 use std::path::PathBuf;
@@ -121,6 +122,18 @@ enum Command {
         /// Exit 1 when a step is not applicable.
         #[arg(long)]
         strict: bool,
+    },
+    /// The MCP server over stdio: every op as a tool over a workspace (SPEC "The MCP server").
+    Serve {
+        /// The workspace the tools read and write.
+        #[arg(long)]
+        workspace: PathBuf,
+        /// The configuration file (rascal.toml); checked, and used by later milestones' tools.
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// Calls that may run at once; each still commits in turn.
+        #[arg(long, default_value_t = 1)]
+        concurrency: usize,
     },
     /// A workspace: list what it holds, or import an image into it.
     Workspace {
@@ -320,6 +333,7 @@ impl From<ProjectionArg> for Projection {
 const RESERVED: &[&str] = &[
     "run",
     "heal",
+    "serve",
     "render",
     "inspect",
     "export",
@@ -529,6 +543,24 @@ fn main() {
                 }
             }
         }
+        Command::Serve {
+            workspace,
+            config,
+            concurrency,
+        } => match serve::serve(
+            registry,
+            &serve::ServeArgs {
+                workspace,
+                config,
+                concurrency,
+            },
+        ) {
+            Ok(()) => exit::OK,
+            Err(error) => {
+                eprintln!("rascal serve: {error}");
+                exit::code_for(&error)
+            }
+        },
         Command::Workspace { command } => {
             let result = match command {
                 WorkspaceCommand::List {

@@ -75,7 +75,7 @@ pub fn invalid(message: impl Into<String>) -> ErrorData {
 pub fn class_of(error: &rascal_core::Error) -> &'static str {
     use rascal_core::Error;
     match error {
-        Error::Usage { .. } | Error::Recipe { .. } => "usage",
+        Error::Usage { .. } | Error::InvalidArgs { .. } | Error::Recipe { .. } => "usage",
         Error::Io { .. } => "io",
         Error::Image { .. } => "image",
         Error::Json { .. } | Error::Toml { .. } => "format",
@@ -105,4 +105,47 @@ pub fn base64_decode(text: &str) -> Option<Vec<u8>> {
         }
     }
     Some(out)
+}
+
+/// The PNG bytes of the images an envelope lists, in order, taken from the op's outputs by
+/// identity: the blocks a result owes. A pure op lists none.
+pub fn image_blocks_of(
+    output: &rascal_core::op::Output,
+) -> rascal_core::error::Result<Vec<Vec<u8>>> {
+    let mut blocks = Vec::new();
+    for listed in &output.envelope.images {
+        let image = output
+            .outputs
+            .values()
+            .find_map(|a| match a {
+                rascal_core::artifact::Artifact::Image(i)
+                    if i.record.identity == listed.identity =>
+                {
+                    Some(i.clone())
+                }
+                _ => None,
+            })
+            .ok_or_else(|| {
+                rascal_core::Error::op(
+                    "serve",
+                    format!(
+                        "the envelope lists image {} but no output carries it",
+                        listed.identity
+                    ),
+                )
+            })?;
+        let mut bytes = Vec::new();
+        image
+            .pixels
+            .write_to(
+                &mut std::io::Cursor::new(&mut bytes),
+                image::ImageFormat::Png,
+            )
+            .map_err(|source| rascal_core::Error::Image {
+                path: "<serve>".into(),
+                source,
+            })?;
+        blocks.push(bytes);
+    }
+    Ok(blocks)
 }

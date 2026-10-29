@@ -1,7 +1,9 @@
 //! The one error type of the core crate. Every variant names the path or thing it is about.
-//! The binary maps `Usage` and `Recipe` to exit 64 and everything else to exit 3.
+//! The binary maps `Usage`, `InvalidArgs` and `Recipe` to exit 64 and everything else to exit 3.
 
 use std::path::PathBuf;
+
+use crate::op::Envelope;
 
 /// Everything the core can fail with.
 #[derive(Debug, thiserror::Error)]
@@ -54,6 +56,14 @@ pub enum Error {
     /// directory that is not empty, an unknown recipe. Exit 64.
     #[error("{message}")]
     Usage { message: String },
+    /// An op's parameters failed validation: the `invalid_args` envelope that was journaled,
+    /// kept so a server can return it as the result. Exit 64.
+    #[error("step {step}: {op}: {}", envelope.reason.clone().unwrap_or_default())]
+    InvalidArgs {
+        step: String,
+        op: String,
+        envelope: Box<Envelope>,
+    },
     /// A recipe that does not validate, named by step. Exit 64.
     #[error("recipe {recipe}, step {step}: {message}")]
     Recipe {

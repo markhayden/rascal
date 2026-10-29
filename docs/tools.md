@@ -88,3 +88,27 @@ The remaining ops arrive with their tasks (PLAN.md):
 `fan`, `profile`, `feather`, `ramp`, `apply`, `window`, `unwindow`, `paste`, `measure` in M2;
 `grow`, `shrink`, `close`, `subtract`, `select`, `invert`, `tighten` in M4; `segment` from the
 Python pack in M5.
+
+## The server
+
+`rascal serve --workspace ws/ [--config rascal.toml] [--concurrency n]` is an MCP server over
+stdio at protocol revision `2025-11-25` (ADR 0015). It advertises one tool per op in the table
+above, named as the op, with ordinary arguments only: one string property per input port (an
+artifact id or identity in the workspace) plus the op's parameters by name, and `constants`
+when the op has sets. No argument is injected; ids resolve against the served workspace and
+nowhere else. Five workspace tools go with them: `workspace_import` (a path or base64 bytes in;
+the canonical Image and its `raw:` frame out), `workspace_list` (by type), `workspace_describe`
+(a record as JSON), `workspace_read` (an Image's PNG as one image content block, bounded at
+64 MiB; any other type is `invalid_args`) and `workspace_dash` (writes the run page into the
+workspace and returns its path).
+
+A result is the envelope as `structuredContent`, a text block with the summary, and image
+content blocks in exactly the count and order of the envelope's `images` (none for a pure op;
+one for `workspace_read`). Validation stays in the envelope as `invalid_args` with `isError`;
+a caller's mistake outside any envelope (an unknown tool or id, a malformed argument) is a
+JSON-RPC invalid-params error; an operational failure is a JSON-RPC internal error whose
+`data.class` names rascal's error class (`io`, `op`, `image`, `format`, `mask_invariant`,
+`usage`). Calls are serial per workspace by default; `--concurrency n` lets `n` run at once,
+each still committing in turn. Tracing goes to stderr only, never to the protocol stream. The
+testkit's independent client (`crates/rascal-testkit/src/mcp_client.rs`), written against the
+protocol document and nothing of rascal's, drives the server in `tests/serve.rs`.

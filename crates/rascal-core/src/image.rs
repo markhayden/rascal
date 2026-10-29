@@ -109,7 +109,21 @@ impl Image {
     /// Decodes a job image (JPEG or PNG) as a canonical image in its raw frame. Without a
     /// projection an image exactly 2:1 is assumed equirectangular; the second value says so.
     pub fn import(path: &Path, projection: Option<Projection>) -> Result<(Image, Frame, bool)> {
-        let decoded = decode_limited(path)?;
+        Image::from_decoded(decode_limited(path)?, projection)
+    }
+
+    /// `import` for bytes already in memory (an MCP client's base64 image).
+    pub fn import_bytes(
+        bytes: &[u8],
+        projection: Option<Projection>,
+    ) -> Result<(Image, Frame, bool)> {
+        Image::from_decoded(decode_limited_bytes(bytes)?, projection)
+    }
+
+    fn from_decoded(
+        decoded: DynamicImage,
+        projection: Option<Projection>,
+    ) -> Result<(Image, Frame, bool)> {
         let (width, height) = decoded.dimensions();
         let (projection, assumed) = match projection {
             Some(p) => (p, false),

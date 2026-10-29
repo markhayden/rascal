@@ -291,6 +291,23 @@ impl Workspace {
         Ok((id, frame, artifact))
     }
 
+    /// `import` for bytes already in memory; `source` names them in the record.
+    pub fn import_bytes(
+        &self,
+        bytes: &[u8],
+        source: &str,
+        projection: Option<crate::frame::Projection>,
+    ) -> Result<(String, Frame, Artifact)> {
+        let (image, frame, assumed) = Image::import_bytes(bytes, projection)?;
+        if assumed {
+            self.note(format!(
+                "projection assumed equirectangular: {source} is exactly 2:1 and no projection was given"
+            ))?;
+        }
+        let (id, artifact) = self.add_canonical(image, &frame, source)?;
+        Ok((id, frame, artifact))
+    }
+
     /// Adds an already decoded canonical image and its raw frame as an `import` record.
     pub fn add_canonical(
         &self,
@@ -505,20 +522,21 @@ impl Workspace {
                 resolved
             }
             Err(message) => {
-                let envelope = self.failed_envelope(&manifest, message.clone(), 0);
+                let envelope = self.failed_envelope(&manifest, message, 0);
                 self.journal_line(
                     step_id,
                     &manifest,
                     params,
                     input_identities,
                     BTreeMap::new(),
-                    Some(envelope),
+                    Some(envelope.clone()),
                     0,
                 )?;
-                return Err(Error::usage(format!(
-                    "step {step_id}: {}: {message}",
-                    manifest.name
-                )));
+                return Err(Error::InvalidArgs {
+                    step: step_id.to_string(),
+                    op: manifest.name.clone(),
+                    envelope: Box::new(envelope),
+                });
             }
         };
         let frames = self.frames()?;
@@ -594,11 +612,11 @@ impl Workspace {
                 duration_ms,
             )?;
             if output.envelope.status == Status::InvalidArgs {
-                return Err(Error::usage(format!(
-                    "step {step_id}: {}: {}",
-                    manifest.name,
-                    output.envelope.reason.clone().unwrap_or_default()
-                )));
+                return Err(Error::InvalidArgs {
+                    step: step_id.to_string(),
+                    op: manifest.name.clone(),
+                    envelope: Box::new(output.envelope),
+                });
             }
             return Ok(Invocation {
                 output,

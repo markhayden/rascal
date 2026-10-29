@@ -731,7 +731,7 @@ mask = "mask.mask"
         }
         r.validate(&registry).unwrap();
         let e = r.run(&registry, inputs(&run, &f), &run).unwrap_err();
-        assert!(matches!(e, rascal_core::Error::Usage { .. }), "{e:?}");
+        assert!(matches!(e, rascal_core::Error::InvalidArgs { .. }), "{e:?}");
         assert!(e.to_string().contains(expect), "{e}");
         let lines = rascal_core::journal::Journal::read(&dir.join("journal.jsonl")).unwrap();
         assert_eq!(
@@ -809,7 +809,7 @@ fn a_bad_rect_box_is_invalid_args_from_the_op() {
     let e = run
         .invoke("r", "rect", &registry, &inputs, &params)
         .unwrap_err();
-    assert!(matches!(e, rascal_core::Error::Usage { .. }), "{e:?}");
+    assert!(matches!(e, rascal_core::Error::InvalidArgs { .. }), "{e:?}");
     assert!(e.to_string().contains("x0 < x1"), "{e}");
     let lines = rascal_core::journal::Journal::read(&dir.join("journal.jsonl")).unwrap();
     assert_eq!(

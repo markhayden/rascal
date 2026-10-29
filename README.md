@@ -59,6 +59,7 @@ rascal ops list                                           # every op's manifest,
 rascal inspect run/artifacts/<id> --json                  # or --out pages/ for the overlay and chart, --replay to rebuild
 rascal export --compat run/journal.jsonl --step rasterize --out e.json
 rascal dash run/ --out run/dash.html                     # the run page: timings, envelopes, every artifact; --serve for loopback
+rascal serve --workspace ws/                              # every op as an MCP tool over stdio, plus import/list/describe/read/dash
 ```
 
 Replace (screens, signs), retouch, extend and isolate are later milestones.
