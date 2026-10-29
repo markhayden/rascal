@@ -42,7 +42,10 @@ tracing = "0.1"
 # The subscriber behind RASCAL_LOG (SPEC "Diagnostics"): spans to stderr, off by default.
 tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "std", "ansi"] }
 tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "process", "io-util", "time", "sync", "signal"] }
-reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json", "multipart"] }
+# The TLS provider reqwest's rustls needs, installed by the HTTP filler; ring, not aws-lc, so
+# the build needs no cmake.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 
 [workspace.lints.clippy]
 all = "warn"

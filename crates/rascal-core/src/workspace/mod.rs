@@ -304,11 +304,35 @@ impl Workspace {
                 image.record.frame, frame.id
             )));
         }
+        self.add_external(
+            image,
+            frame,
+            "import",
+            serde_json::json!({ "source": source, "projection": frame.projection }),
+        )
+    }
+
+    /// Adds an image that came from outside the op graph (an import, a filler's answer) as a
+    /// committed record under `op_name`, with `params` saying where it came from; the frame
+    /// is registered if new. Returns the id and the artifact.
+    pub fn add_external(
+        &self,
+        image: Image,
+        frame: &Frame,
+        op_name: &str,
+        params: serde_json::Value,
+    ) -> Result<(String, Artifact)> {
+        if image.record.frame != frame.id {
+            return Err(Error::usage(format!(
+                "the image is in frame {} but {} was given",
+                image.record.frame, frame.id
+            )));
+        }
         let started = Instant::now();
         let artifact = Artifact::Image(Arc::new(image));
         let mut outputs = BTreeMap::new();
         outputs.insert("image".to_string(), artifact.clone());
-        let mut envelope = Envelope::ok(format!("imported {source} as {}", frame.id));
+        let mut envelope = Envelope::ok(format!("{op_name}: an image in {}", frame.id));
         envelope.artifacts.insert(
             "image".to_string(),
             op::ArtifactRef {
@@ -318,14 +342,13 @@ impl Workspace {
             },
         );
         envelope.provenance = Provenance {
-            tool: "import".to_string(),
+            tool: op_name.to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
             duration_ms: 0,
         };
-        let params = serde_json::json!({ "source": source, "projection": frame.projection });
         let mut record = OperationRecord::new(
-            "import",
-            "import",
+            op_name,
+            op_name,
             env!("CARGO_PKG_VERSION"),
             params,
             BTreeMap::new(),
@@ -452,6 +475,17 @@ impl Workspace {
                 "step {step_id}: {}: no constant set {name}",
                 manifest.name
             )));
+        }
+        // The selected (or default) constant set supplies the defaults the step did not give.
+        let selected = constants_name
+            .clone()
+            .or_else(|| manifest.constants.first().cloned());
+        if let Some(name) = &selected {
+            for (key, value) in op.constant_set(name) {
+                if manifest.param(&key).is_some() {
+                    given.entry(key).or_insert(value);
+                }
+            }
         }
         let resolved = match manifest.resolve_params(&given) {
             Ok(mut resolved) => {

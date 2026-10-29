@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Docs coverage, both ways. Every op in the catalogue, every rendering profile, every run-page
-# panel and every recipe output field is named in docs/; and every name under the documented
+# panel, every measure and every recipe output field is named in docs/; and every name under the documented
 # tables exists in the registry, so a stale name fails too. Runs the debug binary; `cargo build` first if needed.
 # DOCS_DIR and RASCAL_BIN override the locations for the self-test.
 set -euo pipefail
@@ -43,6 +43,16 @@ for p in $documented_panels; do
   grep -qx "$p" <<< "$panels" || { echo "docs: '$p' is in $docs/diagnostics.md's panel table but no such panel is registered" >&2; status=1; }
 done
 
+# --- measures: the registry against docs/measures.md's table ---------------------------------
+measures="$("$bin" measure --list | sort -u)"
+documented_measures="$(grep -E '^\| `[a-z_]+` \| .* \| .* \| .* \|$' "$docs/measures.md" | sed -E 's/^\| `([a-z_]+)`.*/\1/' | sort -u)"
+for m in $measures; do
+  grep -qx "$m" <<< "$documented_measures" || { echo "docs: measure '$m' is registered but not in $docs/measures.md's table" >&2; status=1; }
+done
+for m in $documented_measures; do
+  grep -qx "$m" <<< "$measures" || { echo "docs: '$m' is in $docs/measures.md's table but no such measure is registered" >&2; status=1; }
+done
+
 # --- recipe outputs and config keys: the schemas against the pages -----------------------------------
 for key in mask image plan render; do
   grep -q "\`$key\`\|^$key = \|\b$key = \"" "$docs/recipes.md" || { echo "docs: recipe output '$key' is not named in $docs/recipes.md" >&2; status=1; }
@@ -51,5 +61,5 @@ for key in workspace corpus; do
   grep -q "\[$key\]\|\`$key\`" "$docs/recipes.md" "$docs/workspace.md" "$docs/lab.md" 2>/dev/null || { echo "docs: config section '$key' is not named in docs/" >&2; status=1; }
 done
 
-[ "$status" -eq 0 ] && echo "docs ok: $(wc -w <<< "$catalogue" | tr -d ' ') ops, $(wc -w <<< "$profiles" | tr -d ' ') profiles, $(wc -w <<< "$panels" | tr -d ' ') panels"
+[ "$status" -eq 0 ] && echo "docs ok: $(wc -w <<< "$catalogue" | tr -d ' ') ops, $(wc -w <<< "$profiles" | tr -d ' ') profiles, $(wc -w <<< "$panels" | tr -d ' ') panels, $(wc -w <<< "$measures" | tr -d ' ') measures"
 exit "$status"

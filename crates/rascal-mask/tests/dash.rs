@@ -198,7 +198,11 @@ fn assert_page_matches_journal(html: &str, lines: &[serde_json::Value]) {
 }
 
 fn assert_every_artifact_embedded(html: &str, lines: &[serde_json::Value]) {
-    let floor = image::open(repo_root().join("fixtures/images/floor.png")).unwrap();
+    assert_every_artifact_embedded_at(html, lines, (320, 200));
+}
+
+/// Every PNG asset is an artifact in the raw frame, so it has the imported image's size.
+fn assert_every_artifact_embedded_at(html: &str, lines: &[serde_json::Value], size: (u32, u32)) {
     let table = asset_table(html);
     let mut checked = BTreeSet::new();
     for line in lines {
@@ -223,7 +227,7 @@ fn assert_every_artifact_embedded(html: &str, lines: &[serde_json::Value]) {
                         let decoded = image::load_from_memory(&bytes).unwrap();
                         assert_eq!(
                             (decoded.width(), decoded.height()),
-                            (floor.width(), floor.height()),
+                            size,
                             "{port}: an artifact in the raw frame has the image's size"
                         );
                     }
@@ -237,19 +241,24 @@ fn assert_every_artifact_embedded(html: &str, lines: &[serde_json::Value]) {
             }
         }
     }
-    // The image, the location, the mask's three planes and the rendering: distinct assets.
-    assert!(
-        checked.len() >= 6,
-        "decoded {} distinct assets",
-        checked.len()
+    // Every asset in the table is one a figure references: nothing embedded for no reason.
+    assert_eq!(
+        checked,
+        table.keys().cloned().collect::<BTreeSet<_>>(),
+        "the asset table holds exactly the referenced assets"
     );
     // Each embedded once: the page holds exactly one PNG data URI per PNG asset, however many
-    // journal lines name the artifact (the two rect runs share theirs).
+    // journal lines name the artifact (the two rect runs share theirs). A panel's own derived
+    // picture (the profile panel's strip) is inline and is not an artifact.
     let png_assets = table
         .values()
         .filter(|u| u.starts_with("data:image/png"))
         .count();
-    assert_eq!(html.matches("data:image/png;base64,").count(), png_assets);
+    let strips = html.matches("<figure class=\"strip\">").count();
+    assert_eq!(
+        html.matches("data:image/png;base64,").count(),
+        png_assets + strips
+    );
 }
 
 #[test]
@@ -531,5 +540,191 @@ fn the_run_directory_form_lists_the_step_with_its_duration_and_three_planes() {
         let decoded = image::load_from_memory(&bytes).unwrap();
         assert_eq!(decoded.width(), 320, "{plane}");
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A fan line's panel: the half-width chart and the strip appear on the page for the step
+/// that produced the band profile, and the profile itself is in the asset table as JSON.
+#[test]
+fn a_band_profile_line_shows_its_chart_and_strip() {
+    let dir = scratch("profile");
+    let ws = dir.join("ws");
+    let sky = repo_root().join("fixtures/images/step-sky.png");
+    let out = rascal(&["workspace", "import", s(&ws), s(&sky)]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let out = rascal(&[
+        "line",
+        "--workspace",
+        s(&ws),
+        "--image",
+        "img-1",
+        "--column",
+        "0.5",
+        "--width_px",
+        "2",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let line_id = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .find_map(|l| {
+            l.strip_prefix("location: ")
+                .map(|r| r.split_whitespace().next().unwrap().to_string())
+        })
+        .unwrap();
+    let out = rascal(&[
+        "fan",
+        "--workspace",
+        s(&ws),
+        "--image",
+        "img-1",
+        "--line",
+        &line_id,
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let html = dash(&ws, &dir.join("page.html"));
+    let lines = journal(&ws);
+    assert_page_matches_journal(&html, &lines);
+    assert_every_artifact_embedded_at(&html, &lines, (400, 300));
+    let fan_line = lines.iter().find(|l| l["op"] == "fan").unwrap();
+    let seq = fan_line["seq"].to_string();
+    let open = format!("<section data-seq=\"{seq}\"");
+    let at = html.find(&open).unwrap();
+    let section = &html[at..html[at..].find("</section>").unwrap() + at];
+    assert!(
+        section.contains("<strong>profile</strong>"),
+        "the profile panel renders for the fan line"
+    );
+    assert!(
+        section.contains("<svg") && section.contains("half-width per row"),
+        "the chart"
+    );
+    assert!(
+        section.contains("class=\"strip\"") && section.contains("columns "),
+        "the strip"
+    );
+    let band = fan_line["outputs"]["band"].as_str().unwrap();
+    let (mime, bytes) = decode_data_uri(&asset_table(&html)[band]);
+    assert_eq!(mime, "application/json");
+    let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(value["half"].as_array().unwrap().len(), 300);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A measure line's panel: every Series the line produced as a chart and the summaries table,
+/// and nothing for a line that produced none.
+#[test]
+fn a_measure_line_shows_its_series_and_summaries() {
+    let dir = scratch("measures");
+    let ws = dir.join("ws");
+    let sky = repo_root().join("fixtures/images/step-sky.png");
+    let out = rascal(&["workspace", "import", s(&ws), s(&sky)]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let port = |out: &std::process::Output, name: &str| -> String {
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .find_map(|l| {
+                l.strip_prefix(&format!("{name}: "))
+                    .map(|r| r.split_whitespace().next().unwrap().to_string())
+            })
+            .unwrap()
+    };
+    let w = s(&ws);
+    let out = rascal(&[
+        "line",
+        "--workspace",
+        w,
+        "--image",
+        "img-1",
+        "--column",
+        "0.5",
+        "--width_px",
+        "2",
+    ]);
+    let line_id = port(&out, "location");
+    let out = rascal(&[
+        "fan",
+        "--workspace",
+        w,
+        "--image",
+        "img-1",
+        "--line",
+        &line_id,
+    ]);
+    let band_id = port(&out, "band");
+    let out = rascal(&["profile", "--workspace", w, "--band", &band_id]);
+    let mask_id = port(&out, "mask");
+    let out = rascal(&[
+        "measure",
+        "--workspace",
+        w,
+        "--after",
+        "img-1",
+        "--before",
+        "img-1",
+        "--mask",
+        &mask_id,
+        "--json",
+    ]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let html = dash(&ws, &dir.join("page.html"));
+    let lines = journal(&ws);
+    let measure = lines.iter().find(|l| l["op"] == "measure").unwrap();
+    let seq = measure["seq"].to_string();
+    let open = format!("<section data-seq=\"{seq}\"");
+    let at = html.find(&open).unwrap();
+    let section = &html[at..html[at..].find("</section>").unwrap() + at];
+    assert!(
+        section.contains("<strong>measures</strong>"),
+        "the measures panel"
+    );
+    let outputs = measure["outputs"].as_object().unwrap();
+    assert!(!outputs.is_empty(), "the measure produced series");
+    for port_name in outputs.keys() {
+        assert!(
+            section.contains(&format!("{port_name}: ")),
+            "a chart for {port_name}"
+        );
+    }
+    assert_eq!(
+        section.matches("<svg").count(),
+        outputs.len(),
+        "one chart per series"
+    );
+    for name in [
+        "continuity.mean",
+        "drift.outside.r",
+        "tone_step.dL.rows_skipped",
+    ] {
+        assert!(
+            section.contains(&format!("<td>{name}</td>")),
+            "the summary {name}"
+        );
+    }
+    // A line that is not a measure has no measures panel.
+    let fan_seq = lines.iter().find(|l| l["op"] == "fan").unwrap()["seq"].to_string();
+    let open = format!("<section data-seq=\"{fan_seq}\"");
+    let at = html.find(&open).unwrap();
+    let fan_section = &html[at..html[at..].find("</section>").unwrap() + at];
+    assert!(!fan_section.contains("<strong>measures</strong>"));
     let _ = std::fs::remove_dir_all(&dir);
 }

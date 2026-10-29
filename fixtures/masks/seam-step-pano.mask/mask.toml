@@ -1,0 +1,28 @@
+version = 1
+id = "ramp.mask"
+frame = "cut:21849d848b3c:2753d2955f36"
+frame_identity = "sha256:ff4b879cce1f3b84311b6209a25866ac63915853883918fb42b6e4faa1a95519"
+width = 112
+height = 400
+use_case = "seam"
+identity = "sha256:a92caad66553f457c8ad882a723ded8ddfe9af0ae92ea0873900089d269c756b"
+
+[zones]
+core = "core.png"
+blend = "blend.png"
+protect = "protect.png"
+
+[profile]
+line = "sha256:e84345012d8d6b97c216cf6b91c9306fa49642f9db2ded63e6fcf2efd5ec6cd7"
+band = "band.profile.json"
+sigma_px = "sigma.series.json"
+
+[[prescriptions]]
+kind = "tone_ramp"
+version = 1
+step = "prescription-0.series.json"
+share = 0.5
+
+[source]
+locations = ["sha256:e84345012d8d6b97c216cf6b91c9306fa49642f9db2ded63e6fcf2efd5ec6cd7"]
+instances = []

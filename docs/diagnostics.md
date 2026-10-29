@@ -22,7 +22,9 @@ built from `journal.jsonl` and the operation records, from the template in
   duration and a waterfall bar. A step that ran more than once is marked `repeat n`; a
   `not_applicable` or `measured_nothing` step is amber, a failed (`invalid_args`) one red; a
   journal note is grey.
-- **Filler and pack calls**: empty until the fillers (M2) and the tool pack (M3) write them.
+- **Filler and pack calls**: one row per `filler call:` note in the journal (the entry, its
+  command or URL, the request's size, the bytes, the duration, the exit code or HTTP status
+  and the outcome); pack calls arrive with M3.
 - **Steps**: a section per journal line with every panel's rendering for it.
 
 The page names every journal line and no other, and embeds every artifact the journal names as
@@ -49,9 +51,10 @@ registered panel is missing from this table or a listed panel is not registered.
 |---|---|---|
 | `envelope` | the native envelope (status, summary, measurements, requirements) and the resolved parameters with the constant set version | 1.10 |
 | `artifacts` | every output of the line: images and the three mask planes as thumbnails that open at full size, other artifacts as JSON links | 1.10 |
+| `profile` | a band profile's half-width per row as a chart, beside the strip of the input image the band can reach | 2.1 |
+| `measures` | every series a `measure` line produced as a chart, with the envelope's summaries in a table | 2.6 |
 
-Arriving later: the rulers' per-row charts beside the strip they measured (2.1), the measures
-with their series (2.6), filler calls (2.8), pack calls (3.3).
+Arriving later: pack calls (3.3).
 
 ## Tracing
 

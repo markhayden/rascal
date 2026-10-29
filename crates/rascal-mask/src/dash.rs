@@ -25,7 +25,127 @@ pub fn panels() -> PanelRegistry {
     let mut registry = PanelRegistry::new();
     registry.register(Box::new(EnvelopePanel));
     registry.register(Box::new(ArtifactsPanel));
+    registry.register(Box::new(ProfilePanel));
+    registry.register(Box::new(MeasuresPanel));
     registry
+}
+
+/// Every Series a `measure` line produced, as a chart, with the envelope's summaries beside it.
+struct MeasuresPanel;
+
+impl Panel for MeasuresPanel {
+    fn name(&self) -> &'static str {
+        "measures"
+    }
+
+    fn render(&self, line: &JournalLine, workspace: &Workspace) -> Option<Rendered> {
+        if line.op.as_deref() != Some("measure") {
+            return None;
+        }
+        let mut parts = Vec::new();
+        for (port, identity) in &line.outputs {
+            let Ok(Artifact::Series(series)) = workspace.load(identity) else {
+                continue;
+            };
+            let values: Vec<f64> = if series.channels == 1 {
+                series.values.clone()
+            } else {
+                series
+                    .values
+                    .chunks(series.channels as usize)
+                    .map(|c| c[0])
+                    .collect()
+            };
+            parts.push(format!(
+                "<div class=\"profile\">{}<p class=\"meta\">{}: {} rows ({})</p></div>",
+                rascal_ops::inspect::chart_svg(
+                    &format!("{port}: {}", series.name),
+                    &series.unit,
+                    &values
+                ),
+                panel::escape(port),
+                series.rows.len(),
+                panel::escape(&series.unit)
+            ));
+        }
+        if let Some(envelope) = &line.envelope {
+            let rows: Vec<String> = envelope
+                .measurements
+                .iter()
+                .map(|m| {
+                    format!(
+                        "<tr><td>{}</td><td>{:.4}</td><td>{}</td></tr>",
+                        panel::escape(&m.name),
+                        m.value,
+                        panel::escape(&m.unit)
+                    )
+                })
+                .collect();
+            if !rows.is_empty() {
+                parts.push(format!("<table class=\"summaries\"><thead><tr><th>summary</th><th>value</th><th>unit</th></tr></thead><tbody>{}</tbody></table>", rows.join("")));
+            }
+        }
+        (!parts.is_empty()).then(|| Rendered {
+            title: "measures".to_string(),
+            html: parts.join(""),
+        })
+    }
+}
+
+/// A band profile's half-width per row as a chart, beside the strip of the image it measured.
+struct ProfilePanel;
+
+impl Panel for ProfilePanel {
+    fn name(&self) -> &'static str {
+        "profile"
+    }
+
+    fn render(&self, line: &JournalLine, workspace: &Workspace) -> Option<Rendered> {
+        let mut parts = Vec::new();
+        for (port, identity) in &line.outputs {
+            let Ok(Artifact::BandProfile(band)) = workspace.load(identity) else {
+                continue;
+            };
+            let chart = rascal_ops::inspect::chart_svg(
+                &format!("{port}: half-width per row"),
+                "px",
+                &band.half,
+            );
+            // The strip: the image columns the band can reach, around the centre column.
+            let strip = line
+                .inputs
+                .get("image")
+                .and_then(|id| workspace.load(id).ok())
+                .and_then(|artifact| match artifact {
+                    Artifact::Image(image) => Some(image),
+                    _ => None,
+                })
+                .map(|image| {
+                    let reach = band.half.iter().cloned().fold(0.0, f64::max).ceil() as u32 + 4;
+                    let (w, h) = (image.pixels.width(), image.pixels.height());
+                    let x0 = band.column_px.saturating_sub(reach);
+                    let x1 = (band.column_px + reach).min(w);
+                    let crop = image.pixels.crop_imm(x0, 0, x1 - x0, h);
+                    format!(
+                        "<figure class=\"strip\"><img src=\"{}\" alt=\"columns {x0} to {x1} of {}\"><figcaption>columns {x0} to {x1} around {}</figcaption></figure>",
+                        panel::png_data_uri(&png_bytes(&crop)),
+                        panel::escape(&image.record.frame),
+                        band.column_px
+                    )
+                })
+                .unwrap_or_default();
+            parts.push(format!(
+                "<div class=\"profile\">{strip}{chart}<p class=\"meta\">thin {:.1} px, {} rows, constants {}</p></div>",
+                band.thin_px,
+                band.half.len(),
+                panel::escape(&band.constants)
+            ));
+        }
+        (!parts.is_empty()).then(|| Rendered {
+            title: "profile".to_string(),
+            html: parts.join(""),
+        })
+    }
 }
 
 struct EnvelopePanel;
@@ -337,10 +457,7 @@ pub fn build(root: &Path) -> Result<String> {
         )
         .replace("{{SUMMARY}}", &panel::escape(&summary))
         .replace("{{WATERFALL_ROWS}}", &rows.join("\n"))
-        .replace(
-            "{{CALLS}}",
-            "<p class=\"empty\" data-calls=\"0\">No filler or pack calls in this journal.</p>",
-        )
+        .replace("{{CALLS}}", &calls_table(&lines))
         .replace("{{STEPS}}", &steps.join("\n"))
         .replace(
             "{{ASSETS}}",
@@ -413,4 +530,45 @@ fn read_request_head(stream: &mut std::net::TcpStream) -> bool {
             return false;
         }
     }
+}
+
+/// The filler and pack call rows, from the journal's `filler call:` notes.
+fn calls_table(lines: &[JournalLine]) -> String {
+    let calls: Vec<(u64, serde_json::Value)> = lines
+        .iter()
+        .filter_map(|l| {
+            let text = l.note.as_deref()?.strip_prefix("filler call: ")?;
+            serde_json::from_str::<serde_json::Value>(text)
+                .ok()
+                .map(|v| (l.seq, v))
+        })
+        .collect();
+    if calls.is_empty() {
+        return "<p class=\"empty\" data-calls=\"0\">No filler or pack calls in this journal.</p>"
+            .to_string();
+    }
+    let rows: Vec<String> = calls
+        .iter()
+        .map(|(seq, c)| {
+            let s = |k: &str| panel::escape(c.get(k).and_then(|v| v.as_str()).unwrap_or(""));
+            let n = |k: &str| c.get(k).and_then(|v| v.as_i64()).unwrap_or(0);
+            format!(
+                "<tr data-call-seq=\"{seq}\"><td>{seq}</td><td>filler</td><td>{}</td><td>{}</td><td>{}x{}</td><td>{} / {} bytes</td><td>{} ms</td><td>{}</td><td>{}</td></tr>",
+                s("filler"),
+                s("target"),
+                n("request_width"),
+                n("request_height"),
+                n("request_bytes"),
+                n("response_bytes"),
+                n("duration_ms"),
+                n("status"),
+                s("outcome")
+            )
+        })
+        .collect();
+    format!(
+        "<table data-calls=\"{}\"><thead><tr><th>#</th><th>kind</th><th>name</th><th>target</th><th>request</th><th>bytes</th><th>duration</th><th>status</th><th>outcome</th></tr></thead><tbody>{}</tbody></table>",
+        calls.len(),
+        rows.join("")
+    )
 }

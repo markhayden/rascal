@@ -456,7 +456,7 @@ be refitted on the owner's corpus; a change to a value is a new set version. Ini
 
 | set | values |
 |---|---|
-| `fan-v1` | `ref_width 1620`, `thin_px 15`, `gap_px 4`, `step_cols 10`, `texture_cols 160` (all four scaled by `w / ref_width` and rounded to integers ≥ 1), `tex_low 0.5`, `tex_high 2.0` (contrast, percent per pixel), `lum_floor 40`, `step_min 0.5`, `step_ref 4.0` (levels of 255), `wide_max 0.15` (fraction of `w`), `row_sigma 0.012`, `width_sigma 0.02` (fractions of `h`), `gate true` |
+| `fan-v1` | `ref_width 1620`, `thin_px 15`, `gap_px 4`, `step_cols 10`, `texture_cols 160` (the three window sizes scaled by `w / ref_width` and rounded to integers ≥ 1; `thin_px` scaled unrounded), `tex_low 0.5`, `tex_high 2.0` (contrast, percent per pixel), `lum_floor 40`, `step_min 0.5`, `step_ref 4.0` (levels of 255), `wide_max 0.15` (fraction of `w`), `row_sigma 0.012`, `width_sigma 0.02` (fractions of `h`), `gate true` |
 | `profile-v1` | `feather_ratio 0.55` |
 | `ramp-v1` | `share 0.5`, `ramp_sigma 0.02` |
 | `feather-v1` | `support 3.0` (sigmas) |
@@ -486,7 +486,8 @@ with `fan-v1`; `thin = thin_px · w / ref_width`:
 1. The core's reference edge is `c ± thin`. The step windows are the `step_cols` columns ending
    `gap_px` before `c − thin` (left) and starting `gap_px` after `c + thin` (right); the texture
    windows are the `texture_cols` columns ending at `c − thin` and starting at `c + thin`. All
-   windows are clipped to `[0, w)`; a window clipped to fewer than 2 columns is `not_applicable`.
+   windows are clipped to `[0, w)`; a window the frame clips to fewer than 2 columns (or to
+   fewer than it asked for, when the scaled geometry asked for one) is `not_applicable`.
 2. Luminance `L = 0.299 R + 0.587 G + 0.114 B`.
 3. *Step* per row: the mean over channels of `|mean(left) − mean(right)|` on the step windows.
 4. *Texture* per row: the mean 3×3 Sobel gradient magnitude of `L` (divided by 8; edge

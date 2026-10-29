@@ -1,1 +1,1 @@
-{"config_version":1,"workspace":{"dir":"ws"},"corpus":{"manifest":"corpus.toml"}}
+{"config_version":1,"workspace":{"dir":"ws"},"corpus":{"manifest":"corpus.toml"},"fillers":{"hosted":{"url":"https://example.invalid/inpaint","profile":"binary","paste":"hard","timeout_s":180,"send_mask":false,"key_env":"HOSTED_FILLER_KEY","max_side":2048,"revision":"vendor model 2026-10"},"local-inpaint":{"command":["python","fill.py","{image}","{mask}","{out}"],"profile":"grey","paste":"feather","timeout_s":120,"send_mask":false,"revision":"fill.py 2026-10-28"}}}

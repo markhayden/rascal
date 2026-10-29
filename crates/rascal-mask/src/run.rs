@@ -18,7 +18,10 @@ use rascal_core::registry::OpRegistry;
 use rascal_core::workspace::Workspace;
 
 /// The recipes embedded in the binary, by name.
-const SHIPPED: &[(&str, &str)] = &[("rect", include_str!("../recipes/rect.toml"))];
+const SHIPPED: &[(&str, &str)] = &[
+    ("rect", include_str!("../recipes/rect.toml")),
+    ("seam", include_str!("../recipes/seam.toml")),
+];
 
 /// A shipped recipe by name, or a recipe file by path.
 pub fn load_recipe(name_or_path: &str) -> Result<Recipe> {
@@ -67,14 +70,39 @@ pub struct RunReport {
 /// `stroke` from `--stroke`, `protect` and `mask` from stored mask directories; a declared
 /// input without its flag, or a flag without its input, is a usage error.
 pub fn run(registry: &OpRegistry, args: &RunArgs) -> Result<RunReport> {
+    if args.prompt.is_some() {
+        return Err(Error::usage(
+            "--prompt binds through a configured pack, which arrives with M5; heal passes it to the filler",
+        ));
+    }
+    let (run, outcome, _) = run_recipe(registry, args)?;
+    let mask_dir = match outcome.outputs.get("mask") {
+        Some(Artifact::Mask(mask)) => Some(mask.path_in(&run.workspace.root.join("artifacts"))),
+        _ => None,
+    };
+    Ok(RunReport {
+        status: outcome.status,
+        stopped_at: outcome.stopped_at,
+        reason: outcome.reason,
+        mask_dir,
+        renders: outcome.renders,
+    })
+}
+
+/// Binds the inputs and runs the recipe; `heal` continues from the outcome. Returns the run,
+/// the outcome and the input image artifact.
+pub fn run_recipe(
+    registry: &OpRegistry,
+    args: &RunArgs,
+) -> Result<(Run, rascal_core::recipe::Outcome, Artifact)> {
     if let Some(path) = &args.config {
         rascal_core::config::Config::read(path)?;
     }
     let recipe = load_recipe(&args.recipe)?;
     recipe.validate(registry)?;
-    if args.prompt.is_some() {
+    if args.prompt.is_some() && recipe.inputs.contains_key("prompt") {
         return Err(Error::usage(
-            "--prompt binds through a configured pack, which arrives with M5",
+            "inputs.prompt binds through a configured pack, which arrives with M5",
         ));
     }
     let declared = |name: &str| recipe.inputs.contains_key(name);
@@ -156,18 +184,9 @@ pub fn run(registry: &OpRegistry, args: &RunArgs) -> Result<RunReport> {
         }
     }
 
+    let input_image = inputs["image"].clone();
     let outcome = recipe.run(registry, inputs, &run)?;
-    let mask_dir = match outcome.outputs.get("mask") {
-        Some(Artifact::Mask(mask)) => Some(mask.path_in(&run.workspace.root.join("artifacts"))),
-        _ => None,
-    };
-    Ok(RunReport {
-        status: outcome.status,
-        stopped_at: outcome.stopped_at,
-        reason: outcome.reason,
-        mask_dir,
-        renders: outcome.renders,
-    })
+    Ok((run, outcome, input_image))
 }
 
 /// A location from a JSON file, validated against the schema and the image's frame. The file

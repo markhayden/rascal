@@ -241,6 +241,7 @@ pub const COMPONENTS: &[&str] = &[
     "Windows",
     "WorkspaceConfig",
     "CorpusConfig",
+    "FillerConfig",
     "InputDecl",
     "RenderOut",
     "Outputs",

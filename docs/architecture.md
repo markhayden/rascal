@@ -72,8 +72,15 @@ which parts exist; it is updated in the same commit as the code it describes.
 | primitives, `cut`, `put`, `line`, `rect`, `stroke`, `rasterize` | rascal-ops | done: the six primitives, `cut` and `put` with the Plan artifact, `rect`, `line`, `stroke`, and `rasterize` for every kind | M1 tasks 1.8a, 1.8b |
 | `inspect`, compatibility export | rascal-core, rascal-mask | done: the inspect op and pages, `--replay`, the export projection with its two refusals, self-contained runs, the docs-coverage check | M1 task 1.9 |
 | the run page and tracing | rascal-core, rascal-mask | done: `rascal dash` (`--out`, `--serve` on loopback, `--panels`), the panel registry with the envelope and artifacts panels, `RASCAL_LOG` spans per op | M1 task 1.10 |
-| the seam ops and `heal` | rascal-ops, rascal-mask | not started | M2 |
 | MCP client and server | rascal-mcp | not started | M3 |
+| `fan` and the band profile | rascal-ops, rascal-mask | done: the two rulers and the half-width rule, `fan-v1` and `fan-thin-v1` embedded, constant sets as parameter defaults, the step-sky fixture and golden profile, the profile panel | M2 task 2.1 |
+| `profile` and `feather` | rascal-ops | done: the band core at `half`, the per-row and the one-sigma feather by distance transform with finite support, the `sigma_px` series, protect wins | M2 task 2.2 |
+| `ramp` and `apply` | rascal-ops | done: the step on the profile's windows as a prescription, apply with the `w > 0` rule, `ramp-v1` | M2 task 2.3 |
+| `window` and `unwindow` | rascal-ops | done: the window contract (support, context, square, caps, slide), the `crop:` frame reused by identity, the cropped planes, exact unwindow | M2 task 2.4 |
+| `paste` (feather and hard) | rascal-ops, rascal-mask | done: the paste contract on pixels, both modes, alpha rules, poisson registered as not applicable until M7, `rascal paste` on files | M2 task 2.5 |
+| `measure` v1 | rascal-ops, rascal-mask | done: the five measures with `measures-v1`, series with row indices and units, summaries, skipped rows, `measured_nothing`, circular hue, `rascal measure` on files, the measures panel, the docs check | M2 task 2.6 |
+| the fillers and the fake fillers | rascal-core, rascal-mask, rascal-testkit | done: `[fillers.*]` with its checks, the command filler (placeholders, timeout, exit handling), the HTTP filler (multipart, bearer from `key_env`, timeout), the request-field matrix, the dimension assertion, the journal record without the key, six fake behaviours as a command and a local server | M2 task 2.7 |
+| `heal` and the shipped `seam` recipe | rascal-mask | done: the typed graph executed literally over the recipe's outputs, the preservation check in raw coordinates, the measures in the mask's frame, the stored fill and `--replay`, the run page by default, the step-pano fixture and the golden seam mask | M2 task 2.8 |
 | the refine ops and the remove, repair, protect recipes | rascal-ops, rascal-mask | not started | M4 |
 | the Python pack | tools/python | not started | M5 |
 | the lab | rascal-mask | not started | M6 |

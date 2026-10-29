@@ -4,15 +4,24 @@
 //! Task 1.1 brings `rect`, `rasterize` and `render` in their walking-slice forms; the
 //! primitives arrive in 1.8a and the rest of the catalogue from M2 on.
 
+pub mod apply;
 pub mod cut;
+pub mod fan;
+pub mod feather;
 pub mod inspect;
 pub mod line;
+pub mod measure;
+pub mod paste;
 pub mod primitives;
+pub mod profile;
 pub mod put;
+pub mod ramp;
 pub mod rasterize;
 pub mod rect;
 pub mod render;
 pub mod stroke;
+pub mod unwindow;
+pub mod window;
 
 use rascal_core::registry::OpRegistry;
 
@@ -26,6 +35,15 @@ pub fn register_all(registry: &mut OpRegistry) -> rascal_core::error::Result<()>
     registry.register(Box::new(line::Line))?;
     registry.register(Box::new(stroke::Stroke))?;
     registry.register(Box::new(inspect::Inspect))?;
+    registry.register(Box::new(fan::Fan))?;
+    registry.register(Box::new(profile::Profile))?;
+    registry.register(Box::new(feather::Feather))?;
+    registry.register(Box::new(ramp::Ramp))?;
+    registry.register(Box::new(apply::Apply))?;
+    registry.register(Box::new(window::Window))?;
+    registry.register(Box::new(unwindow::Unwindow))?;
+    registry.register(Box::new(paste::Paste))?;
+    registry.register(Box::new(measure::Measure))?;
     Ok(())
 }
 

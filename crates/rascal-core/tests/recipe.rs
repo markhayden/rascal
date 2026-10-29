@@ -63,6 +63,13 @@ impl Op for Tuned {
         .with_constants(&["tuned-v1", "tuned-v2"])
     }
 
+    fn constant_set(&self, name: &str) -> Params {
+        let gain = if name == "tuned-v2" { 7.0 } else { 2.5 };
+        [("gain".to_string(), toml::Value::Float(gain))]
+            .into_iter()
+            .collect()
+    }
+
     fn run(
         &self,
         _: &Context<'_>,
@@ -262,7 +269,7 @@ fn resolved_defaults_and_the_constant_set_appear_in_the_journal() {
     let registry = registry();
     let frame = Frame::raw(40, 30, Projection::Flat);
     let recipe = validate(&format!(
-        "{RASTERIZE}[[step]]\nid = \"t\"\nop = \"tuned\"\ninputs = {{ mask = \"mask.mask\" }}\n[[step]]\nid = \"u\"\nop = \"tuned\"\ninputs = {{ mask = \"t.mask\" }}\nconstants = \"tuned-v2\"\ngain = 1\n[outputs]\nmask = \"u.mask\"\n"
+        "{RASTERIZE}[[step]]\nid = \"t\"\nop = \"tuned\"\ninputs = {{ mask = \"mask.mask\" }}\n[[step]]\nid = \"u\"\nop = \"tuned\"\ninputs = {{ mask = \"t.mask\" }}\nconstants = \"tuned-v2\"\ngain = 1\n[[step]]\nid = \"v\"\nop = \"tuned\"\ninputs = {{ mask = \"u.mask\" }}\nconstants = \"tuned-v2\"\n[outputs]\nmask = \"v.mask\"\n"
     ))
     .unwrap();
     let dir = std::env::temp_dir().join(format!("rascal-recipe-journal-{}", std::process::id()));
@@ -315,6 +322,12 @@ fn resolved_defaults_and_the_constant_set_appear_in_the_journal() {
         "a number default is recorded as a number"
     );
     assert_eq!(by_step("u")["constants"], "tuned-v2");
+    assert_eq!(
+        by_step("v")["gain"],
+        7.0,
+        "the selected set's value is the default"
+    );
+    assert_eq!(by_step("v")["constants"], "tuned-v2");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

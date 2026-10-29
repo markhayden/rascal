@@ -4,8 +4,11 @@
 mod dash;
 mod exit;
 mod export;
+mod heal;
 mod inspect;
+mod measure;
 mod ops;
+mod paste;
 mod render;
 mod run;
 mod workspace_cmd;
@@ -69,6 +72,56 @@ enum Command {
         #[arg(long)]
         strict: bool,
     },
+    /// Run a recipe and heal through a configured filler: the fixed graph with the
+    /// preservation check and the measures; writes result.png and the run page.
+    Heal {
+        /// A shipped recipe by name (seam, rect) or a recipe file.
+        recipe: String,
+        /// The image (JPEG or PNG).
+        image: PathBuf,
+        /// The filler entry in the configuration.
+        #[arg(long)]
+        filler: String,
+        /// The configuration file (rascal.toml) naming the filler.
+        #[arg(long)]
+        config: PathBuf,
+        /// The run directory: must be new or empty.
+        #[arg(long)]
+        out: PathBuf,
+        /// Bind inputs.location to a box: x0,y0,x1,y1 as fractions of the image.
+        #[arg(long, allow_hyphen_values = true, conflicts_with = "location")]
+        bbox: Option<String>,
+        /// Bind inputs.location to a location JSON file.
+        #[arg(long)]
+        location: Option<PathBuf>,
+        /// Bind inputs.stroke to a stroke location JSON file.
+        #[arg(long)]
+        stroke: Option<PathBuf>,
+        /// Bind inputs.protect to a stored mask directory.
+        #[arg(long)]
+        protect: Option<PathBuf>,
+        /// Bind inputs.mask to a stored mask directory.
+        #[arg(long)]
+        mask: Option<PathBuf>,
+        /// The prompt for the filler, when it takes one.
+        #[arg(long)]
+        prompt: Option<String>,
+        /// Keep artifacts and the journal in this workspace instead of a private one under --out.
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// The image's projection; without it an exactly 2:1 image is taken as equirectangular.
+        #[arg(long)]
+        projection: Option<ProjectionArg>,
+        /// Do not write the run page beside the journal.
+        #[arg(long)]
+        no_dash: bool,
+        /// Reuse the filler output a previous run recorded for the same request (no filler call).
+        #[arg(long)]
+        replay: Option<PathBuf>,
+        /// Exit 1 when a step is not applicable.
+        #[arg(long)]
+        strict: bool,
+    },
     /// A workspace: list what it holds, or import an image into it.
     Workspace {
         #[command(subcommand)]
@@ -128,6 +181,58 @@ enum Command {
         /// The file to write; overwritten if it exists.
         #[arg(long)]
         out: PathBuf,
+    },
+    /// The measures of a composite: continuity, tone step, transition, texture match, drift.
+    Measure {
+        /// The image to measure (the composite): a file, or an id with --workspace.
+        #[arg(long, required_unless_present = "list")]
+        after: Option<String>,
+        /// The image before, for drift: a file, or an id with --workspace.
+        #[arg(long)]
+        before: Option<String>,
+        /// The mask: a directory (`<id>.mask/`), or an id with --workspace.
+        #[arg(long, required_unless_present = "list")]
+        mask: Option<String>,
+        /// Measure artifacts of this workspace by id, journaling the invocation there.
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// The measures to run, comma-separated (default: all five).
+        #[arg(long)]
+        set: Option<String>,
+        /// Print the envelope as JSON (the summaries are its measurements).
+        #[arg(long)]
+        json: bool,
+        /// Exit 1 when the envelope is not ok (measured nothing, not applicable).
+        #[arg(long)]
+        strict: bool,
+        /// List the measures, one per line, and exit.
+        #[arg(long, conflicts_with_all = ["after", "before", "mask", "set", "json"])]
+        list: bool,
+    },
+    /// The testkit's fake filler as a command (test builds only): `<behaviour> <image> [<mask>] <out>`.
+    #[cfg(feature = "testkit")]
+    #[command(hide = true)]
+    FakeFiller {
+        behaviour: String,
+        paths: Vec<PathBuf>,
+    },
+    /// Composite a fill onto a base through a stored mask (feather, hard; poisson with M7).
+    Paste {
+        /// The base image, in the mask's frame.
+        base: PathBuf,
+        /// The fill, in the mask's frame and size.
+        fill: PathBuf,
+        /// The mask directory (`<id>.mask/`).
+        mask: PathBuf,
+        /// feather (default), hard, or poisson.
+        #[arg(long, default_value = "feather")]
+        mode: String,
+        /// The file to write; overwritten if it exists. PNG, or JPEG for .jpg.
+        #[arg(long)]
+        out: PathBuf,
+        /// Exit 1 when the paste is not applicable (poisson before M7).
+        #[arg(long)]
+        strict: bool,
     },
     /// Render a stored mask for one consumer.
     Render {
@@ -214,9 +319,13 @@ impl From<ProjectionArg> for Projection {
 /// Built-in command names that an op may not shadow.
 const RESERVED: &[&str] = &[
     "run",
+    "heal",
     "render",
     "inspect",
     "export",
+    "paste",
+    "measure",
+    "fake-filler",
     "dash",
     "ops",
     "workspace",
@@ -346,6 +455,80 @@ fn main() {
                 }
             }
         }
+        Command::Heal {
+            recipe,
+            image,
+            filler,
+            config,
+            out,
+            bbox,
+            location,
+            stroke,
+            protect,
+            mask,
+            prompt,
+            workspace,
+            projection,
+            no_dash,
+            replay,
+            strict,
+        } => {
+            let args = heal::HealArgs {
+                run: run::RunArgs {
+                    recipe,
+                    image,
+                    out,
+                    bbox,
+                    location,
+                    stroke,
+                    protect,
+                    mask,
+                    prompt,
+                    config: Some(config),
+                    workspace,
+                    projection: projection.map(Into::into),
+                    strict,
+                },
+                filler,
+                no_dash,
+                replay,
+            };
+            match heal::heal(&registry, &args) {
+                Ok(report) => {
+                    for (profile, path) in &report.renders {
+                        println!("{profile}: {}", path.display());
+                    }
+                    if let Some(result) = &report.result {
+                        println!("result: {}", result.display());
+                    }
+                    if let Some(dash) = &report.dash {
+                        println!("dash: {}", dash.display());
+                    }
+                    match report.status {
+                        Status::Ok => exit::OK,
+                        status => {
+                            eprintln!(
+                                "rascal heal: step {} reported {}: {}; nothing healed",
+                                report.stopped_at.unwrap_or_default(),
+                                serde_json::to_string(&status)
+                                    .unwrap_or_default()
+                                    .trim_matches('"'),
+                                report.reason.unwrap_or_default()
+                            );
+                            if args.run.strict {
+                                exit::NOT_APPLICABLE
+                            } else {
+                                exit::OK
+                            }
+                        }
+                    }
+                }
+                Err(error) => {
+                    eprintln!("rascal heal: {error}");
+                    exit::code_for(&error)
+                }
+            }
+        }
         Command::Workspace { command } => {
             let result = match command {
                 WorkspaceCommand::List {
@@ -463,6 +646,120 @@ fn main() {
                 exit::code_for(&error)
             }
         },
+        Command::Measure {
+            after,
+            before,
+            mask,
+            workspace,
+            set,
+            json,
+            strict,
+            list,
+        } => {
+            if list {
+                println!("{}", measure::list());
+                exit::OK
+            } else {
+                let result = match &workspace {
+                    Some(ws) => measure::measure_in_workspace(
+                        &registry,
+                        ws,
+                        after.as_deref().unwrap_or_default(),
+                        before.as_deref(),
+                        mask.as_deref().unwrap_or_default(),
+                        set.as_deref(),
+                    ),
+                    None => measure::measure(
+                        &registry,
+                        &measure::MeasureArgs {
+                            before: before.map(PathBuf::from),
+                            after: PathBuf::from(after.unwrap_or_default()),
+                            mask: PathBuf::from(mask.unwrap_or_default()),
+                            set,
+                        },
+                    ),
+                };
+                match result {
+                    Ok(envelope) => {
+                        if json {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&envelope).unwrap_or_default()
+                            );
+                        } else {
+                            println!("{}", envelope.summary);
+                            for m in &envelope.measurements {
+                                println!("{:<28} {:>14.4} {}", m.name, m.value, m.unit);
+                            }
+                        }
+                        if envelope.status == Status::Ok || !strict {
+                            exit::OK
+                        } else {
+                            exit::NOT_APPLICABLE
+                        }
+                    }
+                    Err(error) => {
+                        eprintln!("rascal measure: {error}");
+                        exit::code_for(&error)
+                    }
+                }
+            }
+        }
+        #[cfg(feature = "testkit")]
+        Command::FakeFiller { behaviour, paths } => {
+            use rascal_testkit::fake_filler::{Behaviour, run_command};
+            let Some(behaviour) = Behaviour::parse(&behaviour) else {
+                eprintln!("rascal fake-filler: unknown behaviour {behaviour}");
+                std::process::exit(exit::USAGE);
+            };
+            match paths.as_slice() {
+                [image, out] => run_command(behaviour, image, None, out),
+                [image, mask, out] => run_command(behaviour, image, Some(mask), out),
+                _ => {
+                    eprintln!("rascal fake-filler: <behaviour> <image> [<mask>] <out>");
+                    exit::USAGE
+                }
+            }
+        }
+        Command::Paste {
+            base,
+            fill,
+            mask,
+            mode,
+            out,
+            strict,
+        } => {
+            let args = paste::PasteArgs {
+                base,
+                fill,
+                mask,
+                mode,
+                out,
+            };
+            match paste::paste(&registry, &args) {
+                Ok((path, Status::Ok, _)) => {
+                    println!("{}", path.display());
+                    exit::OK
+                }
+                Ok((_, status, reason)) => {
+                    eprintln!(
+                        "rascal paste: {}: {reason}; nothing written",
+                        serde_json::to_string(&status)
+                            .unwrap_or_default()
+                            .trim_matches('"')
+                    );
+                    if strict {
+                        exit::NOT_APPLICABLE
+                    } else {
+                        exit::OK
+                    }
+                }
+                Err(error) => {
+                    eprintln!("rascal paste: {error}");
+                    exit::code_for(&error)
+                }
+            }
+        }
         Command::Render {
             mask,
             profile,

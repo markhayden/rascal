@@ -66,6 +66,41 @@ before anything is read or written, so a hand-edited record cannot reach outside
 hand-edited plane is therefore refused on load, and `inspect --replay` reports a hand-edited
 record (`record_differs`) even when its planes are intact.
 
+## The feather
+
+`profile` and `feather` write the blend the same way. For a pixel outside the core, `D` is the
+distance from its centre to the nearest core pixel's edge (the exact Euclidean distance
+transform, less the half pixel to the boundary) and `σ` is the row's sigma (`profile`:
+`feather_ratio · half[y]`, stored as the `sigma_px` series) or the op's one sigma (`feather`):
+
+```
+blend = round(255 · exp(−D² / (2σ²)))      for 0 < D ≤ support · σ,   else 0
+```
+
+The weight tends to 1 at the core's boundary, the 50% contour is `1.1774 σ` outside the core,
+and the support (`feather-v1`: 3 sigmas) is finite. Protected pixels get `blend = 0`.
+
+## Prescriptions
+
+A prescription describes a change `apply` will make to the canvas; the mask stays a
+description until then. `ramp` adds a `tone_ramp`: a 3-channel series `Δ[y]` (right minus
+left on the band profile's step windows, row-smoothed) and a `share`. `apply` performs every
+prescription once, in order: a pixel with effective weight `w > 0` at distance `d = |x + 0.5 −
+c|` from the line moves by `sign · share · Δ[y] · max(0, 1 − d / half[y])`, the left side toward
+the right and the right toward the left, rounded and clamped; a pixel with `w = 0` (protected,
+or outside the mask's support) is byte-identical. The ramp is zero at and beyond the band's
+half-width.
+
+## Paste
+
+`paste` composites a fill onto a base through the mask. The output starts as a copy of the
+base and only pixels with `w > 0` are written, so `out = base` wherever `w = 0`, protected
+pixels included: the preservation guarantee of a standalone paste. `feather` writes
+`(1 − w) · base + w · fill`; `hard` writes the fill where the core is set and not protected;
+`poisson`, the gradient-domain blend, arrives with M7 and is not applicable until then.
+Arithmetic is per RGB channel in `f32`, rounded and clamped; a base's alpha is kept, a fill's
+alpha is ignored and the summary says so.
+
 ## Identity
 
 `sha256:` over the three planes' pixel digests, the use case, the frame identity, the profile's

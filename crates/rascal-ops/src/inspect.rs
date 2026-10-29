@@ -149,10 +149,10 @@ pub fn chart_svg(title: &str, unit: &str, values: &[f64]) -> String {
         ),
         w = width,
         h = height,
-        title = title,
+        title = rascal_core::panel::escape(title),
         right = width - 4.0,
         max = max,
-        unit = unit,
+        unit = rascal_core::panel::escape(unit),
         points = points.join(" ")
     )
 }

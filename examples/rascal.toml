@@ -1,0 +1,28 @@
+# rascal.toml: the configuration a pipeline gives rascal (docs/recipes.md, docs/fillers.md).
+config_version = 1
+
+[workspace]                                      # where runs keep their workspace when --workspace is not given
+dir = "ws"
+
+# A local filler: a command with placeholders. Exit 0 and a PNG at {out} of the request's size.
+[fillers.local-inpaint]
+command = ["python", "fill.py", "{image}", "{mask}", "{out}"]
+profile = "grey"                                 # the rendering it takes: grey or binary (mask input), alpha or tinted (image input)
+paste = "feather"                                # how its result is composited: feather, hard, poisson (M7)
+timeout_s = 120
+revision = "fill.py 2026-10-28"                  # free text the lab hashes into cell identity; required for lab use
+
+# A hosted filler: a multipart POST (image, mask when the profile has one, prompt when given); a PNG back.
+[fillers.hosted]
+url = "https://example.invalid/inpaint"
+profile = "binary"
+paste = "hard"
+key_env = "HOSTED_FILLER_KEY"                    # Authorization: Bearer, read at call time; never stored, logged or journaled
+timeout_s = 180
+max_side = 2048                                  # the heal graph windows to it; the support must fit
+revision = "vendor model 2026-10"
+
+# The testkit's fake, for trying heal without a model (build with --features testkit):
+# [fillers.fake]
+# command = ["rascal", "fake-filler", "exact", "{image}", "{mask}", "{out}"]
+# profile = "grey"

@@ -83,13 +83,14 @@ without. A bad parameter value is `invalid_args` in the journal and exit 64.
 | recipe | since | steps |
 |---|---|---|
 | `rect` | 1.1 | `inputs.location` → `rasterize`; renders `grey` |
-| `seam` | M2 | `cut` → `line` → `fan` → `profile` → `ramp` |
+| `seam` | 2.8 | `cut` → `line` → `fan` → `profile` → `ramp`; outputs the band mask, the cut canvas and the plan; `heal seam` consumes them (`docs/fillers.md`) |
 | `remove`, `repair`, `repair-area`, `protect` | M4 | see SPEC.md "Recipes" |
 
 ## The configuration file
 
 `--config rascal.toml` names the file a pipeline gives rascal. Its general sections are here;
-`[fillers]` arrives with M2 and `[packs]` with M3. The schema is `schemas/rascal/config-v1.json`.
+`[fillers.*]` is on `docs/fillers.md` and `[packs]` arrives with M3. The schema is
+`schemas/rascal/config-v1.json`; `examples/rascal.toml` is a complete file.
 
 ```toml
 config_version = 1

@@ -24,3 +24,31 @@ fn floor_fixture_matches_its_builder() {
         "fixtures/images/floor.png differs from images::floor(320, 200); UPDATE_FIXTURES=1 regenerates it"
     );
 }
+
+#[test]
+fn step_sky_fixture_matches_its_builder() {
+    let built = rascal_testkit::images::step_sky(400, 300);
+    let path = fixture("step-sky.png");
+    if std::env::var_os("UPDATE_FIXTURES").is_some() {
+        built.save(&path).unwrap();
+    }
+    let committed = image::open(&path).unwrap().to_rgb8();
+    assert!(
+        committed.as_raw() == built.as_raw(),
+        "fixtures/images/step-sky.png differs from images::step_sky(400, 300); UPDATE_FIXTURES=1 regenerates it"
+    );
+}
+
+#[test]
+fn step_pano_fixture_matches_its_builder() {
+    let built = rascal_testkit::images::step_pano(800, 400);
+    let path = fixture("step-pano.png");
+    if std::env::var_os("UPDATE_FIXTURES").is_some() {
+        built.save(&path).unwrap();
+    }
+    let committed = image::open(&path).unwrap().to_rgb8();
+    assert!(
+        committed.as_raw() == built.as_raw(),
+        "fixtures/images/step-pano.png differs from images::step_pano(800, 400); UPDATE_FIXTURES=1 regenerates it"
+    );
+}
