@@ -12,7 +12,7 @@ filler's answer and no scaled request in v1 (scaled windows are a later mileston
 [fillers.local-inpaint]
 command = ["python", "fill.py", "{image}", "{mask}", "{out}"]   # placeholders substituted; exit 0 and a PNG at {out}
 profile = "grey"                                                # grey | binary (mask input), alpha | tinted (image input)
-paste = "feather"                                               # feather (default) | hard | poisson (M7)
+paste = "feather"                                               # feather (default) | hard | poisson
 timeout_s = 120                                                 # default 120
 revision = "fill.py 2026-10-28"                                 # the lab hashes it into a cell's identity
 

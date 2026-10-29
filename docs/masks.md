@@ -96,10 +96,26 @@ half-width.
 `paste` composites a fill onto a base through the mask. The output starts as a copy of the
 base and only pixels with `w > 0` are written, so `out = base` wherever `w = 0`, protected
 pixels included: the preservation guarantee of a standalone paste. `feather` writes
-`(1 − w) · base + w · fill`; `hard` writes the fill where the core is set and not protected;
-`poisson`, the gradient-domain blend, arrives with M7 and is not applicable until then.
+`(1 − w) · base + w · fill`; `hard` writes the fill where the core is set and not protected.
 Arithmetic is per RGB channel in `f32`, rounded and clamped; a base's alpha is kept, a fill's
 alpha is ignored and the summary says so.
+
+`poisson` is the gradient-domain blend, for a fill whose level or tone does not meet the base
+at the mask's edge: a filler that returned the right texture a few levels too dark, a sky that
+is the wrong shade of blue. The domain `Ω` is every pixel with `w > 0` and not protected. Per
+RGB channel the discrete Poisson equation on the 4-neighbour grid over `Ω` takes the fill's own
+gradients inside `Ω` and the base's values at every neighbour outside `Ω`, protected holes
+included, so the result keeps what the fill drew and matches what the base shows around it; a
+pixel on the image border has one fewer neighbour and one fewer term. The solve is conjugate
+gradients in `f32` from the fill as the initial guess, converged when the residual is within
+`tol` of the right-hand side (`poisson-v1`: `tol 1e-4`, `max_iter 2000`); reaching `max_iter`
+is an operational error (exit 3), never a quiet fallback to `feather`. The solution is clamped
+to `[0, 255]` and then feathered like any fill, `(1 − w) · base + w · solution`, so the blend
+zone still fades and `w = 0` pixels are untouched. Two refusals: a `wrap` frame (there is no
+wrap adjacency in v1; `heal seam` pastes in the cut canvas, which is bounded) is `invalid_args`,
+and a mask whose `w > 0` pixels cover the whole image has nothing to anchor to and is
+`not_applicable`. The envelope reports `domain_px` and `iterations`; `docs/results/poisson-bench.md`
+records the solve time for a 1000×1000 domain.
 
 ## Identity
 

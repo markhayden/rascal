@@ -246,7 +246,7 @@ enum Command {
         behaviour: String,
         paths: Vec<PathBuf>,
     },
-    /// Composite a fill onto a base through a stored mask (feather, hard; poisson with M7).
+    /// Composite a fill onto a base through a stored mask (feather, hard or poisson).
     Paste {
         /// The base image, in the mask's frame.
         base: PathBuf,
@@ -260,7 +260,7 @@ enum Command {
         /// The file to write; overwritten if it exists. PNG, or JPEG for .jpg.
         #[arg(long)]
         out: PathBuf,
-        /// Exit 1 when the paste is not applicable (poisson before M7).
+        /// Exit 1 when the paste is not applicable (poisson with nothing to anchor to).
         #[arg(long)]
         strict: bool,
     },

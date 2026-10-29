@@ -1,0 +1,3 @@
+# poisson-v1 (SPEC.md "Constant sets"). A change to a value is a new set version.
+tol = 1e-4
+max_iter = 2000

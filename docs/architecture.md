@@ -79,7 +79,7 @@ which parts exist; it is updated in the same commit as the code it describes.
 | `profile` and `feather` | rascal-ops | done: the band core at `half`, the per-row and the one-sigma feather by distance transform with finite support, the `sigma_px` series, protect wins | M2 task 2.2 |
 | `ramp` and `apply` | rascal-ops | done: the step on the profile's windows as a prescription, apply with the `w > 0` rule, `ramp-v1` | M2 task 2.3 |
 | `window` and `unwindow` | rascal-ops | done: the window contract (support, context, square, caps, slide), the `crop:` frame reused by identity, the cropped planes, exact unwindow | M2 task 2.4 |
-| `paste` (feather and hard) | rascal-ops, rascal-mask | done: the paste contract on pixels, both modes, alpha rules, poisson registered as not applicable until M7, `rascal paste` on files | M2 task 2.5 |
+| `paste` (feather and hard) | rascal-ops, rascal-mask | done: the paste contract on pixels, both modes, alpha rules, `rascal paste` on files | M2 task 2.5 |
 | `measure` v1 | rascal-ops, rascal-mask | done: the five measures with `measures-v1`, series with row indices and units, summaries, skipped rows, `measured_nothing`, circular hue, `rascal measure` on files, the measures panel, the docs check | M2 task 2.6 |
 | the fillers and the fake fillers | rascal-core, rascal-mask, rascal-testkit | done: `[fillers.*]` with its checks, the command filler (placeholders, timeout, exit handling), the HTTP filler (multipart, bearer from `key_env`, timeout), the request-field matrix, the dimension assertion, the journal record without the key, six fake behaviours as a command and a local server | M2 task 2.7 |
 | `heal` and the shipped `seam` recipe | rascal-mask | done: the typed graph executed literally over the recipe's outputs, the preservation check in raw coordinates, the measures in the mask's frame, the stored fill and `--replay`, the run page by default, the step-pano fixture and the golden seam mask | M2 task 2.8 |
@@ -90,4 +90,4 @@ which parts exist; it is updated in the same commit as the code it describes.
 | the segmenter decision | tools/python | survey drafted (`tools/python/MODEL.md`, recommending OWLv2 + MobileSAM under branch A); the owner signs decision 5 and ADR 0018 follows | M4 task 4.5 |
 | the Python pack | tools/python | not started | M5 |
 | the lab | rascal-mask | not started | M6 |
-| the Poisson paste | rascal-ops | not started | M7 |
+| the Poisson paste | rascal-ops, rascal-mask | done: the sparse 4-neighbour system over the unprotected `w > 0` pixels, the fill's gradients with the base's values at the edge, conjugate gradients in `f32` from the fill with the true residual confirming convergence, `poisson-v1`, the whole-image domain not applicable, a wrap frame refused, the clamped solution feathered; `paste --mode poisson` and `paste = "poisson"` through `heal`; the 1000×1000 benchmark in `docs/results/poisson-bench.md` | M7 task 7.1 |
