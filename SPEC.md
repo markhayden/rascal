@@ -1243,10 +1243,9 @@ Each names the command that proves it.
 
 Owner decisions, recorded in `docs/owner-decisions.md` before the task that needs them:
 
-1. The segmenter (during M4): which permissively licensed public model is exported, its
-   redistribution terms for the export, and whether it supports text prompts, points or both;
-   or branch B.
+1. The segmenter (during M4): decided 2026-10-29, branch A with OWLv2 base and MobileSAM
+   exported to ONNX (ADR 0018); text prompts in v1, points later.
 2. The private corpus (before M6): its location, first contents, and the sky and structured
-   groups for the protocol.
-3. The MCP crate versus an in-house JSON-RPC implementation (M3, by ADR).
-4. Whether `fan` gains a path form before or after v1 (the spec says after).
+   groups for the protocol. Open: the owner is gathering the panoramas.
+3. The MCP crate versus an in-house JSON-RPC implementation: decided, ADR 0015.
+4. Whether `fan` gains a path form before or after v1: after v1 (decided 2026-10-29).

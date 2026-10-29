@@ -61,12 +61,12 @@ with green CI on both platforms, and then the tag.
 - [x] 4.2 `subtract`, `select`, `invert`
 - [x] 4.3 `tighten`
 - [x] 4.4 The `remove`, `repair`, `repair-area`, `protect` recipes and the acceptance script → tag `m4.1`
-- [~] 4.5 The segmenter decision (survey drafted; owner signs)
+- [x] 4.5 The segmenter decision (branch A: OWLv2 + MobileSAM, ADR 0018, 2026-10-29)
 - [x] Checkpoint M4 → tag `m4`
 
 ## M5 Pack
 - [x] 5.1 The pack skeleton, `echo_region`, `fetch` and the harness
-- [ ] 5.2 `segment` under branch A, or branch B
+- [ ] 5.2 `segment` under branch A (ADR 0018)
 - [x] 5.3 The bundle and offline setup (the model artifacts' bytes join the bundle with 5.2; a bundle URL for `setup` comes with the release, 7.2) → tag `m5.1`
 - [ ] Checkpoint M5 → tag `m5`
 

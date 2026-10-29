@@ -9,10 +9,10 @@ The plan's "Owner decisions" table is the index; this file holds the answers.
 | 2 | The forbidden-word list location (`RASCAL_FORBIDDEN_WORDS`) | task 0.1's first commit | the clean-room scan runs locally on every commit from 0.1 on; the list never enters the tree | made 2026-10-28 |
 | 3 | A real local filler and a real wrapped image on the owner's machine | task 2.8's by-hand run | M2's checkpoint needs one real heal through a real filler, viewed by the owner | made 2026-10-29 |
 | 4 | The MCP transport (an MCP crate or an in-house JSON-RPC implementation) | task 3.1, by ADR 0015 | no MCP code is written until the ADR is accepted | made 2026-10-29 (ADR 0015) |
-| 5 | The segmenter, its branch (A or B) and the export's redistribution terms | task 5.2, decided in task 4.5 by ADR 0018 | M5's `segment` task does not start, and success criterion 5 or 5b is not fixed, until the ADR is accepted | survey drafted 2026-10-29 (`tools/python/MODEL.md`); awaiting the owner's signature |
-| 6 | The private corpus: location, first contents, the sky and structured groups with at least `min_decided` images each | task 6.1 | no lab matrix is written until the corpus manifest verifies | pending |
-| 7 | The path fan before or after v1 | after M7, unless task 4.3 shows the need | v0.1.0 ships without it unless the owner decides otherwise during M4 | pending |
-| 9 | The `not_worse` rule: under the spec's default fractions (`preferred` at wins ≥ 2/3, `not_worse` at losses < 1/3) a group can never be `not_worse` without being `preferred`, since wins and losses sum to the decided pairs; the implementation reports `preferred`, `not_worse`, `worse` or `inconclusive` with the strongest first. Options: (a) read criterion 6's "not_worse on the structured group" as "preferred or not_worse" (what `docs/lab.md` says now); (b) count `same` as not-a-loss and define `not_worse` over all judged pairs; (c) give `seam-01`'s protocol fractions with a gap (for example `preferred = [3, 4]`) | task 6.4 | the structured group's gate (G16) reads the outcome literally, so the owner's reading must be recorded before the first round is decoded | pending (raised by the M6 review, 2026-10-29) |
+| 5 | The segmenter, its branch (A or B) and the export's redistribution terms | task 5.2, decided in task 4.5 by ADR 0018 | M5's `segment` task does not start, and success criterion 5 or 5b is not fixed, until the ADR is accepted | made 2026-10-29 (ADR 0018) |
+| 6 | The private corpus: location, first contents, the sky and structured groups with at least `min_decided` images each | task 6.1 | no lab matrix is written until the corpus manifest verifies | pending: the owner is gathering the panoramas (2026-10-29) |
+| 7 | The path fan before or after v1 | after M7, unless task 4.3 shows the need | v0.1.0 ships without it unless the owner decides otherwise during M4 | made 2026-10-29: after v1 |
+| 9 | The `not_worse` rule: under the spec's default fractions (`preferred` at wins ≥ 2/3, `not_worse` at losses < 1/3) a group can never be `not_worse` without being `preferred`, since wins and losses sum to the decided pairs; the implementation reports `preferred`, `not_worse`, `worse` or `inconclusive` with the strongest first. Options: (a) read criterion 6's "not_worse on the structured group" as "preferred or not_worse" (what `docs/lab.md` says now); (b) count `same` as not-a-loss and define `not_worse` over all judged pairs; (c) give `seam-01`'s protocol fractions with a gap (for example `preferred = [3, 4]`) | task 6.4 | the structured group's gate (G16) reads the outcome literally, so the owner's reading must be recorded before the first round is decoded | made 2026-10-29: option (a) |
 
 ## 1. No conflicting obligation
 
@@ -32,12 +32,16 @@ case among many, not the project's identity. Examples, fixtures and docs draw on
 (stitched scans, product shots, archival prints, interiors, landscapes, screens and signs) rather
 than any single industry.
 
-## 8. Merging and pushing at checkpoints
+## 8. Merging and pushing
 
 2026-10-28, at the M0 checkpoint. After the owner has reviewed and approved a milestone, the
 agent merges it into `main`, runs `just check` on the merge commit, pushes `main` and the tags,
-waits for CI on both platforms, and tags the checkpoint. `main` is never force pushed, and no
-milestone is merged without the owner's approval.
+waits for CI on both platforms, and tags the checkpoint. `main` is never force pushed.
+
+Widened 2026-10-29: the agent merges at will during development, without the owner's approval,
+as long as every check and CI run is green. A merge is a merge commit that has passed `just
+check` (with the clean-room scan) locally and CI on both platforms; milestone tags still mark a
+complete milestone. The owner reviews the checkpoint documents at their own pace.
 
 ## 3. A real filler and a real image
 
@@ -57,4 +61,19 @@ the independent minimal client as the in-house check on it.
 The survey is `tools/python/MODEL.md`. Its recommendation is branch A with OWLv2 base
 (Apache-2.0) for text to boxes and MobileSAM (Apache-2.0) for boxes to planes, both exported to
 ONNX for the bundle, with SAM 2.1 Hiera-Tiny as the drop-in if MobileSAM's masks prove loose.
-The owner signs here with the branch, the model pair and the date; ADR 0018 follows.
+2026-10-29. The owner signs branch A with OWLv2 base and MobileSAM, both exported to ONNX, as
+the survey recommends; ADR 0018 records it and task 5.2 starts. The redistribution terms are
+the Apache-2.0 tags read on the day of the export, recorded in the bundle's notice by 5.2.
+
+## 7. The path fan
+
+2026-10-29. After v1. `fan` keeps its line form through v0.1.0; a path form is a later
+milestone if the lab or a use case asks for it.
+
+## 9. The `not_worse` rule
+
+2026-10-29. Option (a), left to the agent by the owner: criterion 6's "not_worse on the
+structured group" reads as "preferred or not_worse", which `preferred` satisfies. The decode
+reports the strongest outcome first, and the protocol's default fractions stay as the spec
+wrote them; a round that wants a distinct `not_worse` band gives its protocol fractions with a
+gap (option c) and says so in its results document.
