@@ -54,7 +54,7 @@ with green CI on both platforms, and then the tag.
 
 ## Observations from the first real runs (2026-10-29, not gating)
 - [ ] Speed of a heal is almost all output: a 5760×2880 result as PNG at the default level and a 63 MB run page embedding every image at full size (about 70 s of a 90 s run). Faster PNG level or an opt-in JPEG result, thumbnails in the page, parallel writes. Before the M6 lab rounds.
-- [ ] LaMa leaves a grey veil in smooth sky with the standard band; `wide_max = 0.05` on the fan removes it and keeps the ramp. A per-filler constant set is a lab question (M6); Poisson paste (M7) is the structural answer.
+- [x] LaMa leaves a grey veil in smooth sky with the standard band (confirmed by seam-01 and seam-02); a filler entry's `overrides` now choose the band `heal` runs for it (docs/fillers.md); Poisson paste (M7) is the structural answer.
 
 ## M4 Refine
 - [x] 4.1 `grow`, `shrink`, `close`

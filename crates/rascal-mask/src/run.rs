@@ -13,13 +13,14 @@ use rascal_core::location::Location;
 use rascal_core::mask::Mask;
 use rascal_core::op::Status;
 use rascal_core::outdir::{self, OutKind};
-use rascal_core::recipe::{InputType, Recipe, Run};
+use rascal_core::recipe::{InputType, Override, Recipe, Run, apply_override};
 use rascal_core::registry::OpRegistry;
 use rascal_core::workspace::Workspace;
 
 pub use rascal_mask::recipes::load_recipe;
 
 /// What `run` was asked to do.
+#[derive(Debug, Clone)]
 pub struct RunArgs {
     pub recipe: String,
     pub image: PathBuf,
@@ -36,6 +37,10 @@ pub struct RunArgs {
     pub strict: bool,
     /// A recorded run whose pack calls answer instead of the packs (G4).
     pub replay: Option<PathBuf>,
+    /// Recipe overrides applied before validation (`"<step>.<param>" = value`), with who asked
+    /// for them: a filler entry's, set by `heal`; `run` and the lab pass none.
+    pub overrides: BTreeMap<String, Override>,
+    pub overrides_from: Option<String>,
 }
 
 /// A bound and executed recipe, with the registry it ran in (the shipped ops plus the
@@ -102,7 +107,7 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
         .as_deref()
         .map(rascal_core::config::Config::read)
         .transpose()?;
-    let recipe = load_recipe(&args.recipe)?;
+    let mut recipe = load_recipe(&args.recipe)?;
     if declares_prompt(&recipe) && args.prompt.is_none() {
         return Err(Error::usage(format!(
             "recipe {} needs inputs.prompt: give --prompt",
@@ -154,6 +159,15 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
     };
     let (registry, packs) =
         crate::packs::registry_for(config.as_ref(), &run.workspace, args.replay.as_deref())?;
+    for (key, value) in &args.overrides {
+        let from = args.overrides_from.as_deref().unwrap_or("the caller");
+        apply_override(&mut recipe, &registry, key, value)
+            .map_err(|m| Error::usage(format!("fillers.{from}: override {key}: {m}")))?;
+        run.note(format!(
+            "override from fillers.{from}: {key} = {}",
+            toml::Value::from(value)
+        ))?;
+    }
     recipe.validate(&registry).map_err(|e| {
         let no_packs = config.as_ref().is_none_or(|c| c.packs.is_empty());
         match e {

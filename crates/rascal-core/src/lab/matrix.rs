@@ -16,6 +16,7 @@ use crate::error::Result;
 use crate::lab::corpus::Corpus;
 use crate::lab::protocol::Protocol;
 use crate::recipe::Recipe;
+pub use crate::recipe::{Override, apply_override};
 use crate::registry::OpRegistry;
 
 /// `matrix.toml`.
@@ -67,29 +68,6 @@ pub struct Arm {
     /// What one filler call may cost; the ledger sums it.
     #[serde(default)]
     pub spend_usd_per_call: f64,
-}
-
-/// An override's value: what a step parameter takes.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(untagged)]
-pub enum Override {
-    Bool(bool),
-    Integer(i64),
-    Float(f64),
-    String(String),
-    List(Vec<Override>),
-}
-
-impl From<&Override> for toml::Value {
-    fn from(value: &Override) -> toml::Value {
-        match value {
-            Override::Bool(b) => toml::Value::Boolean(*b),
-            Override::Integer(i) => toml::Value::Integer(*i),
-            Override::Float(f) => toml::Value::Float(*f),
-            Override::String(s) => toml::Value::String(s.clone()),
-            Override::List(items) => toml::Value::Array(items.iter().map(Into::into).collect()),
-        }
-    }
 }
 
 /// A validated matrix: the recipes its arms resolved to, with overrides applied.
@@ -291,50 +269,6 @@ fn check_override_key(key: &str) -> std::result::Result<(), String> {
         }
         _ => Err(format!("override key {key:?} is not <step>.<param>")),
     }
-}
-
-/// Sets one step parameter (or its constant set) from an override; the step and the
-/// parameter must exist.
-pub fn apply_override(
-    recipe: &mut Recipe,
-    registry: &OpRegistry,
-    key: &str,
-    value: &Override,
-) -> std::result::Result<(), String> {
-    let Some((step_id, param)) = key.split_once('.') else {
-        return Err(format!("override key {key:?} is not <step>.<param>"));
-    };
-    let Some(step) = recipe.step.iter_mut().find(|s| s.id == step_id) else {
-        return Err(format!("no step {step_id} in the recipe"));
-    };
-    let manifest = registry
-        .get(&step.op)
-        .map(|op| op.manifest())
-        .ok_or_else(|| format!("step {step_id}: unknown op {}", step.op))?;
-    if param == "constants" {
-        let Override::String(name) = value else {
-            return Err("constants takes a set name".to_string());
-        };
-        if !manifest.constants.iter().any(|c| c == name) {
-            return Err(format!(
-                "{} has no constant set {name} (it has {})",
-                step.op,
-                if manifest.constants.is_empty() {
-                    "none".to_string()
-                } else {
-                    manifest.constants.join(", ")
-                }
-            ));
-        }
-        step.constants = Some(name.clone());
-        return Ok(());
-    }
-    if manifest.param(param).is_none() {
-        return Err(format!("{} has no parameter {param}", step.op));
-    }
-    step.params
-        .insert(param.to_string(), toml::Value::from(value));
-    Ok(())
 }
 
 /// The dependent-finder rule: a finder step whose input binds, through any chain of steps, to

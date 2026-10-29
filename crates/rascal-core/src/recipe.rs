@@ -871,3 +871,70 @@ pub fn image_artifact(image: Image) -> Artifact {
 pub fn mask_artifact(mask: Mask) -> Artifact {
     Artifact::Mask(Arc::new(mask))
 }
+
+/// An override's value: what a step parameter takes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum Override {
+    Bool(bool),
+    Integer(i64),
+    Float(f64),
+    String(String),
+    List(Vec<Override>),
+}
+
+impl From<&Override> for toml::Value {
+    fn from(value: &Override) -> toml::Value {
+        match value {
+            Override::Bool(b) => toml::Value::Boolean(*b),
+            Override::Integer(i) => toml::Value::Integer(*i),
+            Override::Float(f) => toml::Value::Float(*f),
+            Override::String(s) => toml::Value::String(s.clone()),
+            Override::List(items) => toml::Value::Array(items.iter().map(Into::into).collect()),
+        }
+    }
+}
+
+/// Sets one step parameter (or its constant set) from an override; the step and the
+/// parameter must exist.
+pub fn apply_override(
+    recipe: &mut Recipe,
+    registry: &OpRegistry,
+    key: &str,
+    value: &Override,
+) -> std::result::Result<(), String> {
+    let Some((step_id, param)) = key.split_once('.') else {
+        return Err(format!("override key {key:?} is not <step>.<param>"));
+    };
+    let Some(step) = recipe.step.iter_mut().find(|s| s.id == step_id) else {
+        return Err(format!("no step {step_id} in the recipe"));
+    };
+    let manifest = registry
+        .get(&step.op)
+        .map(|op| op.manifest())
+        .ok_or_else(|| format!("step {step_id}: unknown op {}", step.op))?;
+    if param == "constants" {
+        let Override::String(name) = value else {
+            return Err("constants takes a set name".to_string());
+        };
+        if !manifest.constants.iter().any(|c| c == name) {
+            return Err(format!(
+                "{} has no constant set {name} (it has {})",
+                step.op,
+                if manifest.constants.is_empty() {
+                    "none".to_string()
+                } else {
+                    manifest.constants.join(", ")
+                }
+            ));
+        }
+        step.constants = Some(name.clone());
+        return Ok(());
+    }
+    if manifest.param(param).is_none() {
+        return Err(format!("{} has no parameter {param}", step.op));
+    }
+    step.params
+        .insert(param.to_string(), toml::Value::from(value));
+    Ok(())
+}

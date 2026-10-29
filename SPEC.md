@@ -688,6 +688,7 @@ profile = "grey"
 paste = "feather"
 timeout_s = 120
 revision = "fill.py 2026-10-28"                 # free text the lab hashes into cell identity; required for lab use
+overrides = { "fan.constants" = "fan-thin-v1" } # recipe overrides heal applies when this filler paints (the band it can carry); run and the lab ignore them
 
 [fillers.hosted]
 url = "https://example.invalid/inpaint"        # multipart POST: image, mask (when the profile has one), prompt?; PNG back

@@ -52,6 +52,13 @@
             "null"
           ]
         },
+        "overrides": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Override"
+          },
+          "description": "Recipe overrides `heal` applies when this filler paints, `\"<step>.<param>\" = value` or\n`\"<step>.constants\" = \"<set>\"` (the matrix's form): the band a filler can carry is a\nproperty of the filler (`docs/results/seam-02.md`). `rascal run` and the lab ignore\nthem: a run without a filler has none, and a lab arm says everything it runs.",
+          "type": "object"
+        },
         "paste": {
           "default": "feather",
           "description": "The paste mode for its result: `feather`, `hard` or `poisson`.",
@@ -92,6 +99,31 @@
         "profile"
       ],
       "type": "object"
+    },
+    "Override": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "format": "int64",
+          "type": "integer"
+        },
+        {
+          "format": "double",
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/Override"
+          },
+          "type": "array"
+        }
+      ],
+      "description": "An override's value: what a step parameter takes."
     },
     "PackConfig": {
       "additionalProperties": false,

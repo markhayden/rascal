@@ -9,6 +9,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
+use crate::recipe::Override;
 
 /// Where runs keep their workspace when `--workspace` is not given.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
@@ -29,7 +30,7 @@ pub struct CorpusConfig {
 }
 
 /// The configuration file.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// The file's version.
@@ -90,7 +91,7 @@ impl Config {
 /// the rendering profile it takes, the paste mode its result is composited with, a timeout,
 /// and for the lab a revision string. `key_env` names the environment variable holding a
 /// bearer key, which is read at call time and never stored, logged or journaled.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FillerConfig {
     /// The command and its arguments; `{image}`, `{mask}`, `{out}` and `{prompt}` are
@@ -122,6 +123,12 @@ pub struct FillerConfig {
     /// Free text the lab hashes into a cell's identity; required for lab use.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision: Option<String>,
+    /// Recipe overrides `heal` applies when this filler paints, `"<step>.<param>" = value` or
+    /// `"<step>.constants" = "<set>"` (the matrix's form): the band a filler can carry is a
+    /// property of the filler (`docs/results/seam-02.md`). `rascal run` and the lab ignore
+    /// them: a run without a filler has none, and a lab arm says everything it runs.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub overrides: BTreeMap<String, Override>,
 }
 
 fn default_paste() -> String {

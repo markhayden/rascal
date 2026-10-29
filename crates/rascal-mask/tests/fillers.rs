@@ -5,6 +5,7 @@
 #![cfg(feature = "testkit")]
 #![allow(clippy::unwrap_used)]
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -81,6 +82,7 @@ fn command_config(behaviour: Behaviour, with_mask: bool, timeout_s: u64) -> Fill
         key_env: None,
         max_side: None,
         revision: Some("fake".to_string()),
+        overrides: BTreeMap::new(),
     }
 }
 
@@ -95,6 +97,7 @@ fn http_config(url: &str, key_env: Option<&str>, timeout_s: u64) -> FillerConfig
         key_env: key_env.map(str::to_string),
         max_side: None,
         revision: None,
+        overrides: BTreeMap::new(),
     }
 }
 
