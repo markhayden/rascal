@@ -39,6 +39,8 @@ rayon = "1.12"
 sha2 = "0.11"
 fs4 = "1.1"
 tracing = "0.1"
+# The MCP SDK (ADR 0015): pinned; stdio for `serve`, a child process for the packs; no macros.
+rmcp = { version = "=3.8.0", default-features = false, features = ["server", "client", "transport-io", "transport-child-process", "schemars"] }
 # The subscriber behind RASCAL_LOG (SPEC "Diagnostics"): spans to stderr, off by default.
 tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "std", "ansi"] }
 tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "process", "io-util", "time", "sync", "signal"] }

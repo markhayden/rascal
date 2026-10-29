@@ -8,6 +8,15 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+rascal-core = { workspace = true }
+rmcp = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+rascal-testkit = { path = "../rascal-testkit" }
+image = { workspace = true }

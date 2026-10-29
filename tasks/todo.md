@@ -47,7 +47,7 @@ with green CI on both platforms, and then the tag.
 - [x] Checkpoint M2 → tag `m2` (reviews in docs/reviews/m2-checkpoint.md)
 
 ## M3 MCP
-- [ ] 3.1 The transport decision and the independent client
+- [x] 3.1 The transport decision and the independent client
 - [ ] 3.2 `rascal serve` → tag `m3.1`
 - [ ] 3.3 The pack client and the isolation suite
 - [ ] Checkpoint M3 → tag `m3`

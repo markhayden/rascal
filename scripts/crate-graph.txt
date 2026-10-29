@@ -14,3 +14,5 @@ dev rascal-core -> rascal-ops
 dev rascal-ops -> rascal-testkit
 dev rascal-mcp -> rascal-testkit
 dev rascal-mask -> rascal-testkit
+# The testkit's mcp_client module imports nothing from rascal-core, rascal-mcp or rmcp (ADR 0015);
+# crates/rascal-testkit/tests/mcp_client.rs reads its source to keep it that way.
