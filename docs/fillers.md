@@ -15,6 +15,7 @@ profile = "grey"                                                # grey | binary 
 paste = "feather"                                               # feather (default) | hard | poisson
 timeout_s = 120                                                 # default 120
 revision = "fill.py 2026-10-28"                                 # the lab hashes it into a cell's identity
+overrides = { "fan.constants" = "fan-thin-v1", "fan.wide_max" = 0.05 }   # the band this filler can carry (heal only)
 
 [fillers.hosted]
 url = "https://example.invalid/inpaint"   # multipart POST: image, mask (when the profile has one), prompt (when given)
@@ -28,6 +29,18 @@ max_side = 2048                           # the heal graph windows to it
 Exactly one of `command` and `url`; `key_env` goes with `url`; `send_mask = true` on an
 image-input profile also sends the `grey` rendering as `mask`. `examples/rascal.toml` has both
 entries; the schema is `schemas/rascal/config-v1.json`.
+
+**`overrides`** are recipe overrides in the matrix's form (`"<step>.<param>" = value`,
+`"<step>.constants" = "<set>"`, `docs/lab.md`) that `heal` applies to the recipe before it
+runs when this filler paints. The lab rounds showed the band a filler can carry is a property
+of the filler: a model that smears a wide band across smooth sky wants `fan-thin-v1`, one that
+carries it wants the ramp (`docs/results/seam-02.md`). So the entry says it once, and `heal
+seam --filler lama` runs the band LaMa needs while `--filler bria-erase` runs the wide ramp.
+Each applied override is a journal note (`override from fillers.<name>: <key> = <value>`) and
+the step's journaled parameters are the resolved ones, so a run says what it ran; an override
+naming a step, parameter or set the recipe lacks is refused naming the entry before anything
+runs. `rascal run` applies none (no filler is involved), and the lab ignores them: an arm says
+everything it runs, so the rounds that find the right band stay explicit.
 
 ## What a filler receives (G9)
 

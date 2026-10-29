@@ -18,6 +18,7 @@ mod serve;
 mod tools;
 mod workspace_cmd;
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use clap::error::ErrorKind;
@@ -574,6 +575,8 @@ fn main() {
                 projection: projection.map(Into::into),
                 strict,
                 replay,
+                overrides: BTreeMap::new(),
+                overrides_from: None,
             };
             match run::run(&args) {
                 Ok(report) => {
@@ -642,6 +645,8 @@ fn main() {
                     projection: projection.map(Into::into),
                     strict,
                     replay: replay.clone(),
+                    overrides: BTreeMap::new(),
+                    overrides_from: None,
                 },
                 filler,
                 no_dash,

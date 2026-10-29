@@ -29,7 +29,8 @@ the `[workspace]`, `[fillers]` and `[packs]` sections are described in `docs/wor
 
 ## The protocol
 
-A round's committed inputs (the corpus manifest, `protocol.toml` and `matrix.toml`) live under
+A filler entry's own `overrides` (`docs/fillers.md`) are not applied by `lab run`: an arm names
+everything it runs. A round's committed inputs (the corpus manifest, `protocol.toml` and `matrix.toml`) live under
 `labs/<name>/`; its run output goes under `lab/<name>/`, which is never committed.
 `protocol.toml` is committed before `lab run` is invoked; the run records the digest of its
 bytes, and a change after a run is a new lab name. It names the lab, the seed `lab pairs`

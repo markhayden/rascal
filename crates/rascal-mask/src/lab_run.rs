@@ -312,6 +312,8 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
                 projection: None,
                 strict: false,
                 replay: None,
+                overrides: BTreeMap::new(),
+                overrides_from: None,
             },
             filler: arm.filler.clone(),
             no_dash: args.no_dash,

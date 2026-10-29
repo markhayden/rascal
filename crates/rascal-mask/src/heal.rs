@@ -102,7 +102,11 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         registry,
         packs: _packs,
         recipe,
-    } = run::run_recipe(&args.run)?;
+    } = run::run_recipe(&run::RunArgs {
+        overrides: entry.overrides.clone(),
+        overrides_from: Some(args.filler.clone()),
+        ..args.run.clone()
+    })?;
     // A prompt the recipe bound (a finder's) is not the filler's.
     let filler_prompt = if run::declares_prompt(&recipe) {
         None
