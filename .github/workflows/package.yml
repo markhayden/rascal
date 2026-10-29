@@ -37,6 +37,8 @@ jobs:
           python-version: "3.12"
       - name: Sync the Python pack's environment (the pytest bundle test runs in it)
         run: uv sync --frozen --project tools/python
+      - name: Allow an unprivileged network namespace (the disconnected bundle step runs in one)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: scripts/check-packaging.sh
       - run: scripts/publish.sh --dry-run
       - name: Release acceptance from the packaged crates
