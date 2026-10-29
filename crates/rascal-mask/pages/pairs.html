@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rascal pairs</title>
+<style>
+  :root { --bg: #fbfaf8; --fg: #1f1d1a; --muted: #6b6560; --line: #e2ddd6; --accent: #b0158f; --card: #ffffff; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #16151a; --fg: #ebe7e1; --muted: #9b958d; --line: #2d2b31; --accent: #e06bcd; --card: #1f1e24; } }
+  html { color-scheme: light dark; }
+  body { margin: 0; padding: 24px max(16px, 3vw); background: var(--bg); color: var(--fg); font: 14px/1.45 ui-sans-serif, system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; } h2 { font-size: 15px; margin: 24px 0 8px; }
+  .meta { color: var(--muted); }
+  .pair { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin: 12px 0; }
+  .sides { display: flex; gap: 12px; flex-wrap: wrap; } .sides figure { margin: 0; flex: 1 1 320px; min-width: 0; }
+  .sides img { width: 100%; height: auto; border: 1px solid var(--line); background: #888; }
+  figcaption { font-size: 12px; color: var(--muted); }
+  .picks button { padding: 6px 14px; margin: 8px 8px 0 0; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); cursor: pointer; }
+  .picks button.chosen { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .done { position: sticky; top: 0; background: var(--card); border-bottom: 1px solid var(--line); padding: 8px 0; margin: 0 0 12px; }
+  textarea { width: 100%; min-height: 120px; font: 12px ui-monospace, monospace; }
+  a.save { display: inline-block; margin-right: 12px; }
+</style>
+</head>
+<body>
+<h1>rascal pairs <span class="meta">{{LAB}}</span></h1>
+<p class="meta">{{SUMMARY}} Pick the better result of each pair, or <em>same</em> when they are as good, or <em>neither</em> when both fail. The arms are not named and the sides were drawn; judge the pictures.</p>
+<div class="done"><span id="progress">0 of {{COUNT}} picked</span> · <a class="save" id="save" download="picks.json" href="#">Save picks.json</a> <span class="meta">(or copy the text at the bottom into a file)</span></div>
+{{PAIRS}}
+<h2>picks.json</h2>
+<textarea id="out" readonly></textarea>
+<script>
+  // The page knows the assignment's digest and the pair ids, never the arms or the sides.
+  const digest = {{DIGEST}};
+  const ids = {{IDS}};
+  const picks = {};
+  function render() {
+    const list = ids.filter((id) => picks[id]).map((id) => ({ pair: id, pick: picks[id] }));
+    const text = JSON.stringify({ picks_version: 1, assignment_digest: digest, pick: list }, null, 2) + "\n";
+    document.getElementById("out").value = text;
+    document.getElementById("progress").textContent = list.length + " of " + ids.length + " picked";
+    const save = document.getElementById("save");
+    if (save.href.startsWith("blob:")) { URL.revokeObjectURL(save.href); }
+    save.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+  }
+  document.querySelectorAll(".picks button").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.pair;
+      picks[id] = button.dataset.pick;
+      button.parentElement.querySelectorAll("button").forEach((b) => b.classList.toggle("chosen", b === button));
+      render();
+    });
+  });
+  render();
+</script>
+</body>
+</html>

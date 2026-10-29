@@ -97,6 +97,13 @@ impl LabDir {
         read_json(&self.root.join("lab.json"))
     }
 
+    /// Records the cells of the run that just finished, by `<arm>/<image>`.
+    pub fn set_current(&self, current: std::collections::BTreeMap<String, String>) -> Result<()> {
+        let mut record = self.record()?;
+        record.current = current;
+        write_json(&self.root.join("lab.json"), &record)
+    }
+
     /// `cells/<hex>` for an identity (`sha256:<hex>`).
     pub fn cell_dir(&self, identity: &str) -> PathBuf {
         self.root

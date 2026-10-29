@@ -3,11 +3,12 @@
 //! under `schemas/rascal/`; `matrix::validate` checks a matrix against its protocol, its
 //! corpus and the recipes its arms name, including the dependent-finder rejection. The
 //! commands (`rascal corpus verify`, `rascal lab …`) live in the binary crate; `cell` holds
-//! what `lab run` writes.
+//! what `lab run` writes, `pairs` the blind assignment, the picks and their decode.
 
 pub mod cell;
 pub mod corpus;
 pub mod matrix;
+pub mod pairs;
 pub mod protocol;
 
 use std::path::Path;

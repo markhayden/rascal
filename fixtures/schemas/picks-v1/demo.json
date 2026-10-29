@@ -1,0 +1,22 @@
+{
+  "picks_version": 1,
+  "assignment_digest": "sha256:22f81e95bb1a54156e6ea347c0fa2668dc13087f8881a7f5822b685fbdf37fe9",
+  "pick": [
+    {
+      "pair": "sky-01",
+      "pick": "left"
+    },
+    {
+      "pair": "structured-01",
+      "pick": "right"
+    },
+    {
+      "pair": "sky-02",
+      "pick": "right"
+    },
+    {
+      "pair": "structured-02",
+      "pick": "same"
+    }
+  ]
+}

@@ -394,6 +394,21 @@ enum LabCommand {
         #[arg(long)]
         no_dash: bool,
     },
+    /// Write the blind pairs page for two arms: pairs/assignment.json and pairs/index.html.
+    Pairs {
+        /// The lab directory of a finished lab run.
+        lab: PathBuf,
+        /// The two arms compared, a,b; wins are a's.
+        #[arg(long)]
+        arms: String,
+    },
+    /// Decode a picks file the pairs page wrote: wins, losses and the outcome per group.
+    Decode {
+        /// The lab directory holding pairs/assignment.json.
+        lab: PathBuf,
+        /// The picks.json the page saved.
+        picks: PathBuf,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -739,6 +754,16 @@ fn main() {
                     no_dash,
                 })
                 .map(|_| exit::OK),
+                LabCommand::Pairs { lab, arms } => lab::pairs::pairs(&lab, &arms).map(|page| {
+                    println!("pairs: {}", page.display());
+                    exit::OK
+                }),
+                LabCommand::Decode { lab, picks } => {
+                    lab::pairs::decode(&lab, &picks).map(|decode| {
+                        lab::pairs::print_decode(&decode);
+                        exit::OK
+                    })
+                }
             };
             match result {
                 Ok(code) => code,

@@ -73,7 +73,7 @@ with green CI on both platforms, and then the tag.
 ## M6 Lab
 - [x] 6.1 Corpus, protocol, matrix and `fan-thin-v1` (built on the example corpus over the fixtures; owner decision 6 names the private corpus for 6.4)
 - [x] 6.2 `lab run`
-- [ ] 6.3 `lab pairs` and `lab decode` → tag `m6.1`
+- [x] 6.3 `lab pairs` and `lab decode` → tag `m6.1`
 - [ ] 6.4 The owner's first lab round (criterion 6 gate)
 - [ ] Checkpoint M6 → tag `m6`
 

@@ -3,6 +3,13 @@
   "additionalProperties": false,
   "description": "`lab.json` at the lab's root: what every later invocation must agree with.",
   "properties": {
+    "current": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "The cells of the last `lab run`, by `<arm>/<image>`: the identities `lab pairs` shows.",
+      "type": "object"
+    },
     "lab_version": {
       "format": "uint32",
       "minimum": 0,

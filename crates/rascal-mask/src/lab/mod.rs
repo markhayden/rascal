@@ -1,8 +1,10 @@
 //! The lab's commands (SPEC.md "The lab"): `rascal corpus verify`, and the matrix resolved
 //! against its protocol, corpus and recipes for `lab run` (M6). The types and their
-//! validation are `rascal_core::lab`; `layout` is the lab directory `lab run` writes.
+//! validation are `rascal_core::lab`; `layout` is the lab directory `lab run` writes; `pairs`
+//! is the blind pairs page and the decode of its picks.
 
 pub mod layout;
+pub mod pairs;
 
 use std::path::{Path, PathBuf};
 

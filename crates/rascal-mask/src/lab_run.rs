@@ -77,8 +77,20 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
         name: matrix.name.clone(),
         protocol_digest,
         matrix: args.matrix.display().to_string(),
+        current: BTreeMap::new(),
     };
     let (lab, resumed) = LabDir::open_or_create(&args.out, &record)?;
+    if !resumed {
+        // The protocol beside the record, so pairs and decode need nothing outside the lab.
+        std::fs::copy(
+            matrix_dir.join(&matrix.protocol),
+            lab.root.join("protocol.toml"),
+        )
+        .map_err(|source| Error::Io {
+            path: lab.root.join("protocol.toml"),
+            source,
+        })?;
+    }
 
     // The registry the arms validate against: the shipped ops and the configured packs'
     // tools, the latter being the finders. The packs journal into the lab's own workspace.
@@ -183,6 +195,7 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
     }
 
     let mut report = LabRunReport::default();
+    let mut current = BTreeMap::new();
     for image in &validated.matrix.image {
         for (index, arm) in validated.matrix.arm.iter().enumerate() {
             let mut recipe = validated.recipes[index].clone();
@@ -216,6 +229,7 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
                 components,
             };
             lab.write_cell(&cell)?;
+            current.insert(format!("{}/{}", arm.name, image.id), cell.identity.clone());
             let short = &cell.identity[7..19];
             let redo = args.redo.as_deref() == Some(arm.name.as_str());
             if !redo && let Some(latest) = lab.latest(&cell.identity)? {
@@ -336,6 +350,7 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
             );
         }
     }
+    lab.set_current(current)?;
     println!(
         "lab {}: {} ran, {} reused, {} stopped, {} failed; {} external call{}, spend {:.2} USD",
         record.name,

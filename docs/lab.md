@@ -95,4 +95,32 @@ offline in a few seconds; `crates/rascal-mask/tests/lab_run.rs` is the scenario.
 
 ## Pairs and decode
 
-`lab pairs` and `lab decode` arrive with task 6.3; this page grows with them.
+```
+rascal lab pairs lab/<name>/ --arms a,b
+rascal lab decode lab/<name>/ picks.json
+```
+
+`lab pairs` takes the two arms' current cells (those of the last `lab run`) for every image
+the protocol's groups name, each with a complete `latest` attempt, and writes
+`pairs/assignment.json` (the lab, the protocol digest, the arms, the seed, and per pair the
+image id, the group, the cell and attempt on each side and which side arm `a` took) and
+`pairs/index.html`, a static page with both results embedded as PNG data and nothing that
+names an arm, a side's cell or the configuration. The page order and each pair's sides are
+drawn from the protocol's seed (splitmix64; the order by Fisher–Yates, then one bit per pair),
+so the same lab draws the same page. The judge picks `left`, `right`, `same` or `neither` per
+pair and saves `picks.json` (version, the assignment file's digest, one pick per pair id);
+the page offers the file and shows its text.
+
+`lab decode` reads the picks against `pairs/assignment.json` and the lab's `protocol.toml`
+(kept beside `lab.json` by the run; an edited one is refused). Picks whose assignment digest
+differs (stale or foreign), a pair with no pick, a pair picked twice, a pair not in the
+assignment or a pick that is not one of the four are refused naming the pair. Per group it
+prints pairs, decided (`left` or `right`), wins (arm `a`'s side), losses, `same`, `neither`,
+and the outcome: `inconclusive` under `min_decided` decided pairs, else `preferred` when wins
+over decided pairs reach the protocol's fraction (two thirds by default, inclusive),
+`not_worse` when losses over decided pairs stay below the protocol's fraction (one third by
+default), else `worse`. Under the default fractions `not_worse` without `preferred` cannot
+occur (wins and losses sum to the decided pairs); a protocol whose fractions leave a gap can
+reach it. Success criterion 6 reads: the sky group `preferred` and the structured group
+`not_worse` (which `preferred` satisfies) for `fan-ramp` against `thin`. The results of a
+round go in `docs/results/<lab>.md` with the protocol digest beside the outcome.

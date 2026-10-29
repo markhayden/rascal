@@ -21,6 +21,9 @@ pub struct LabRecord {
     pub protocol_digest: String,
     /// The matrix file, as given.
     pub matrix: String,
+    /// The cells of the last `lab run`, by `<arm>/<image>`: the identities `lab pairs` shows.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub current: BTreeMap<String, String>,
 }
 
 /// `cells/<identity>/cell.json`.

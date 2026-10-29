@@ -88,6 +88,7 @@ pub fn inventory() -> Vec<BoundaryType> {
     use crate::lab::cell::{AttemptRecord, CellRecord, LabRecord, LedgerLine};
     use crate::lab::corpus::Corpus;
     use crate::lab::matrix::Matrix;
+    use crate::lab::pairs::{Assignment, Picks};
     use crate::lab::protocol::Protocol;
     use crate::location::Location;
     use crate::mask::{InspectReport, MaskRecord};
@@ -148,6 +149,18 @@ pub fn inventory() -> Vec<BoundaryType> {
             "rascal/ledger-v1.json",
             Source::Generated,
             ["ledger-v1/filler.json"]
+        ),
+        boundary_type!(
+            Assignment,
+            "rascal/assignment-v1.json",
+            Source::Generated,
+            ["assignment-v1/demo.json"]
+        ),
+        boundary_type!(
+            Picks,
+            "rascal/picks-v1.json",
+            Source::Generated,
+            ["picks-v1/demo.json"]
         ),
         boundary_type!(
             InspectReport,
@@ -309,6 +322,9 @@ pub const COMPONENTS: &[&str] = &[
     "CellComponents",
     "FillerEntry",
     "FinderDescriptor",
+    "Pair",
+    "Shown",
+    "Pick",
     "FillerConfig",
     "PackConfig",
     "Accepts",
