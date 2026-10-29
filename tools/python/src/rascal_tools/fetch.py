@@ -12,6 +12,9 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+# The artifacts manifest ships inside the package, so an installed pack reads the same file.
+ARTIFACTS = Path(__file__).resolve().parent / "artifacts.toml"
+
 
 class FetchError(RuntimeError):
     pass

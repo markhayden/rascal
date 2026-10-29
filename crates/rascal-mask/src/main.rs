@@ -61,7 +61,7 @@ enum Command {
         /// Bind inputs.mask to a stored mask directory in the image's frame.
         #[arg(long)]
         mask: Option<PathBuf>,
-        /// Bind inputs.prompt through a configured pack (arrives with M5).
+        /// Bind inputs.prompt, a recipe's text input (remove-prompt's finder prompt).
         #[arg(long)]
         prompt: Option<String>,
         /// The configuration file (rascal.toml).
@@ -112,7 +112,8 @@ enum Command {
         /// Bind inputs.mask to a stored mask directory.
         #[arg(long)]
         mask: Option<PathBuf>,
-        /// The prompt for the filler, when it takes one.
+        /// The prompt: inputs.prompt when the recipe declares it (remove-prompt), else the
+        /// filler's, when it takes one.
         #[arg(long)]
         prompt: Option<String>,
         /// Keep artifacts and the journal in this workspace instead of a private one under --out.

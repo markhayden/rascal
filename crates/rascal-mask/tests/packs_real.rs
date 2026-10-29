@@ -3,6 +3,11 @@
 //! rascal-tools echo_region --image i --bbox …` round-trips the box as one region and one
 //! plane; the pack sees the allowlisted environment only (its `echo_env` debug tool says so).
 //!
+//! `segment` runs on the chair fixture when the model artifacts are in the pack's model
+//! directory (`RASCAL_TOOLS_MODELS`, else `~/.cache/rascal-tools`), with the plane checked
+//! on the chair's seat; without them the test says so and passes, unless
+//! `RASCAL_MODELS_REQUIRED` is set.
+//!
 //! The pack is launched from its own virtual environment (`tools/python/.venv`, made by `uv
 //! sync --frozen`). When that environment is absent the tests print why and pass, so
 //! `cargo test` stays green on a machine without the pack; CI syncs it first.
@@ -89,8 +94,10 @@ fn the_real_pack_lists_echo_region_and_round_trips_a_box() {
     assert!(out.status.success(), "{}", text(&out.stderr));
     let listed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     let tools = listed["rascal-tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 1, "{listed}");
+    assert_eq!(tools.len(), 2, "{listed}");
     assert_eq!(tools[0]["name"], "echo_region");
+    assert_eq!(tools[1]["name"], "segment");
+    assert_eq!(tools[1]["params"][0]["name"], "prompt");
     assert_eq!(tools[0]["outputs"][0]["many"], true);
     assert_eq!(tools[0]["params"][0]["kind"], "number_array");
     let ws = dir.join("ws");
@@ -235,5 +242,113 @@ fn the_real_pack_sees_the_allowlisted_environment_only() {
     for gone in ["HOSTED_FILLER_KEY", "UNDECLARED", "SOME_SECRET"] {
         assert!(!names.contains(&gone), "{gone} reached the pack: {names:?}");
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The model directory holding every artifact `artifacts.toml` names, when it does.
+fn models_dir() -> Option<PathBuf> {
+    let dir = std::env::var_os("RASCAL_TOOLS_MODELS")
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache/rascal-tools"))
+        })?;
+    let manifest =
+        std::fs::read_to_string(repo_root().join("tools/python/src/rascal_tools/artifacts.toml"))
+            .unwrap();
+    let names: Vec<&str> = manifest
+        .lines()
+        .filter_map(|l| l.strip_prefix("name = \""))
+        .map(|l| l.trim_end_matches('"'))
+        .collect();
+    assert_eq!(names.len(), 4, "artifacts.toml names four files");
+    if names.iter().all(|n| dir.join(n).is_file()) {
+        Some(dir)
+    } else {
+        assert!(
+            std::env::var_os("RASCAL_MODELS_REQUIRED").is_none(),
+            "the model artifacts are absent from {} and RASCAL_MODELS_REQUIRED is set",
+            dir.display()
+        );
+        eprintln!(
+            "packs_real: the model artifacts are absent from {} (rascal-tools fetch); skipping segment",
+            dir.display()
+        );
+        None
+    }
+}
+
+#[test]
+fn the_real_pack_segments_the_chair_when_the_models_are_present() {
+    let Some(binary) = pack_binary() else { return };
+    let Some(models) = models_dir() else { return };
+    let dir = scratch("segment");
+    let cfg = config(&dir, &binary, false);
+    let ws = dir.join("ws");
+    let chair = repo_root().join("fixtures/images/chair-blob.png");
+    let out = rascal_env(
+        &[
+            "tools",
+            "call",
+            "rascal-tools",
+            "segment",
+            "--config",
+            cfg.to_str().unwrap(),
+            "--workspace",
+            ws.to_str().unwrap(),
+            "--image",
+            chair.to_str().unwrap(),
+            "--prompt",
+            "a wooden chair",
+            "--threshold",
+            "0.05",
+            "--max_instances",
+            "1",
+            "--json",
+        ],
+        &[("RASCAL_TOOLS_MODELS", models.to_str().unwrap())],
+    );
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let stdout = text(&out.stdout);
+    let envelope = first_json(&stdout);
+    assert_eq!(envelope["status"], "ok", "{envelope}");
+    assert_eq!(envelope["regions"][0]["label"], "a wooden chair");
+    assert_eq!(envelope["regions"][0]["location"]["kind"], "polygon");
+    assert_eq!(envelope["images"].as_array().unwrap().len(), 1);
+    let rows: Vec<serde_json::Value> = serde_json::from_slice(
+        &rascal_env(
+            &[
+                "workspace",
+                "list",
+                ws.to_str().unwrap(),
+                "--type",
+                "Image",
+                "--json",
+            ],
+            &[],
+        )
+        .stdout,
+    )
+    .unwrap();
+    let plane_id = stdout
+        .lines()
+        .find_map(|l| l.strip_prefix("plane_0: "))
+        .unwrap()
+        .split(' ')
+        .next()
+        .unwrap();
+    let identity = rows.iter().find(|r| r["id"] == plane_id).unwrap()["identity"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let plane = image::open(
+        ws.join("artifacts")
+            .join(format!("{}.png", identity.trim_start_matches("sha256:"))),
+    )
+    .unwrap()
+    .to_luma8();
+    // The chair's seat is set; the floor beside it is not (480x320 fixture).
+    assert_eq!(plane.get_pixel(200, 160)[0], 255);
+    assert_eq!(plane.get_pixel(40, 40)[0], 0);
+    assert_eq!(plane.get_pixel(400, 300)[0], 0);
     let _ = std::fs::remove_dir_all(&dir);
 }

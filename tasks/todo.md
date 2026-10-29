@@ -66,7 +66,7 @@ with green CI on both platforms, and then the tag.
 
 ## M5 Pack
 - [x] 5.1 The pack skeleton, `echo_region`, `fetch` and the harness
-- [ ] 5.2 `segment` under branch A (ADR 0018)
+- [x] 5.2 `segment` under branch A (ADR 0018): OWLv2 + SAM 2.1 on onnxruntime, `remove-prompt`, the models in the bundle
 - [x] 5.3 The bundle and offline setup (the model artifacts' bytes join the bundle with 5.2; a bundle URL for `setup` comes with the release, 7.2) → tag `m5.1`
 - [ ] Checkpoint M5 → tag `m5`
 

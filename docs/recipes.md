@@ -2,8 +2,8 @@
 
 A recipe is a TOML list of typed steps. Every op is a tool; a recipe is the fixed, reviewable
 order in which a use case calls them, with data flowing between steps by name. rascal ships one
-recipe per v1 use case; the shipped files are the acceptance fixtures and are addressable by
-name (`rascal run rect …`) as well as by path.
+recipe per v1 use case (two for remove: by location and by prompt); the shipped files are the
+acceptance fixtures and are addressable by name (`rascal run rect …`) as well as by path.
 
 ## The file
 
@@ -13,9 +13,10 @@ name = "seam"
 use_case = "seam"                       # seam | remove | repair | protect | custom
 projection = "equirectangular"          # optional: how an input image is read when --projection is not given
 
-[inputs]                                # what the caller binds; any artifact type
+[inputs]                                # what the caller binds; any artifact type, or Text
 image = { type = "Image" }
 protect = { type = "Mask", optional = true }   # optional: the caller may leave it out; only an optional port may take it
+prompt = { type = "Text" }              # text (a finder's prompt): a step's string parameter takes it as prompt = "inputs.prompt"
 
 [[step]]
 id = "cut"                              # unique, no '.', not "inputs"
@@ -77,9 +78,13 @@ new bbox location in the image's frame; `--location` binds any location kind fro
 location to `inputs.stroke`; `--protect` and `--mask` bind stored mask directories in the
 image's frame, or (for `protect`) in a frame derived from it that the workspace knows (frames
 carry sizes and projections, not images, so the check is on the frame chain: give the mask the
-run that made it). A flag
-without its declared input, or a declared input without its flag, is a usage error, except an
-input the recipe marks `optional`. `--prompt` arrives with the Python pack (M5).
+run that made it). `--prompt` binds `inputs.prompt`, a `Text` input: not an artifact but a
+string a step's parameter takes by naming it as its value (`prompt = "inputs.prompt"`); the
+run substitutes the text and the journal records the resolved value, and an optional text
+left out leaves the parameter to the op's default. Text binds string parameters only, never a
+port. A flag without its declared input, or a declared input without its flag, is a usage
+error, except an input the recipe marks `optional`; `heal` passes `--prompt` to the filler
+only when the recipe declares no `inputs.prompt`, since a finder's prompt is not a filler's.
 
 A step that returns `not_applicable` publishes nothing; a later step that binds its output does
 not run and the run stops naming the requirement; `rascal run` exits 1 under `--strict` and 0
@@ -97,7 +102,8 @@ when the request is the same, or fails naming the request.
 |---|---|---|
 | `rect` | 1.1 | `inputs.location` → `rasterize`; renders `grey` |
 | `seam` | 2.8 | `cut` → `line` → `fan` → `profile` → `ramp`; outputs the band mask, the cut canvas and the plan; `heal seam` consumes them (`docs/fillers.md`) |
-| `remove` | 4.4 | `inputs.location` (a box, a polygon or a stroke; `--prompt` through a pack's `select` in M5) → `rasterize` → `grow` (4 px, 12 px down for the shadow) → `close` (3 px) → `subtract` (optional `inputs.protect`, grown 2 px) → `feather` (4 px) |
+| `remove` | 4.4 | `inputs.location` (a box, a polygon or a stroke) → `rasterize` → `grow` (4 px, 12 px down for the shadow) → `close` (3 px) → `subtract` (optional `inputs.protect`, grown 2 px) → `feather` (4 px) |
+| `remove-prompt` | 5.2 | `inputs.prompt` (text, `--prompt`) → `segment` (a configured pack's, `max_instances` 8) → `select` (every plane) → the same `grow`, `close`, `subtract` and `feather` as `remove`; needs `--config` with a `[packs.*]` entry that serves `segment` (`docs/tools.md`) |
 | `repair` | 4.4 | `inputs.stroke` → `tighten` (`tighten-v1`) → `feather` (2 px) |
 | `repair-area` | 4.4 | `inputs.location` (a box or a polygon) → `rasterize` → `feather` (3 px) |
 | `protect` | 4.4 | `inputs.image` (the earlier composite, in its raw frame) and `inputs.mask` (the earlier mask, in that frame or one derived from it that the workspace knows) → `invert` into the raw frame; outputs the inverted mask and the image, no plan: the second pass edits everything the first left alone and keeps what it painted |

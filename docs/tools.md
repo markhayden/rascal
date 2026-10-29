@@ -99,8 +99,8 @@ produced; on the command line `--plane` is repeated, in order; over MCP it is an
 the binary and fails when an op or profile is missing from these pages, or when a documented
 name no longer exists.
 
-The remaining op arrives with its task (PLAN.md): `segment` from the Python pack in M5 (the client that runs
-it, and a fake pack that serves it, are below).
+`segment` is not a shipped op: the Python pack serves it (below), and a recipe reaches it
+through a configured pack like any pack tool.
 
 ## The server
 
@@ -134,8 +134,8 @@ protocol document and nothing of rascal's, drives the server in `tests/serve.rs`
 ## The packs
 
 A **pack** is a tool server rascal starts: a process speaking MCP over its stdio, declared in
-`rascal.toml` and holding the learned finders (`segment` from the Python pack in M5; the
-testkit's fake pack now). Every tool a pack lists becomes an op in the registry of the run,
+`rascal.toml` and holding the learned finders (`segment` from the Python pack; the testkit's
+fake pack for tests). Every tool a pack lists becomes an op in the registry of the run,
 callable from a recipe step, from `rascal tools call`, and from `rascal serve` when it is given
 the same configuration.
 
@@ -210,8 +210,8 @@ naming it; the pack is never called under `--replay`.
 
 ```
 rascal tools list --config rascal.toml [--json]                     # start every pack, print its tools
-rascal tools call fake segment --config rascal.toml --workspace ws/ \
-    --image photo.png --prompt "the chair" [--max_instances 3] [--json]   # one tool, as its op subcommand
+rascal tools call rascal-tools segment --config rascal.toml --workspace ws/ \
+    --image photo.png --prompt "the chair" [--max_instances 3] [--threshold 0.2] [--json]   # one tool, as its op subcommand
 ```
 
 `tools call` takes the tool's own arguments: `--<port>` an id (or a path, imported first) and
@@ -220,25 +220,43 @@ rascal tools call fake segment --config rascal.toml --workspace ws/ \
 **The Python pack** is `tools/python`, a `uv` project (`rascal-tools`): an MCP server over stdio
 on the SDK's 1.x line (revision 2025-11-25), listing each tool with both `_meta` documents built
 from one `ToolSpec` and holding its bounds under rascal's ceilings at listing time. It serves
-`echo_region` (a box in, one region and one plane out: the parity tool) and, with
-`serve --debug-tools`, `echo_env` (the variable names it can see). `rascal-tools fetch` is the
-one network step: it downloads the artifacts `artifacts.toml` names into `RASCAL_TOOLS_MODELS`
-(default `~/.cache/rascal-tools`) and verifies each SHA-256, discarding a mismatch. Its tests
-are offline (`pytest`, `ruff`; `scripts/check-python.sh`, part of `just check` when the
-environment exists), with a parity harness that compares a tool's answer to stored outputs
-within a stated tolerance and skips `segmenter`-marked cases until the artifact is fetched.
-Launch is `tools/python/.venv/bin/rascal-tools serve` after `uv sync --frozen` there;
-`crates/rascal-mask/tests/packs_real.rs` drives it through rascal's client. `segment` arrives
-with the owner's segmenter decision (`tools/python/MODEL.md`).
+`echo_region` (a box in, one region and one plane out: the parity tool), `segment`, and, with
+`serve --debug-tools`, `echo_env` (the variable names it can see).
+
+**`segment`** takes an image and `prompt` (one or more queries separated by `.`, `,` or `;`),
+`max_instances` (default 8, at most 16) and `threshold` (the detector score a box needs,
+default 0.2), and answers one polygon region per instance (the detector's box, labelled with
+the query it answered, scored, best first) and one plane per region in the image's frame;
+`not_applicable` when nothing scores over the threshold. Two models do it, both exported to
+ONNX and run on `onnxruntime` with no PyTorch anywhere near the pack: OWLv2 base turns the
+queries into boxes with scores, SAM 2.1 Hiera-Tiny turns each kept box into a plane
+(`tools/python/MODEL.md`: the sources, the licences, the export, the preprocessing the pack
+mirrors, the parity). The model artifacts (749 MB in all) live outside the pack: `rascal-tools
+fetch` is the one network step, downloading what `artifacts.toml` names into
+`RASCAL_TOOLS_MODELS` (default `~/.cache/rascal-tools`) and verifying each SHA-256,
+discarding a mismatch; a bundle carries them under `models/` beside the environment, which
+the pack looks in when the variable is unset. The pack verifies each artifact's digest once per
+process before using it and loads the models on the first call. A call without the artifacts
+is an operational error naming the directory looked in and the command that fills it.
+
+The pack's tests are offline (`pytest`, `ruff`; `scripts/check-python.sh`, part of `just
+check` when the environment exists), with a parity harness that compares a tool's answer to
+stored outputs within a stated tolerance and skips the `segmenter`-marked case until every
+artifact is fetched. Launch is `tools/python/.venv/bin/rascal-tools serve` after `uv sync
+--frozen` there; `crates/rascal-mask/tests/packs_real.rs` drives it through rascal's client,
+`segment` included when the artifacts are present.
 
 **The bundle and offline setup.** A release ships one bundle per platform (`macos-arm64`,
 `linux-x86_64`), built by `scripts/build-bundle.sh <platform> <dir>` on a connected machine:
 the directory is the provisioning project itself (`pyproject.toml` pinning the pack wheel by
 relative path for that platform only, and its `uv.lock`, resolved against the wheelhouse and
 nothing else), `wheel/` (the pack from `uv build`), `wheelhouse/` (every locked dependency as
-a wheel for the platform and Python 3.12), `MODEL.md`, `artifacts.toml`, and `bundle.toml`
-naming the pack, its version, the Python version, the platform and the SHA-256 of every file
-(the model artifacts' bytes join it with `segment`). On the target machine the prerequisites
+a wheel for the platform and Python 3.12), `MODEL.md`, `artifacts.toml`, `NOTICE` and
+`LICENSE`, the model artifacts under `models/` when the building machine's model directory
+holds every one with its digest (a bundle built without them says so and serves `echo_region`
+only; `BUNDLE_MODELS=required` makes that a failure), and `bundle.toml` naming the pack, its
+version, the Python version, the platform, whether the models are in and the SHA-256 of
+every file. On the target machine the prerequisites
 are `uv` and a Python 3.12 it can find without downloading one (`uv python install 3.12` on a
 connected machine). `rascal tools setup --bundle <dir> --into <dir>` (or `--config rascal.toml`,
 installing where the pack entry's `command` points, `<dir>/.venv/bin/rascal-tools`) checks the
@@ -251,7 +269,8 @@ whole, any other non-empty directory is refused. The SHA-256 of `bundle.toml` is
 digest the lab records. Launch never touches the network. `scripts/bundle-acceptance.sh`
 (part of `scripts/acceptance.sh`, and a macOS job in the package workflow) builds this
 machine's bundle, installs it with the network disabled where the kernel allows (`unshare
--rn`) and the caches empty, calls `echo_region` through the install, refuses a tampered copy,
+-rn`) and the caches empty, calls `echo_region` through the install (and `segment` when the
+bundle holds the models), refuses a tampered copy,
 runs the pytest bundle test (`tools/python/tests/test_bundle.py`, which checks the build's
 output when `RASCAL_BUNDLE` names one and skips otherwise) and the Rust install test against
 the built bundle. On Linux the install and the call run in a network namespace with no

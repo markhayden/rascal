@@ -1,0 +1,25 @@
+# The export environment: PyTorch and Transformers, used once on a connected machine to turn
+# the two checkpoints into the ONNX artifacts `artifacts.toml` names (`MODEL.md`, ADR 0018).
+# Nothing here ships: the pack and its bundle depend on onnxruntime only. PyPI packages only,
+# so the export is reproducible from the lock.
+[project]
+name = "rascal-tools-export"
+version = "0.1.0"
+description = "Exports the segmenter's checkpoints to ONNX for rascal-tools"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "torch>=2.5",
+    "torchvision>=0.20",
+    "transformers>=4.57,<5",
+    "onnx>=1.17",
+    "onnxruntime>=1.20",
+    "onnxscript>=0.2",
+    "numpy>=2",
+    "pillow>=11",
+    "huggingface-hub>=0.30",
+    "tokenizers>=0.22.2",
+    "scipy>=1.18.1",
+]
+
+[tool.uv]
+package = false

@@ -1,0 +1,54 @@
+# Remove what a prompt names: a configured pack's `segment` finds the instances, `select`
+# takes every plane as the core, then the same shaping as `remove`: grown a little and further
+# downward for the shadow, closed, kept off anything protected, feathered. Needs --config with
+# a [packs.*] entry that serves segment; `--prompt` binds inputs.prompt.
+version = 1
+name = "remove-prompt"
+use_case = "remove"
+
+[inputs]
+image = { type = "Image" }
+prompt = { type = "Text" }
+protect = { type = "Mask", optional = true }
+
+[[step]]
+id = "segment"
+op = "segment"
+inputs = { image = "inputs.image" }
+prompt = "inputs.prompt"
+max_instances = 8
+
+[[step]]
+id = "select"
+op = "select"
+inputs = { plane = "segment.plane" }
+
+[[step]]
+id = "grow"
+op = "grow"
+inputs = { mask = "select.mask" }
+px = 4.0
+down_px = 12.0
+
+[[step]]
+id = "close"
+op = "close"
+inputs = { mask = "grow.mask" }
+radius_px = 3.0
+
+[[step]]
+id = "subtract"
+op = "subtract"
+inputs = { mask = "close.mask", subtract = "inputs.protect" }
+grow_px = 2.0
+
+[[step]]
+id = "feather"
+op = "feather"
+inputs = { mask = "subtract.mask" }
+sigma_px = 4.0
+
+[outputs]
+mask = "feather.mask"
+image = "inputs.image"
+render = [{ for = "grey", out = "remove-prompt-grey.png" }]

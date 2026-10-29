@@ -35,17 +35,20 @@ Release archives for macOS arm64, Linux x86_64 and Linux arm64 will be attached 
 releases. The Python pack is `rascal-tools` (`tools/python`, a `uv` project) and is optional:
 it ships as a bundle per platform (macOS arm64, Linux x86_64) that installs with no network.
 Its prerequisites are [`uv`](https://docs.astral.sh/uv/) and a Python 3.12 that uv can find;
-then `rascal tools setup --bundle <dir> --into <dir>` (`docs/tools.md`).
+then `rascal tools setup --bundle <dir> --into <dir>` (`docs/tools.md`). The segmenter's model
+artifacts (749 MB, Apache-2.0, `tools/python/MODEL.md`) come inside a full bundle or through
+`rascal-tools fetch`.
 
 ## The recipes
 
-A recipe is a TOML list of typed steps. rascal ships one per v1 use case, and the shipped files
-are the acceptance fixtures:
+A recipe is a TOML list of typed steps. rascal ships one per v1 use case (two for remove), and
+the shipped files are the acceptance fixtures:
 
 | recipe | what it masks | the location it takes |
 |---|---|---|
 | `seam` | a band across a vertical line, wide where the surface is smooth and thin where it is detailed, with a tone ramp across it; the wrap edge of a 360 or any line | a line, or the wrap edge |
-| `remove` | an object with its shadow and reflection, minus protected zones | a segmenter prompt, a click, a stroke, a polygon or a rectangle |
+| `remove` | an object with its shadow and reflection, minus protected zones | a click, a stroke, a polygon or a rectangle |
+| `remove-prompt` | the same, found by the Python pack's segmenter (OWLv2 and SAM 2.1, `tools/python/MODEL.md`) | a text prompt |
 | `repair` | a scratch or tear, tightened to the defect's edges and feathered | a stroke |
 | `repair-area` | a stain or spot, rasterized and feathered | a rectangle or polygon |
 | `protect` | the inverse of any mask, for a second pass | a mask |
@@ -54,6 +57,7 @@ are the acceptance fixtures:
 ```
 rascal run seam pano.jpg --out run/
 rascal run remove room.jpg --location chairs.json --out run/
+rascal run remove-prompt room.jpg --prompt "chair" --config rascal.toml --out run/   # the pack's segmenter finds them
 rascal run repair print.jpg --stroke scratch.json --out run/
 rascal heal seam pano.jpg --filler local-inpaint --config rascal.toml --out run/
 rascal render run/artifacts/<id> --for tinted --image img-3 --out seam-tinted.png
@@ -63,7 +67,7 @@ rascal inspect run/artifacts/<id> --json                  # or --out pages/ for 
 rascal export --compat run/journal.jsonl --step rasterize --out e.json
 rascal dash run/ --out run/dash.html                     # the run page: timings, envelopes, every artifact; --serve for loopback
 rascal serve --workspace ws/                              # every op as an MCP tool over stdio, plus import/list/describe/read/dash
-rascal tools call fake segment --config rascal.toml --workspace ws/ --image photo.png --prompt "the chair"   # a pack's tool from the shell
+rascal tools call rascal-tools segment --config rascal.toml --workspace ws/ --image photo.png --prompt "the chair"   # a pack's tool from the shell
 rascal tools setup --bundle bundle-macos-arm64/ --into ~/rascal-tools   # the Python pack installed offline from its bundle
 rascal corpus verify corpus.toml --root ~/rascal/corpus                 # every image's file against its digest
 rascal lab run matrix.toml --config rascal.toml --out lab/seam-01/      # every cell healed once; resume makes no external call

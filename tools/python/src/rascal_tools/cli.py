@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from rascal_tools import __version__
+from rascal_tools import fetch as fetch_module
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -24,8 +25,8 @@ def main(argv: list[str] | None = None) -> int:
     fetch.add_argument(
         "--artifacts",
         type=Path,
-        default=Path(__file__).resolve().parents[2] / "artifacts.toml",
-        help="the artifacts.toml to read (default: the pack's)",
+        default=fetch_module.ARTIFACTS,
+        help="the artifacts.toml to read (default: the pack's own)",
     )
     fetch.add_argument("--cache", type=Path, default=None, help="the cache directory")
     args = parser.parse_args(argv)
@@ -34,8 +35,6 @@ def main(argv: list[str] | None = None) -> int:
 
         return server.main(debug=args.debug_tools)
     if args.command == "fetch":
-        from rascal_tools import fetch as fetch_module
-
         return fetch_module.main(args.artifacts, args.cache)
     return 64
 

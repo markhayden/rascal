@@ -42,7 +42,8 @@ picks count toward neither side, and a group with fewer than `min_decided` decid
 
 `matrix.toml` names its corpus and protocol (paths relative to the file), repeats the seed, and
 lists the images (corpus ids, with per-image `inputs` binding recipe inputs to files such as a
-location, and per-image `overrides`) and the arms: a `recipe` (shipped by name or a file
+location, and per-image `overrides`; a `Text` input such as `remove-prompt`'s prompt has no
+matrix binding yet, so such a recipe cannot be an arm) and the arms: a `recipe` (shipped by name or a file
 relative to the matrix), `overrides` (`"<step>.<param>" = value`, with `"<step>.constants"`
 selecting a constant set), the `filler` entry in the configuration the run is given, and
 `spend_usd_per_call`, which the ledger sums. `fan-thin-v1` is the spec's fixed-width arm:

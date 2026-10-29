@@ -207,7 +207,9 @@ fn a_many_output_binds_to_a_many_input_by_prefix_and_expands_at_run_time() {
     let (_, _, image) = run.workspace.import(&floor, None).unwrap();
     let mut inputs = BTreeMap::new();
     inputs.insert("image".to_string(), image);
-    let outcome = recipe("find.plane").run(&with_one, inputs, &run).unwrap();
+    let outcome = recipe("find.plane")
+        .run(&with_one, inputs, &BTreeMap::new(), &run)
+        .unwrap();
     assert_eq!(
         outcome.status,
         rascal_core::op::Status::Ok,
@@ -322,7 +324,9 @@ image = "consume.image"
     let mut inputs = BTreeMap::new();
     inputs.insert("image".to_string(), image.clone());
     inputs.insert("extra_0".to_string(), image);
-    let outcome = hostile.run(&registry, inputs, &run).unwrap();
+    let outcome = hostile
+        .run(&registry, inputs, &BTreeMap::new(), &run)
+        .unwrap();
     assert_eq!(
         outcome.status,
         rascal_core::op::Status::Ok,

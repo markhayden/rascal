@@ -599,7 +599,9 @@ mask = "mask.mask"
     r.validate(&registry).unwrap();
     let dir = scratch("na");
     let run = Run::open(&dir).unwrap();
-    let outcome = r.run(&registry, inputs(&run, &f), &run).unwrap();
+    let outcome = r
+        .run(&registry, inputs(&run, &f), &BTreeMap::new(), &run)
+        .unwrap();
     assert_eq!(outcome.status, Status::NotApplicable);
     assert_eq!(outcome.stopped_at.as_deref(), Some("p"));
     assert_eq!(outcome.reason.as_deref(), Some("the probe refuses"));
@@ -656,7 +658,9 @@ mask = "mask.mask"
     r.validate(&registry).unwrap();
     let dir = scratch("req");
     let run = Run::open(&dir).unwrap();
-    let outcome = r.run(&registry, inputs(&run, &f), &run).unwrap();
+    let outcome = r
+        .run(&registry, inputs(&run, &f), &BTreeMap::new(), &run)
+        .unwrap();
     assert_eq!(outcome.status, Status::NotApplicable);
     assert_eq!(
         outcome.stopped_at.as_deref(),
@@ -733,7 +737,9 @@ mask = "mask.mask"
             continue;
         }
         r.validate(&registry).unwrap();
-        let e = r.run(&registry, inputs(&run, &f), &run).unwrap_err();
+        let e = r
+            .run(&registry, inputs(&run, &f), &BTreeMap::new(), &run)
+            .unwrap_err();
         assert!(matches!(e, rascal_core::Error::InvalidArgs { .. }), "{e:?}");
         assert!(e.to_string().contains(expect), "{e}");
         let lines = rascal_core::journal::Journal::read(&dir.join("journal.jsonl")).unwrap();

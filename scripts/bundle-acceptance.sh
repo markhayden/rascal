@@ -3,7 +3,8 @@
 # this machine's bundle (the one network step), then, with the network disabled where the
 # platform allows it (`unshare -rn` on Linux) and the uv and pip caches pointed at empty
 # directories, `rascal tools setup --bundle` installs into a clean directory, the installed
-# pack answers `echo_region` through `rascal tools call`, a tampered copy of the bundle is
+# pack answers `echo_region` through `rascal tools call` (and `segment`, when the models were
+# in the pack's model directory and so are in the bundle), a tampered copy of the bundle is
 # refused, and the pytest bundle test checks the build's output.
 #
 #   scripts/bundle-acceptance.sh <rascal binary> [scratch dir]
@@ -64,6 +65,22 @@ envelope = json.JSONDecoder().raw_decode(text[text.index("{"):])[0]
 assert envelope["status"] == "ok", envelope
 print("echo_region:", envelope["summary"])
 ' "$scratch/call.json"
+
+if [ -d "$scratch/bundle/models" ]; then
+  echo "bundle: the installed pack segments the chair from the bundled models"
+  ${disconnected[@]+"${disconnected[@]}"} "$rascal" tools call rascal-tools segment --config "$scratch/rascal.toml" \
+    --workspace "$scratch/ws" --image fixtures/images/chair-blob.png --prompt "a wooden chair" --threshold 0.05 --max_instances 1 --json > "$scratch/segment.json"
+  python3 -I -c '
+import json, sys
+text = open(sys.argv[1]).read()
+envelope = json.JSONDecoder().raw_decode(text[text.index("{"):])[0]
+assert envelope["status"] == "ok", envelope
+assert envelope["regions"][0]["label"] == "a wooden chair", envelope
+print("segment:", envelope["summary"])
+' "$scratch/segment.json"
+else
+  echo "bundle: no models in the bundle (rascal-tools fetch first); segment not called"
+fi
 
 echo "bundle: a tampered copy is refused"
 cp -R "$scratch/bundle" "$scratch/tampered"

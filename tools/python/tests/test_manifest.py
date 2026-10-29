@@ -71,5 +71,5 @@ def test_bounds_over_rascals_ceilings_are_refused_at_listing() -> None:
 
 
 def test_the_catalogue_hides_the_debug_tool_unless_asked() -> None:
-    assert list(catalogue()) == ["echo_region"]
-    assert list(catalogue(debug=True)) == ["echo_region", "echo_env"]
+    assert list(catalogue()) == ["echo_region", "segment"]
+    assert list(catalogue(debug=True)) == ["echo_region", "segment", "echo_env"]

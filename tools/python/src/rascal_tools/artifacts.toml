@@ -1,0 +1,30 @@
+# The model artifacts `rascal-tools fetch` downloads into the cache and verifies, and a bundle
+# carries (SPEC.md "The Python pack and its bundle"; MODEL.md for the provenance of each).
+# `name` is the file name in the cache; `sha256` is checked before and after a download, and
+# by the pack before an artifact is used; `licence` is as MODEL.md records it. The files are
+# published as release assets of the repository; a bundle holds them under models/. The file
+# lives inside the package so an installed pack reads the same one.
+
+[[artifact]]
+name = "owlv2-base-patch16.onnx"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-10/owlv2-base-patch16.onnx"
+sha256 = "11a8711e6d8d63f7bf8bfcc0e62d5d4e00fa8b6096dbec82ee2fbbff61389767"
+licence = "Apache-2.0"
+
+[[artifact]]
+name = "owlv2-base-patch16.tokenizer.json"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-10/owlv2-base-patch16.tokenizer.json"
+sha256 = "fbf857dd4099afc6da394d17cba2f22c5d01eb6d87bb74967c90634f3bcf4e82"
+licence = "Apache-2.0"
+
+[[artifact]]
+name = "sam2.1-hiera-tiny.encoder.onnx"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-10/sam2.1-hiera-tiny.encoder.onnx"
+sha256 = "ed386472cf112f10464cdad2d2c786e171306cb31aeb2096c6a1da8789c35073"
+licence = "Apache-2.0"
+
+[[artifact]]
+name = "sam2.1-hiera-tiny.decoder.onnx"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-10/sam2.1-hiera-tiny.decoder.onnx"
+sha256 = "53c6457d30ffca641fab504bf647ccb7d158c60e5d6c3ca810cf735c50e8cb59"
+licence = "Apache-2.0"

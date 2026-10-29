@@ -5,6 +5,7 @@
   "python": "3.12",
   "platform": "macos-arm64",
   "wheel": "wheel/rascal_tools-0.1.0-py3-none-any.whl",
+  "models": false,
   "files": {
     "MODEL.md": "sha256:f2fd1220ae0c5518ef3c8f7c32d80ae74b0b6019425f1e6f0f330b87ff4939d1",
     "artifacts.toml": "sha256:40d5f591a379fb457de3e0e0478fd9f9ecdaa347e790d74b85843e2ba3eb045a",

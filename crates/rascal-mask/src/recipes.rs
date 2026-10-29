@@ -11,6 +11,10 @@ pub const SHIPPED: &[(&str, &str)] = &[
     ("rect", include_str!("../recipes/rect.toml")),
     ("seam", include_str!("../recipes/seam.toml")),
     ("remove", include_str!("../recipes/remove.toml")),
+    (
+        "remove-prompt",
+        include_str!("../recipes/remove-prompt.toml"),
+    ),
     ("repair", include_str!("../recipes/repair.toml")),
     ("repair-area", include_str!("../recipes/repair-area.toml")),
     ("protect", include_str!("../recipes/protect.toml")),

@@ -15,6 +15,10 @@
       "description": "Every file in the bundle by relative path, with its `sha256:<hex>` digest.",
       "type": "object"
     },
+    "models": {
+      "description": "Whether the model artifacts `artifacts.toml` names are in the bundle under `models/`\n(a bundle without them serves `echo_region` only).",
+      "type": "boolean"
+    },
     "pack": {
       "description": "The pack's distribution name (`rascal-tools`).",
       "type": "string"
@@ -42,6 +46,7 @@
     "python",
     "platform",
     "wheel",
+    "models",
     "files"
   ],
   "title": "BundleManifest",

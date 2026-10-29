@@ -25,12 +25,50 @@ use crate::registry::OpRegistry;
 use crate::rendering::Profile;
 use crate::workspace::Workspace;
 
+/// What a declared input is: an artifact of one type, bound to step ports, or `Text` (a
+/// prompt), which a step's string parameter takes by naming it as its value
+/// (`prompt = "inputs.prompt"`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub enum InputType {
+    Image,
+    Location,
+    Mask,
+    BandProfile,
+    Series,
+    Plan,
+    Text,
+}
+
+impl InputType {
+    /// The artifact type, for every kind but `Text`.
+    pub fn artifact_type(self) -> Option<ArtifactType> {
+        Some(match self {
+            InputType::Image => ArtifactType::Image,
+            InputType::Location => ArtifactType::Location,
+            InputType::Mask => ArtifactType::Mask,
+            InputType::BandProfile => ArtifactType::BandProfile,
+            InputType::Series => ArtifactType::Series,
+            InputType::Plan => ArtifactType::Plan,
+            InputType::Text => return None,
+        })
+    }
+}
+
+impl std::fmt::Display for InputType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.artifact_type() {
+            Some(t) => t.fmt(f),
+            None => f.write_str("Text"),
+        }
+    }
+}
+
 /// A declared recipe input.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct InputDecl {
     #[serde(rename = "type")]
-    pub artifact_type: ArtifactType,
+    pub kind: InputType,
     /// An input the caller may leave out; a step port bound to it is then left unbound, so
     /// only an optional port may take it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -224,7 +262,7 @@ impl Recipe {
     ) -> Option<ArtifactType> {
         let (source, name) = binding.split_once('.')?;
         if source == "inputs" {
-            return self.inputs.get(name).map(|d| d.artifact_type);
+            return self.inputs.get(name).and_then(|d| d.kind.artifact_type());
         }
         let index = self.step[..upto].iter().position(|s| s.id == source)?;
         let manifest = registry.get(&self.step[index].op)?.manifest();
@@ -240,6 +278,22 @@ impl Recipe {
             .strip_prefix("inputs.")
             .and_then(|name| self.inputs.get(name))
             .is_some_and(|d| d.optional)
+    }
+
+    /// The declared text input a parameter value names (`inputs.<name>` with `<name>` a
+    /// `Text` input), with its declaration.
+    fn text_binding<'a>(&'a self, value: &'a toml::Value) -> Option<(&'a str, &'a InputDecl)> {
+        let name = value.as_str()?.strip_prefix("inputs.")?;
+        let decl = self.inputs.get(name)?;
+        (decl.kind == InputType::Text).then_some((name, decl))
+    }
+
+    /// Whether a binding names a declared text input, which no port takes.
+    fn binding_is_text_input(&self, binding: &str) -> bool {
+        binding
+            .strip_prefix("inputs.")
+            .and_then(|name| self.inputs.get(name))
+            .is_some_and(|d| d.kind == InputType::Text)
     }
 
     /// Whether a binding names a many output port as a whole (`<step>.<port>`), which only a
@@ -296,6 +350,14 @@ impl Recipe {
                     .ok_or_else(|| {
                         self.fail(&step.id, format!("op {} has no input {port}", step.op))
                     })?;
+                if self.binding_is_text_input(binding) {
+                    return Err(self.fail(
+                        &step.id,
+                        format!(
+                            "input {port} is bound to {binding}, a text input; text binds a string parameter (prompt = \"{binding}\"), not a port"
+                        ),
+                    ));
+                }
                 let bound = self
                     .binding_type(binding, index, registry)
                     .ok_or_else(|| self.fail(&step.id, format!("input {port} is bound to {binding}, which is not an earlier step's output or a declared input")))?;
@@ -338,6 +400,35 @@ impl Recipe {
                     return Err(self.fail(
                         &step.id,
                         format!("input {} is required by {}", port.name, step.op),
+                    ));
+                }
+            }
+            for (name, value) in &step.params {
+                let Some((text, decl)) = self.text_binding(value) else {
+                    continue;
+                };
+                let param = manifest.param(name).ok_or_else(|| {
+                    self.fail(
+                        &step.id,
+                        format!("op {}: unknown parameter {name}", step.op),
+                    )
+                })?;
+                if param.kind != op::ParamKind::String {
+                    return Err(self.fail(
+                        &step.id,
+                        format!(
+                            "parameter {name} takes text input inputs.{text}, but it is a {:?} parameter, not a string",
+                            param.kind
+                        ),
+                    ));
+                }
+                if param.required && decl.optional {
+                    return Err(self.fail(
+                        &step.id,
+                        format!(
+                            "parameter {name} is required by {}, but inputs.{text} is an optional input",
+                            step.op
+                        ),
                     ));
                 }
             }
@@ -570,25 +661,45 @@ impl Recipe {
         &self,
         registry: &OpRegistry,
         inputs: BTreeMap<String, Artifact>,
+        texts: &BTreeMap<String, String>,
         run: &Run,
     ) -> Result<Outcome> {
         for (name, decl) in &self.inputs {
-            match inputs.get(name) {
-                Some(a) if a.artifact_type() == decl.artifact_type => {}
-                Some(a) => {
+            match (decl.kind.artifact_type(), inputs.get(name), texts.get(name)) {
+                (Some(_), _, Some(_)) | (None, Some(_), _) => {
                     return Err(Error::usage(format!(
-                        "input {name} must be a {}, got a {}",
-                        decl.artifact_type,
+                        "input {name} is a {}, but was given as {}",
+                        decl.kind,
+                        if decl.kind == InputType::Text {
+                            "an artifact"
+                        } else {
+                            "text"
+                        }
+                    )));
+                }
+                (Some(expected), Some(a), None) if a.artifact_type() == expected => {}
+                (Some(expected), Some(a), None) => {
+                    return Err(Error::usage(format!(
+                        "input {name} must be a {expected}, got a {}",
                         a.artifact_type()
                     )));
                 }
-                None if decl.optional => {}
-                None => {
+                (None, None, Some(_)) => {}
+                (_, None, None) if decl.optional => {}
+                (_, None, None) => {
                     return Err(Error::usage(format!(
                         "input {name} ({}) was not given",
-                        decl.artifact_type
+                        decl.kind
                     )));
                 }
+            }
+        }
+        for name in inputs.keys().chain(texts.keys()) {
+            if !self.inputs.contains_key(name) {
+                return Err(Error::usage(format!(
+                    "input {name} is not one recipe {} declares",
+                    self.name
+                )));
             }
         }
         let mut bindings: BTreeMap<String, Artifact> = BTreeMap::new();
@@ -666,7 +777,21 @@ impl Recipe {
                 }
                 break;
             }
+            // A string parameter naming a text input takes its value; an absent optional
+            // text leaves the parameter out, so the op's default applies.
             let mut params = step.params.clone();
+            for (name, value) in &step.params {
+                if let Some((text, _)) = self.text_binding(value) {
+                    match texts.get(text) {
+                        Some(given) => {
+                            params.insert(name.clone(), toml::Value::String(given.clone()));
+                        }
+                        None => {
+                            params.remove(name);
+                        }
+                    }
+                }
+            }
             if let Some(constants) = &step.constants {
                 params.insert(
                     "constants".to_string(),

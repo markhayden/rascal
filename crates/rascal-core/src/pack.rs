@@ -258,6 +258,9 @@ pub struct BundleManifest {
     pub platform: String,
     /// The pack wheel's path inside the bundle.
     pub wheel: String,
+    /// Whether the model artifacts `artifacts.toml` names are in the bundle under `models/`
+    /// (a bundle without them serves `echo_region` only).
+    pub models: bool,
     /// Every file in the bundle by relative path, with its `sha256:<hex>` digest.
     pub files: BTreeMap<String, String>,
 }
