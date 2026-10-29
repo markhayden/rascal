@@ -116,3 +116,52 @@ pub fn step_pano(width: u32, height: u32) -> RgbImage {
         ])
     })
 }
+
+/// The chair-blob canvas: the textured floor with a dark chair (a seat, a back, two legs) in
+/// the left half and its soft shadow falling down and to the right, as an object to remove
+/// presents itself. The chair's pixels are a flat dark grey-brown with a little noise; the
+/// shadow darkens the floor by up to 45% over an ellipse below the seat.
+pub fn chair_blob(width: u32, height: u32) -> RgbImage {
+    let mut out = floor(width, height);
+    let mut lcg = Lcg(0x5eed_c4a1_2b10_b0b1);
+    let (w, h) = (width as f32, height as f32);
+    // The chair in fractions of the canvas: seat, back and legs.
+    let seat = [0.28 * w, 0.46 * h, 0.52 * w, 0.56 * h];
+    let back = [0.30 * w, 0.22 * h, 0.36 * w, 0.46 * h];
+    let legs = [
+        [0.30 * w, 0.56 * h, 0.33 * w, 0.78 * h],
+        [0.47 * w, 0.56 * h, 0.50 * w, 0.78 * h],
+    ];
+    let inside = |b: &[f32; 4], x: f32, y: f32| x >= b[0] && x < b[2] && y >= b[1] && y < b[3];
+    // The shadow: an ellipse under the seat, offset right and down, soft at its edge.
+    let (sx, sy, rx, ry) = (0.47 * w, 0.80 * h, 0.22 * w, 0.07 * h);
+    for y in 0..height {
+        for x in 0..width {
+            let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+            let chair = inside(&seat, fx, fy)
+                || inside(&back, fx, fy)
+                || legs.iter().any(|l| inside(l, fx, fy));
+            if chair {
+                let noise = (lcg.next() % 9) as f32 - 4.0;
+                let px = |v: f32| (v + noise).round().clamp(0.0, 255.0) as u8;
+                out.put_pixel(x, y, Rgb([px(58.0), px(46.0), px(40.0)]));
+                continue;
+            }
+            let d = ((fx - sx) / rx).powi(2) + ((fy - sy) / ry).powi(2);
+            if d < 1.0 {
+                let shade = 1.0 - 0.45 * (1.0 - d).sqrt();
+                let p = out.get_pixel(x, y);
+                out.put_pixel(
+                    x,
+                    y,
+                    Rgb([
+                        (p[0] as f32 * shade).round() as u8,
+                        (p[1] as f32 * shade).round() as u8,
+                        (p[2] as f32 * shade).round() as u8,
+                    ]),
+                );
+            }
+        }
+    }
+    out
+}

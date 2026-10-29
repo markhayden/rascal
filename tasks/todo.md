@@ -52,8 +52,12 @@ with green CI on both platforms, and then the tag.
 - [x] 3.3 The pack client and the isolation suite
 - [x] Checkpoint M3 → tag `m3`
 
+## Observations from the first real runs (2026-10-29, not gating)
+- [ ] Speed of a heal is almost all output: a 5760×2880 result as PNG at the default level and a 63 MB run page embedding every image at full size (about 70 s of a 90 s run). Faster PNG level or an opt-in JPEG result, thumbnails in the page, parallel writes. Before the M6 lab rounds.
+- [ ] LaMa leaves a grey veil in smooth sky with the standard band; `wide_max = 0.05` on the fan removes it and keeps the ramp. A per-filler constant set is a lab question (M6); Poisson paste (M7) is the structural answer.
+
 ## M4 Refine
-- [ ] 4.1 `grow`, `shrink`, `close`
+- [x] 4.1 `grow`, `shrink`, `close`
 - [ ] 4.2 `subtract`, `select`, `invert`
 - [ ] 4.3 `tighten`
 - [ ] 4.4 The `remove`, `repair`, `repair-area`, `protect` recipes and the acceptance script → tag `m4.1`

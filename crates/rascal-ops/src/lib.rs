@@ -1,13 +1,15 @@
 //! The rascal operations: the pixel primitives, every op in the catalogue as a pure function
 //! plus a thin `Op` implementation, the solvers, and the embedded constant sets.
 //!
-//! Task 1.1 brings `rect`, `rasterize` and `render` in their walking-slice forms; the
-//! primitives arrive in 1.8a and the rest of the catalogue from M2 on.
+//! `refine` holds what every core-replacing refinement (`grow`, `shrink`, `close`, later
+//! `select` and `tighten`) shares.
 
 pub mod apply;
+pub mod close;
 pub mod cut;
 pub mod fan;
 pub mod feather;
+pub mod grow;
 pub mod inspect;
 pub mod line;
 pub mod measure;
@@ -18,7 +20,9 @@ pub mod put;
 pub mod ramp;
 pub mod rasterize;
 pub mod rect;
+pub(crate) mod refine;
 pub mod render;
+pub mod shrink;
 pub mod stroke;
 pub mod unwindow;
 pub mod window;
@@ -44,6 +48,9 @@ pub fn register_all(registry: &mut OpRegistry) -> rascal_core::error::Result<()>
     registry.register(Box::new(unwindow::Unwindow))?;
     registry.register(Box::new(paste::Paste))?;
     registry.register(Box::new(measure::Measure))?;
+    registry.register(Box::new(grow::Grow))?;
+    registry.register(Box::new(shrink::Shrink))?;
+    registry.register(Box::new(close::Close))?;
     Ok(())
 }
 

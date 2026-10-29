@@ -52,3 +52,17 @@ fn step_pano_fixture_matches_its_builder() {
         "fixtures/images/step-pano.png differs from images::step_pano(800, 400); UPDATE_FIXTURES=1 regenerates it"
     );
 }
+
+#[test]
+fn chair_blob_fixture_matches_its_builder() {
+    let built = rascal_testkit::images::chair_blob(480, 320);
+    let path = fixture("chair-blob.png");
+    if std::env::var_os("UPDATE_FIXTURES").is_some() {
+        built.save(&path).unwrap();
+    }
+    let committed = image::open(&path).unwrap().to_rgb8();
+    assert!(
+        committed.as_raw() == built.as_raw(),
+        "fixtures/images/chair-blob.png differs from images::chair_blob(480, 320); UPDATE_FIXTURES=1 regenerates it"
+    );
+}

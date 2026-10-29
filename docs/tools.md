@@ -68,6 +68,9 @@ before accepting it.
 | `paste` | out | Image (base), Image (fill), Mask | an Image with the composite role: a copy of the base with only `w > 0` pixels written (`feather`: `(1 − w) · base + w · fill`; `hard`: the fill where the core is set and not protected); `w = 0` pixels, protected ones included, are copied without arithmetic; a base's alpha kept, a fill's ignored; `poisson` is not applicable until M7; `rascal paste` runs it on files | 2.5 |
 | `measure` | out | Image (after), Image (before, optional), Mask, Location (line, optional) | a Series per measure in the set (`continuity`, `tone_step`, `transition`, `texture_match`; `drift` is scalars) with the summaries in the envelope; a measure without its inputs is not applicable for itself; one whose every row is skipped measured nothing; `measures-v1`; see `docs/measures.md` | 2.6 |
 | `inspect` | inspect | Mask, Image | the overlay (an inspection Image) and a Series of the core's width per row; `rascal inspect` adds `--json`, `--out` and `--replay` | 1.9 |
+| `grow` | refine | Mask; `px`, `down_px` | the same mask with its core dilated by a disc of radius `px` and, with `down_px`, unioned with itself shifted down by every row up to `down_px` (a shadow); cleared under protect; blend cleared, profile and prescriptions removed (`refinement` in the envelope) | 4.1 |
+| `shrink` | refine | Mask; `px` | the same mask with its core eroded by a disc of radius `px`, cleared under protect; not applicable when nothing survives; blend cleared, profile and prescriptions removed | 4.1 |
+| `close` | refine | Mask; `radius_px` | the same mask with its core closed (dilated then eroded) by a disc of `radius_px`, so gaps and notches narrower than the disc fill; cleared under protect; blend cleared, profile and prescriptions removed | 4.1 |
 
 The pixel primitives every op is built from live in `rascal_ops::primitives`: row smoothing
 (a Gaussian truncated at 3σ, renormalised at the edges), the 3×3 Sobel magnitude with edge
@@ -84,8 +87,8 @@ A point-list parameter is written `[[x, y], …]` in a recipe and `x,y;x,y` on t
 the binary and fails when an op or profile is missing from these pages, or when a documented
 name no longer exists.
 
-The remaining ops arrive with their tasks (PLAN.md): `grow`, `shrink`, `close`, `subtract`,
-`select`, `invert`, `tighten` in M4; `segment` from the Python pack in M5 (the client that runs
+The remaining ops arrive with their tasks (PLAN.md): `subtract`, `select`, `invert`,
+`tighten` in M4; `segment` from the Python pack in M5 (the client that runs
 it, and a fake pack that serves it, are below).
 
 ## The server
