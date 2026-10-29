@@ -402,6 +402,11 @@ enum LabCommand {
         /// The two arms compared, a,b; wins are a's.
         #[arg(long)]
         arms: String,
+        /// Scale the whole images to this longest side (px) for the whole and look-around
+        /// views, said on the page; the focus crops stay at full size. Keeps a page of many
+        /// large panoramas within what a browser opens.
+        #[arg(long)]
+        whole_max_side: Option<u32>,
     },
     /// Decode a picks file the pairs page wrote: wins, losses and the outcome per group.
     Decode {
@@ -755,7 +760,11 @@ fn main() {
                     no_dash,
                 })
                 .map(|_| exit::OK),
-                LabCommand::Pairs { lab, arms } => lab::pairs::pairs(&lab, &arms).map(|page| {
+                LabCommand::Pairs {
+                    lab,
+                    arms,
+                    whole_max_side,
+                } => lab::pairs::pairs(&lab, &arms, whole_max_side).map(|page| {
                     println!("pairs: {}", page.display());
                     exit::OK
                 }),

@@ -1,0 +1,81 @@
+# The first lab round's matrix (docs/lab.md): every kept image of the generated corpus through
+# the seam recipe under two arms, fan-ramp (fan-v1) and thin (fan-thin-v1), healed by the
+# local LaMa filler. Run:
+#   rascal lab run labs/seam-01/matrix.toml --config <rascal.toml with [fillers.lama]> \
+#       --out lab/seam-01/ --corpus-root <the corpus files> --no-dash
+version = 1
+name = "seam-01"
+corpus = "corpus.toml"
+protocol = "protocol.toml"
+seed = 20261029
+
+[[image]]
+id = "beach-dark-sunset"
+
+[[image]]
+id = "beach-dawn"
+
+[[image]]
+id = "sky-02-v2"
+
+[[image]]
+id = "sky-03"
+
+[[image]]
+id = "sky-04"
+
+[[image]]
+id = "sky-05"
+
+[[image]]
+id = "sky-06"
+
+[[image]]
+id = "sky-07"
+
+[[image]]
+id = "sky-08"
+
+[[image]]
+id = "str-01-v2"
+
+[[image]]
+id = "str-02-v2"
+
+[[image]]
+id = "str-03"
+
+[[image]]
+id = "str-04"
+
+[[image]]
+id = "str-06"
+
+[[image]]
+id = "str-07"
+
+[[image]]
+id = "str-08"
+
+[[image]]
+id = "str-09"
+
+[[image]]
+id = "str-10"
+
+[[image]]
+id = "str-11"
+
+[[image]]
+id = "str-12"
+
+[[arm]]
+name = "fan-ramp"
+recipe = "seam"
+filler = "lama"
+
+[[arm]]
+name = "thin"
+recipe = "seam"
+overrides = { "fan.constants" = "fan-thin-v1" }
+filler = "lama"

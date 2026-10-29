@@ -10,7 +10,7 @@ The plan's "Owner decisions" table is the index; this file holds the answers.
 | 3 | A real local filler and a real wrapped image on the owner's machine | task 2.8's by-hand run | M2's checkpoint needs one real heal through a real filler, viewed by the owner | made 2026-10-29 |
 | 4 | The MCP transport (an MCP crate or an in-house JSON-RPC implementation) | task 3.1, by ADR 0015 | no MCP code is written until the ADR is accepted | made 2026-10-29 (ADR 0015) |
 | 5 | The segmenter, its branch (A or B) and the export's redistribution terms | task 5.2, decided in task 4.5 by ADR 0018 | M5's `segment` task does not start, and success criterion 5 or 5b is not fixed, until the ADR is accepted | made 2026-10-29 (ADR 0018) |
-| 6 | The private corpus: location, first contents, the sky and structured groups with at least `min_decided` images each | task 6.1 | no lab matrix is written until the corpus manifest verifies | pending: the owner is gathering the panoramas (2026-10-29) |
+| 6 | The private corpus: location, first contents, the sky and structured groups with at least `min_decided` images each | task 6.1 | no lab matrix is written until the corpus manifest verifies | made 2026-10-29: a generated corpus |
 | 7 | The path fan before or after v1 | after M7, unless task 4.3 shows the need | v0.1.0 ships without it unless the owner decides otherwise during M4 | made 2026-10-29: after v1 |
 | 9 | The `not_worse` rule: under the spec's default fractions (`preferred` at wins ≥ 2/3, `not_worse` at losses < 1/3) a group can never be `not_worse` without being `preferred`, since wins and losses sum to the decided pairs; the implementation reports `preferred`, `not_worse`, `worse` or `inconclusive` with the strongest first. Options: (a) read criterion 6's "not_worse on the structured group" as "preferred or not_worse" (what `docs/lab.md` says now); (b) count `same` as not-a-loss and define `not_worse` over all judged pairs; (c) give `seam-01`'s protocol fractions with a gap (for example `preferred = [3, 4]`) | task 6.4 | the structured group's gate (G16) reads the outcome literally, so the owner's reading must be recorded before the first round is decoded | made 2026-10-29: option (a) |
 
@@ -64,6 +64,19 @@ ONNX for the bundle, with SAM 2.1 Hiera-Tiny as the drop-in if MobileSAM's masks
 2026-10-29. The owner signs branch A with OWLv2 base and MobileSAM, both exported to ONNX, as
 the survey recommends; ADR 0018 records it and task 5.2 starts. The redistribution terms are
 the Apache-2.0 tags read on the day of the export, recorded in the bundle's notice by 5.2.
+
+## 6. The corpus
+
+2026-10-29. The owner chose to generate the corpus rather than use their photographs: twenty
+equirectangular panoramas made with `gemini-3.1-flash-image` from the prompt list the agent
+wrote (nine sky, eleven structured; two of the sky images are restyles of one composition),
+reviewed and kept by the owner, each with its prompt and provenance in the manifest's licence
+note. The files live outside the repository in the owner's generator's output directory; the
+manifest, the protocol and the matrix are committed under `labs/seam-01/`. The images were
+requested as 21:9 and resized to 2:1, so their spherical geometry is approximate; the wrap
+seam is real and unhealed, which is what the round judges. The first protocol sets
+`min_decided = 8`, under the spec's default of ten, because the sky group holds nine images.
+More scenes can be generated as the rounds need them.
 
 ## 7. The path fan
 

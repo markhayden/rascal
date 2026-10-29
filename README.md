@@ -71,7 +71,7 @@ rascal tools call rascal-tools segment --config rascal.toml --workspace ws/ --im
 rascal tools setup --bundle bundle-macos-arm64/ --into ~/rascal-tools   # the Python pack installed offline from its bundle
 rascal corpus verify corpus.toml --root ~/rascal/corpus                 # every image's file against its digest
 rascal lab run matrix.toml --config rascal.toml --out lab/seam-01/      # every cell healed once; resume makes no external call
-rascal lab pairs lab/seam-01/ --arms fan-ramp,thin                      # the blind pairs page; the judge saves picks.json
+rascal lab pairs lab/seam-01/ --arms fan-ramp,thin [--whole-max-side 2000]   # the blind pairs page; the judge saves picks.json
 rascal lab decode lab/seam-01/ picks.json                               # wins, losses and the outcome per group
 ```
 
