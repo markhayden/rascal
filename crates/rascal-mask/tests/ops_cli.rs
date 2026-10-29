@@ -49,11 +49,17 @@ fn ops_list_names_the_catalogue_and_json_gives_every_manifest() {
     }
     let out = rascal(&["ops", "list", "--json"]);
     let manifests: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(
-        manifests.len(),
-        7,
-        "rect, rasterize, render, cut, put, line, stroke"
-    );
+    // Every op listed in text is a manifest in JSON, once each, and nothing else.
+    let listed: std::collections::BTreeSet<&str> = text
+        .lines()
+        .filter_map(|l| l.split_whitespace().next())
+        .collect();
+    let names: std::collections::BTreeSet<&str> = manifests
+        .iter()
+        .filter_map(|m| m["name"].as_str())
+        .collect();
+    assert_eq!(listed, names);
+    assert_eq!(names.len(), manifests.len(), "no duplicate manifests");
     for m in &manifests {
         for field in [
             "name",

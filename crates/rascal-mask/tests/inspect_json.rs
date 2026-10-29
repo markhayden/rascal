@@ -74,10 +74,10 @@ fn inspect_json_prints_record_statistics_and_identity() {
             .starts_with(&value["identity"].as_str().unwrap()[7..])
     );
     assert!(value["profile"].is_null());
-    // Without --json the pages arrive later: a usage error that says so.
+    // Without a mode, a usage error names the three.
     let out = rascal(&["inspect", mask.to_str().unwrap()]);
     assert_eq!(out.status.code(), Some(64));
-    assert!(String::from_utf8_lossy(&out.stderr).contains("1.9"));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("--json, --out <dir> or --replay"));
     let _ = std::fs::remove_dir_all(&dir);
 }
 

@@ -56,7 +56,8 @@ rascal heal seam pano.jpg --filler local-inpaint --config rascal.toml --out run/
 rascal render run/artifacts/<id> --for tinted --image img-3 --out seam-tinted.png
 rascal paste base.png fill.png run/artifacts/<id> --mode poisson --out composite.png
 rascal ops list                                           # every op's manifest, as an agent sees it
-rascal inspect run/artifacts/<id> --json
+rascal inspect run/artifacts/<id> --json                  # or --out pages/ for the overlay and chart, --replay to rebuild
+rascal export --compat run/journal.jsonl --step rasterize --out e.json
 ```
 
 Replace (screens, signs), retouch, extend and isolate are later milestones.

@@ -320,7 +320,7 @@ fn topology_name(topology: Topology) -> &'static str {
     }
 }
 
-/// The frames a run or workspace knows, by id. REPLACED BY 1.7a (the registry generation).
+/// The frames a snapshot knows, by id: an in-memory view of the registry generation's frames.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct FrameTable {
     pub frames: Vec<Frame>,

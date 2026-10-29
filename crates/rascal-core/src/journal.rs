@@ -1,5 +1,6 @@
 //! The journal: one JSON line per invocation, publishing or not, successful or not. The
-//! diagnostics source. REPLACED BY 1.7b (the projection from operation records, `repair`).
+//! diagnostics source; never the only copy of anything, since `workspace repair` rebuilds it
+//! as a projection of the committed operation records.
 
 use std::collections::BTreeMap;
 use std::io::Write;

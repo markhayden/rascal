@@ -32,8 +32,8 @@ pub struct RenderArgs {
 pub fn render(registry: &OpRegistry, args: &RenderArgs) -> Result<PathBuf> {
     let mask = Mask::read(&args.mask)?;
     let out = outdir::prepare(&args.out, OutKind::File)?;
-    // A throwaway run beside nothing: the op needs a frame table and a journal, and a file
-    // destination has no run directory. REPLACED BY 1.7a (a private workspace).
+    // A stored mask may live anywhere; the op runs in a throwaway workspace that knows the
+    // mask's frame, rebuilt from its record (a raw frame is its size and projection).
     let scratch = std::env::temp_dir().join(format!(
         "rascal-render-{}-{}",
         std::process::id(),
@@ -60,8 +60,7 @@ pub fn render(registry: &OpRegistry, args: &RenderArgs) -> Result<PathBuf> {
             }
             None => {
                 // The frame must be known to the scratch workspace: a blank canonical image of
-                // the mask's size stands in. REPLACED BY 1.7a's follow-up in 1.9 (frames from
-                // the workspace the mask came from).
+                // the mask's size stands in, which registers the frame without a photograph.
                 let blank = image::DynamicImage::ImageLuma8(image::GrayImage::new(
                     frame.width,
                     frame.height,
@@ -119,8 +118,9 @@ fn write_by_extension(path: &Path, pixels: &image::DynamicImage) -> Result<()> {
     }
 }
 
-/// The frame a stored mask is in, rebuilt from its record. REPLACED BY 1.7a (frames come from
-/// the workspace registry, not from the mask).
+/// The frame a stored mask is in, rebuilt from its record: a mask in a raw frame carries
+/// its size and the frame id names the projection. A mask in a derived frame needs its
+/// workspace, which `rascal <op> --workspace` provides.
 pub fn frame_of(mask: &Mask) -> Frame {
     let (width, height) = mask.dimensions();
     let projection = if mask.record.frame.ends_with(":equirectangular") {

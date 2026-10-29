@@ -1,5 +1,5 @@
-//! Typed artifacts: what ops take and return. Every artifact has a type, a local id and an
-//! identity. REPLACED BY 1.4 (BandProfile, Series, Plan; the artifact store).
+//! Typed artifacts: what ops take and return. Every artifact has a type and an identity; the
+//! workspace gives it a local id when it is committed.
 
 use std::sync::Arc;
 

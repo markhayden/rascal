@@ -58,6 +58,7 @@ before accepting it.
 | `render` | out | Mask [, Image]; `for`, `threshold`, `colour`, `strength` | Image: `grey`, `binary` (`mask_input`), `alpha`, `tinted` (`image_input`), `overlay` (inspection) | 1.1, 1.5 |
 | `cut` | prep | Image (wrapped raw); `strip` | Image in a new `cut:` frame (the two edge strips side by side, the wrap edge at the centre) and the Plan | 1.8a |
 | `put` | prep | Image (parent), Image (canvas), Plan | Image in the parent frame with the canvas's halves on the edge strips; cut then put is byte-identical | 1.8a |
+| `inspect` | inspect | Mask, Image | the overlay (an inspection Image) and a Series of the core's width per row; `rascal inspect` adds `--json`, `--out` and `--replay` | 1.9 |
 
 The pixel primitives every op is built from live in `rascal_ops::primitives`: row smoothing
 (a Gaussian truncated at 3σ, renormalised at the edges), the 3×3 Sobel magnitude with edge
@@ -69,6 +70,10 @@ port takes an id or a mask directory, and `--out <file>` also writes a lone imag
 PNG.
 
 A point-list parameter is written `[[x, y], …]` in a recipe and `x,y;x,y` on the command line.
+
+`scripts/check-docs.sh` (part of `just check`) reads the catalogue and the render profiles from
+the binary and fails when an op or profile is missing from these pages, or when a documented
+name no longer exists.
 
 The remaining ops arrive with their tasks (PLAN.md):
 `fan`, `profile`, `feather`, `ramp`, `apply`, `window`, `unwindow`, `paste`, `measure` in M2;

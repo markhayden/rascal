@@ -83,8 +83,12 @@ it (ADR 0016).
 ## Reading one by hand
 
 `rascal inspect <dir> --json` prints the record, the zone counts (core, blend, protect, painted,
-the support bbox, the weight sum) and the identity. The overlay and the per-row chart arrive
-with task 1.9.
+the support bbox, the weight sum) and the identity. `--out <dir>` writes `overlay.jpg` (the
+image in the mask's frame tinted by `w`, the core's edge in white), `chart.svg` (the core's
+width per row; a band mask's rulers join it in M2) and `inspect.json`. `--replay` rebuilds the
+mask from its operation record and the stored inputs and diffs the planes: an untouched run
+reports an empty diff, a tampered plane is named, and a run directory copied elsewhere replays
+the same because every input it used is inside it.
 
 ## Renderings
 

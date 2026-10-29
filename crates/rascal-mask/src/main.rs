@@ -2,6 +2,7 @@
 //! brings `run` and `render`.
 
 mod exit;
+mod export;
 mod inspect;
 mod ops;
 mod render;
@@ -12,6 +13,7 @@ use std::path::PathBuf;
 
 use clap::error::ErrorKind;
 use clap::{Parser, Subcommand, ValueEnum};
+use rascal_core::Error;
 use rascal_core::frame::Projection;
 use rascal_core::op::Status;
 
@@ -76,13 +78,37 @@ enum Command {
         #[command(subcommand)]
         command: OpsCommand,
     },
-    /// Inspect a stored mask: with --json, the record, zone statistics and identity.
+    /// Inspect a stored mask: the record and zone statistics (--json), the overlay and the
+    /// per-row chart (--out), or the mask rebuilt from its record and diffed (--replay).
     Inspect {
-        /// The mask directory (`<id>.mask/`).
+        /// The mask directory (`<workspace>/artifacts/<id>.mask/`).
         mask: PathBuf,
-        /// Print JSON on stdout.
+        /// Print the record, zone statistics and identity as JSON on stdout.
         #[arg(long)]
         json: bool,
+        /// Write overlay.jpg, chart.svg and inspect.json into this directory (new or empty).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Rebuild the mask from its operation record and the stored inputs, and diff the planes.
+        #[arg(long)]
+        replay: bool,
+    },
+    /// Project a native envelope or a location onto the copied schemas (ADR 0009).
+    Export {
+        /// The journal (journal.jsonl) to take the envelope from.
+        journal: Option<PathBuf>,
+        /// The step whose envelope to export.
+        #[arg(long)]
+        step: Option<String>,
+        /// A location JSON file to export standalone instead of an envelope.
+        #[arg(long)]
+        location: Option<PathBuf>,
+        /// Validate against the copied schemas and write the projection.
+        #[arg(long)]
+        compat: bool,
+        /// The file to write; overwritten if it exists.
+        #[arg(long)]
+        out: PathBuf,
     },
     /// Render a stored mask for one consumer.
     Render {
@@ -167,7 +193,15 @@ impl From<ProjectionArg> for Projection {
 }
 
 /// Built-in command names that an op may not shadow.
-const RESERVED: &[&str] = &["run", "render", "inspect", "ops", "workspace", "help"];
+const RESERVED: &[&str] = &[
+    "run",
+    "render",
+    "inspect",
+    "export",
+    "ops",
+    "workspace",
+    "help",
+];
 
 fn main() {
     let registry = match rascal_ops::registry() {
@@ -299,17 +333,48 @@ fn main() {
             }
         }
         Command::Ops { command } => ops::run(&registry, command),
-        Command::Inspect { mask, json } => {
-            let result = if json {
-                inspect::inspect_json(&mask).map(|value| {
+        Command::Inspect {
+            mask,
+            json,
+            out,
+            replay,
+        } => {
+            let result = (|| -> rascal_core::error::Result<()> {
+                if !json && out.is_none() && !replay {
+                    return Err(Error::usage(
+                        "inspect: give --json, --out <dir> or --replay",
+                    ));
+                }
+                if json {
                     println!(
                         "{}",
-                        serde_json::to_string_pretty(&value).unwrap_or_default()
-                    )
-                })
-            } else {
-                inspect::inspect_pages(&mask)
-            };
+                        serde_json::to_string_pretty(&inspect::inspect_json(&mask)?)
+                            .unwrap_or_default()
+                    );
+                }
+                if let Some(out) = &out {
+                    for path in inspect::inspect_pages(&registry, &mask, out)? {
+                        println!("{}", path.display());
+                    }
+                }
+                if replay {
+                    let report = inspect::inspect_replay(&registry, &mask)?;
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&report).unwrap_or_default()
+                    );
+                    if !report.is_clean() {
+                        return Err(Error::op(
+                            "inspect",
+                            format!(
+                                "replay differs on {:?}",
+                                report.differing_planes.keys().collect::<Vec<_>>()
+                            ),
+                        ));
+                    }
+                }
+                Ok(())
+            })();
             match result {
                 Ok(()) => exit::OK,
                 Err(error) => {
@@ -318,6 +383,22 @@ fn main() {
                 }
             }
         }
+        Command::Export {
+            journal,
+            step,
+            location,
+            compat,
+            out,
+        } => match export::run(&journal, step.as_deref(), &location, compat, &out) {
+            Ok(path) => {
+                println!("{}", path.display());
+                exit::OK
+            }
+            Err(error) => {
+                eprintln!("rascal export: {error}");
+                exit::code_for(&error)
+            }
+        },
         Command::Render {
             mask,
             profile,

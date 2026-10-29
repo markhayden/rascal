@@ -1,7 +1,23 @@
 # Compatibility export
 
-What `rascal export --compat` projects, what it drops, and what it refuses by name. The export
-itself arrives with M1 task 1.9; this page already documents the schemas it targets.
+What `rascal export --compat` projects, what it drops, and what it refuses by name.
+
+## The command
+
+```
+rascal export --compat run/journal.jsonl --step rect --out rect.json     # a step's envelope
+rascal export --compat --location box.json --out box.json                # a standalone location
+```
+
+The projection keeps `status`, `summary`, `measurements`, `regions`, `images`, `transforms` and
+`provenance`, and drops `artifacts` and every other native field, since that is rascal's
+bookkeeping and not content. It then fails, naming the item, on content the copied schema cannot
+express: a `line` or `stroke` region, or an image whose mapping to its parent is not a plain
+bbox (an image in a `cut:` frame maps to two spans). Nothing is approximated. A standalone
+location exports as the location object alone and validates against the copied envelope's
+embedded `Location` definition by `$ref`; `line` and `stroke` have no copied form. The export
+is validated against the copied schema before it is written; the schemas are read from a
+checkout's `schemas/` directory or from `RASCAL_SCHEMAS`.
 
 ## The copied schemas
 

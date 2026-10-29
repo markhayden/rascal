@@ -80,3 +80,18 @@ without. A bad parameter value is `invalid_args` in the journal and exit 64.
 | `rect` | 1.1 | `inputs.location` → `rasterize`; renders `grey` |
 | `seam` | M2 | `cut` → `line` → `fan` → `profile` → `ramp` |
 | `remove`, `repair`, `repair-area`, `protect` | M4 | see SPEC.md "Recipes" |
+
+## The configuration file
+
+`--config rascal.toml` names the file a pipeline gives rascal. Its general sections are here;
+`[fillers]` arrives with M2 and `[packs]` with M3. The schema is `schemas/rascal/config-v1.json`.
+
+```toml
+config_version = 1
+
+[workspace]                     # where runs keep their workspace when --workspace is not given
+dir = "ws"
+
+[corpus]                        # the private corpus (M6)
+manifest = "corpus.toml"
+```

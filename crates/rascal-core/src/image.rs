@@ -1,8 +1,7 @@
 //! Images: pixels in a frame, with a role and an identity. A canonical image is the lossless
 //! decode of a job image, stored once and never modified.
 //!
-//! REPLACED BY 1.2 (the pixel digest and image identity under canonical serialization; the
-//! PNG encoder settings of ADR 0016).
+//! Identity and the pixel digest follow canonical serialization (ADR 0016).
 
 use std::path::Path;
 

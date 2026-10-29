@@ -5,8 +5,8 @@
 //! binding typed and pointing at an earlier step or a declared input, every required port
 //! bound, every parameter declared and within bounds, every constant set known to its op,
 //! every output of the right type; the error names the step. Defaults are resolved by the
-//! manifest and the resolved values are what the journal records. The runner writes under
-//! `--out` directly. REPLACED BY 1.7a (the workspace commit protocol).
+//! manifest and the resolved values are what the journal records. The runner commits every
+//! step's outputs through the workspace.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

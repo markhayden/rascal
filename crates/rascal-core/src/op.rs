@@ -850,7 +850,7 @@ pub type Inputs = BTreeMap<String, Artifact>;
 /// The resolved parameters of a step.
 pub type Params = toml::Table;
 
-/// What the op runs against. REPLACED BY 1.7a (the workspace).
+/// What the op runs against: the frames of the workspace snapshot it was invoked in.
 pub struct Context<'a> {
     pub frames: &'a FrameTable,
 }
