@@ -14,7 +14,7 @@ use rascal_core::image::{Image, Role};
 use rascal_core::location::Location;
 use rascal_core::op::{Context, Inputs, Op, Output, Params, Status};
 use rascal_core::profile::BandProfile;
-use rascal_ops::fan::{Fan, Settings, fan_profile};
+use rascal_ops::fan::{DEFAULT_SET, Fan, Settings, fan_profile};
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -159,7 +159,7 @@ fn run(table: &FrameTable, inputs: &Inputs, params: Params) -> Output {
     let name = constants
         .as_ref()
         .and_then(|c| c.as_str())
-        .unwrap_or("fan-v1")
+        .unwrap_or(DEFAULT_SET)
         .to_string();
     for (k, v) in Fan.constant_set(&name) {
         given.entry(k).or_insert(v);
@@ -179,7 +179,7 @@ fn the_op_emits_a_band_profile_and_fan_thin_fixes_every_row_at_thin() {
         panic!()
     };
     assert_eq!(band.frame, frame.id);
-    assert_eq!(band.constants, "fan-v1");
+    assert_eq!(band.constants, DEFAULT_SET);
     assert_eq!(band.column_px, 200);
     assert_eq!(band.half.len(), 60);
     assert!(band.half.iter().all(|h| *h > band.thin_px + 5.0), "opens");

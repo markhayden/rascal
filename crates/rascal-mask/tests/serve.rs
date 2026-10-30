@@ -75,7 +75,7 @@ fn the_independent_client_imports_finds_masks_renders_and_reads_back() {
     let fan = tools.iter().find(|t| t.name == "fan").unwrap();
     assert_eq!(
         fan.input_schema["properties"]["constants"]["enum"][0],
-        "fan-v1"
+        "fan-v3"
     );
 
     // Import, rect, rasterize, render, read.

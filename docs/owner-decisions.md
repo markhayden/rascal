@@ -110,3 +110,14 @@ we dont need to release till we are super ready", and to circle back first to th
 noted during the lab rounds, starting with the fan's band swallowing solid objects on smooth
 surfaces (`tasks/todo.md`). The release machinery is complete and proven (`docs/results/suite-timing.md`);
 pushing the tag is the one step left, on the owner's word.
+
+## 12. fan-v3 is the default band, for now
+
+2026-10-30. After objects-01 and objects-02 (`docs/results/`), the owner made fan-v3 the seam
+recipe's band and the `fan` op's default set: "make it the default for now". fan-v3 won its
+rounds by a handful of decided pairs with most pairs the same, lost none of fan-v2's wins and
+none of fan-v1's sky, so the owner preferred it as the working default while the mask-builder
+follow-ups (objects on the line kept, base and stand, thin parts) are built. The lab matrices
+that ran under fan-v1 name their set explicitly, so they stay reproducible. "For now": the
+default is revisited after the next mask round.
+

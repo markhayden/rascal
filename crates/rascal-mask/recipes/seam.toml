@@ -26,7 +26,7 @@ width_px = 2.0
 id = "fan"
 op = "fan"
 inputs = { image = "cut.image", line = "line.location" }
-constants = "fan-v1"
+constants = "fan-v3"
 
 [[step]]
 id = "band"

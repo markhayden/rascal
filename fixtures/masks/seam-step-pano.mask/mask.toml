@@ -5,7 +5,7 @@ frame_identity = "sha256:ff4b879cce1f3b84311b6209a25866ac63915853883918fb42b6e4f
 width = 112
 height = 400
 use_case = "seam"
-identity = "sha256:a92caad66553f457c8ad882a723ded8ddfe9af0ae92ea0873900089d269c756b"
+identity = "sha256:feeebc65d7c05a27dc313a563615ac04c0ca1215db675748064519d5bd87db8b"
 
 [zones]
 core = "core.png"

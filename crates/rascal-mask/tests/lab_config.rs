@@ -97,7 +97,7 @@ fn the_examples_validate_and_the_arms_resolve_to_the_seam_recipe_with_overrides_
     assert_eq!(fan.constants.as_deref(), Some("fan-thin-v1"));
     let ramp = &validated.recipes[1];
     let fan = ramp.step.iter().find(|s| s.id == "fan").unwrap();
-    assert_eq!(fan.constants.as_deref(), Some("fan-v1"));
+    assert_eq!(fan.constants.as_deref(), Some("fan-v3"));
     // The protocol's defaults and rules.
     assert_eq!(validated.protocol.min_decided, 2);
     assert_eq!(validated.protocol.rules.preferred, [2, 3]);
