@@ -298,3 +298,153 @@ fn a_built_bundle_installs_offline_and_the_installed_pack_answers() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A synthetic bundle packed the way `scripts/build-bundle.sh --archive` packs one: a tar.gz
+/// with a single top-level directory holding the files.
+fn pack(bundle: &Path, archive: &Path) {
+    let status = Command::new("tar")
+        .args(["-czf"])
+        .arg(archive)
+        .arg("-C")
+        .arg(bundle.parent().unwrap())
+        .arg(bundle.file_name().unwrap())
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
+fn sha256_of(path: &Path) -> String {
+    sha256_bytes(&std::fs::read(path).unwrap())
+}
+
+/// Serves one file over HTTP on the loopback, once, from a thread.
+fn serve_once(path: &Path) -> String {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/bundle.tar.gz", listener.local_addr().unwrap());
+    let body = std::fs::read(path).unwrap();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().take(2) {
+            let mut stream = stream.unwrap();
+            let mut buffer = [0u8; 4096];
+            let _ = stream.read(&mut buffer);
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/gzip\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(head.as_bytes());
+            let _ = stream.write_all(&body);
+        }
+    });
+    url
+}
+
+#[test]
+fn setup_takes_an_archive_or_a_url_and_checks_its_digest_first() {
+    let dir = scratch("archive");
+    let host = host_platform().unwrap_or("linux-x86_64");
+    let bundle = dir.join("rascal-tools-bundle-x");
+    synthetic(&bundle, host);
+    let archive = dir.join("bundle.tar.gz");
+    pack(&bundle, &archive);
+    let digest = sha256_of(&archive);
+    let into = dir.join("into");
+    // A local archive with the wrong digest: refused before anything is unpacked or written.
+    let out = rascal(
+        &[
+            "tools",
+            "setup",
+            "--bundle",
+            archive.to_str().unwrap(),
+            "--sha256",
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "--into",
+            into.to_str().unwrap(),
+        ],
+        &[],
+    );
+    assert_eq!(out.status.code(), Some(64), "{}", text(&out.stderr));
+    assert!(
+        text(&out.stderr).contains(&format!(
+            "the archive's digest is {digest}, not sha256:0000"
+        )),
+        "{}",
+        text(&out.stderr)
+    );
+    assert!(!into.exists());
+    // The right digest: unpacked, verified (the synthetic files pass their digests), and the
+    // install proceeds to the environment, which the fake wheel cannot provide.
+    let out = rascal(
+        &[
+            "tools",
+            "setup",
+            "--bundle",
+            archive.to_str().unwrap(),
+            "--sha256",
+            digest.trim_start_matches("sha256:"),
+            "--into",
+            into.to_str().unwrap(),
+        ],
+        &[],
+    );
+    let stdout = text(&out.stdout);
+    assert!(
+        stdout.contains("unpacked") && stdout.contains("files verified"),
+        "{stdout}\n{}",
+        text(&out.stderr)
+    );
+    assert_ne!(out.status.code(), Some(0));
+    let _ = std::fs::remove_dir_all(&into);
+    // A directory with --sha256 is refused: there is no archive to check.
+    let out = rascal(
+        &[
+            "tools",
+            "setup",
+            "--bundle",
+            bundle.to_str().unwrap(),
+            "--sha256",
+            &digest,
+            "--into",
+            into.to_str().unwrap(),
+        ],
+        &[],
+    );
+    assert_eq!(out.status.code(), Some(64));
+    assert!(text(&out.stderr).contains("--sha256 goes with an archive or a URL"));
+    // A URL without --sha256 is refused before any download.
+    let out = rascal(
+        &[
+            "tools",
+            "setup",
+            "--bundle",
+            "http://127.0.0.1:9/bundle.tar.gz",
+            "--into",
+            into.to_str().unwrap(),
+        ],
+        &[],
+    );
+    assert_eq!(out.status.code(), Some(64));
+    assert!(text(&out.stderr).contains("needs --sha256"));
+    // A URL with its digest: downloaded from the loopback, checked, unpacked, verified.
+    let url = serve_once(&archive);
+    let out = rascal(
+        &[
+            "tools",
+            "setup",
+            "--bundle",
+            &url,
+            "--sha256",
+            &digest,
+            "--into",
+            into.to_str().unwrap(),
+        ],
+        &[],
+    );
+    let stdout = text(&out.stdout);
+    assert!(
+        stdout.contains("bytes downloaded") && stdout.contains("files verified"),
+        "{stdout}\n{}",
+        text(&out.stderr)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -17,3 +17,7 @@ tokio = { workspace = true }
 
 [lints]
 workspace = true
+
+# A test tool, never a release artifact: dist builds archives for rascal-mask only.
+[package.metadata.dist]
+dist = false

@@ -1,0 +1,77 @@
+name: bundles
+
+# The Python pack's release bundles (SPEC.md "The Python pack and its bundle"): on a version
+# tag, one bundle per platform is built by scripts/build-bundle.sh on that platform's runner,
+# packed as a tar.gz with its SHA-256 beside it, smoked by scripts/bundle-acceptance.sh from
+# the packed archive, and uploaded to the tag's GitHub release (the one dist creates from the
+# same tag). The models join the bundle when the `models-2026-10` release holds them; a bundle
+# built without them says so and serves echo_region only.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    name: bundle ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-arm64
+            runner: macos-15
+          - platform: linux-x86_64
+            runner: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the toolchain from rust-toolchain.toml
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Install uv and the pack's Python
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.23"
+          python-version: "3.12"
+      - name: Sync the Python pack's environment
+        run: uv sync --frozen --project tools/python
+      - name: Fetch the model artifacts from the models release, when it exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$HOME/.cache/rascal-tools"
+          if gh release view models-2026-10 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release download models-2026-10 --repo "$GITHUB_REPOSITORY" --dir "$HOME/.cache/rascal-tools" --clobber
+            echo "models fetched"
+          else
+            echo "no models release; the bundle serves echo_region only"
+          fi
+      - name: Allow an unprivileged network namespace (Linux)
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: cargo build --release -p rascal-mask
+      - name: Build the bundle and pack it
+        run: |
+          scripts/build-bundle.sh ${{ matrix.platform }} bundle --archive rascal-tools-bundle-${{ matrix.platform }}.tar.gz
+          shasum -a 256 rascal-tools-bundle-${{ matrix.platform }}.tar.gz > rascal-tools-bundle-${{ matrix.platform }}.tar.gz.sha256
+          cat rascal-tools-bundle-${{ matrix.platform }}.tar.gz.sha256
+      - name: Install from the packed archive with no network and call the pack
+        run: scripts/bundle-acceptance.sh target/release/rascal --archive rascal-tools-bundle-${{ matrix.platform }}.tar.gz
+      - name: Upload to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then break; fi
+            echo "waiting for the release $GITHUB_REF_NAME"; sleep 60
+          done
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber \
+            rascal-tools-bundle-${{ matrix.platform }}.tar.gz rascal-tools-bundle-${{ matrix.platform }}.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rascal-tools-bundle-${{ matrix.platform }}
+          path: rascal-tools-bundle-${{ matrix.platform }}.tar.gz*

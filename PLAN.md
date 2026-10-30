@@ -1153,8 +1153,12 @@ met, or an owner-recorded scope change for any that is not.
 directory; `rascal run seam` from the unpacked release archive runs on the fixture.
 
 **Acceptance.**
-- [ ] Timing under three minutes recorded; the release workflow dry run green;
-      `scripts/acceptance.sh` green from the unpacked archive; the criteria table complete.
+- [x] Timing under three minutes recorded (`docs/results/suite-timing.md`: 30.8 s and
+      129.9 s); the release workflow dry run green (`dist generate --check`, `dist plan`,
+      the package workflow); the archive's `rascal` runs `seam` on the fixture and the bundle
+      installs from its packed archive with `segment` answering (the same document); the
+      criteria table complete (`docs/architecture.md`). The release itself, the `v0.1.0` tag,
+      waits on the owner's word, with the model files' release.
 
 **Verification.** `just publish-dry-run`; `just dist-check`; `scripts/acceptance.sh`.
 

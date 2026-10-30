@@ -5,7 +5,7 @@
 //! tool's parameters, `--json`, `--out`); `setup` installs the Python pack from its bundle
 //! with no network (`rascal_mcp::provision`).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use rascal_core::Error;
@@ -150,19 +150,216 @@ pub fn call(
     Ok(crate::workspace_cmd::run_op(&registry, name, sub))
 }
 
-/// `rascal tools setup --bundle <dir> [--into <dir>] [--config rascal.toml [--pack <name>]]`:
-/// the bundle verified, the platform checked, the destination checked, uv and the interpreter
-/// found, the files copied, the environment synced offline, the launcher smoked, and the pack
-/// entry to write printed. With `--config` and no `--into`, the install directory is the one
-/// the entry's command points at (`<dir>/.venv/bin/rascal-tools`, a relative `<dir>` taken
-/// from the configuration file's directory).
+/// Where a bundle comes from: a directory, a `.tar.gz` archive, or the URL of one (the one
+/// network step), with the archive's SHA-256 required for a URL and checked for a file when
+/// given. An archive is unpacked under a scratch directory that lives as long as the install.
+pub struct BundleSource {
+    pub root: PathBuf,
+    _scratch: Option<tempdir::Scratch>,
+}
+
+/// A scratch directory removed on drop.
+mod tempdir {
+    use std::path::{Path, PathBuf};
+
+    pub struct Scratch(PathBuf);
+
+    impl Scratch {
+        pub fn new(name: &str) -> std::io::Result<Scratch> {
+            let dir = std::env::temp_dir().join(format!(
+                "rascal-setup-{name}-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis())
+                    .unwrap_or_default()
+            ));
+            std::fs::create_dir_all(&dir)?;
+            Ok(Scratch(dir))
+        }
+
+        pub fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+}
+
+/// The SHA-256 of bytes as `sha256:<hex>`.
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::Digest;
+    format!(
+        "sha256:{}",
+        rascal_core::canonical::to_hex(&sha2::Sha256::digest(bytes))
+    )
+}
+
+/// Downloads the archive at `url` (https or http, no redirects off the host's scheme), with
+/// a size ceiling and a timeout; the bytes are checked against `expected` by the caller.
+fn download(url: &str) -> Result<Vec<u8>> {
+    const MAX_BYTES: usize = 4 << 30;
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| Error::op("setup", format!("no runtime for the download: {e}")))?;
+    // The TLS provider is process-wide; installing it twice is not an error here.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    rt.block_on(async {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(3600))
+            .build()
+            .map_err(|e| Error::op("setup", format!("client: {e}")))?;
+        let response = client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| Error::op("setup", format!("{url}: {e}")))?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(Error::op("setup", format!("{url}: HTTP {status}")));
+        }
+        if let Some(length) = response.content_length()
+            && length as usize > MAX_BYTES
+        {
+            return Err(Error::op(
+                "setup",
+                format!("{url}: {length} bytes is over the {MAX_BYTES} byte ceiling"),
+            ));
+        }
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| Error::op("setup", format!("{url}: {e}")))?;
+        if bytes.len() > MAX_BYTES {
+            return Err(Error::op(
+                "setup",
+                format!("{url}: over the {MAX_BYTES} byte ceiling"),
+            ));
+        }
+        Ok(bytes.to_vec())
+    })
+}
+
+/// Unpacks a `.tar.gz` of a bundle into `scratch` and returns the directory holding
+/// `bundle.toml`: the archive's single top-level directory, or the scratch root.
+fn unpack(bytes: &[u8], scratch: &Path, what: &str) -> Result<PathBuf> {
+    let decoder = flate2::read::GzDecoder::new(bytes);
+    let mut archive = tar::Archive::new(decoder);
+    archive.set_overwrite(false);
+    archive.set_preserve_permissions(false);
+    archive.unpack(scratch).map_err(|e| {
+        Error::op(
+            "setup",
+            format!("{what}: not a bundle archive I can unpack: {e}"),
+        )
+    })?;
+    if scratch.join("bundle.toml").is_file() {
+        return Ok(scratch.to_path_buf());
+    }
+    let mut dirs: Vec<PathBuf> = std::fs::read_dir(scratch)
+        .map_err(|e| Error::io(scratch, e))?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
+    match dirs.as_slice() {
+        [only] if only.join("bundle.toml").is_file() => Ok(dirs.remove(0)),
+        _ => Err(Error::usage(format!(
+            "{what}: the archive holds no bundle.toml at its root or in a single top-level directory"
+        ))),
+    }
+}
+
+impl BundleSource {
+    /// Resolves `--bundle`: a URL (needs `sha256`), an archive file (`sha256` checked when
+    /// given), or a directory (no digest to check; `sha256` is refused).
+    pub fn resolve(bundle: &str, sha256: Option<&str>) -> Result<BundleSource> {
+        let expected = sha256.map(|d| {
+            let d = d.trim().to_ascii_lowercase();
+            if d.starts_with("sha256:") {
+                d
+            } else {
+                format!("sha256:{d}")
+            }
+        });
+        if bundle.starts_with("https://") || bundle.starts_with("http://") {
+            let Some(expected) = expected else {
+                return Err(Error::usage(
+                    "--bundle <url> needs --sha256 <digest> (the .sha256 file beside the archive)",
+                ));
+            };
+            println!("bundle: downloading {bundle}");
+            let bytes = download(bundle)?;
+            let got = sha256_hex(&bytes);
+            if got != expected {
+                return Err(Error::usage(format!(
+                    "{bundle}: the archive's digest is {got}, not {expected}; nothing was unpacked"
+                )));
+            }
+            let scratch =
+                tempdir::Scratch::new("url").map_err(|e| Error::io(Path::new("<temp>"), e))?;
+            let root = unpack(&bytes, scratch.path(), bundle)?;
+            println!(
+                "bundle: {} bytes downloaded, digest {got}, unpacked",
+                bytes.len()
+            );
+            return Ok(BundleSource {
+                root,
+                _scratch: Some(scratch),
+            });
+        }
+        let path = Path::new(bundle);
+        if path.is_file() {
+            let bytes = std::fs::read(path).map_err(|e| Error::io(path, e))?;
+            let got = sha256_hex(&bytes);
+            if let Some(expected) = &expected
+                && &got != expected
+            {
+                return Err(Error::usage(format!(
+                    "{}: the archive's digest is {got}, not {expected}; nothing was unpacked",
+                    path.display()
+                )));
+            }
+            let scratch =
+                tempdir::Scratch::new("archive").map_err(|e| Error::io(Path::new("<temp>"), e))?;
+            let root = unpack(&bytes, scratch.path(), &path.display().to_string())?;
+            println!("bundle: {} unpacked, digest {got}", path.display());
+            return Ok(BundleSource {
+                root,
+                _scratch: Some(scratch),
+            });
+        }
+        if expected.is_some() {
+            return Err(Error::usage(
+                "--sha256 goes with an archive or a URL; a directory's files are verified by its bundle.toml",
+            ));
+        }
+        Ok(BundleSource {
+            root: path.to_path_buf(),
+            _scratch: None,
+        })
+    }
+}
+
+/// `rascal tools setup --bundle <dir|archive|url> [--sha256 <digest>] [--into <dir>]
+/// [--config rascal.toml [--pack <name>]]`: the bundle fetched and unpacked when it is an
+/// archive or a URL, verified, the platform checked, the destination checked, uv and the
+/// interpreter found, the files copied, the environment synced offline, the launcher smoked,
+/// and the pack entry to write printed. With `--config` and no `--into`, the install directory
+/// is the one the entry's command points at (`<dir>/.venv/bin/rascal-tools`, a relative
+/// `<dir>` taken from the configuration file's directory).
 pub fn setup(
-    bundle: &Path,
+    bundle: &str,
+    sha256: Option<&str>,
     into: Option<&Path>,
     config: Option<&Path>,
     pack: Option<&str>,
 ) -> Result<()> {
-    let bundle = Bundle::open(bundle)?;
+    let source = BundleSource::resolve(bundle, sha256)?;
+    let bundle = Bundle::open(&source.root)?;
     bundle.check_platform()?;
     let configured = match config {
         Some(path) => {

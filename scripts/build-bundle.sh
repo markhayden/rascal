@@ -2,7 +2,7 @@
 # Builds the Python pack's release bundle for one platform (SPEC.md "The Python pack and its
 # bundle"): a directory `rascal tools setup --bundle <dir>` installs from with no network.
 #
-#   scripts/build-bundle.sh <macos-arm64|linux-x86_64> <out-dir>
+#   scripts/build-bundle.sh <macos-arm64|linux-x86_64> <out-dir> [--archive <file.tar.gz>]
 #
 # The bundle is the provisioning project itself: `pyproject.toml` pinning the pack wheel by
 # relative path for that platform only, its `uv.lock` resolved against the wheelhouse and
@@ -17,6 +17,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 platform="${1:?platform: macos-arm64 or linux-x86_64}"
 out="${2:?the bundle directory to create}"
+archive=""
+if [ "${3:-}" = "--archive" ]; then archive="${4:?the .tar.gz to write}"; fi
 case "$platform" in
   macos-arm64)
     tags=(--platform macosx_11_0_arm64 --platform macosx_12_0_arm64 --platform macosx_13_0_arm64 --platform macosx_14_0_arm64)
@@ -127,3 +129,11 @@ for rel in files:
 print(f"build-bundle: {len(files)} files listed")
 PY
 echo "build-bundle: $out ($platform, rascal-tools $pack_version, Python $python)"
+if [ -n "$archive" ]; then
+  # The archive holds the bundle as one top-level directory named after the platform.
+  staged="$(mktemp -d "${TMPDIR:-/tmp}/rascal-bundle-archive.XXXXXX")"
+  ln -s "$out" "$staged/rascal-tools-bundle-$platform"
+  tar -czf "$archive" -C "$staged" -h "rascal-tools-bundle-$platform"
+  rm -rf "$staged"
+  echo "build-bundle: $archive ($(du -h "$archive" | cut -f1)), sha256:$(shasum -a 256 "$archive" | cut -d' ' -f1)"
+fi

@@ -453,9 +453,14 @@ enum ToolsCommand {
     /// Install the Python pack from a bundle with no network: verify every digest, copy the
     /// listed files, sync the environment from the wheelhouse, smoke the launcher.
     Setup {
-        /// The bundle directory (scripts/build-bundle.sh, or the release's bundle archive unpacked).
+        /// The bundle: a directory (scripts/build-bundle.sh), a .tar.gz archive, or the URL of
+        /// one (a release's rascal-tools-bundle-<platform>.tar.gz; the one network step).
         #[arg(long)]
-        bundle: PathBuf,
+        bundle: String,
+        /// The archive's SHA-256 (the .sha256 file beside it): required for a URL, checked
+        /// for a local archive.
+        #[arg(long)]
+        sha256: Option<String>,
         /// Where to install: a new or empty directory, or the bundle itself (in place).
         /// Without it, the directory the configured pack's command points at.
         #[arg(long)]
@@ -721,11 +726,18 @@ fn main() {
                 } => tools::call(&pack, &tool, &config, &workspace, &args),
                 ToolsCommand::Setup {
                     bundle,
+                    sha256,
                     into,
                     config,
                     pack,
-                } => tools::setup(&bundle, into.as_deref(), config.as_deref(), pack.as_deref())
-                    .map(|()| exit::OK),
+                } => tools::setup(
+                    &bundle,
+                    sha256.as_deref(),
+                    into.as_deref(),
+                    config.as_deref(),
+                    pack.as_deref(),
+                )
+                .map(|()| exit::OK),
             };
             match result {
                 Ok(code) => code,

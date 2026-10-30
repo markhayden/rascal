@@ -7,7 +7,10 @@
 # in the pack's model directory and so are in the bundle), a tampered copy of the bundle is
 # refused, and the pytest bundle test checks the build's output.
 #
-#   scripts/bundle-acceptance.sh <rascal binary> [scratch dir]
+#   scripts/bundle-acceptance.sh <rascal binary> [--archive <file.tar.gz>] [scratch dir]
+#
+# With --archive the bundle is also packed as that .tar.gz and the install reads the archive
+# with its digest, the way a release's bundle is installed.
 #
 # Needs uv and a Python 3.12 uv can find (`uv python install 3.12` on a connected machine).
 # Without uv the step is skipped with a line saying so, except in CI, where it fails.
@@ -15,7 +18,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 rascal="${1:?the rascal binary}"
 rascal="$(cd "$(dirname "$rascal")" && pwd)/$(basename "$rascal")"
-scratch="${2:-$(mktemp -d "${TMPDIR:-/tmp}/rascal-bundle.XXXXXX")}"
+shift
+archive=""
+if [ "${1:-}" = "--archive" ]; then archive="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"; shift 2; fi
+scratch="${1:-$(mktemp -d "${TMPDIR:-/tmp}/rascal-bundle.XXXXXX")}"
 if ! command -v uv >/dev/null 2>&1; then
   if [ -n "${CI:-}" ]; then echo "bundle: uv is not installed in CI" >&2; exit 1; fi
   echo "bundle: skipped (uv is not installed)"
@@ -33,7 +39,13 @@ python="$(tr -d '[:space:]' < tools/python/.python-version)"
 UV_PYTHON_DOWNLOADS=never uv python find "$python" >/dev/null || { echo "bundle: no Python $python for uv; uv python install $python first" >&2; exit 1; }
 
 echo "bundle: building for $platform"
-scripts/build-bundle.sh "$platform" "$scratch/bundle" | tail -1
+if [ -n "$archive" ]; then
+  scripts/build-bundle.sh "$platform" "$scratch/bundle" --archive "$archive" | tail -1
+  source_flag=(--bundle "$archive" --sha256 "$(shasum -a 256 "$archive" | cut -d' ' -f1)")
+else
+  scripts/build-bundle.sh "$platform" "$scratch/bundle" | tail -1
+  source_flag=(--bundle "$scratch/bundle")
+fi
 
 # From here on, no network: an empty namespace where the kernel grants one, and always
 # --offline plus empty caches inside setup itself.
@@ -51,7 +63,7 @@ export UV_CACHE_DIR="$scratch/uv-cache" PIP_CACHE_DIR="$scratch/pip-cache" PIP_N
 mkdir -p "$UV_CACHE_DIR" "$PIP_CACHE_DIR"
 
 echo "bundle: setup into a clean directory"
-${disconnected[@]+"${disconnected[@]}"} "$rascal" tools setup --bundle "$scratch/bundle" --into "$scratch/pack" | tee "$scratch/setup.out"
+${disconnected[@]+"${disconnected[@]}"} "$rascal" tools setup "${source_flag[@]}" --into "$scratch/pack" | tee "$scratch/setup.out"
 command_line="$(grep '^\[packs.rascal-tools\]: command' "$scratch/setup.out" | sed 's/^\[packs.rascal-tools\]: //')"
 printf 'config_version = 1\n[packs.rascal-tools]\n%s\n' "$command_line" > "$scratch/rascal.toml"
 
