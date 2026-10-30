@@ -423,7 +423,8 @@ fn fan_v3_removes_a_straddling_object_whole_and_eases_the_cap_in_and_out() {
     // Beyond the running minimum's reach, fan-v2 steps back to the full width in one row;
     // fan-v3 eases back over the taper: continuous at the boundary (the first free row is
     // within a pixel of the last capped one), widening row by row, and within half a pixel
-    // of the full width again eight tapers on (three carried, then the smoothing's tail).
+    // of the full width again once the carry, the smoothing and the width smoothing have
+    // run out.
     let taper = (Settings::fan_v3().object_taper * f64::from(h)).round() as usize;
     let last_capped = (70..100)
         .rev()
@@ -451,7 +452,8 @@ fn fan_v3_removes_a_straddling_object_whole_and_eases_the_cap_in_and_out() {
             v3.half[y + 1]
         );
     }
-    let settled = first_free + 8 * taper + 2;
+    // Settled: past the carry, the smoothing's tail and the width smoothing's tail.
+    let settled = first_free + 8 * taper.max(1) + 3 * (0.02 * f64::from(h)).ceil() as usize + 2;
     assert!(
         (v3.half[settled] - v1.half[settled]).abs() < 0.5,
         "row {settled}: {} vs {}",
