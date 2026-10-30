@@ -18,3 +18,7 @@ object_edge = 0.0
 object_ratio = 6.0
 object_margin_px = 3.0
 object_sigma = 0.004
+object_run = 0
+object_wander_px = 2
+object_taper = 0
+object_straddle = "thin"

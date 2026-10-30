@@ -379,3 +379,113 @@ fn the_object_cap_stops_the_band_short_of_an_object_and_keeps_a_straddling_one_t
     let same = fan_profile(&image, 0.5, &off).unwrap();
     assert_eq!(same.half, v1.half);
 }
+
+#[test]
+fn fan_v3_removes_a_straddling_object_whole_and_eases_the_cap_in_and_out() {
+    let (w, h) = (1620, 240);
+    let c = 810.0;
+    let image = {
+        let mut img = canvas_with_disc(w, h, c + 30.0, 60.0, 10.0);
+        let straddling = canvas_with_disc(w, h, c, 180.0, 10.0);
+        for (x, y, p) in straddling.enumerate_pixels() {
+            if p[0] == 40 {
+                img.put_pixel(x, y, *p);
+            }
+        }
+        img
+    };
+    let v1 = fan_profile(&image, 0.5, &Settings::fan_v1()).unwrap();
+    let v2 = fan_profile(&image, 0.5, &Settings::fan_v2()).unwrap();
+    let v3 = fan_profile(&image, 0.5, &Settings::fan_v3()).unwrap();
+    // Rows through the straddling disc: fan-v2 striped them at thin; fan-v3 leaves them to
+    // the rulers, as wide as fan-v1 (the object is removed whole).
+    for y in 172..188 {
+        assert!((v2.half[y] - v2.thin).abs() < 1e-9);
+        assert!(v3.cap[y].is_infinite(), "row {y} is free under fan-v3");
+        assert!(
+            (v3.half[y] - v1.half[y]).abs() < 1e-9,
+            "row {y}: {} vs fan-v1's {}",
+            v3.half[y],
+            v1.half[y]
+        );
+    }
+    // Rows through the disc beside the line keep fan-v2's cap exactly: a capped row never
+    // widens over the object.
+    for y in 52..68 {
+        assert!(v3.cap[y].is_finite());
+        assert!(
+            v3.half[y] <= v2.half[y] + 1e-9,
+            "row {y}: {} over fan-v2's {}",
+            v3.half[y],
+            v2.half[y]
+        );
+    }
+    // Beyond the running minimum's reach, fan-v2 steps back to the full width in one row;
+    // fan-v3 eases back over the taper: narrower than fan-v1 there, widening row by row,
+    // and within half a pixel of the full width again four tapers on.
+    let reach = (Settings::fan_v2().object_sigma * f64::from(h)).round() as usize;
+    let taper = (Settings::fan_v3().object_taper * f64::from(h)).round() as usize;
+    let first_free = 70 + reach + 1;
+    assert!(v2.cap[first_free].is_infinite());
+    assert!(
+        v3.half[first_free] < v1.half[first_free] - 1.0,
+        "{} vs {}",
+        v3.half[first_free],
+        v1.half[first_free]
+    );
+    for y in first_free..first_free + 2 * taper {
+        assert!(
+            v3.half[y + 1] >= v3.half[y] - 1e-9,
+            "row {y}: {} then {}",
+            v3.half[y],
+            v3.half[y + 1]
+        );
+    }
+    let settled = first_free + 4 * taper + 2;
+    assert!(
+        (v3.half[settled] - v1.half[settled]).abs() < 0.5,
+        "row {settled}: {} vs {}",
+        v3.half[settled],
+        v1.half[settled]
+    );
+    // The embedded set round-trips through the schema and parses as the op's defaults do.
+    assert!(Settings::fan_v3().object_straddle_whole);
+    assert!(!Settings::fan_v2().object_straddle_whole);
+}
+
+/// A smooth canvas with the centre step and rows of short dashes across the opening: strong
+/// horizontal steps one to three rows tall, the way cloud texture is. Each block of dashes is
+/// offset from the one above by more than the chain's wander, so no edge runs down the frame.
+fn canvas_with_dashes(w: u32, h: u32) -> RgbImage {
+    RgbImage::from_fn(w, h, |x, y| {
+        let base = 140 + if x < w / 2 { 12 } else { 0 };
+        let block = y / 6;
+        let rows = 1 + block % 3;
+        let in_rows = y % 6 < rows;
+        let offset = (block % 4) * 7;
+        let left = w / 2 - 120;
+        let dash = x >= left && x < w / 2 + 120 && (x - left + offset) % 28 < 10;
+        let v = if in_rows && dash { 70 } else { base };
+        Rgb([v, v, v])
+    })
+}
+
+#[test]
+fn fan_v3_ignores_texture_whose_edges_do_not_run_down_the_frame() {
+    let (w, h) = (1620, 400);
+    let image = canvas_with_dashes(w, h);
+    let v1 = fan_profile(&image, 0.5, &Settings::fan_v1()).unwrap();
+    let v2 = fan_profile(&image, 0.5, &Settings::fan_v2()).unwrap();
+    let v3 = fan_profile(&image, 0.5, &Settings::fan_v3()).unwrap();
+    let capped = |p: &rascal_ops::fan::Profile| p.cap.iter().filter(|c| c.is_finite()).count();
+    // fan-v2 takes every strong step as an object's edge and caps most of the frame.
+    assert!(
+        capped(&v2) > h as usize / 2,
+        "fan-v2 capped {} rows",
+        capped(&v2)
+    );
+    // fan-v3 asks for a vertical run of object_run · h (4 rows here); the dashes are one to
+    // three rows tall, so none qualifies and the band is fan-v1's.
+    assert_eq!(capped(&v3), 0, "fan-v3 capped {} rows", capped(&v3));
+    assert_eq!(v3.half, v1.half);
+}

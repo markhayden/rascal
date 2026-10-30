@@ -1,0 +1,28 @@
+# fan-v3: fan-v2 with the object cap refined by objects-01 (docs/results/objects-01.md): an
+# edge counts only when it runs down the frame for object_run of the height (cloud and
+# foliage texture, a few rows long, no longer caps the band); an object beside the line still
+# stops the band short of its edge, but an object the line runs through is no longer striped
+# at thin, it is left to the band as fan-v1 would (removed whole); and the cap tapers over
+# object_taper of the height instead of stepping.
+ref_width = 1620
+thin_px = 15.0
+gap_px = 4
+step_cols = 10
+texture_cols = 160
+tex_low = 0.5
+tex_high = 2.0
+lum_floor = 40.0
+step_min = 0.5
+step_ref = 4.0
+wide_max = 0.15
+row_sigma = 0.012
+width_sigma = 0.02
+gate = true
+object_edge = 8.0
+object_ratio = 6.0
+object_margin_px = 3.0
+object_sigma = 0.004
+object_run = 0.01
+object_wander_px = 2
+object_taper = 0.01
+object_straddle = "whole"

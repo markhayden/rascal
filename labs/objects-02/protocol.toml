@@ -1,0 +1,41 @@
+# fan-v3's round (SPEC.md "fan", step 6b; docs/results/objects-01.md): the ramp band under
+# fan-v3, which removes an object the line runs through whole and tapers the cap, against
+# fan-v1, both healed by Bria Eraser, over the structured group of seam-03. Wins are fan-v3's.
+# The question: does fan-v3 keep objects-01's wins (the living room, the studio, the dining
+# room) and lose its regressions (the break-room light, the harbour chimney)?
+version = 1
+name = "objects-02"
+seed = 20261103
+arms = ["ramp-v3-bria", "ramp-bria"]
+min_decided = 10
+
+[[group]]
+name = "structured"
+images = [
+  "str-01-v2",
+  "str-02-v2",
+  "str-03",
+  "str-04",
+  "str-06",
+  "str-07",
+  "str-08",
+  "str-09",
+  "str-10",
+  "str-11",
+  "str-12",
+  "sunburst-str-library-modern",
+  "sunburst-str-library-v2",
+  "sunburst-training-01-home-living-room",
+  "sunburst-training-03-office-studio",
+  "sunburst-training-05-home-kitchen",
+  "sunburst-training-06-forest-clearing",
+  "sunburst-training-07-office-meeting-room",
+  "sunburst-training-09-home-bedroom",
+  "sunburst-training-10-city-courtyard",
+  "sunburst-training-11-home-dining-room-v2",
+  "sunburst-training-13-office-lobby",
+  "sunburst-training-15-home-attic",
+  "sunburst-training-17-office-break-room",
+  "sunburst-training-18-harbor-promenade",
+  "sunburst-training-19-home-sunroom"
+]

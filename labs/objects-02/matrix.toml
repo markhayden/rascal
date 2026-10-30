@@ -1,0 +1,100 @@
+# fan-v3's matrix (docs/lab.md): the seam recipe with fan-v3 and with fan-v1, both filled by
+# Bria Eraser on fal (the spend is an estimate per call). Run:
+#   rascal lab run labs/objects-02/matrix.toml --config <rascal.toml with [fillers.bria-erase]> \
+#       --out lab/objects-02/ --corpus-root <the corpus files> --no-dash
+version = 1
+name = "objects-02"
+corpus = "corpus.toml"
+protocol = "protocol.toml"
+seed = 20261103
+
+[[image]]
+id = "str-01-v2"
+
+[[image]]
+id = "str-02-v2"
+
+[[image]]
+id = "str-03"
+
+[[image]]
+id = "str-04"
+
+[[image]]
+id = "str-06"
+
+[[image]]
+id = "str-07"
+
+[[image]]
+id = "str-08"
+
+[[image]]
+id = "str-09"
+
+[[image]]
+id = "str-10"
+
+[[image]]
+id = "str-11"
+
+[[image]]
+id = "str-12"
+
+[[image]]
+id = "sunburst-str-library-modern"
+
+[[image]]
+id = "sunburst-str-library-v2"
+
+[[image]]
+id = "sunburst-training-01-home-living-room"
+
+[[image]]
+id = "sunburst-training-03-office-studio"
+
+[[image]]
+id = "sunburst-training-05-home-kitchen"
+
+[[image]]
+id = "sunburst-training-06-forest-clearing"
+
+[[image]]
+id = "sunburst-training-07-office-meeting-room"
+
+[[image]]
+id = "sunburst-training-09-home-bedroom"
+
+[[image]]
+id = "sunburst-training-10-city-courtyard"
+
+[[image]]
+id = "sunburst-training-11-home-dining-room-v2"
+
+[[image]]
+id = "sunburst-training-13-office-lobby"
+
+[[image]]
+id = "sunburst-training-15-home-attic"
+
+[[image]]
+id = "sunburst-training-17-office-break-room"
+
+[[image]]
+id = "sunburst-training-18-harbor-promenade"
+
+[[image]]
+id = "sunburst-training-19-home-sunroom"
+
+[[arm]]
+name = "ramp-v3-bria"
+recipe = "seam"
+overrides = { "fan.constants" = "fan-v3" }
+filler = "bria-erase"
+spend_usd_per_call = 0.04
+
+[[arm]]
+name = "ramp-bria"
+recipe = "seam"
+filler = "bria-erase"
+spend_usd_per_call = 0.04
