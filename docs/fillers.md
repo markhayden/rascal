@@ -51,8 +51,11 @@ image resampled with Lanczos, the mask with a triangle filter and, when binary, 
 back to binary) and the fill comes back scaled to the support with Lanczos before the paste.
 The journal notes the two sizes, the call records the scaled request's dimensions and bytes,
 the request identity is over the bytes sent, so a replay reproduces the call, and the lab's
-cell identity carries the setting. What the scaling costs in fine texture is a lab question;
-`max_side` (the window, a crop) is unchanged and the two combine.
+cell identity carries the setting. The lab answered what it costs (`docs/results/lama-scale-01.md`):
+for LaMa at 1024, twenty of twenty-one sky seams judged better than at full size and the
+structured seams a near draw (twelve to fourteen), with the call faster by more than half; so
+a filler trained small wants it where the seam crosses smooth content and can do without it
+on detail. `max_side` (the window, a crop) is unchanged and the two combine.
 
 ## What a filler receives (G9)
 
