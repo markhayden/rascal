@@ -258,9 +258,14 @@ only; `BUNDLE_MODELS=required` makes that a failure), and `bundle.toml` naming t
 version, the Python version, the platform, whether the models are in and the SHA-256 of
 every file. On the target machine the prerequisites
 are `uv` and a Python 3.12 it can find without downloading one (`uv python install 3.12` on a
-connected machine). `rascal tools setup --bundle <dir> --into <dir>` (or `--config rascal.toml`,
-installing where the pack entry's `command` points, `<dir>/.venv/bin/rascal-tools`) checks the
-platform, verifies every digest (a mismatch or a missing file is refused with exit 3 naming the
+connected machine). `rascal tools setup --bundle <dir|archive|url> --into <dir>` (or `--config
+rascal.toml`, installing where the pack entry's `command` points, `<dir>/.venv/bin/rascal-tools`)
+takes the bundle as a directory, as the `.tar.gz` `scripts/build-bundle.sh --archive` packs
+(one top-level directory), or as the URL of one, the release's
+`rascal-tools-bundle-<platform>.tar.gz`: the download is the one network step, `--sha256`
+(the `.sha256` file beside the archive) is required for a URL and checked for a local archive
+before anything is unpacked, and the archive is unpacked under a scratch directory for the
+install. It then checks the platform, verifies every digest (a mismatch or a missing file is refused with exit 3 naming the
 file, before anything is written), copies exactly the listed files, runs `uv sync --frozen
 --no-dev --offline --no-index --find-links wheelhouse --no-cache` with interpreter downloads
 forbidden, smokes the launcher's `--version`, and prints the `command` line for the pack
@@ -279,7 +284,10 @@ interfaces; macOS has no such namespace, so there the proof is uv's `--offline -
 uv. `setup` runs uv and the launcher with the baseline environment only (`PATH`, `HOME`,
 `LANG`, `LC_ALL`, `TMPDIR`), so no key and no uv setting of the shell's reaches them, and the
 environment is always `<dir>/.venv`. A bundle given as a URL (the spec's one network step)
-arrives with the release, task 7.2; until then `--bundle` names a directory.
+is built per platform by the `bundles` workflow on a version tag (`.github/workflows/bundles.yml`),
+which fetches the model files from the `models-2026-10` release when it exists, builds the
+bundle on that platform's runner, installs it from the packed archive with the network
+disabled, calls the pack, and uploads the archive with its `.sha256` to the tag's release.
 
 **The fake pack** (`rascal fake-pack <behaviour>` with the `testkit` feature, or the testkit's
 `fake-pack` binary) serves `segment` with one selectable behaviour: `exact`, `bad-schema`,

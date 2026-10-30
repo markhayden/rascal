@@ -25,19 +25,41 @@ pipelines drive its tools.
 
 ## Install
 
-Not yet published. When it is:
+Three ways to get the `rascal` command, and one more step for the Python pack.
+
+**From crates.io** (needs a Rust toolchain):
 
 ```
 cargo install rascal-mask        # installs the `rascal` command
 ```
 
-Release archives for macOS arm64, Linux x86_64 and Linux arm64 will be attached to GitHub
-releases. The Python pack is `rascal-tools` (`tools/python`, a `uv` project) and is optional:
-it ships as a bundle per platform (macOS arm64, Linux x86_64) that installs with no network.
-Its prerequisites are [`uv`](https://docs.astral.sh/uv/) and a Python 3.12 that uv can find;
-then `rascal tools setup --bundle <dir> --into <dir>` (`docs/tools.md`). The segmenter's model
-artifacts (749 MB, Apache-2.0, `tools/python/MODEL.md`) come inside a full bundle or through
-`rascal-tools fetch`.
+**From a release archive**: each [GitHub release](https://github.com/markhayden/rascal/releases)
+carries `rascal-mask-<target>.tar.xz` for `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu`
+and `aarch64-unknown-linux-gnu`, with a `sha256.sum` beside them. Unpack and put `rascal` on
+your `PATH`:
+
+```
+tar -xf rascal-mask-aarch64-apple-darwin.tar.xz
+./rascal-mask-aarch64-apple-darwin/rascal run seam pano.jpg --out run/
+```
+
+**The Python pack** (`rascal-tools`: the segmenter behind `remove-prompt`) is optional. Each
+release carries one bundle per platform, `rascal-tools-bundle-macos-arm64.tar.gz` and
+`rascal-tools-bundle-linux-x86_64.tar.gz`, with its SHA-256 beside it; a bundle installs with
+no network. The prerequisites are [`uv`](https://docs.astral.sh/uv/) and a Python 3.12 that uv
+can find (`uv python install 3.12` once, on a connected machine). Then:
+
+```
+rascal tools setup --bundle https://github.com/markhayden/rascal/releases/download/v0.1.0/rascal-tools-bundle-macos-arm64.tar.gz \
+    --sha256 <the digest beside it> --into ~/rascal-tools
+```
+
+`setup` downloads the archive (the one network step), checks its digest, verifies every file
+inside against the bundle's manifest, installs offline, and prints the `[packs.rascal-tools]`
+entry to put in `rascal.toml`. `--bundle` also takes a local archive or an unpacked directory.
+A full bundle carries the segmenter's model files (749 MB, Apache-2.0,
+`tools/python/MODEL.md`); a bundle built without them says so and serves `echo_region` only,
+and `rascal-tools fetch` brings the models later. `docs/tools.md` has the whole of it.
 
 ## The recipes
 
