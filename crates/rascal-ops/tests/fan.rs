@@ -421,19 +421,29 @@ fn fan_v3_removes_a_straddling_object_whole_and_eases_the_cap_in_and_out() {
         );
     }
     // Beyond the running minimum's reach, fan-v2 steps back to the full width in one row;
-    // fan-v3 eases back over the taper: narrower than fan-v1 there, widening row by row,
-    // and within half a pixel of the full width again four tapers on.
-    let reach = (Settings::fan_v2().object_sigma * f64::from(h)).round() as usize;
+    // fan-v3 eases back over the taper: continuous at the boundary (the first free row is
+    // within a pixel of the last capped one), widening row by row, and within half a pixel
+    // of the full width again eight tapers on (three carried, then the smoothing's tail).
     let taper = (Settings::fan_v3().object_taper * f64::from(h)).round() as usize;
-    let first_free = 70 + reach + 1;
+    let last_capped = (70..100)
+        .rev()
+        .find(|y| v2.cap[*y].is_finite())
+        .expect("the disc's cap reaches past row 70");
+    let first_free = last_capped + 1;
     assert!(v2.cap[first_free].is_infinite());
     assert!(
-        v3.half[first_free] < v1.half[first_free] - 1.0,
-        "{} vs {}",
-        v3.half[first_free],
-        v1.half[first_free]
+        v2.half[first_free] - v2.half[last_capped] > 5.0,
+        "fan-v2 steps: {} then {}",
+        v2.half[last_capped],
+        v2.half[first_free]
     );
-    for y in first_free..first_free + 2 * taper {
+    assert!(
+        (v3.half[first_free] - v3.half[last_capped]).abs() < 1.0,
+        "fan-v3 steps: {} then {}",
+        v3.half[last_capped],
+        v3.half[first_free]
+    );
+    for y in first_free..first_free + 6 * taper {
         assert!(
             v3.half[y + 1] >= v3.half[y] - 1e-9,
             "row {y}: {} then {}",
@@ -441,7 +451,7 @@ fn fan_v3_removes_a_straddling_object_whole_and_eases_the_cap_in_and_out() {
             v3.half[y + 1]
         );
     }
-    let settled = first_free + 4 * taper + 2;
+    let settled = first_free + 8 * taper + 2;
     assert!(
         (v3.half[settled] - v1.half[settled]).abs() < 0.5,
         "row {settled}: {} vs {}",
