@@ -76,6 +76,9 @@ pub struct FillerEntry {
     /// The filler's largest side, which windows the heal graph.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_side: Option<u32>,
+    /// The longest side the request is scaled to before the call, when set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_max_side: Option<u32>,
     /// Whether the grey rendering is sent with an image-input profile.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub send_mask: bool,

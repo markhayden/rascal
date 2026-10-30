@@ -75,7 +75,7 @@ step reproducible from files.
 | later | **extend**: outpainting, stitch holes, aspect change | the empty region | the hole plus its blend band |
 | later | **isolate**: cut-outs for compositing | the subject | an alpha matte; hair and glass decide quality |
 | later | **fan along a path**: a scratch through a smooth surround | a `stroke` | the seam band's rule applied along a path instead of a column |
-| later | **scaled windows**: a filler whose `max_side` is smaller than the mask's support | | a downscaled request with a pixel-centre transform |
+| v1 (decision 10) | **scaled windows**: a filler that wants a smaller request than the mask's support (`fill_max_side`) | | a downscaled request, the fill scaled back to the support |
 | never | grades, upscales, denoise, anything with no region | | |
 
 ### Where it sits
@@ -538,7 +538,7 @@ stroke.
 **`window`** with `window-v1`: the **support** is the integer bbox of pixels with `w > 0`
 (`x0, y0` floored, `x1, y1` ceiled to pixel edges); an empty support is `not_applicable`, and a
 support with either side larger than `max_side` is `not_applicable` with the sizes in the reason
-(scaled windows are a later milestone). The support is mandatory; **context** is optional: the
+(a filler's `fill_max_side` scales the request down and the fill back, decision 10). The support is mandatory; **context** is optional: the
 window is the support expanded by `context` times its width and height on each side, then made
 square at the larger side, then capped to `max_side` on each side, then capped to the image's
 width and height, then slid inside the image (toward the smaller offset when two placements
@@ -698,6 +698,7 @@ key_env = "HOSTED_FILLER_KEY"                  # Authorization: Bearer; never st
 timeout_s = 180
 max_side = 2048
 revision = "vendor model 2026-10"
+fill_max_side = 1024                           # a scaled window: the request sent at this longest side, the fill scaled back (decision 10)
 ```
 
 A filler receives an image (and a mask for `mask_input` profiles) of exactly the dimensions
@@ -1244,7 +1245,7 @@ Each names the command that proves it.
 | M5 | the Python pack: bundle, offline install test, `echo_region`, `segment` under branch A, parity tests; remove with a prompt |
 | M6 | the lab: matrix, per-image bindings, cells and identity, attempts, ledger, assignment and picks, protocol, decode, corpus manifest and verify |
 | M7 | the Poisson paste as specified |
-| later | Node (`@markhayden/rascal`), Swift, WASM; the path fan; scaled windows; replace with homography; retouch; extend; isolate; `segment` under branch B |
+| later | Node (`@markhayden/rascal`), Swift, WASM; the path fan; replace with homography; retouch; extend; isolate; `segment` under branch B |
 
 ## Open questions
 

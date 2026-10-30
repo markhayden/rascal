@@ -79,5 +79,6 @@ with green CI on both platforms, and then the tag.
 
 ## M7 Poisson and release
 - [x] 7.1 The solver and `paste --mode poisson`
+- [x] 7.1b A scaled window per filler (`fill_max_side`, decision 10): the request downscaled, the fill scaled back, journaled and in the cell identity
 - [ ] 7.2 The final timing run and the release
 - [ ] Checkpoint M7 → tag `m7` → tag `v0.1.0`

@@ -215,6 +215,27 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         grey.as_deref(),
         filler_prompt,
     )?;
+    // A filler with fill_max_side is sent a downscaled request and its fill is scaled back.
+    let (request, scaled_from) = match entry
+        .fill_max_side
+        .map(|side| request.scaled(side))
+        .transpose()?
+        .flatten()
+    {
+        Some((scaled, from)) => {
+            run.note(format!(
+                "fill request scaled to {}x{} from {}x{} (fillers.{} fill_max_side = {}); the fill is scaled back to the support",
+                scaled.width,
+                scaled.height,
+                from.0,
+                from.1,
+                args.filler,
+                entry.fill_max_side.unwrap_or_default()
+            ))?;
+            (scaled, Some(from))
+        }
+        None => (request, None),
+    };
     let request_identity = request_identity(&request);
     let frame_c = crop_frame.clone().unwrap_or_else(|| frame_f.clone());
     let wanted = StoredFill {
@@ -223,7 +244,7 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         filler: args.filler.clone(),
         revision: entry.revision.clone(),
     };
-    let mut origin = serde_json::json!({ "filler": args.filler, "profile": entry.profile, "request": request_identity });
+    let mut origin = serde_json::json!({ "filler": args.filler, "profile": entry.profile, "request": request_identity, "scaled_from": scaled_from.map(|(w, h)| format!("{w}x{h}")) });
     let fill = match args
         .replay
         .as_deref()
@@ -232,7 +253,10 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         .flatten()
     {
         Some((pixels, stored)) => {
-            if (pixels.width(), pixels.height()) != (request.width, request.height) {
+            // A recorded fill is the request's size, or the support's when the request was
+            // scaled (the stored fill is the scaled-back one).
+            let size = (pixels.width(), pixels.height());
+            if size != (request.width, request.height) && scaled_from != Some(size) {
                 return Err(Error::op(
                     "heal",
                     format!(
@@ -268,6 +292,12 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
             note_call(&run, &outcome.call)?;
             outcome.fill?
         }
+    };
+    let fill = match scaled_from {
+        Some((width, height)) if (fill.width(), fill.height()) != (width, height) => {
+            fill.resize_exact(width, height, image::imageops::FilterType::Lanczos3)
+        }
+        _ => fill,
     };
     let fill_image = Image::new("fill", fill, &frame_c, Role::Fill, None);
     let (_, fill_artifact) = run

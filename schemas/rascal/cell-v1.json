@@ -60,6 +60,15 @@
       "additionalProperties": false,
       "description": "The filler entry as the identity sees it: what changes the work, never its name in the\nconfiguration and never the key.",
       "properties": {
+        "fill_max_side": {
+          "description": "The longest side the request is scaled to before the call, when set.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "max_side": {
           "description": "The filler's largest side, which windows the heal graph.",
           "format": "uint32",
