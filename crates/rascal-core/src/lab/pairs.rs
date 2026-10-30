@@ -214,7 +214,12 @@ pub fn decode(
         }
     }
     let mut groups = Vec::new();
-    for group in &protocol.group {
+    // A page drawn for one group holds that group's pairs only; the others are not reported.
+    for group in protocol
+        .group
+        .iter()
+        .filter(|g| assignment.pair.iter().any(|p| p.group == g.name))
+    {
         let mut result = GroupResult {
             group: group.name.clone(),
             pairs: 0,

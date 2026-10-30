@@ -408,6 +408,10 @@ enum LabCommand {
         /// large panoramas within what a browser opens.
         #[arg(long)]
         whole_max_side: Option<u32>,
+        /// Only this protocol group's pairs, in their own directory (pairs/<a>-vs-<b>-<group>),
+        /// so a large round is judged a group at a time; decode reads each page's picks on its own.
+        #[arg(long)]
+        group: Option<String>,
     },
     /// Decode a picks file the pairs page wrote: wins, losses and the outcome per group.
     Decode {
@@ -769,7 +773,8 @@ fn main() {
                     lab,
                     arms,
                     whole_max_side,
-                } => lab::pairs::pairs(&lab, &arms, whole_max_side).map(|page| {
+                    group,
+                } => lab::pairs::pairs(&lab, &arms, whole_max_side, group.as_deref()).map(|page| {
                     println!("pairs: {}", page.display());
                     exit::OK
                 }),

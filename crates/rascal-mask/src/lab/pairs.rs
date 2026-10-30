@@ -2,7 +2,8 @@
 //! "The lab"). `pairs` takes the two arms' current cells for every protocol image, draws the
 //! page order and the sides from the protocol's seed, writes `pairs/<a>-vs-<b>/assignment.json`
 //! and the static `index.html` beside it with both results embedded and nothing that names an
-//! arm; a lab holds one such directory per comparison; the
+//! arm; a lab holds one such directory per comparison (per group with `--group`, when a round
+//! is too large for one page); the
 //! page shows each pair at its focus (the region both results changed, at full size), whole,
 //! and for an equirectangular image from inside the sphere, with the unhealed source beside
 //! the results, and writes `picks.json`. `decode` checks the picks against the assignment's digest and
@@ -151,7 +152,12 @@ fn split_template() -> Result<(&'static str, &'static str, &'static str)> {
 /// Writes the assignment and the page; returns the page's path. `whole_max_side` scales the
 /// whole images (the whole and look-around views) to that longest side, said on the page;
 /// the focus crops are always at full size.
-pub fn pairs(root: &Path, arms: &str, whole_max_side: Option<u32>) -> Result<PathBuf> {
+pub fn pairs(
+    root: &Path,
+    arms: &str,
+    whole_max_side: Option<u32>,
+    group: Option<&str>,
+) -> Result<PathBuf> {
     let lab = LabDir {
         root: root.to_path_buf(),
     };
@@ -166,8 +172,25 @@ pub fn pairs(root: &Path, arms: &str, whole_max_side: Option<u32>) -> Result<Pat
     if a == b {
         return Err(Error::usage("--arms takes two different arms"));
     }
+    if let Some(name) = group
+        && !protocol.group.iter().any(|g| g.name == name)
+    {
+        return Err(Error::usage(format!(
+            "--group {name}: the protocol has {}",
+            protocol
+                .group
+                .iter()
+                .map(|g| g.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )));
+    }
     let mut candidates = Vec::new();
-    for group in &protocol.group {
+    for group in protocol
+        .group
+        .iter()
+        .filter(|g| group.is_none_or(|name| g.name == name))
+    {
         for image in &group.images {
             let shown = |arm: &str| -> Result<Shown> {
                 let key = format!("{arm}/{image}");
@@ -214,7 +237,10 @@ pub fn pairs(root: &Path, arms: &str, whole_max_side: Option<u32>) -> Result<Pat
             )));
         }
     }
-    let dir = lab.root.join("pairs").join(format!("{a}-vs-{b}"));
+    let dir = lab.root.join("pairs").join(match group {
+        Some(name) => format!("{a}-vs-{b}-{name}"),
+        None => format!("{a}-vs-{b}"),
+    });
     std::fs::create_dir_all(&dir).map_err(|source| Error::Io {
         path: dir.clone(),
         source,
@@ -298,9 +324,12 @@ pub fn pairs(root: &Path, arms: &str, whole_max_side: Option<u32>) -> Result<Pat
         .replace(
             "{{SUMMARY}}",
             &panel::escape(&format!(
-                "{} pairs over {} groups; protocol {}.{}",
+                "{} pairs over {}; protocol {}.{}",
                 assignment.pair.len(),
-                protocol.group.len(),
+                match group {
+                    Some(name) => format!("the {name} group"),
+                    None => format!("{} groups", protocol.group.len()),
+                },
                 digest,
                 whole_max_side
                     .map(|side| format!(

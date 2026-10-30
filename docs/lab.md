@@ -120,7 +120,9 @@ names an arm, a side's cell or the configuration; the command prints the page's 
 full panoramas runs to hundreds of megabytes (the spec asks for embedding and forbids a silent
 resize). `--whole-max-side <px>` scales the whole images to that longest side for the whole and
 look-around views and says so on the page, so a round of many large panoramas opens in a
-browser; the focus crops are never scaled. The page order and each pair's sides are
+browser; the focus crops are never scaled. `--group <name>` writes one protocol group's pairs
+to their own directory (`pairs/<a>-vs-<b>-<name>/`) when a round is too large for one page;
+`lab decode` reads each page's picks on its own and reports that group. The page order and each pair's sides are
 drawn from the protocol's seed (splitmix64; the order by Fisher–Yates, then one bit per pair),
 so the same lab draws the same page. The judge picks `left`, `right`, `same` or `neither` per
 pair and saves `picks.json` (version, the assignment file's digest, one pick per pair id);

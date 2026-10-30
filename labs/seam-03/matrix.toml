@@ -1,0 +1,175 @@
+# The third round's matrix (docs/lab.md): every kept image through the seam recipe under the
+# two masks (fan-v1 and fan-thin-v1) and two fillers, Bria Eraser on fal (hosted; the spend is
+# an estimate per call) and LaMa locally. Run:
+#   rascal lab run labs/seam-03/matrix.toml --config <rascal.toml with [fillers.bria-erase] and [fillers.lama]> \
+#       --out lab/seam-03/ --corpus-root <the corpus files> --no-dash
+version = 1
+name = "seam-03"
+corpus = "corpus.toml"
+protocol = "protocol.toml"
+seed = 20261031
+
+[[image]]
+id = "beach-dark-sunset"
+
+[[image]]
+id = "beach-dawn"
+
+[[image]]
+id = "sky-01-new"
+
+[[image]]
+id = "sky-02-v2"
+
+[[image]]
+id = "sky-03"
+
+[[image]]
+id = "sky-04"
+
+[[image]]
+id = "sky-05"
+
+[[image]]
+id = "sky-06"
+
+[[image]]
+id = "sky-07"
+
+[[image]]
+id = "sky-08"
+
+[[image]]
+id = "sky-09"
+
+[[image]]
+id = "sky-10"
+
+[[image]]
+id = "sky-11"
+
+[[image]]
+id = "sky-12"
+
+[[image]]
+id = "str-01-v2"
+
+[[image]]
+id = "str-02-v2"
+
+[[image]]
+id = "str-03"
+
+[[image]]
+id = "str-04"
+
+[[image]]
+id = "str-06"
+
+[[image]]
+id = "str-07"
+
+[[image]]
+id = "str-08"
+
+[[image]]
+id = "str-09"
+
+[[image]]
+id = "str-10"
+
+[[image]]
+id = "str-11"
+
+[[image]]
+id = "str-12"
+
+[[image]]
+id = "sunburst-sky-winter"
+
+[[image]]
+id = "sunburst-str-library-modern"
+
+[[image]]
+id = "sunburst-str-library-v2"
+
+[[image]]
+id = "sunburst-training-01-home-living-room"
+
+[[image]]
+id = "sunburst-training-02-coastal-headland"
+
+[[image]]
+id = "sunburst-training-03-office-studio"
+
+[[image]]
+id = "sunburst-training-04-desert-basin"
+
+[[image]]
+id = "sunburst-training-05-home-kitchen"
+
+[[image]]
+id = "sunburst-training-06-forest-clearing"
+
+[[image]]
+id = "sunburst-training-07-office-meeting-room"
+
+[[image]]
+id = "sunburst-training-08-mountain-lake"
+
+[[image]]
+id = "sunburst-training-09-home-bedroom"
+
+[[image]]
+id = "sunburst-training-10-city-courtyard"
+
+[[image]]
+id = "sunburst-training-11-home-dining-room-v2"
+
+[[image]]
+id = "sunburst-training-12-prairie-dusk"
+
+[[image]]
+id = "sunburst-training-13-office-lobby"
+
+[[image]]
+id = "sunburst-training-15-home-attic"
+
+[[image]]
+id = "sunburst-training-16-snowy-field"
+
+[[image]]
+id = "sunburst-training-17-office-break-room"
+
+[[image]]
+id = "sunburst-training-18-harbor-promenade"
+
+[[image]]
+id = "sunburst-training-19-home-sunroom"
+
+[[image]]
+id = "sunburst-training-20-volcanic-coast"
+
+[[arm]]
+name = "fan-ramp-bria"
+recipe = "seam"
+filler = "bria-erase"
+spend_usd_per_call = 0.04
+
+[[arm]]
+name = "thin-bria"
+recipe = "seam"
+overrides = { "fan.constants" = "fan-thin-v1" }
+filler = "bria-erase"
+spend_usd_per_call = 0.04
+
+[[arm]]
+name = "fan-ramp-lama"
+recipe = "seam"
+filler = "lama"
+
+[[arm]]
+name = "thin-lama"
+recipe = "seam"
+overrides = { "fan.constants" = "fan-thin-v1" }
+filler = "lama"
