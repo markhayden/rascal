@@ -22,7 +22,7 @@ jobs:
       matrix:
         include:
           - name: macos-arm64
-            runner: macos-14
+            runner: macos-15
           - name: linux-x86_64
             runner: ubuntu-latest
     runs-on: ${{ matrix.runner }}
