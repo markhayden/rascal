@@ -352,7 +352,7 @@ version = "1.0.0"
 params = { tex_low = 0.5, tex_high = 2.0, wide_max = 0.15, gate = true, thin_px = 15.0, ref_width = 1620, row_sigma = 0.012, width_sigma = 0.02 }
 inputs = { frame = "sha256:…", line = "sha256:…" }
 outputs = { band = "sha256:…" }
-constants = "fan-v1"
+constants = "fan-v3"
 ```
 
 Rules:
@@ -483,7 +483,8 @@ The weight tends to 1 at the core's boundary, the 50% contour is at `D = σ · �
 outside the core, and the support is finite. Protected pixels get `blend = 0`.
 
 **`fan`** on a `bounded` frame of width `w`, height `h`, centre column `c = column · w` rounded,
-with `fan-v1`; `thin = thin_px · w / ref_width`:
+with the constants of the step's set (`fan-v3` when it names none, since 2026-10-30; the
+rules below are written for `fan-v1`, and 6b adds the rest); `thin = thin_px · w / ref_width`:
 
 1. The core's reference edge is `c ± thin`. The step windows are the `step_cols` columns ending
    `gap_px` before `c − thin` (left) and starting `gap_px` after `c + thin` (right); the texture
@@ -625,7 +626,7 @@ column = 0.5
 id = "fan"
 op = "fan"
 inputs = { image = "cut.image", line = "line.location" }
-constants = "fan-v1"
+constants = "fan-v3"
 
 [[step]]
 id = "band"

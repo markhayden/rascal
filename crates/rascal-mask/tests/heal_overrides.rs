@@ -95,7 +95,7 @@ fn the_filler_entry_chooses_the_band_and_the_journal_says_so() {
     }
     let plain_lines = journal(&dir.join("run-plain"));
     let thin_lines = journal(&dir.join("run-thin"));
-    assert_eq!(fan_step(&plain_lines)["params"]["constants"], "fan-v1");
+    assert_eq!(fan_step(&plain_lines)["params"]["constants"], "fan-v3");
     assert_eq!(fan_step(&thin_lines)["params"]["constants"], "fan-thin-v1");
     assert_eq!(fan_step(&thin_lines)["params"]["wide_max"], 0.02);
     let notes: Vec<String> = thin_lines
@@ -162,7 +162,7 @@ fn the_filler_entry_chooses_the_band_and_the_journal_says_so() {
             .any(|n| n.starts_with("override from fillers.fake: fan.constants")),
         "{notes:?}"
     );
-    // `rascal run` with the same config applies nothing: the fan runs fan-v1.
+    // `rascal run` with the same config applies nothing: the fan runs the recipe's fan-v3.
     let out = dir.join("run-run");
     let result = rascal(&[
         "run",
@@ -174,7 +174,7 @@ fn the_filler_entry_chooses_the_band_and_the_journal_says_so() {
         out.to_str().unwrap(),
     ]);
     assert_eq!(result.status.code(), Some(0), "{}", text(&result.stderr));
-    assert_eq!(fan_step(&journal(&out))["params"]["constants"], "fan-v1");
+    assert_eq!(fan_step(&journal(&out))["params"]["constants"], "fan-v3");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

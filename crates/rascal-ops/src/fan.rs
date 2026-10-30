@@ -26,12 +26,17 @@ pub struct Fan;
 const NAME: &str = "fan";
 
 /// The embedded constant sets, by name; the first is the default.
+/// The embedded sets. The first is the one a step gets when it names none (the manifest's
+/// rule, SPEC.md "Constant sets"): fan-v3 since 2026-10-30 (owner decision 12).
 const SETS: [(&str, &str); 4] = [
+    ("fan-v3", include_str!("../constants/fan-v3.toml")),
     ("fan-v1", include_str!("../constants/fan-v1.toml")),
     ("fan-thin-v1", include_str!("../constants/fan-thin-v1.toml")),
     ("fan-v2", include_str!("../constants/fan-v2.toml")),
-    ("fan-v3", include_str!("../constants/fan-v3.toml")),
 ];
+
+/// The default set's name, the first of `SETS`.
+pub const DEFAULT_SET: &str = SETS[0].0;
 
 /// A parsed constant set.
 fn set(name: &str) -> Option<&'static toml::Table> {
@@ -167,7 +172,7 @@ const TUNABLES: [(&str, &str); 10] = [
 
 impl Op for Fan {
     fn manifest(&self) -> Manifest {
-        let defaults = set("fan-v1").expect("the default set is embedded");
+        let defaults = set(DEFAULT_SET).expect("the default set is embedded");
         let number = |key: &str| -> serde_json::Value {
             match defaults.get(key) {
                 Some(toml::Value::Float(f)) => serde_json::json!(f),
@@ -276,7 +281,7 @@ impl Op for Fan {
         let constants_name = params
             .get("constants")
             .and_then(|c| c.as_str())
-            .unwrap_or("fan-v1")
+            .unwrap_or(DEFAULT_SET)
             .to_string();
         let table = set(&constants_name)
             .ok_or_else(|| Error::op(NAME, format!("no constant set {constants_name}")))?;
@@ -405,7 +410,7 @@ pub struct Settings {
 }
 
 impl Settings {
-    /// The default set's settings, for tests and the lab.
+    /// The first set's settings, for tests and the lab.
     pub fn fan_v1() -> Settings {
         Settings::embedded("fan-v1")
     }

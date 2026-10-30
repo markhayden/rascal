@@ -28,7 +28,7 @@ strip = 0.07                            # every other key is one of the op's par
 id = "fan"
 op = "fan"
 inputs = { image = "cut.image", line = "line.location" }
-constants = "fan-v1"                    # a constant set the op declares; the first is the default
+constants = "fan-v3"                    # a constant set the op declares; the first is the default
 
 [outputs]                               # the contract a consumer reads, by output name
 mask = "ramp.mask"                      # Mask

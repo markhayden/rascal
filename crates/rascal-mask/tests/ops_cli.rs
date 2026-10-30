@@ -295,7 +295,7 @@ fn fan_on_the_step_sky_canvas_prints_its_summary_and_opens_only_on_the_sky() {
     // The journal records the resolved tunables and the set.
     let lines = journal(&ws);
     let fan = lines.iter().find(|l| l["op"] == "fan").unwrap();
-    assert_eq!(fan["params"]["constants"], "fan-v1");
+    assert_eq!(fan["params"]["constants"], "fan-v3");
     assert_eq!(fan["params"]["wide_max"], 0.15);
     assert_eq!(fan["params"]["gate"], true);
     let _ = std::fs::remove_dir_all(&dir);

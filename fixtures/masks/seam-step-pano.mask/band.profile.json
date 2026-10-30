@@ -413,6 +413,6 @@
     "step_cols": 1,
     "texture_cols": 11
   },
-  "constants": "fan-v1",
-  "identity": "sha256:45cd6ecbb2ae22b0e41698b3c35afc907deae6496005318c96172b1129582079"
+  "constants": "fan-v3",
+  "identity": "sha256:f2b8c358706ce322d10f98a756a91fa27eb63573d66d9a08d0744b1d05bdffcc"
 }

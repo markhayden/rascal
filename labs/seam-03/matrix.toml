@@ -150,9 +150,12 @@ id = "sunburst-training-19-home-sunroom"
 [[image]]
 id = "sunburst-training-20-volcanic-coast"
 
+# The fan-v1 arms name their set: when this ran the seam recipe defaulted to fan-v1; since
+# 2026-10-30 it defaults to fan-v3, so the explicit override keeps the matrix reproducible.
 [[arm]]
 name = "fan-ramp-bria"
 recipe = "seam"
+overrides = { "fan.constants" = "fan-v1" }
 filler = "bria-erase"
 spend_usd_per_call = 0.04
 
@@ -166,6 +169,7 @@ spend_usd_per_call = 0.04
 [[arm]]
 name = "fan-ramp-lama"
 recipe = "seam"
+overrides = { "fan.constants" = "fan-v1" }
 filler = "lama"
 
 [[arm]]
