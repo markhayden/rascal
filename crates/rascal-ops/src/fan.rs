@@ -26,10 +26,11 @@ pub struct Fan;
 const NAME: &str = "fan";
 
 /// The embedded constant sets, by name; the first is the default.
-const SETS: [(&str, &str); 3] = [
+const SETS: [(&str, &str); 4] = [
     ("fan-v1", include_str!("../constants/fan-v1.toml")),
     ("fan-thin-v1", include_str!("../constants/fan-thin-v1.toml")),
     ("fan-v2", include_str!("../constants/fan-v2.toml")),
+    ("fan-v3", include_str!("../constants/fan-v3.toml")),
 ];
 
 /// A parsed constant set.
@@ -53,6 +54,63 @@ fn set(name: &str) -> Option<&'static toml::Table> {
 /// The names a step may select.
 pub fn set_names() -> Vec<&'static str> {
     SETS.iter().map(|(n, _)| *n).collect()
+}
+
+/// `object_straddle`: `"thin"` (the row stays at the minimum width) or `"whole"` (the row
+/// is left to the rulers, so the object is removed whole).
+fn straddle_whole(table: &toml::Table) -> Result<bool> {
+    match table.get("object_straddle").and_then(|v| v.as_str()) {
+        Some("thin") => Ok(false),
+        Some("whole") => Ok(true),
+        other => Err(Error::op(
+            NAME,
+            format!("constant object_straddle must be \"thin\" or \"whole\", got {other:?}"),
+        )),
+    }
+}
+
+/// The vertical run of each strong step: `up[y][x]` counts the chain of strong steps ending
+/// at row `y` (each within `wander` columns of the previous row's), `down` the chain starting
+/// there; the run is `up + down − 1` (at least 1 on a strong step, 0 elsewhere).
+fn vertical_runs(strong: &[bool], ws: usize, hs: usize, wander: u32) -> Vec<u32> {
+    let wander = wander as usize;
+    let chain = |rows: &mut dyn Iterator<Item = usize>| -> Vec<u32> {
+        let mut out = vec![0u32; ws * hs];
+        let mut prev: Option<usize> = None;
+        for y in rows {
+            for x in 0..ws {
+                if !strong[y * ws + x] {
+                    continue;
+                }
+                let best = prev.map_or(0, |p| {
+                    let lo = x.saturating_sub(wander);
+                    let hi = (x + wander).min(ws - 1);
+                    (lo..=hi).map(|xx| out[p * ws + xx]).max().unwrap_or(0)
+                });
+                out[y * ws + x] = best + 1;
+            }
+            prev = Some(y);
+        }
+        out
+    };
+    let up = chain(&mut (0..hs));
+    let down = chain(&mut (0..hs).rev());
+    up.iter()
+        .zip(&down)
+        .map(|(u, d)| if *u == 0 { 0 } else { u + d - 1 })
+        .collect()
+}
+
+/// A whole number from a set.
+fn whole_number(table: &toml::Table, key: &str) -> Result<u32> {
+    match table.get(key) {
+        Some(toml::Value::Integer(i)) if *i >= 0 => u32::try_from(*i)
+            .map_err(|_| Error::op(NAME, format!("constant {key} is out of range: {i}"))),
+        other => Err(Error::op(
+            NAME,
+            format!("constant {key} must be a whole number, got {other:?}"),
+        )),
+    }
 }
 
 /// A number from a set.
@@ -144,8 +202,8 @@ impl Op for Fan {
         };
         Manifest::new(
             NAME,
-            "1.1.0",
-            "The band profile along a column line: a half-width per row, wide where the surface beside the line is smooth and the two sides differ in tone, thin where it is detailed, and stopping short of a solid object the opening would cross (the object cap, fan-v2).",
+            "1.2.0",
+            "The band profile along a column line: a half-width per row, wide where the surface beside the line is smooth and the two sides differ in tone, thin where it is detailed, and stopping short of a solid object the opening would cross (the object cap, fan-v2; fan-v3 removes a straddling object whole and tapers the cap).",
             "On a cut canvas whose centre column is the wrap edge of a panorama, or any image with a vertical line to heal: the step before profile and ramp.",
             "When the line is a path or the region is an area (use rasterize); on an uncut equirectangular image (cut it first).",
             "A BandProfile: half[y], the centre column, thin and the resolved windows. Not applicable when a sampling window clips to fewer than two columns (the line is too near an edge for the frame width).",
@@ -252,6 +310,10 @@ impl Op for Fan {
             object_ratio: constant(table, "object_ratio")?,
             object_margin_px: number("object_margin_px")?,
             object_sigma: constant(table, "object_sigma")?,
+            object_taper: constant(table, "object_taper")?,
+            object_run: constant(table, "object_run")?,
+            object_wander_px: whole_number(table, "object_wander_px")?,
+            object_straddle_whole: straddle_whole(table)?,
         };
         if settings.tex_high <= settings.tex_low {
             return Ok(Output::invalid_args(format!(
@@ -328,6 +390,18 @@ pub struct Settings {
     pub object_margin_px: f64,
     /// The cap's reach along the rows, as a fraction of the height (a running minimum).
     pub object_sigma: f64,
+    /// The taper beyond the cap's reach, as a fraction of the height: the band eases from
+    /// the cap back to its width over about three times this; 0 steps.
+    pub object_taper: f64,
+    /// The vertical run an edge needs to count, as a fraction of the height: a strong step
+    /// chained through at least this many rows is an object's edge, a shorter one is
+    /// texture (clouds, foliage). 0 takes every strong step.
+    pub object_run: f64,
+    /// How many columns the chain may wander per row.
+    pub object_wander_px: u32,
+    /// Whether an object the line runs through is left to the rulers (removed whole) rather
+    /// than capped at `thin`.
+    pub object_straddle_whole: bool,
 }
 
 impl Settings {
@@ -343,6 +417,10 @@ impl Settings {
 
     pub fn fan_v2() -> Settings {
         Settings::embedded("fan-v2")
+    }
+
+    pub fn fan_v3() -> Settings {
+        Settings::embedded("fan-v3")
     }
 
     fn embedded(name: &str) -> Settings {
@@ -367,6 +445,11 @@ impl Settings {
             object_ratio: c("object_ratio"),
             object_margin_px: c("object_margin_px"),
             object_sigma: c("object_sigma"),
+            object_taper: c("object_taper"),
+            object_run: c("object_run"),
+            object_wander_px: whole_number(table, "object_wander_px")
+                .expect("the embedded set is complete"),
+            object_straddle_whole: straddle_whole(table).expect("the embedded set is complete"),
         }
     }
 }
@@ -530,11 +613,15 @@ pub fn fan_profile(
 
 /// The object cap, per row: inside the row's opening `[c − half, c + half]` and beyond the
 /// seam's own gap, a column whose horizontal luminance step is at least `object_edge` and
-/// `object_ratio` times the row's median step is a solid object's edge. An edge on one side
-/// caps the row at its distance less `object_margin_px`; edges on both sides mean the object
-/// straddles the line and the row stays at `thin`. The cap then reaches `object_sigma · h`
-/// rows up and down as a running minimum, so the band clears the object's ends too. Infinity
-/// where nothing stands in the way; every row when `object_edge` is 0.
+/// `object_ratio` times the row's median step, and whose vertical run of such steps is at
+/// least `object_run · h` rows, is a solid object's edge. An edge on one side
+/// caps the row at its distance less `object_margin_px`; edges on both sides, or one too
+/// close for the band to stop short of it, mean the object is on the line: the row stays at
+/// `thin`, or with `object_straddle = "whole"` the row and those within reach of it are
+/// left to the rulers so the object is removed whole. The cap reaches `object_sigma · h`
+/// rows up and down as a running minimum, so the band clears the object's ends too, and
+/// eases back to the band's width over `object_taper · h` beyond (0 steps). Infinity where
+/// nothing stands in the way; every row when `object_edge` is 0.
 #[allow(clippy::too_many_arguments)]
 fn object_cap(
     lum: &[f32],
@@ -554,25 +641,41 @@ fn object_cap(
     let margin = s.object_margin_px * scale;
     let exclude = f64::from(gap.max(2));
     let c = f64::from(column_px);
-    let mut steps: Vec<f64> = Vec::with_capacity(w as usize);
-    for y in 0..h {
-        let row = &lum[(y * w) as usize..((y + 1) * w) as usize];
+    let (hs, ws) = (h as usize, w as usize - 1);
+    // The strong steps: between columns x and x + 1 (at x + 0.5), at least `object_edge`
+    // and `object_ratio` times the row's median step.
+    let mut strong = vec![false; hs * ws];
+    let mut steps: Vec<f64> = Vec::with_capacity(ws);
+    for y in 0..hs {
+        let row = &lum[y * w as usize..(y + 1) * w as usize];
         steps.clear();
         steps.extend(row.windows(2).map(|p| f64::from((p[1] - p[0]).abs())));
         let mut sorted = steps.clone();
         sorted.sort_by(|a, b| a.total_cmp(b));
         let median = sorted[sorted.len() / 2];
         let threshold = s.object_edge.max(s.object_ratio * median);
-        let reach = half[y as usize];
+        for (x, step) in steps.iter().enumerate() {
+            strong[y * ws + x] = *step >= threshold;
+        }
+    }
+    // The vertical run through each strong step: how many consecutive rows above and below
+    // hold a strong step within `object_wander_px` columns, chained. A solid object's edge
+    // runs for many rows; cloud and foliage texture does not.
+    let min_run = (s.object_run * f64::from(h)).round() as u32;
+    let runs = vertical_runs(&strong, ws, hs, s.object_wander_px);
+    // Per row, the nearest qualifying edge on each side, and whether the object is on the
+    // line: edges on both sides, or one so close that the band could not stop short of it.
+    let mut on_line = vec![false; hs];
+    for y in 0..hs {
+        let reach = half[y];
         let lo = ((c - reach).floor().max(0.0)) as usize;
         let hi = ((c + reach).ceil().min(f64::from(w) - 2.0)) as usize;
         let mut left: Option<f64> = None;
         let mut right: Option<f64> = None;
-        for (x, step) in steps.iter().enumerate().take(hi + 1).skip(lo) {
-            if *step < threshold {
+        for x in lo..=hi {
+            if !strong[y * ws + x] || runs[y * ws + x] < min_run {
                 continue;
             }
-            // The step between columns x and x + 1 sits at x + 0.5.
             let d = (x as f64 + 0.5) - c;
             if d.abs() <= exclude {
                 continue;
@@ -583,23 +686,67 @@ fn object_cap(
                 right = Some(right.map_or(d, |v: f64| v.min(d)));
             }
         }
-        cap[y as usize] = match (left, right) {
-            (Some(_), Some(_)) => thin,
-            (Some(d), None) | (None, Some(d)) => (d - margin).max(thin),
-            (None, None) => f64::INFINITY,
+        let nearest = match (left, right) {
+            (Some(l), Some(r)) => Some(l.min(r)),
+            (Some(d), None) | (None, Some(d)) => Some(d),
+            (None, None) => None,
+        };
+        on_line[y] = matches!((left, right), (Some(_), Some(_)))
+            || nearest.is_some_and(|d| d - margin <= thin);
+        cap[y] = match nearest {
+            Some(_) if on_line[y] => thin,
+            Some(d) => d - margin,
+            None => f64::INFINITY,
         };
     }
-    // A running minimum over ±reach rows.
+    // A running minimum over ±reach rows, so the band clears the object's ends.
     let reach = (s.object_sigma * f64::from(h)).round() as usize;
-    if reach == 0 {
-        return cap;
-    }
     let n = cap.len();
     let mut spread = cap.clone();
-    for (y, out) in spread.iter_mut().enumerate() {
-        let lo = y.saturating_sub(reach);
-        let hi = (y + reach).min(n - 1);
-        *out = cap[lo..=hi].iter().cloned().fold(f64::INFINITY, f64::min);
+    if reach > 0 {
+        for (y, out) in spread.iter_mut().enumerate() {
+            let lo = y.saturating_sub(reach);
+            let hi = (y + reach).min(n - 1);
+            *out = cap[lo..=hi].iter().cloned().fold(f64::INFINITY, f64::min);
+        }
     }
+    // An object on the line is removed whole (`object_straddle = "whole"`): its rows, and
+    // the rows within reach of them where only one of its ends was found, are left to the
+    // rulers rather than striped at thin.
+    if s.object_straddle_whole {
+        for (y, out) in spread.iter_mut().enumerate() {
+            let lo = y.saturating_sub(reach);
+            let hi = (y + reach).min(n - 1);
+            if on_line[lo..=hi].iter().any(|b| *b) {
+                *out = f64::INFINITY;
+            }
+        }
+    }
+    // Then the taper: the cap smoothed against the uncapped width eases the band in and
+    // out over the rows beyond the reach instead of stepping; a capped row keeps its cap,
+    // so the band never comes back over the object.
+    let taper = s.object_taper * f64::from(h);
+    if taper <= 0.0 || spread.iter().all(|c| c.is_infinite()) {
+        return spread;
+    }
+    let filled: Vec<f64> = spread
+        .iter()
+        .zip(half)
+        .map(|(c, h)| if c.is_finite() { *c } else { *h })
+        .collect();
+    let eased = smooth_rows(&filled, taper);
     spread
+        .iter()
+        .zip(eased)
+        .zip(half)
+        .map(|((c, e), h)| {
+            if c.is_finite() {
+                c.min(e)
+            } else if e < *h - 1e-9 {
+                e
+            } else {
+                f64::INFINITY
+            }
+        })
+        .collect()
 }
