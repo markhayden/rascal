@@ -41,6 +41,48 @@ pub struct RunArgs {
     /// for them: a filler entry's, set by `heal`; `run` and the lab pass none.
     pub overrides: BTreeMap<String, Override>,
     pub overrides_from: Option<String>,
+    /// `--set <step>.<param>=<value>`, applied after the filler's overrides: the command line
+    /// wins. Parsed here, so a bad one is a usage error naming it.
+    pub sets: Vec<String>,
+}
+
+/// One `--set`: `<step>.<param>=<value>`, the value read as TOML (`0.3`, `1`, `true`,
+/// `"fan-v2"`, `[1, 2]`) or, when it is not TOML, as the bare string (`fan-v2`).
+pub fn parse_set(spec: &str) -> Result<(String, Override)> {
+    let Some((key, value)) = spec.split_once('=') else {
+        return Err(Error::usage(format!(
+            "--set takes <step>.<param>=<value>, got {spec:?}"
+        )));
+    };
+    let key = key.trim();
+    if !key.contains('.') || key.starts_with('.') || key.ends_with('.') {
+        return Err(Error::usage(format!(
+            "--set {spec:?}: the key is <step>.<param> (or <step>.constants)"
+        )));
+    }
+    let value = value.trim();
+    let parsed = toml::from_str::<toml::Table>(&format!("v = {value}"))
+        .ok()
+        .and_then(|mut t| t.remove("v"))
+        .and_then(override_of)
+        .unwrap_or_else(|| Override::String(value.to_string()));
+    Ok((key.to_string(), parsed))
+}
+
+fn override_of(value: toml::Value) -> Option<Override> {
+    Some(match value {
+        toml::Value::Boolean(b) => Override::Bool(b),
+        toml::Value::Integer(i) => Override::Integer(i),
+        toml::Value::Float(f) => Override::Float(f),
+        toml::Value::String(s) => Override::String(s),
+        toml::Value::Array(items) => Override::List(
+            items
+                .into_iter()
+                .map(override_of)
+                .collect::<Option<Vec<_>>>()?,
+        ),
+        toml::Value::Table(_) | toml::Value::Datetime(_) => return None,
+    })
 }
 
 /// A bound and executed recipe, with the registry it ran in (the shipped ops plus the
@@ -166,6 +208,15 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
         run.note(format!(
             "override from fillers.{from}: {key} = {}",
             toml::Value::from(value)
+        ))?;
+    }
+    for spec in &args.sets {
+        let (key, value) = parse_set(spec)?;
+        apply_override(&mut recipe, &registry, &key, &value)
+            .map_err(|m| Error::usage(format!("--set {spec:?}: {m}")))?;
+        run.note(format!(
+            "override from --set: {key} = {}",
+            toml::Value::from(&value)
         ))?;
     }
     recipe.validate(&registry).map_err(|e| {

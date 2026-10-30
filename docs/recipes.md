@@ -68,6 +68,7 @@ parameter must be written as an integer.
 ```
 rascal run <recipe> <image> --out run/ [--bbox x0,y0,x1,y1 | --location l.json]
                                        [--stroke s.json] [--protect <mask dir>] [--mask <mask dir>]
+                                       [--prompt "chair"] [--set segment.threshold=0.4 --set grow.px=8]
                                        [--projection flat|equirectangular] [--config rascal.toml] [--strict]
                                        [--replay <run or workspace>]
 ```
@@ -85,6 +86,14 @@ left out leaves the parameter to the op's default. Text binds string parameters 
 port. A flag without its declared input, or a declared input without its flag, is a usage
 error, except an input the recipe marks `optional`; `heal` passes `--prompt` to the filler
 only when the recipe declares no `inputs.prompt`, since a finder's prompt is not a filler's.
+
+`--set <step>.<param>=<value>` overrides one step parameter, or a step's constant set
+(`fan.constants=fan-v2`), for this run without a recipe copy: the value is read as TOML
+(`0.4`, `8`, `true`, `[1, 2]`) or as a bare string, the override is applied before validation
+(so a step, parameter or set the recipe lacks is refused naming the `--set`), journaled as a
+note, and the step's journaled parameters are the resolved ones. Repeat it for several. On
+`heal` it wins over the filler entry's `overrides` (`docs/fillers.md`); the lab's matrix has its
+own `overrides` and takes no `--set`.
 
 A step that returns `not_applicable` publishes nothing; a later step that binds its output does
 not run and the run stops naming the requirement; `rascal run` exits 1 under `--strict` and 0

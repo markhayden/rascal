@@ -124,3 +124,24 @@ def test_the_chair_is_found_with_parity() -> None:
     # The chair stands roughly in the middle third of the fixture.
     assert 0.2 < polygon[0][0] < 0.4 and 0.4 < polygon[1][0] < 0.65
     assert_parity("segment", "chair", result, tolerance=0.005)
+
+
+@pytest.mark.segmenter
+def test_several_instances_decode_one_box_per_call() -> None:
+    for name in (segment.GRAPH, segment.TOKENIZER, segment.ENCODER, segment.DECODER):
+        requires_artifact(name)
+    from rascal_tools import harness as harness_module
+
+    pixels = np.asarray(Image.open(FIXTURE).convert("RGB"))
+    harness = harness_module.parse({"_harness": harness_dict(pixels, "raw:480x320:flat")})
+    # A threshold low enough to keep the whole-frame proposal beside the chair: two boxes,
+    # two planes, each decoded in its own call (the graph takes one box at a time).
+    result = segment.run(
+        {"prompt": "a wooden chair", "max_instances": 4, "threshold": 0.03}, harness
+    )
+    assert result.isError is False, result.content[0]
+    envelope = result.structuredContent
+    assert envelope["status"] == "ok", envelope
+    assert len(envelope["regions"]) >= 2
+    assert len(envelope["images"]) == len(envelope["regions"])
+    assert sum(1 for b in result.content if b.type == "image") == len(envelope["regions"])

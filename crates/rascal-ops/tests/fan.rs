@@ -194,7 +194,10 @@ fn the_op_emits_a_band_profile_and_fan_thin_fixes_every_row_at_thin() {
         .iter()
         .map(|m| m.name.as_str())
         .collect();
-    assert_eq!(names, ["thin_px", "half_max_px", "rows_widened"]);
+    assert_eq!(
+        names,
+        ["thin_px", "half_max_px", "rows_widened", "rows_capped"]
+    );
     // fan-thin-v1: the same canvas, every row at thin.
     let mut params = Params::new();
     params.insert(
@@ -285,4 +288,94 @@ fn a_clipped_window_is_not_applicable_and_the_refusals_name_their_reason() {
     let out = run(&table, &inputs, Params::new());
     assert_eq!(out.envelope.status, Status::InvalidArgs);
     assert!(out.envelope.reason.as_deref().unwrap().contains("wraps"));
+}
+
+/// A smooth canvas with a clear step across the centre (the band would open wide on every
+/// row) and a dark disc of radius `r` centred at (`cx`, `cy`): a solid object.
+fn canvas_with_disc(w: u32, h: u32, cx: f32, cy: f32, r: f32) -> RgbImage {
+    RgbImage::from_fn(w, h, |x, y| {
+        let base = 140.0 + if x < w / 2 { 12.0 } else { 0.0 };
+        let dx = x as f32 + 0.5 - cx;
+        let dy = y as f32 + 0.5 - cy;
+        let v = if dx * dx + dy * dy <= r * r {
+            40.0
+        } else {
+            base
+        };
+        Rgb([v as u8, v as u8, v as u8])
+    })
+}
+
+#[test]
+fn the_object_cap_stops_the_band_short_of_an_object_and_keeps_a_straddling_one_thin() {
+    // At the reference width the windows are the set's own: thin 15, a 160-column texture
+    // window, so a 20-pixel disc raises the texture ruler a little and closes nothing.
+    let (w, h) = (1620, 240);
+    let c = 810.0;
+    // One disc beside the line (its near edge 20 px right of it), one straddling it.
+    let image = {
+        let mut img = canvas_with_disc(w, h, c + 30.0, 60.0, 10.0);
+        let straddling = canvas_with_disc(w, h, c, 180.0, 10.0);
+        for (x, y, p) in straddling.enumerate_pixels() {
+            if p[0] == 40 {
+                img.put_pixel(x, y, *p);
+            }
+        }
+        img
+    };
+    let v1 = fan_profile(&image, 0.5, &Settings::fan_v1()).unwrap();
+    let v2 = fan_profile(&image, 0.5, &Settings::fan_v2()).unwrap();
+    let wide = Settings::fan_v1().wide_max * f64::from(w);
+    let thin = v2.thin;
+    // fan-v1 ignores the objects: every row uncapped, and the band through both discs well
+    // over the cap (the disc's own edges raise the texture ruler a little, no more).
+    assert!(v1.cap.iter().all(|c| c.is_infinite()));
+    assert!(
+        v1.half[60] > 20.0 && v1.half[180] > 20.0,
+        "{} {}",
+        v1.half[60],
+        v1.half[180]
+    );
+    assert!(v1.half[20] > wide - 1.0, "{} vs {wide}", v1.half[20]);
+    // fan-v2, rows through the disc beside the line: the band stops short of its near edge
+    // (20 px less the margin, 3 px at ref_width).
+    let margin = Settings::fan_v2().object_margin_px * f64::from(w) / Settings::fan_v2().ref_width;
+    for y in 52..68 {
+        // The disc's near edge on this row: 30 less its half-chord.
+        let dy = y as f64 + 0.5 - 60.0;
+        let edge = 30.0 - (100.0 - dy * dy).max(0.0).sqrt();
+        assert!(v2.cap[y].is_finite(), "row {y} is capped");
+        assert!(
+            v2.half[y] <= edge - margin + 0.75 && v2.half[y] >= thin,
+            "row {y}: half {} against the edge at {edge:.1} px",
+            v2.half[y]
+        );
+    }
+    // Rows through the straddling disc: edges on both sides, so thin.
+    for y in 172..188 {
+        assert!(
+            (v2.half[y] - thin).abs() < 1e-9,
+            "row {y}: half {} is not thin {thin}",
+            v2.half[y]
+        );
+    }
+    // Rows well away from both discs are as wide as fan-v1's.
+    for y in [20usize, 120, 230] {
+        assert!(v2.cap[y].is_infinite(), "row {y} is free");
+        assert!(
+            (v2.half[y] - v1.half[y]).abs() < 1e-9,
+            "row {y}: {} vs {}",
+            v2.half[y],
+            v1.half[y]
+        );
+    }
+    // The cap reaches a little beyond the disc's rows (the running minimum), never further
+    // than object_sigma of the height.
+    let reach = (Settings::fan_v2().object_sigma * f64::from(h)).round() as usize;
+    assert!(v2.cap[70 + reach - 1].is_finite() && v2.cap[70 + reach + 2].is_infinite());
+    // The cap off (object_edge 0) reproduces fan-v1 exactly.
+    let mut off = Settings::fan_v2();
+    off.object_edge = 0.0;
+    let same = fan_profile(&image, 0.5, &off).unwrap();
+    assert_eq!(same.half, v1.half);
 }

@@ -40,7 +40,7 @@ onnxruntime 1.31.1.
 |---|---|---|
 | `owlv2-base-patch16.onnx` | `pixel_values` [1, 3, 960, 960] float32; `input_ids`, `attention_mask` [Q, 16] int64, Q dynamic | `logits` [1, 3600, Q]; `pred_boxes` [1, 3600, 4] as centre x, centre y, width, height, fractions of the padded square; `objectness` [1, 3600] |
 | `sam2.1-hiera-tiny.encoder.onnx` | `pixel_values` [1, 3, 1024, 1024] float32 | `feat0` [1, 256, 256, 256], `feat1` [1, 256, 128, 128], `feat2` [1, 256, 64, 64] |
-| `sam2.1-hiera-tiny.decoder.onnx` | the three features; `boxes` [1, B, 4] float32 as x0, y0, x1, y1 in 1024-pixel coordinates, B dynamic | `masks` [1, B, 256, 256] logits (inside where > 0); `iou` [1, B], the decoder's own estimate |
+| `sam2.1-hiera-tiny.decoder.onnx` | the three features; `boxes` [1, 1, 4] float32 as x0, y0, x1, y1 in 1024-pixel coordinates (one box per call: the export fixed the box axis at 1 despite the dynamic shape it was given, so the pack decodes each kept box in its own call and reuses the features) | `masks` [1, 1, 256, 256] logits (inside where > 0); `iou` [1, 1], the decoder's own estimate |
 
 Export parity on the fixture (ONNX against PyTorch, same preprocessed tensors): OWLv2 logits
 within 5.1e-3 and boxes within 1.7e-4; SAM 2.1 features within 1.3e-5 and the thresholded
