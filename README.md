@@ -93,7 +93,7 @@ exchange documents without translation; rascal is fully standalone and depends o
 
 ## Status
 
-Pre-release. M0 to M4 are merged (the scaffold, the core, the seam, MCP, the refinements); M5 (the Python pack and its bundle), M6 (the lab) and M7's Poisson paste are on branches awaiting the owner's checkpoint review. The design is in [SPEC.md](SPEC.md), the build order
+Pre-release. M0 to M6 are merged (the scaffold, the core, the seam, MCP, the refinements, the Python pack with its segmenter and bundle, the lab) and M7's Poisson paste with them; the lab's three rounds met success criterion 6 (`docs/results/seam-03.md`). Left: publishing the segmenter's model files and the release (task 7.2). The design is in [SPEC.md](SPEC.md), the build order
 in [PLAN.md](PLAN.md), the decisions in [docs/adr/](docs/adr/README.md), and the current state
 of each part in [docs/architecture.md](docs/architecture.md#status).
 
