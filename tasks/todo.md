@@ -18,7 +18,7 @@ with green CI on both platforms, and then the tag.
 - [x] 0.5 Owner readiness (rows 1 and 2 made; 3 to 7 pending their tasks)
 - [x] M0 review and test review, findings fixed or recorded (docs/reviews/m0-checkpoint.md)
 - [x] `just check` and `just ci-local` green on the final branch; hooks tested; schema harness green
-- [ ] Checkpoint M0: owner reads the ADRs → merge to `main` → push → CI green on both platforms → tag `m0`
+- [x] Checkpoint M0: owner reads the ADRs → merge to `main` → push → CI green on both platforms → tag `m0` (tagged; the line was never ticked)
 
 ## M1 Core
 - [x] 1.1 Walking slice → tag `m1.1`
@@ -68,7 +68,7 @@ with green CI on both platforms, and then the tag.
 - [x] 5.1 The pack skeleton, `echo_region`, `fetch` and the harness
 - [x] 5.2 `segment` under branch A (ADR 0018): OWLv2 + SAM 2.1 on onnxruntime, `remove-prompt`, the models in the bundle
 - [x] 5.3 The bundle and offline setup (the model artifacts' bytes join the bundle with 5.2; a bundle URL for `setup` comes with the release, 7.2) → tag `m5.1`
-- [ ] Checkpoint M5 → tag `m5`
+- [ ] Checkpoint M5 → tag `m5` once the model files are published as the `models-2026-10` release (the owner runs the release command; everything else of M5 is merged)
 
 ## M6 Lab
 - [x] 6.1 Corpus, protocol, matrix and `fan-thin-v1` (built on the example corpus over the fixtures; owner decision 6 names the private corpus for 6.4)
@@ -82,4 +82,4 @@ with green CI on both platforms, and then the tag.
 - [x] 7.1b A scaled window per filler (`fill_max_side`, decision 10): the request downscaled, the fill scaled back, journaled and in the cell identity; `lama-scale-01` judged it: sky 20 of 21 for the scaled window, structured 12 to 14 (`docs/results/lama-scale-01.md`)
 - [ ] **The band swallows solid objects on a smooth surface** (owner, 2026-10-29, after the lama-scale-01 round): where a ceiling light, a track spot or a fitting sits on an otherwise smooth ceiling, the fan widens for the smooth surface, the object falls inside the band, and the filler removes it. Two cells to keep for the work: `lama-scale-01`, `sunburst-training-17-office-break-room` (cells `56af200d…` scaled and `683d99ad…` full: a ceiling light on a smooth ceiling, gone in both) and `str-10` (cells `262d246e…` scaled and `2d0edb13…` full: a track light removed, the rest of the row kept). The fix belongs to the mask builder, after the initial development: the fan (or a step before it) should recognise a solid object inside the smooth region and go around it, by pattern and by how close detail lies to the seam, so the band protects what it crosses rather than erasing it. A `fan-v2` with its own lab round; the lab pages and run directories are on the owner's machine under `lab/lama-scale-01/`.
 - [~] 7.2 The final timing run and the release: timing recorded (`docs/results/suite-timing.md`, 2 min 41 s), the criteria table in `docs/architecture.md`, `setup` from an archive or URL with its digest, the `bundles` workflow, the README install section; left: the owner's word to push `v0.1.0` (and the models release)
-- [ ] Checkpoint M7 → tag `m7` → tag `v0.1.0`
+- [ ] Checkpoint M7 → tag `m7` → tag `v0.1.0` when the owner calls the work ready (decision 11); the machinery is complete
