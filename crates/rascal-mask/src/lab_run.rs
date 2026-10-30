@@ -190,6 +190,7 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
                 profile: entry.profile.clone(),
                 paste: entry.paste.clone(),
                 max_side: entry.max_side,
+                fill_max_side: entry.fill_max_side,
                 send_mask: entry.send_mask,
                 revision,
             },

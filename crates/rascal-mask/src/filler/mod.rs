@@ -109,6 +109,60 @@ impl FillRequest {
         })
     }
 
+    /// The request downscaled so its longest side is `max_side`, with the size it had, or
+    /// `None` when it already fits. The image is resampled with Lanczos, the mask with a
+    /// triangle filter and, when it was binary, thresholded back to binary; the fill the
+    /// filler returns at the scaled size is scaled to the support by `heal`.
+    pub fn scaled(&self, max_side: u32) -> Result<Option<(FillRequest, (u32, u32))>> {
+        let longest = self.width.max(self.height);
+        if max_side == 0 || longest <= max_side {
+            return Ok(None);
+        }
+        let scale = f64::from(max_side) / f64::from(longest);
+        let side = |v: u32| ((f64::from(v) * scale).round() as u32).max(1);
+        let (width, height) = (side(self.width), side(self.height));
+        let decode = |bytes: &[u8]| {
+            image::load_from_memory(bytes).map_err(|source| Error::Image {
+                path: "<request>".into(),
+                source,
+            })
+        };
+        let image = decode(&self.image_png)?.resize_exact(
+            width,
+            height,
+            image::imageops::FilterType::Lanczos3,
+        );
+        let mask_png = match &self.mask_png {
+            None => None,
+            Some(bytes) => {
+                let mask = decode(bytes)?.to_luma8();
+                let binary = mask.pixels().all(|p| p.0[0] == 0 || p.0[0] == 255);
+                let mut scaled = image::imageops::resize(
+                    &mask,
+                    width,
+                    height,
+                    image::imageops::FilterType::Triangle,
+                );
+                if binary {
+                    for p in scaled.pixels_mut() {
+                        p.0[0] = if p.0[0] >= 128 { 255 } else { 0 };
+                    }
+                }
+                Some(png_bytes(&DynamicImage::ImageLuma8(scaled))?)
+            }
+        };
+        Ok(Some((
+            FillRequest {
+                image_png: png_bytes(&image)?,
+                mask_png,
+                width,
+                height,
+                prompt: self.prompt.clone(),
+            },
+            (self.width, self.height),
+        )))
+    }
+
     /// The request's size in bytes, for the journal.
     pub fn bytes(&self) -> u64 {
         (self.image_png.len() + self.mask_png.as_ref().map_or(0, Vec::len)) as u64

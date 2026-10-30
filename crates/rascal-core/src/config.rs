@@ -120,6 +120,11 @@ pub struct FillerConfig {
     /// The filler's largest side; the heal graph windows to it. Unset: no window.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_side: Option<u32>,
+    /// The longest side of the request this filler is sent: a larger support goes downscaled
+    /// to fit and the fill comes back scaled to the support (a scaled window, for a model
+    /// trained small, such as LaMa). Unset: the request is the support's size.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_max_side: Option<u32>,
     /// Free text the lab hashes into a cell's identity; required for lab use.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision: Option<String>,

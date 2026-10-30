@@ -12,6 +12,7 @@ paste = "feather"                                # how its result is composited:
 timeout_s = 120
 revision = "fill.py 2026-10-28"                  # free text the lab hashes into cell identity; required for lab use
 overrides = { "fan.constants" = "fan-thin-v1" }  # recipe overrides heal applies when this filler paints: the band it can carry (docs/fillers.md)
+fill_max_side = 1024                             # a scaled window: the request is sent at this longest side and the fill scaled back
 
 # A hosted filler: a multipart POST (image, mask when the profile has one, prompt when given); a PNG back.
 [fillers.hosted]

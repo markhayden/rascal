@@ -36,6 +36,15 @@
             "null"
           ]
         },
+        "fill_max_side": {
+          "description": "The longest side of the request this filler is sent: a larger support goes downscaled\nto fit and the fill comes back scaled to the support (a scaled window, for a model\ntrained small, such as LaMa). Unset: the request is the support's size.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "key_env": {
           "description": "The environment variable holding the bearer key for `url`.",
           "type": [

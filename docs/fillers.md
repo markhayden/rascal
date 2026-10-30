@@ -3,8 +3,9 @@
 A filler is the plugin that paints: a command or an HTTP endpoint named in `rascal.toml`. rascal
 bundles no weights. It sends the filler an image, and for a mask-input profile a mask, of
 exactly the dimensions it chose, and takes back a PNG of those dimensions; anything else, a
-non-zero exit, a timeout or a non-PNG body, is an operational error. There is no resize of a
-filler's answer and no scaled request in v1 (scaled windows are a later milestone).
+non-zero exit, a timeout or a non-PNG body, is an operational error. The one resize is the
+scaled window a filler asks for with `fill_max_side` (below): the request goes down to fit and
+the fill comes back up to the support, both said in the journal.
 
 ## Declaring one
 
@@ -16,6 +17,7 @@ paste = "feather"                                               # feather (defau
 timeout_s = 120                                                 # default 120
 revision = "fill.py 2026-10-28"                                 # the lab hashes it into a cell's identity
 overrides = { "fan.constants" = "fan-thin-v1", "fan.wide_max" = 0.05 }   # the band this filler can carry (heal only)
+fill_max_side = 1024                                            # send the request scaled to this longest side; the fill is scaled back
 
 [fillers.hosted]
 url = "https://example.invalid/inpaint"   # multipart POST: image, mask (when the profile has one), prompt (when given)
@@ -41,6 +43,16 @@ the step's journaled parameters are the resolved ones, so a run says what it ran
 naming a step, parameter or set the recipe lacks is refused naming the entry before anything
 runs. `rascal run` applies none (no filler is involved), and the lab ignores them: an arm says
 everything it runs, so the rounds that find the right band stay explicit.
+
+**`fill_max_side`** is the scaled window (owner decision 10): a model trained on small images,
+such as LaMa at a few hundred pixels, smears a band it is handed at ten times that. With
+`fill_max_side` set, a request whose longest side exceeds it is sent downscaled to fit (the
+image resampled with Lanczos, the mask with a triangle filter and, when binary, thresholded
+back to binary) and the fill comes back scaled to the support with Lanczos before the paste.
+The journal notes the two sizes, the call records the scaled request's dimensions and bytes,
+the request identity is over the bytes sent, so a replay reproduces the call, and the lab's
+cell identity carries the setting. What the scaling costs in fine texture is a lab question;
+`max_side` (the window, a crop) is unchanged and the two combine.
 
 ## What a filler receives (G9)
 

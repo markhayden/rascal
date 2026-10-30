@@ -83,6 +83,7 @@ fn command_config(behaviour: Behaviour, with_mask: bool, timeout_s: u64) -> Fill
         max_side: None,
         revision: Some("fake".to_string()),
         overrides: BTreeMap::new(),
+        fill_max_side: None,
     }
 }
 
@@ -98,6 +99,7 @@ fn http_config(url: &str, key_env: Option<&str>, timeout_s: u64) -> FillerConfig
         max_side: None,
         revision: None,
         overrides: BTreeMap::new(),
+        fill_max_side: None,
     }
 }
 

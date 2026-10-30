@@ -12,6 +12,7 @@ The plan's "Owner decisions" table is the index; this file holds the answers.
 | 5 | The segmenter, its branch (A or B) and the export's redistribution terms | task 5.2, decided in task 4.5 by ADR 0018 | M5's `segment` task does not start, and success criterion 5 or 5b is not fixed, until the ADR is accepted | made 2026-10-29 (ADR 0018) |
 | 6 | The private corpus: location, first contents, the sky and structured groups with at least `min_decided` images each | task 6.1 | no lab matrix is written until the corpus manifest verifies | made 2026-10-29: a generated corpus |
 | 7 | The path fan before or after v1 | after M7, unless task 4.3 shows the need | v0.1.0 ships without it unless the owner decides otherwise during M4 | made 2026-10-29: after v1 |
+| 10 | Scaled windows in v1, as a filler option (`fill_max_side`), rather than the later milestone the spec named: the lab showed LaMa cannot carry a wide band at full resolution | the LaMa scale option, after seam-03 | the spec's "later" list and the fillers' contract change; the option is journaled and in the cell identity | made 2026-10-29 |
 | 9 | The `not_worse` rule: under the spec's default fractions (`preferred` at wins ≥ 2/3, `not_worse` at losses < 1/3) a group can never be `not_worse` without being `preferred`, since wins and losses sum to the decided pairs; the implementation reports `preferred`, `not_worse`, `worse` or `inconclusive` with the strongest first. Options: (a) read criterion 6's "not_worse on the structured group" as "preferred or not_worse" (what `docs/lab.md` says now); (b) count `same` as not-a-loss and define `not_worse` over all judged pairs; (c) give `seam-01`'s protocol fractions with a gap (for example `preferred = [3, 4]`) | task 6.4 | the structured group's gate (G16) reads the outcome literally, so the owner's reading must be recorded before the first round is decoded | made 2026-10-29: option (a) |
 
 ## 1. No conflicting obligation
@@ -90,3 +91,12 @@ structured group" reads as "preferred or not_worse", which `preferred` satisfies
 reports the strongest outcome first, and the protocol's default fractions stay as the spec
 wrote them; a round that wants a distinct `not_worse` band gives its protocol fractions with a
 gap (option c) and says so in its results document.
+
+## 10. Scaled windows in v1
+
+2026-10-29. After seam-02 showed LaMa smears a wide band at the panoramas' resolution and the
+owner asked for tools that clean up a filler's shortcoming, the owner agreed to the plan that
+put a LaMa scale option before the release ("sounds like a plan. keep trucking"). The spec had
+scaled windows as a later milestone; it is now a filler entry's `fill_max_side`: the request
+is sent downscaled to that longest side and the fill scaled back to the support, said in the
+journal and carried in the lab's cell identity. Whether it helps is a lab question.
