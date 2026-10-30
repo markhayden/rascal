@@ -309,6 +309,63 @@ fn pairs_writes_a_blind_page_and_decode_reports_the_outcome_per_group() {
         "fan-ramp,thin",
     ]);
     assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    // --group writes one group's pairs to their own directory; decode reads them alone.
+    let out = rascal(&[
+        "lab",
+        "pairs",
+        lab.to_str().unwrap(),
+        "--arms",
+        "fan-ramp,thin",
+        "--group",
+        "sky",
+    ]);
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    let sky_dir = lab.join("pairs/fan-ramp-vs-thin-sky");
+    let sky_bytes = std::fs::read(sky_dir.join("assignment.json")).unwrap();
+    let sky: Assignment = serde_json::from_slice(&sky_bytes).unwrap();
+    assert_eq!(sky.pair.len(), 2);
+    assert!(sky.pair.iter().all(|p| p.group == "sky"));
+    assert!(
+        std::fs::read_to_string(sky_dir.join("index.html"))
+            .unwrap()
+            .contains("2 pairs over the sky group")
+    );
+    let sky_picks = dir.join("sky-picks.json");
+    write_picks(&sky_picks, &sky_bytes, |_, pair| {
+        if pair.a_side == "left" {
+            "left"
+        } else {
+            "right"
+        }
+    });
+    let out = rascal(&[
+        "lab",
+        "decode",
+        lab.to_str().unwrap(),
+        sky_picks.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(0), "{}", text(&out.stderr));
+    let stdout = text(&out.stdout);
+    assert!(
+        stdout.lines().any(|l| l.starts_with("sky"))
+            && !stdout.lines().any(|l| l.starts_with("structured")),
+        "{stdout}"
+    );
+    let out = rascal(&[
+        "lab",
+        "pairs",
+        lab.to_str().unwrap(),
+        "--arms",
+        "fan-ramp,thin",
+        "--group",
+        "sea",
+    ]);
+    assert_eq!(out.status.code(), Some(64));
+    assert!(
+        text(&out.stderr).contains("--group sea: the protocol has sky, structured"),
+        "{}",
+        text(&out.stderr)
+    );
     // --arms with one name, three names or the same arm twice.
     for arms in ["fan-ramp", "fan-ramp,thin,wide", "thin,thin"] {
         let out = rascal(&["lab", "pairs", lab.to_str().unwrap(), "--arms", arms]);
