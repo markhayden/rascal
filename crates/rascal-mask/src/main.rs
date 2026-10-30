@@ -65,6 +65,10 @@ enum Command {
         /// Bind inputs.prompt, a recipe's text input (remove-prompt's finder prompt).
         #[arg(long)]
         prompt: Option<String>,
+        /// Override a step parameter or constant set for this run, <step>.<param>=<value>
+        /// (segment.threshold=0.4, grow.px=8, fan.constants=fan-v2); repeatable, journaled.
+        #[arg(long = "set", value_name = "STEP.PARAM=VALUE")]
+        set: Vec<String>,
         /// The configuration file (rascal.toml).
         #[arg(long)]
         config: Option<PathBuf>,
@@ -117,6 +121,10 @@ enum Command {
         /// filler's, when it takes one.
         #[arg(long)]
         prompt: Option<String>,
+        /// Override a step parameter or constant set for this heal, <step>.<param>=<value>;
+        /// repeatable, journaled, and it wins over the filler entry's overrides.
+        #[arg(long = "set", value_name = "STEP.PARAM=VALUE")]
+        set: Vec<String>,
         /// Keep artifacts and the journal in this workspace instead of a private one under --out.
         #[arg(long)]
         workspace: Option<PathBuf>,
@@ -563,6 +571,7 @@ fn main() {
             protect,
             mask,
             prompt,
+            set,
             config,
             workspace,
             projection,
@@ -586,6 +595,7 @@ fn main() {
                 replay,
                 overrides: BTreeMap::new(),
                 overrides_from: None,
+                sets: set,
             };
             match run::run(&args) {
                 Ok(report) => {
@@ -632,6 +642,7 @@ fn main() {
             protect,
             mask,
             prompt,
+            set,
             workspace,
             projection,
             no_dash,
@@ -656,6 +667,7 @@ fn main() {
                     replay: replay.clone(),
                     overrides: BTreeMap::new(),
                     overrides_from: None,
+                    sets: set,
                 },
                 filler,
                 no_dash,

@@ -315,6 +315,7 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
                 replay: None,
                 overrides: BTreeMap::new(),
                 overrides_from: None,
+                sets: Vec::new(),
             },
             filler: arm.filler.clone(),
             no_dash: args.no_dash,

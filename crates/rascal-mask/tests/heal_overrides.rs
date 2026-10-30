@@ -121,6 +121,47 @@ fn the_filler_entry_chooses_the_band_and_the_journal_says_so() {
             .is_some_and(|n| n.starts_with("override from"))),
         "no override note without overrides"
     );
+    // --set wins over the entry's overrides, and both are journaled.
+    let out = dir.join("run-set");
+    let result = rascal(&[
+        "heal",
+        "seam",
+        pano.to_str().unwrap(),
+        "--filler",
+        "fake",
+        "--config",
+        thin.to_str().unwrap(),
+        "--set",
+        "fan.constants=fan-v1",
+        "--out",
+        out.to_str().unwrap(),
+        "--no-dash",
+    ]);
+    assert_eq!(result.status.code(), Some(0), "{}", text(&result.stderr));
+    let set_lines = journal(&out);
+    assert_eq!(fan_step(&set_lines)["params"]["constants"], "fan-v1");
+    assert_eq!(
+        fan_step(&set_lines)["params"]["wide_max"],
+        0.02,
+        "the entry's other override stays"
+    );
+    let notes: Vec<String> = set_lines
+        .iter()
+        .filter(|l| l["event"] == "note")
+        .filter_map(|l| l["note"].as_str().map(String::from))
+        .collect();
+    assert!(
+        notes
+            .iter()
+            .any(|n| n == "override from --set: fan.constants = \"fan-v1\""),
+        "{notes:?}"
+    );
+    assert!(
+        notes
+            .iter()
+            .any(|n| n.starts_with("override from fillers.fake: fan.constants")),
+        "{notes:?}"
+    );
     // `rascal run` with the same config applies nothing: the fan runs fan-v1.
     let out = dir.join("run-run");
     let result = rascal(&[

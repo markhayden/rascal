@@ -80,6 +80,7 @@ the shipped files are the acceptance fixtures:
 rascal run seam pano.jpg --out run/
 rascal run remove room.jpg --location chairs.json --out run/
 rascal run remove-prompt room.jpg --prompt "chair" --config rascal.toml --out run/   # the pack's segmenter finds them
+rascal heal remove-prompt room.jpg --prompt "chair" --set segment.threshold=0.4 --set grow.px=8 --filler lama --config rascal.toml --out run/
 rascal run repair print.jpg --stroke scratch.json --out run/
 rascal heal seam pano.jpg --filler local-inpaint --config rascal.toml --out run/
 rascal render run/artifacts/<id> --for tinted --image img-3 --out seam-tinted.png

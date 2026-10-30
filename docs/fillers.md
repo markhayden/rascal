@@ -42,7 +42,8 @@ Each applied override is a journal note (`override from fillers.<name>: <key> = 
 the step's journaled parameters are the resolved ones, so a run says what it ran; an override
 naming a step, parameter or set the recipe lacks is refused naming the entry before anything
 runs. `rascal run` applies none (no filler is involved), and the lab ignores them: an arm says
-everything it runs, so the rounds that find the right band stay explicit.
+everything it runs, so the rounds that find the right band stay explicit. `--set` on the
+command line is applied after them and wins (`docs/recipes.md`).
 
 **`fill_max_side`** is the scaled window (owner decision 10): a model trained on small images,
 such as LaMa at a few hundred pixels, smears a band it is handed at ten times that. With

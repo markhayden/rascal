@@ -164,3 +164,75 @@ fn the_prompt_is_required_by_remove_prompt_and_refused_by_remove() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn set_overrides_a_step_parameter_for_one_run_and_refuses_a_bad_one() {
+    let dir = scratch("set");
+    let config = config(&dir);
+    let image = repo_root().join("fixtures/images/chair-blob.png");
+    let out = dir.join("run");
+    let result = rascal(&[
+        "run",
+        "remove-prompt",
+        image.to_str().unwrap(),
+        "--prompt",
+        "the chair",
+        "--set",
+        "segment.max_instances=1",
+        "--set",
+        "grow.px=9",
+        "--config",
+        config.to_str().unwrap(),
+        "--out",
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(result.status.code(), Some(0), "{}", text(&result.stderr));
+    let segment = journal_step(&out, "segment");
+    assert_eq!(segment["params"]["max_instances"], 1);
+    assert_eq!(journal_step(&out, "grow")["params"]["px"], 9.0);
+    assert_eq!(
+        journal_step(&out, "select")["inputs"]
+            .as_object()
+            .unwrap()
+            .len(),
+        1,
+        "one plane selected"
+    );
+    let journal = std::fs::read_to_string(out.join("journal.jsonl")).unwrap();
+    assert!(journal.contains("override from --set: segment.max_instances = 1"));
+    assert!(journal.contains("override from --set: grow.px = 9"));
+    for (set, expect) in [
+        ("nonsense", "--set takes <step>.<param>=<value>"),
+        ("threshold=0.4", "the key is <step>.<param>"),
+        ("segment.bogus=1", "segment has no parameter bogus"),
+        ("nope.px=1", "no step nope in the recipe"),
+        ("fan.constants=fan-v9", "no step fan in the recipe"),
+    ] {
+        let result = rascal(&[
+            "run",
+            "remove-prompt",
+            image.to_str().unwrap(),
+            "--prompt",
+            "the chair",
+            "--set",
+            set,
+            "--config",
+            config.to_str().unwrap(),
+            "--out",
+            dir.join("bad").to_str().unwrap(),
+        ]);
+        assert_eq!(
+            result.status.code(),
+            Some(64),
+            "{set}: {}",
+            text(&result.stderr)
+        );
+        assert!(
+            text(&result.stderr).contains(expect),
+            "{set}: {}",
+            text(&result.stderr)
+        );
+        let _ = std::fs::remove_dir_all(dir.join("bad"));
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
