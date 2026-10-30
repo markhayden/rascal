@@ -202,7 +202,7 @@ impl Op for Fan {
         };
         Manifest::new(
             NAME,
-            "1.2.0",
+            "1.2.1",
             "The band profile along a column line: a half-width per row, wide where the surface beside the line is smooth and the two sides differ in tone, thin where it is detailed, and stopping short of a solid object the opening would cross (the object cap, fan-v2; fan-v3 removes a straddling object whole and tapers the cap).",
             "On a cut canvas whose centre column is the wrap edge of a panorama, or any image with a vertical line to heal: the step before profile and ramp.",
             "When the line is a path or the region is an area (use rasterize); on an uncut equirectangular image (cut it first).",
@@ -722,9 +722,11 @@ fn object_cap(
             }
         }
     }
-    // Then the taper: the cap smoothed against the uncapped width eases the band in and
-    // out over the rows beyond the reach instead of stepping; a capped row keeps its cap,
-    // so the band never comes back over the object.
+    // Then the taper: the cap, carried three sigmas further out as a running minimum and
+    // then smoothed with that sigma against the uncapped width, eases the band in and out
+    // over the rows beyond the reach instead of stepping, and is continuous at the cap's
+    // boundary (the smoothed step has settled by the time it reaches a capped row). A
+    // capped row keeps its cap, so the band never comes back over the object.
     let taper = s.object_taper * f64::from(h);
     if taper <= 0.0 || spread.iter().all(|c| c.is_infinite()) {
         return spread;
@@ -734,7 +736,18 @@ fn object_cap(
         .zip(half)
         .map(|(c, h)| if c.is_finite() { *c } else { *h })
         .collect();
-    let eased = smooth_rows(&filled, taper);
+    let carry = (3.0 * taper).ceil() as usize;
+    let carried: Vec<f64> = (0..n)
+        .map(|y| {
+            let lo = y.saturating_sub(carry);
+            let hi = (y + carry).min(n - 1);
+            filled[lo..=hi]
+                .iter()
+                .cloned()
+                .fold(f64::INFINITY, f64::min)
+        })
+        .collect();
+    let eased = smooth_rows(&carried, taper);
     spread
         .iter()
         .zip(eased)
