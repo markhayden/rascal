@@ -1,0 +1,65 @@
+# The scaled-window question (docs/fillers.md, decision 10): LaMa handed the ramp band at the
+# support's size against LaMa handed it scaled to a longest side of 1024 and the fill scaled
+# back, over the seam-03 corpus. Wins are the scaled arm's.
+version = 1
+name = "lama-scale-01"
+seed = 20261101
+arms = ["ramp-lama-scaled", "ramp-lama"]
+min_decided = 10
+
+[[group]]
+name = "sky"
+images = [
+  "beach-dark-sunset",
+  "beach-dawn",
+  "sky-01-new",
+  "sky-02-v2",
+  "sky-03",
+  "sky-04",
+  "sky-05",
+  "sky-06",
+  "sky-07",
+  "sky-08",
+  "sky-09",
+  "sky-10",
+  "sky-11",
+  "sky-12",
+  "sunburst-sky-winter",
+  "sunburst-training-02-coastal-headland",
+  "sunburst-training-04-desert-basin",
+  "sunburst-training-08-mountain-lake",
+  "sunburst-training-12-prairie-dusk",
+  "sunburst-training-16-snowy-field",
+  "sunburst-training-20-volcanic-coast"
+]
+
+[[group]]
+name = "structured"
+images = [
+  "str-01-v2",
+  "str-02-v2",
+  "str-03",
+  "str-04",
+  "str-06",
+  "str-07",
+  "str-08",
+  "str-09",
+  "str-10",
+  "str-11",
+  "str-12",
+  "sunburst-str-library-modern",
+  "sunburst-str-library-v2",
+  "sunburst-training-01-home-living-room",
+  "sunburst-training-03-office-studio",
+  "sunburst-training-05-home-kitchen",
+  "sunburst-training-06-forest-clearing",
+  "sunburst-training-07-office-meeting-room",
+  "sunburst-training-09-home-bedroom",
+  "sunburst-training-10-city-courtyard",
+  "sunburst-training-11-home-dining-room-v2",
+  "sunburst-training-13-office-lobby",
+  "sunburst-training-15-home-attic",
+  "sunburst-training-17-office-break-room",
+  "sunburst-training-18-harbor-promenade",
+  "sunburst-training-19-home-sunroom"
+]
