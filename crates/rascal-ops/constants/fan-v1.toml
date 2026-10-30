@@ -13,3 +13,8 @@ wide_max = 0.15
 row_sigma = 0.012
 width_sigma = 0.02
 gate = true
+# The object cap (fan 1.1.0): off at 0, so this set's bands are what they were.
+object_edge = 0.0
+object_ratio = 6.0
+object_margin_px = 3.0
+object_sigma = 0.004

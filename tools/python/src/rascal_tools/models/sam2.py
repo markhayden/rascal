@@ -60,15 +60,20 @@ class Segmenter:
         if not boxes:
             return [], []
         scale = np.array([SIZE / width, SIZE / height, SIZE / width, SIZE / height])
-        scaled = (np.array(boxes, dtype=np.float64) * scale).astype(np.float32)[None]
-        masks, iou = self.decoder.run(
-            None,
-            {
-                "feat0": features[0],
-                "feat1": features[1],
-                "feat2": features[2],
-                "boxes": scaled,
-            },
-        )
-        planes = [plane_of(masks[0, i], width, height) for i in range(len(boxes))]
-        return planes, [float(v) for v in iou[0]]
+        planes: list[np.ndarray] = []
+        ious: list[float] = []
+        # The exported decoder takes one box per call (MODEL.md); the features are reused.
+        for box in boxes:
+            scaled = (np.array(box, dtype=np.float64) * scale).astype(np.float32)[None, None]
+            masks, iou = self.decoder.run(
+                None,
+                {
+                    "feat0": features[0],
+                    "feat1": features[1],
+                    "feat2": features[2],
+                    "boxes": scaled,
+                },
+            )
+            planes.append(plane_of(masks[0, 0], width, height))
+            ious.append(float(iou[0, 0]))
+        return planes, ious

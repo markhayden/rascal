@@ -26,9 +26,10 @@ pub struct Fan;
 const NAME: &str = "fan";
 
 /// The embedded constant sets, by name; the first is the default.
-const SETS: [(&str, &str); 2] = [
+const SETS: [(&str, &str); 3] = [
     ("fan-v1", include_str!("../constants/fan-v1.toml")),
     ("fan-thin-v1", include_str!("../constants/fan-thin-v1.toml")),
+    ("fan-v2", include_str!("../constants/fan-v2.toml")),
 ];
 
 /// A parsed constant set.
@@ -63,7 +64,15 @@ fn constant(table: &toml::Table, key: &str) -> Result<f64> {
 }
 
 /// The tunables a step may override, with the default set's values as the manifest's defaults.
-const TUNABLES: [(&str, &str); 8] = [
+const TUNABLES: [(&str, &str); 10] = [
+    (
+        "object_edge",
+        "The object cap: a horizontal luminance step (levels per pixel) at and above which a column inside the opening counts as a solid object's edge, beyond the seam's own gap; the row stops short of it, and stays thin when edges stand on both sides. 0 turns the cap off.",
+    ),
+    (
+        "object_margin_px",
+        "How far short of an object's edge the band stops, in pixels at ref_width.",
+    ),
     (
         "tex_low",
         "Texture (contrast, percent per pixel) at and below which the surface counts as fully smooth.",
@@ -109,28 +118,34 @@ impl Op for Fan {
                 _ => serde_json::Value::Null,
             }
         };
-        let param =
-            |key: &str, purpose: &str| -> Param {
-                match key {
-                    "gate" => Param::optional(key, purpose, ParamKind::Boolean, number(key)),
-                    "ref_width" => Param::optional(key, purpose, ParamKind::Integer, number(key))
-                        .bounded(1.0, 1e6),
-                    "wide_max" => Param::optional(key, purpose, ParamKind::Number, number(key))
-                        .bounded(0.0, 0.5),
-                    "thin_px" => Param::optional(key, purpose, ParamKind::Number, number(key))
-                        .bounded(0.5, 1e4),
-                    "row_sigma" | "width_sigma" => {
-                        Param::optional(key, purpose, ParamKind::Number, number(key))
-                            .bounded(0.0, 1.0)
-                    }
-                    _ => Param::optional(key, purpose, ParamKind::Number, number(key))
-                        .bounded(0.0, 100.0),
+        let param = |key: &str, purpose: &str| -> Param {
+            match key {
+                "gate" => Param::optional(key, purpose, ParamKind::Boolean, number(key)),
+                "ref_width" => {
+                    Param::optional(key, purpose, ParamKind::Integer, number(key)).bounded(1.0, 1e6)
                 }
-            };
+                "wide_max" => {
+                    Param::optional(key, purpose, ParamKind::Number, number(key)).bounded(0.0, 0.5)
+                }
+                "object_edge" => Param::optional(key, purpose, ParamKind::Number, number(key))
+                    .bounded(0.0, 255.0),
+                "object_margin_px" => {
+                    Param::optional(key, purpose, ParamKind::Number, number(key)).bounded(0.0, 1e4)
+                }
+                "thin_px" => {
+                    Param::optional(key, purpose, ParamKind::Number, number(key)).bounded(0.5, 1e4)
+                }
+                "row_sigma" | "width_sigma" => {
+                    Param::optional(key, purpose, ParamKind::Number, number(key)).bounded(0.0, 1.0)
+                }
+                _ => Param::optional(key, purpose, ParamKind::Number, number(key))
+                    .bounded(0.0, 100.0),
+            }
+        };
         Manifest::new(
             NAME,
-            "1.0.0",
-            "The band profile along a column line: a half-width per row, wide where the surface beside the line is smooth and the two sides differ in tone, thin where it is detailed.",
+            "1.1.0",
+            "The band profile along a column line: a half-width per row, wide where the surface beside the line is smooth and the two sides differ in tone, thin where it is detailed, and stopping short of a solid object the opening would cross (the object cap, fan-v2).",
             "On a cut canvas whose centre column is the wrap edge of a panorama, or any image with a vertical line to heal: the step before profile and ramp.",
             "When the line is a path or the region is an area (use rasterize); on an uncut equirectangular image (cut it first).",
             "A BandProfile: half[y], the centre column, thin and the resolved windows. Not applicable when a sampling window clips to fewer than two columns (the line is too near an edge for the frame width).",
@@ -233,6 +248,10 @@ impl Op for Fan {
             row_sigma: number("row_sigma")?,
             width_sigma: number("width_sigma")?,
             gate,
+            object_edge: number("object_edge")?,
+            object_ratio: constant(table, "object_ratio")?,
+            object_margin_px: number("object_margin_px")?,
+            object_sigma: constant(table, "object_sigma")?,
         };
         if settings.tex_high <= settings.tex_low {
             return Ok(Output::invalid_args(format!(
@@ -256,6 +275,7 @@ impl Op for Fan {
             .filter(|h| **h > profile.thin + 0.5)
             .count();
         let half_max = profile.half.iter().cloned().fold(0.0, f64::max);
+        let rows_capped = profile.cap.iter().filter(|c| c.is_finite()).count();
         let band = BandProfile::new(
             "fan.band",
             &frame.id,
@@ -278,7 +298,8 @@ impl Op for Fan {
         )
         .with_measurement("thin_px", profile.thin, "px", Some(&frame.id))
         .with_measurement("half_max_px", half_max, "px", Some(&frame.id))
-        .with_measurement("rows_widened", rows_widened as f64, "rows", Some(&frame.id)))
+        .with_measurement("rows_widened", rows_widened as f64, "rows", Some(&frame.id))
+        .with_measurement("rows_capped", rows_capped as f64, "rows", Some(&frame.id)))
     }
 }
 
@@ -299,6 +320,14 @@ pub struct Settings {
     pub row_sigma: f64,
     pub width_sigma: f64,
     pub gate: bool,
+    /// The object cap (0 is off): the horizontal luminance step that marks an object's edge.
+    pub object_edge: f64,
+    /// An edge must also exceed this multiple of the row's median gradient.
+    pub object_ratio: f64,
+    /// How far short of the edge the band stops, in pixels at `ref_width`.
+    pub object_margin_px: f64,
+    /// The cap's reach along the rows, as a fraction of the height (a running minimum).
+    pub object_sigma: f64,
 }
 
 impl Settings {
@@ -310,6 +339,10 @@ impl Settings {
     /// `fan-thin-v1`: the fixed-width arm, `wide_max 0.0`.
     pub fn fan_thin_v1() -> Settings {
         Settings::embedded("fan-thin-v1")
+    }
+
+    pub fn fan_v2() -> Settings {
+        Settings::embedded("fan-v2")
     }
 
     fn embedded(name: &str) -> Settings {
@@ -330,6 +363,10 @@ impl Settings {
             row_sigma: c("row_sigma"),
             width_sigma: c("width_sigma"),
             gate: true,
+            object_edge: c("object_edge"),
+            object_ratio: c("object_ratio"),
+            object_margin_px: c("object_margin_px"),
+            object_sigma: c("object_sigma"),
         }
     }
 }
@@ -342,6 +379,9 @@ pub struct Profile {
     pub half: Vec<f64>,
     /// `raw_half` before the width smoothing and clamp, for the tests of the gate.
     pub raw_half: Vec<f64>,
+    /// The object cap per row: the half-width an object inside the opening limited the row
+    /// to, or infinity where no object stood in the way (every row when the cap is off).
+    pub cap: Vec<f64>,
     pub step: Vec<f64>,
     pub texture: Vec<f64>,
     pub windows: Windows,
@@ -462,15 +502,22 @@ pub fn fan_profile(
             thin + (wide - thin) * smooth * open
         })
         .collect();
-    let half: Vec<f64> = smooth_rows(&raw_half, s.width_sigma * f64::from(h))
+    let smoothed: Vec<f64> = smooth_rows(&raw_half, s.width_sigma * f64::from(h))
         .into_iter()
         .map(|v| v.clamp(thin, wide))
+        .collect();
+    let cap = object_cap(&lum, w, h, column_px, gap, thin, scale, &smoothed, s);
+    let half: Vec<f64> = smoothed
+        .iter()
+        .zip(&cap)
+        .map(|(v, c)| v.min(*c).clamp(thin, wide))
         .collect();
     Ok(Profile {
         column_px,
         thin,
         half,
         raw_half,
+        cap,
         step: step_s,
         texture: texture_s,
         windows: Windows {
@@ -479,4 +526,80 @@ pub fn fan_profile(
             texture_cols,
         },
     })
+}
+
+/// The object cap, per row: inside the row's opening `[c − half, c + half]` and beyond the
+/// seam's own gap, a column whose horizontal luminance step is at least `object_edge` and
+/// `object_ratio` times the row's median step is a solid object's edge. An edge on one side
+/// caps the row at its distance less `object_margin_px`; edges on both sides mean the object
+/// straddles the line and the row stays at `thin`. The cap then reaches `object_sigma · h`
+/// rows up and down as a running minimum, so the band clears the object's ends too. Infinity
+/// where nothing stands in the way; every row when `object_edge` is 0.
+#[allow(clippy::too_many_arguments)]
+fn object_cap(
+    lum: &[f32],
+    w: u32,
+    h: u32,
+    column_px: u32,
+    gap: u32,
+    thin: f64,
+    scale: f64,
+    half: &[f64],
+    s: &Settings,
+) -> Vec<f64> {
+    let mut cap = vec![f64::INFINITY; h as usize];
+    if s.object_edge <= 0.0 || w < 3 {
+        return cap;
+    }
+    let margin = s.object_margin_px * scale;
+    let exclude = f64::from(gap.max(2));
+    let c = f64::from(column_px);
+    let mut steps: Vec<f64> = Vec::with_capacity(w as usize);
+    for y in 0..h {
+        let row = &lum[(y * w) as usize..((y + 1) * w) as usize];
+        steps.clear();
+        steps.extend(row.windows(2).map(|p| f64::from((p[1] - p[0]).abs())));
+        let mut sorted = steps.clone();
+        sorted.sort_by(|a, b| a.total_cmp(b));
+        let median = sorted[sorted.len() / 2];
+        let threshold = s.object_edge.max(s.object_ratio * median);
+        let reach = half[y as usize];
+        let lo = ((c - reach).floor().max(0.0)) as usize;
+        let hi = ((c + reach).ceil().min(f64::from(w) - 2.0)) as usize;
+        let mut left: Option<f64> = None;
+        let mut right: Option<f64> = None;
+        for (x, step) in steps.iter().enumerate().take(hi + 1).skip(lo) {
+            if *step < threshold {
+                continue;
+            }
+            // The step between columns x and x + 1 sits at x + 0.5.
+            let d = (x as f64 + 0.5) - c;
+            if d.abs() <= exclude {
+                continue;
+            }
+            if d < 0.0 {
+                left = Some(left.map_or(-d, |v: f64| v.min(-d)));
+            } else {
+                right = Some(right.map_or(d, |v: f64| v.min(d)));
+            }
+        }
+        cap[y as usize] = match (left, right) {
+            (Some(_), Some(_)) => thin,
+            (Some(d), None) | (None, Some(d)) => (d - margin).max(thin),
+            (None, None) => f64::INFINITY,
+        };
+    }
+    // A running minimum over ±reach rows.
+    let reach = (s.object_sigma * f64::from(h)).round() as usize;
+    if reach == 0 {
+        return cap;
+    }
+    let n = cap.len();
+    let mut spread = cap.clone();
+    for (y, out) in spread.iter_mut().enumerate() {
+        let lo = y.saturating_sub(reach);
+        let hi = (y + reach).min(n - 1);
+        *out = cap[lo..=hi].iter().cloned().fold(f64::INFINITY, f64::min);
+    }
+    spread
 }

@@ -464,6 +464,7 @@ be refitted on the owner's corpus; a change to a value is a new set version. Ini
 | `window-v1` | `context 0.5` |
 | `poisson-v1` | `tol 1e-4`, `max_iter 2000` |
 | `fan-thin-v1` | `fan-v1` with `wide_max 0.0`: the effective upper width is then `thin`, so every row is the minimum width at any image width; the lab's fixed-width arm |
+| `fan-v2` | `fan-v1` with the object cap on: `object_edge 8.0` (levels per pixel), `object_ratio 6.0`, `object_margin_px 3.0`, `object_sigma 0.004`; `fan-v1` and `fan-thin-v1` carry `object_edge 0`, the cap off, so their bands are unchanged |
 
 **Row smoothing** (`smooth_rows(v, σ)`): a Gaussian kernel truncated at `3σ`, renormalised over
 the samples it covers at each position, applied along the row axis; `σ < 0.5` px is the identity.
@@ -502,6 +503,15 @@ with `fan-v1`; `thin = thin_px · w / ref_width`:
    `half = clamp(smooth_rows(raw_half, width_sigma · h), thin, wide)`.
    A closed gate yields `raw_half = thin` on that row; after row smoothing a row within a few
    `width_sigma · h` of an open row may be wider than `thin`, by design.
+6b. *The object cap* (`fan` 1.1.0; on when `object_edge > 0`, as in `fan-v2`): per row, the
+   horizontal step `|L[x+1] − L[x]|` is an object's edge where it is at least `object_edge` and
+   `object_ratio` times the row's median step; edges are sought inside the opening
+   `[c − half, c + half]` beyond the seam's own columns (`|x + 0.5 − c| ≤ max(gap, 2)` is
+   excluded). An edge on one side caps the row at its distance less `object_margin_px · w /
+   ref_width`; edges on both sides mean the object straddles the line and the row's cap is
+   `thin`. The cap spreads `object_sigma · h` rows up and down as a running minimum, and
+   `half = clamp(min(half, cap), thin, wide)`. The band protects what it crosses rather than
+   painting it away (the lab finding of 2026-10-29); `rows_capped` is measured.
 7. Output: the `BandProfile`: `half[y]`, `c`, `thin`, and the resolved window geometry (`gap`,
    `step_cols`, `texture_cols` in pixels), so `ramp` and the measures reuse exactly these columns.
 
