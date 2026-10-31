@@ -293,3 +293,78 @@ fn a_cancelled_call_gets_no_result_and_its_run_says_cancelled() {
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Task 8.6: `[limits]` hold `serve` to a per-call cap a call may only lower and a session
+/// budget; `estimate` says so before anything runs; a refused call is an `error` result with
+/// code `budget`.
+#[test]
+fn the_cap_and_the_budget_refuse_a_call_that_would_spend_too_much() {
+    let dir = scratch("budget");
+    let bin = env!("CARGO_BIN_EXE_rascal");
+    let config = dir.join("limits.toml");
+    std::fs::write(
+        &config,
+        format!(
+            "config_version = 1\n[limits]\ncall_cap_usd = 0.10\nsession_budget_usd = 0.05\n[fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\nrevision = \"fake\"\nspend_usd_per_call = 0.04\n"
+        ),
+    )
+    .unwrap();
+    let mut command = Command::new(bin);
+    command
+        .args([
+            "serve",
+            "--workspace",
+            dir.join("ws").to_str().unwrap(),
+            "--config",
+            config.to_str().unwrap(),
+            "--runs",
+            dir.join("runs").to_str().unwrap(),
+        ])
+        .env_remove("RASCAL_LOG");
+    let mut client = Client::start(&mut command).unwrap();
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let estimate = client
+        .call(
+            "estimate",
+            serde_json::json!({ "action": "seam", "filler": "fake" }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    assert_eq!(estimate["worst_case_usd"], 0.04);
+    assert_eq!(estimate["allowed"], true);
+    // Lowered under the price: refused before anything runs.
+    let low = client
+        .call("seam", serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "fake", "max_spend_usd": 0.01 }))
+        .unwrap();
+    assert!(low.is_error);
+    let s = low.structured.unwrap();
+    assert_eq!(s["status"], "error");
+    assert_eq!(s["error"]["code"], "budget");
+    // The first call fits the budget and spends 0.04; the second would go over 0.05.
+    let first = client
+        .call(
+            "seam",
+            serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "fake" }),
+        )
+        .unwrap();
+    assert_eq!(first.structured.unwrap()["spend"]["usd"], 0.04);
+    let after = client
+        .call(
+            "estimate",
+            serde_json::json!({ "action": "seam", "filler": "fake" }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    assert_eq!(after["allowed"], false);
+    let second = client
+        .call(
+            "seam",
+            serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "fake" }),
+        )
+        .unwrap();
+    assert_eq!(second.structured.unwrap()["error"]["code"], "budget");
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -1288,8 +1288,10 @@ session budget left. The lab's identical-mask arms share one fill (the objects-0
 finding).
 
 **Acceptance.**
-- [ ] Two identical heals: the second is a hit with no filler call; a lab run with two arms whose
-      masks are identical makes one external call.
+- [x] Two identical heals: the second is a hit with no filler call; a lab run with two arms whose
+      masks are identical makes one external call per image.
+- [x] `serve` refuses a call past the per-call cap (lowered by `max_spend_usd`) or the session
+      budget with code `budget`; `estimate` reports both before anything runs.
 
 **Files.** `crates/rascal-mask/src/heal.rs`, `filler/`, `crates/rascal-core/src/config.rs`,
 `lab/`. **Size.** M.

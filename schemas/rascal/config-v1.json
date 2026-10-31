@@ -8,6 +8,20 @@
       ],
       "type": "string"
     },
+    "CacheConfig": {
+      "additionalProperties": false,
+      "description": "`[cache]`: where fills are kept.",
+      "properties": {
+        "dir": {
+          "description": "The directory, created when first used.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dir"
+      ],
+      "type": "object"
+    },
     "CorpusConfig": {
       "additionalProperties": false,
       "description": "The private corpus (M6).",
@@ -89,6 +103,14 @@
           "description": "For an image-input profile: also send the `grey` rendering as `mask`.",
           "type": "boolean"
         },
+        "spend_usd_per_call": {
+          "description": "What one call to this filler costs, in US dollars: the run's estimated spend\n(table-manners 2.3). Unset: free.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "timeout_s": {
           "default": 120,
           "description": "Seconds before the call is abandoned as an operational error.",
@@ -107,6 +129,29 @@
       "required": [
         "profile"
       ],
+      "type": "object"
+    },
+    "LimitsConfig": {
+      "additionalProperties": false,
+      "description": "`[limits]`: what a call and a server session may spend, in US dollars, by the fillers'\nconfigured prices. Unset: no limit.",
+      "properties": {
+        "call_cap_usd": {
+          "description": "The most one call may spend; a call may lower it, never raise it.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "session_budget_usd": {
+          "description": "The most a `serve` process may spend across its calls.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "Override": {
@@ -208,6 +253,17 @@
   "additionalProperties": false,
   "description": "The configuration file.",
   "properties": {
+    "cache": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CacheConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The fill cache (table-manners 4.4, ADR 0020): a fill is kept by its request, so an\nidentical request is answered without calling the filler again."
+    },
     "config_version": {
       "description": "The file's version.",
       "format": "uint32",
@@ -230,6 +286,17 @@
       },
       "description": "The fillers by name.",
       "type": "object"
+    },
+    "limits": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LimitsConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Spend limits for `serve` (table-manners 4.5)."
     },
     "packs": {
       "additionalProperties": {

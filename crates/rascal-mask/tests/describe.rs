@@ -107,7 +107,7 @@ fn a_configured_filler_is_offered_and_may_spend_with_its_key_named() {
     let config = dir.join("rascal.toml");
     std::fs::write(
         &config,
-        "config_version = 1\n\n[fillers.remote]\nurl = \"https://example.invalid/fill\"\nprofile = \"grey\"\nkey_env = \"EXAMPLE_KEY\"\n",
+        "config_version = 1\n\n[fillers.remote]\nurl = \"https://example.invalid/fill\"\nprofile = \"grey\"\nkey_env = \"EXAMPLE_KEY\"\nspend_usd_per_call = 0.04\n",
     )
     .unwrap();
     let out = rascal(&["describe", "--json", "--config", config.to_str().unwrap()]);

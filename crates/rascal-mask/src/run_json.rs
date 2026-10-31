@@ -112,6 +112,7 @@ pub fn error_of(error: &Error) -> (Status, ErrorInfo) {
             )
         }
         Error::Io { .. } => (Status::Error, ErrorCode::Io, true),
+        Error::Budget { .. } => (Status::Error, ErrorCode::Budget, false),
         Error::Image { .. } => (Status::Invalid, ErrorCode::Input, false),
         other => {
             let text = other.to_string();
@@ -162,6 +163,10 @@ pub struct Ended {
     /// The healed image, for `heal`.
     pub result: Option<PathBuf>,
     pub body: serde_json::Map<String, Value>,
+    /// What the run spent, by the filler's configured price.
+    pub spend_usd: f64,
+    /// The fill cache: `Some(true)` a hit, `Some(false)` a miss, `None` not consulted.
+    pub cache: Option<bool>,
 }
 
 /// An output file's reference: its bytes' digest and its header's dimensions; the input's
@@ -321,10 +326,14 @@ pub fn finish(
         duration_ms: u64::try_from(finished.saturating_sub(pending.started_ms)).unwrap_or(u64::MAX),
         input_identity: pending.input_identity.clone(),
         spend: Spend {
-            usd: 0.0,
+            usd: ended.spend_usd,
             basis: SpendBasis::Estimated,
         },
-        cache: Cache::Off,
+        cache: match ended.cache {
+            Some(true) => Cache::Hit,
+            Some(false) => Cache::Miss,
+            None => Cache::Off,
+        },
         images: Some(Images { taken, out }),
         locations: Some(Locations {
             used: if pending.locations_used.is_empty() {
@@ -466,6 +475,8 @@ pub fn ended_with(recipe: &str, error: &Error) -> Ended {
             renders: Vec::new(),
             result: None,
             body,
+            spend_usd: 0.0,
+            cache: None,
         };
     }
     let (status, info) = error_of(error);
@@ -477,6 +488,8 @@ pub fn ended_with(recipe: &str, error: &Error) -> Ended {
         renders: Vec::new(),
         result: None,
         body,
+        spend_usd: 0.0,
+        cache: None,
     }
 }
 
@@ -525,6 +538,8 @@ pub fn watch_signals() {
                     renders: Vec::new(),
                     result: None,
                     body,
+                    spend_usd: 0.0,
+                    cache: None,
                 },
             );
         }
@@ -544,6 +559,8 @@ pub fn ended_ok(
     filler: Option<&str>,
     renders: Vec<(String, PathBuf)>,
     result: Option<PathBuf>,
+    spend_usd: f64,
+    cache: Option<bool>,
 ) -> Ended {
     Ended {
         status: Status::Completed,
@@ -551,5 +568,7 @@ pub fn ended_ok(
         renders,
         result,
         body: body_of(recipe, status, stopped_at, reason, mask_dir, filler),
+        spend_usd,
+        cache,
     }
 }

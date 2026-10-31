@@ -93,9 +93,13 @@ pub fn description(config: Option<&Config>) -> Result<Description> {
     let fillers: Vec<String> = config
         .map(|c| c.fillers.keys().cloned().collect())
         .unwrap_or_default();
-    // Any configured filler may call a paid service (a command can wrap one), so an action may
-    // spend whenever one is configured; the price per call is the filler entry's (task 8.6).
-    let remote = !fillers.is_empty();
+    // An action may spend when a configured filler has a price (`spend_usd_per_call`, the
+    // run's estimated spend); a filler without one is free by the configuration.
+    let remote = config.is_some_and(|c| {
+        c.fillers
+            .values()
+            .any(|f| f.spend_usd_per_call.is_some_and(|p| p > 0.0))
+    });
     let mut needs_env: Vec<String> = config
         .map(|c| {
             c.fillers
@@ -224,6 +228,38 @@ pub fn description(config: Option<&Config>) -> Result<Description> {
             }],
         });
     }
+    actions.push(Action {
+        name: "estimate".to_string(),
+        title: "Estimate a call".to_string(),
+        purpose: "The worst case a call to an action would spend with a filler, the per-call cap and the session budget left; runs nothing.".to_string(),
+        params_schema: json!({
+            "type": "object",
+            "properties": {
+                "action": { "type": "string",
+                            "enum": actions.iter().map(|a| a.name.clone()).collect::<Vec<_>>() },
+                "filler": { "type": "string" },
+                "max_spend_usd": { "type": "number", "minimum": 0 }
+            },
+            "required": ["action"],
+            "additionalProperties": false,
+        }),
+        images: Some(vec![]),
+        locations: Some(vec![]),
+        outputs: Some(Outputs {
+            images: vec![],
+            locations: vec![],
+        }),
+        cost: Cost {
+            may_spend: false,
+            basis: None,
+            needs_env: vec![],
+        },
+        duration: Duration {
+            typical_s: 0.1,
+            max_s: 1.0,
+        },
+        renders: vec![],
+    });
     Ok(Description {
         contract: rascal_core::contract::CONTRACT_VERSION.to_string(),
         profiles: vec![Profile::Images],

@@ -32,6 +32,9 @@ pub struct HealArgs {
     /// A previous run whose recorded filler output is reused when the request is the same,
     /// so a healed run replays without the filler (G4).
     pub replay: Option<PathBuf>,
+    /// The fill cache's directory, over the configuration's `[cache] dir` (the lab gives its
+    /// own, so arms with the same request share one fill).
+    pub cache: Option<PathBuf>,
 }
 
 /// What `heal` did.
@@ -44,6 +47,12 @@ pub struct HealReport {
     pub source: Option<PathBuf>,
     pub dash: Option<PathBuf>,
     pub renders: Vec<(String, PathBuf)>,
+    /// Whether the fill came from the cache: `Some(true)` a hit, `Some(false)` a miss (the
+    /// filler was called and the fill stored), `None` no cache or no fill.
+    pub cache: Option<bool>,
+    /// What the run spent, by the filler's configured price: the price when the filler was
+    /// called, 0 for a cache hit, a replay or a free filler.
+    pub spend_usd: f64,
 }
 
 /// The journal note prefix of a reusable fill: the request identity and the fill artifact.
@@ -244,6 +253,12 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         filler: args.filler.clone(),
         revision: entry.revision.clone(),
     };
+    let cache_dir = args
+        .cache
+        .clone()
+        .or_else(|| config.cache.as_ref().map(|c| c.dir.clone()));
+    let mut cache_use: Option<bool> = None;
+    let mut spend_usd = 0.0;
     let mut origin = serde_json::json!({ "filler": args.filler, "profile": entry.profile, "request": request_identity, "scaled_from": scaled_from.map(|(w, h)| format!("{w}x{h}")) });
     let fill = match args
         .replay
@@ -277,26 +292,48 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
             ))?;
             pixels
         }
-        None => {
-            if run.cancelled() {
-                return Err(Error::Cancelled {
-                    step: "filler".to_string(),
-                });
+        None => match cache_dir
+            .as_deref()
+            .map(|dir| cached_fill(dir, &wanted))
+            .transpose()?
+            .flatten()
+        {
+            Some((pixels, key)) => {
+                cache_use = Some(true);
+                origin["cached"] = serde_json::json!(key);
+                run.note(format!(
+                    "fill from the cache ({key}) for request {request_identity} by fillers.{}; the filler was not called",
+                    args.filler
+                ))?;
+                pixels
             }
-            let scratch = run.dir.join("filler");
-            std::fs::create_dir_all(&scratch).map_err(|e| Error::io(&scratch, e))?;
-            let span = tracing::info_span!(
-                "filler",
-                filler = %args.filler,
-                request_bytes = request.bytes(),
-                width = request.width,
-                height = request.height
-            );
-            let outcome = span.in_scope(|| filler.call(&request, &scratch));
-            let _ = std::fs::remove_dir_all(&scratch);
-            note_call(&run, &outcome.call)?;
-            outcome.fill?
-        }
+            None => {
+                if run.cancelled() {
+                    return Err(Error::Cancelled {
+                        step: "filler".to_string(),
+                    });
+                }
+                let scratch = run.dir.join("filler");
+                std::fs::create_dir_all(&scratch).map_err(|e| Error::io(&scratch, e))?;
+                let span = tracing::info_span!(
+                    "filler",
+                    filler = %args.filler,
+                    request_bytes = request.bytes(),
+                    width = request.width,
+                    height = request.height
+                );
+                let outcome = span.in_scope(|| filler.call(&request, &scratch));
+                let _ = std::fs::remove_dir_all(&scratch);
+                note_call(&run, &outcome.call)?;
+                spend_usd = entry.spend_usd_per_call.unwrap_or(0.0);
+                let fill = outcome.fill?;
+                if let Some(dir) = &cache_dir {
+                    store_fill(dir, &wanted, &fill)?;
+                    cache_use = Some(false);
+                }
+                fill
+            }
+        },
     };
     let fill = match scaled_from {
         Some((width, height)) if (fill.width(), fill.height()) != (width, height) => {
@@ -411,6 +448,8 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         source: Some(run.workspace.image_path(&input_b)),
         dash,
         renders: outcome.renders,
+        cache: cache_use,
+        spend_usd,
     })
 }
 
@@ -438,6 +477,8 @@ fn stopped(
         source: None,
         dash,
         renders,
+        cache: None,
+        spend_usd: 0.0,
     })
 }
 
@@ -676,6 +717,44 @@ pub(crate) fn preservation_check(
         ));
     }
     Ok(())
+}
+
+/// A fill's key in the cache: the request's identity with the filler's name and revision, so
+/// one filler's pixels are never passed off as another's (table-manners 4.4).
+fn cache_key(wanted: &StoredFill) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(wanted.request.as_bytes());
+    hasher.update([0u8]);
+    hasher.update(wanted.filler.as_bytes());
+    hasher.update([0u8]);
+    hasher.update(wanted.revision.as_deref().unwrap_or("").as_bytes());
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// The cached fill for this request, filler and revision, when there is one.
+fn cached_fill(dir: &Path, wanted: &StoredFill) -> Result<Option<(DynamicImage, String)>> {
+    let key = cache_key(wanted);
+    let path = dir.join(format!("{key}.png"));
+    if !path.is_file() {
+        return Ok(None);
+    }
+    Ok(Some((rascal_core::image::decode_limited(&path)?, key)))
+}
+
+/// Keeps a fill in the cache, atomically (a temporary name, then a rename), so two runs that
+/// store the same fill at once leave one whole file.
+fn store_fill(dir: &Path, wanted: &StoredFill, fill: &DynamicImage) -> Result<()> {
+    std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
+    let key = cache_key(wanted);
+    let tmp = dir.join(format!(".{key}.{}.png", std::process::id()));
+    rascal_core::canonical::write_png(&tmp, fill)?;
+    let path = dir.join(format!("{key}.png"));
+    std::fs::rename(&tmp, &path).map_err(|e| Error::io(&path, e))
 }
 
 #[cfg(test)]

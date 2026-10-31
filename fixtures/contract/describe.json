@@ -603,6 +603,54 @@
         }
       ],
       "title": "Protect an earlier edit"
+    },
+    {
+      "cost": {
+        "may_spend": false,
+        "needs_env": []
+      },
+      "duration": {
+        "max_s": 1.0,
+        "typical_s": 0.1
+      },
+      "images": [],
+      "locations": [],
+      "name": "estimate",
+      "outputs": {
+        "images": [],
+        "locations": []
+      },
+      "params_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "mask_rect",
+              "seam",
+              "remove",
+              "remove_prompt",
+              "repair",
+              "repair_area",
+              "protect"
+            ],
+            "type": "string"
+          },
+          "filler": {
+            "type": "string"
+          },
+          "max_spend_usd": {
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "purpose": "The worst case a call to an action would spend with a filler, the per-call cap and the session budget left; runs nothing.",
+      "renders": [],
+      "title": "Estimate a call"
     }
   ],
   "contract": "0.1.0",

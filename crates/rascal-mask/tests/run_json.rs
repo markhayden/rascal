@@ -297,3 +297,61 @@ fn a_signal_cancels_the_run_and_says_so() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Task 8.6: with `[cache] dir`, a repeated heal is answered from the cache: `cache: hit`,
+/// no spend, the filler not called; the first paid the filler's price (`cache: miss`).
+#[test]
+fn a_repeated_heal_is_a_cache_hit_that_spends_nothing() {
+    let dir = scratch("cache");
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let config = dir.join("priced.toml");
+    std::fs::write(
+        &config,
+        format!(
+            "config_version = 1\n[cache]\ndir = {:?}\n[fillers.fake]\ncommand = [{:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\nrevision = \"fake\"\nspend_usd_per_call = 0.04\n",
+            dir.join("fills").to_str().unwrap(),
+            env!("CARGO_BIN_EXE_rascal")
+        ),
+    )
+    .unwrap();
+    let heal = |name: &str| {
+        let out = rascal(&[
+            "heal",
+            "seam",
+            pano.to_str().unwrap(),
+            "--filler",
+            "fake",
+            "--config",
+            config.to_str().unwrap(),
+            "--out",
+            dir.join(name).to_str().unwrap(),
+            "--no-dash",
+        ]);
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        run_json(&dir.join(name))
+    };
+    let first = heal("first");
+    assert_eq!(first["cache"], "miss");
+    assert_eq!(first["spend"]["usd"], 0.04);
+    let second = heal("second");
+    assert_eq!(second["cache"], "hit");
+    assert_eq!(second["spend"]["usd"], 0.0);
+    assert_eq!(second["input_identity"], first["input_identity"]);
+    let journal = std::fs::read_to_string(dir.join("second/journal.jsonl")).unwrap();
+    assert!(journal.contains("fill from the cache"), "{journal}");
+    assert!(
+        !journal.contains("filler call: "),
+        "the filler was not called"
+    );
+    // The healed images are the same pixels.
+    assert_eq!(
+        second["images"]["out"][1]["image"]["file_sha256"],
+        first["images"]["out"][1]["image"]["file_sha256"]
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

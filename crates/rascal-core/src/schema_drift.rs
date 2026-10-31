@@ -318,6 +318,8 @@ pub const COMPONENTS: &[&str] = &[
     "ProvenanceNode",
     "Windows",
     "WorkspaceConfig",
+    "CacheConfig",
+    "LimitsConfig",
     "CorpusConfig",
     "CorpusImage",
     "Group",

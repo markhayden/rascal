@@ -27,6 +27,8 @@ pub struct ContractActions {
     pub config_path: Option<PathBuf>,
     pub config: Option<Config>,
     pub runs: PathBuf,
+    /// What this server process has spent, by the fillers' prices (table-manners 4.5).
+    pub spent: std::sync::Mutex<f64>,
 }
 
 /// The default runs root: `$XDG_DATA_HOME/rascal/runs`, else `~/.local/share/rascal/runs`.
@@ -249,6 +251,31 @@ impl ContractActions {
         })
     }
 
+    /// What a call to the filler costs at worst, and the limits that apply: the per-call cap
+    /// (the configuration's, lowered by `max_spend_usd`) and the session budget.
+    fn limits(&self, filler: Option<&str>, args: &Map<String, Value>) -> Limits {
+        let price = filler
+            .and_then(|f| self.config.as_ref()?.fillers.get(f)?.spend_usd_per_call)
+            .unwrap_or(0.0);
+        let configured = self
+            .config
+            .as_ref()
+            .and_then(|c| c.limits.clone())
+            .unwrap_or_default();
+        let asked = args.get("max_spend_usd").and_then(|v| v.as_f64());
+        let cap = match (configured.call_cap_usd, asked) {
+            (Some(c), Some(a)) => Some(c.min(a)),
+            (c, a) => c.or(a),
+        };
+        let spent = self.spent.lock().map(|s| *s).unwrap_or(0.0);
+        Limits {
+            worst_case_usd: price,
+            call_cap_usd: cap,
+            session_budget_usd: configured.session_budget_usd,
+            session_spent_usd: spent,
+        }
+    }
+
     /// Runs one action to its `run.json`.
     fn run_action(
         &self,
@@ -269,7 +296,10 @@ impl ContractActions {
         let _ = std::fs::create_dir_all(&inputs);
         let _ = std::fs::write(inputs.join("action"), describe::action_name(recipe));
         progress(format!("run {id} started (rascal://run/{id}/run.json)"));
-        let prepared = self.run_args(recipe, args, &out, &inputs, cancel);
+        let limits = self.limits(filler.as_deref(), args);
+        let prepared = self
+            .run_args(recipe, args, &out, &inputs, cancel)
+            .and_then(|run_args| limits.check().map(|()| run_args));
         let (pending, ended) = match prepared {
             Err(error) => {
                 std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
@@ -304,6 +334,9 @@ impl ContractActions {
                 (pending, ended)
             }
         };
+        if let Ok(mut spent) = self.spent.lock() {
+            *spent += ended.spend_usd;
+        }
         let cancelled = ended.status == rascal_core::contract::table_manners::Status::Cancelled;
         run_json::conclude(&pending, ended);
         if cancelled {
@@ -320,6 +353,7 @@ impl ContractActions {
                 filler: filler.to_string(),
                 no_dash: true,
                 replay: None,
+                cache: None,
             }) {
                 Ok(report) => run_json::ended_ok(
                     recipe,
@@ -330,6 +364,8 @@ impl ContractActions {
                     Some(filler),
                     report.renders,
                     report.result,
+                    report.spend_usd,
+                    report.cache,
                 ),
                 Err(error) => run_json::ended_with(recipe, &error),
             },
@@ -342,6 +378,8 @@ impl ContractActions {
                     report.mask_dir.as_deref(),
                     None,
                     report.renders,
+                    None,
+                    0.0,
                     None,
                 ),
                 Err(error) => run_json::ended_with(recipe, &error),
@@ -503,6 +541,24 @@ impl Actions for ContractActions {
             );
             tools.push(Tool::new(name, text, Arc::new(Self::input_schema(action))));
         }
+        // `estimate` is in the description with its own schema.
+        if let Some(estimate) = description["actions"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|a| a["name"] == "estimate")
+            && let Some(position) = tools.iter().position(|t| t.name == "estimate")
+        {
+            let schema = estimate["params_schema"]
+                .as_object()
+                .cloned()
+                .unwrap_or_default();
+            tools[position] = Tool::new(
+                "estimate",
+                estimate["purpose"].as_str().unwrap_or_default().to_string(),
+                Arc::new(schema),
+            );
+        }
         let mut empty = Map::new();
         empty.insert("type".into(), Value::String("object".into()));
         tools.push(Tool::new(
@@ -514,7 +570,7 @@ impl Actions for ContractActions {
     }
 
     fn handles(&self, name: &str) -> bool {
-        name == "describe" || recipe_of(name).is_some()
+        name == "describe" || name == "estimate" || recipe_of(name).is_some()
     }
 
     fn call(
@@ -527,6 +583,31 @@ impl Actions for ContractActions {
         if name == "describe" {
             return Ok(ActionResult {
                 structured: self.description().map_err(|e| e.to_string())?,
+                is_error: false,
+                images: Vec::new(),
+            });
+        }
+        if name == "estimate" {
+            let action = args
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            if recipe_of(action).is_none() {
+                return Err(format!("estimate: no action {action}"));
+            }
+            let filler = args.get("filler").and_then(|v| v.as_str());
+            let limits = self.limits(filler, args);
+            return Ok(ActionResult {
+                structured: json!({
+                    "contract": rascal_core::contract::CONTRACT_VERSION,
+                    "action": action,
+                    "worst_case_usd": limits.worst_case_usd,
+                    "call_cap_usd": limits.call_cap_usd,
+                    "session_budget_usd": limits.session_budget_usd,
+                    "session_spent_usd": limits.session_spent_usd,
+                    "session_left_usd": limits.session_budget_usd.map(|b| (b - limits.session_spent_usd).max(0.0)),
+                    "allowed": limits.check().is_ok(),
+                }),
                 is_error: false,
                 images: Vec::new(),
             });
@@ -603,5 +684,41 @@ impl Actions for ContractActions {
                 })
             }
         }
+    }
+}
+
+/// The spend a call may make, and the limits it is held to (table-manners 4.5).
+struct Limits {
+    worst_case_usd: f64,
+    call_cap_usd: Option<f64>,
+    session_budget_usd: Option<f64>,
+    session_spent_usd: f64,
+}
+
+impl Limits {
+    /// Refuses a call whose worst case is over the cap or the budget left.
+    fn check(&self) -> rascal_core::error::Result<()> {
+        if let Some(cap) = self.call_cap_usd
+            && self.worst_case_usd > cap
+        {
+            return Err(Error::Budget {
+                reason: format!(
+                    "the call may spend {:.4} USD, over the per-call cap of {cap:.4}",
+                    self.worst_case_usd
+                ),
+            });
+        }
+        if let Some(budget) = self.session_budget_usd
+            && self.session_spent_usd + self.worst_case_usd > budget
+        {
+            return Err(Error::Budget {
+                reason: format!(
+                    "the call may spend {:.4} USD; the session has {:.4} of {budget:.4} left",
+                    self.worst_case_usd,
+                    (budget - self.session_spent_usd).max(0.0)
+                ),
+            });
+        }
+        Ok(())
     }
 }

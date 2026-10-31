@@ -411,3 +411,35 @@ fn the_refusals_name_the_field_the_binding_the_protocol_the_directory_and_the_im
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Task 8.6: two arms that are different cells but send the filler identical requests (one
+/// names `fan-v3`, the default, so its mask is the other's: the objects-01 case) share one
+/// fill through the lab's cache: one external call per image, not two.
+#[test]
+fn arms_with_the_same_request_share_one_fill() {
+    let dir = scratch("shared");
+    let (matrix, config) = world(&dir, "fake exact");
+    std::fs::write(
+        dir.join("protocol.toml"),
+        "version = 1\nname = \"lab-test\"\nseed = 7\narms = [\"a\", \"b\"]\nmin_decided = 1\n[[group]]\nname = \"sky\"\nimages = [\"sky-01\", \"sky-02\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &matrix,
+        "version = 1\nname = \"lab-test\"\ncorpus = \"corpus.toml\"\nprotocol = \"protocol.toml\"\nseed = 7\n[[image]]\nid = \"sky-01\"\n[[image]]\nid = \"sky-02\"\n[[arm]]\nname = \"a\"\nrecipe = \"seam\"\nfiller = \"fake\"\nspend_usd_per_call = 0.04\n[[arm]]\nname = \"b\"\nrecipe = \"seam\"\noverrides = { \"fan.constants\" = \"fan-v3\" }\nfiller = \"fake\"\nspend_usd_per_call = 0.04\n",
+    )
+    .unwrap();
+    let out = dir.join("lab");
+    let first = run(&matrix, &config, &out, &[]);
+    assert_eq!(first.status.code(), Some(0), "{}", text(&first.stderr));
+    let stdout = text(&first.stdout);
+    assert!(stdout.contains("4 ran"), "{stdout}");
+    assert!(stdout.contains("2 external calls"), "{stdout}");
+    assert!(stdout.contains("spend 0.08 USD"), "{stdout}");
+    assert_eq!(
+        ledger(&out).iter().filter(|l| l.kind == "filler").count(),
+        2
+    );
+    assert!(out.join("fills").is_dir());
+    let _ = std::fs::remove_dir_all(&dir);
+}

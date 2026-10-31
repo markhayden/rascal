@@ -83,7 +83,7 @@ that still lists the mask. `locations.used` holds the location the run took in;
 `locations.found` the segmenter's boxes, with `score` and `score_kind: owlv2-detection`.
 `input_identity` is a SHA-256 over what was asked (the action, the recipe, the image's file
 digest, the location files, `--set`, the prompt, the filler), so equal requests have equal
-identities. `spend` is 0 and `cache` is `off` until 8.6.
+identities. `spend` and `cache` come from the fill (8.6).
 
 ## `serve` (8.5)
 
@@ -119,5 +119,27 @@ are left for failures before a run exists (an unknown tool, malformed arguments)
   `running`), `rascal://run/{id}/run.json`, `rascal://run/{id}/journal`,
   `rascal://run/{id}/images/{role}`. An id is exactly `run-<ms>-<pid>`; nothing else under the
   runs root, and nothing outside it, can be read.
-- **Spend limits** (`max_spend_usd`, the session budget) arrive with prices in 8.6.
+
+## The fill cache, prices and limits (8.6)
+
+A filler entry's `spend_usd_per_call` is the run's price; `[cache] dir` keeps every fill by its
+request, filler and revision, so an identical request (a retry, a second arm with the same mask)
+is answered without calling the filler: `run.json` says `cache: hit` and spend 0, a call says
+`miss` with the price (table-manners 4.4). The lab always caches, in `fills/` under its directory.
+`[limits]` holds `serve` to `call_cap_usd` (a call's `max_spend_usd` may lower it, never raise
+it) and `session_budget_usd` across the process's calls; a call whose price would pass either is
+refused before it runs, an `error` result with code `budget` (4.5). The `estimate` action returns
+the worst case for an action and filler, the cap, the budget, what the session has spent and
+whether the call would be allowed. An action `may_spend` in the description when a configured
+filler has a price.
+
+```toml
+[cache]
+dir = ".rascal/fills"
+[limits]
+call_cap_usd = 0.50
+session_budget_usd = 5.00
+[fillers.hosted]
+spend_usd_per_call = 0.04
+```
 

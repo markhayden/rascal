@@ -3,7 +3,7 @@
 //! server and client").
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -45,6 +45,34 @@ pub struct Config {
     /// The tool packs by name.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub packs: BTreeMap<String, PackConfig>,
+    /// The fill cache (table-manners 4.4, ADR 0020): a fill is kept by its request, so an
+    /// identical request is answered without calling the filler again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache: Option<CacheConfig>,
+    /// Spend limits for `serve` (table-manners 4.5).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limits: Option<LimitsConfig>,
+}
+
+/// `[cache]`: where fills are kept.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CacheConfig {
+    /// The directory, created when first used.
+    pub dir: PathBuf,
+}
+
+/// `[limits]`: what a call and a server session may spend, in US dollars, by the fillers'
+/// configured prices. Unset: no limit.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LimitsConfig {
+    /// The most one call may spend; a call may lower it, never raise it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call_cap_usd: Option<f64>,
+    /// The most a `serve` process may spend across its calls.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_budget_usd: Option<f64>,
 }
 
 impl Config {
@@ -68,6 +96,20 @@ impl Config {
         for (name, pack) in &config.packs {
             pack.check(name)
                 .map_err(|e| Error::usage(format!("{origin}: {e}")))?;
+        }
+        if let Some(limits) = &config.limits {
+            for (what, value) in [
+                ("call_cap_usd", limits.call_cap_usd),
+                ("session_budget_usd", limits.session_budget_usd),
+            ] {
+                if let Some(v) = value
+                    && !(v.is_finite() && v >= 0.0)
+                {
+                    return Err(Error::usage(format!(
+                        "{origin}: limits.{what} must be 0 or more, got {v}"
+                    )));
+                }
+            }
         }
         Ok(config)
     }
@@ -125,6 +167,10 @@ pub struct FillerConfig {
     /// trained small, such as LaMa). Unset: the request is the support's size.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fill_max_side: Option<u32>,
+    /// What one call to this filler costs, in US dollars: the run's estimated spend
+    /// (table-manners 2.3). Unset: free.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spend_usd_per_call: Option<f64>,
     /// Free text the lab hashes into a cell's identity; required for lab use.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision: Option<String>,
@@ -176,6 +222,13 @@ impl FillerConfig {
         }
         if self.timeout_s == 0 {
             return Err(fail("timeout_s must be at least 1".into()));
+        }
+        if let Some(price) = self.spend_usd_per_call
+            && !(price.is_finite() && price >= 0.0)
+        {
+            return Err(fail(format!(
+                "spend_usd_per_call must be a price of 0 or more, got {price}"
+            )));
         }
         if self.key_env.is_some() && self.url.is_none() {
             return Err(fail("key_env goes with url".into()));

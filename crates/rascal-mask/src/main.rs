@@ -628,6 +628,8 @@ fn main() {
                     None,
                     report.renders.clone(),
                     None,
+                    0.0,
+                    None,
                 ),
                 Err(error) => run_json::ended_with(&args.recipe, error),
             };
@@ -708,6 +710,7 @@ fn main() {
                 filler,
                 no_dash,
                 replay,
+                cache: None,
             };
             let pending = run_json::begin(run_json::pending_for(&args.run, Some(&args.filler)));
             run_json::watch_signals();
@@ -722,6 +725,8 @@ fn main() {
                     Some(&args.filler),
                     report.renders.clone(),
                     report.result.clone(),
+                    report.spend_usd,
+                    report.cache,
                 ),
                 Err(error) => run_json::ended_with(&args.run.recipe, error),
             };

@@ -94,6 +94,11 @@ the `run/` directory of the `heal` that ran it, with `result.png` and, unless `-
 run page, and `attempt.json`: `ok`, `stopped` or `failed`, with the reason) and `latest`, the
 attempt in use.
 
+Every lab keeps a fill cache in `fills/` under its directory: two cells whose filler requests
+are identical (two arms that differ in a parameter but produce the same mask, under the same
+filler and revision) make one external call between them, the second answered from the cache
+with no ledger line and no spend (`docs/fillers.md`).
+
 A second `lab run --out` on the same directory resumes: a cell whose `latest` attempt is `ok`
 is reused and makes no external call (the configured packs are still started for their
 listings, which is not a call); one that stopped or failed runs again as a new attempt.
