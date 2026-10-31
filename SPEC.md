@@ -677,8 +677,9 @@ check:   for every raw pixel whose mapped w = 0, and every protected pixel, Out 
 measure: band set with before = I_F, after = W' in F (the mask's frame); drift with before = I_F, after = W'
 ```
 
-The journal gains the filler call: command or URL, request dimensions, duration, bytes, exit
-status; never a key.
+The journal gains the filler call: a note when it starts with the entry's price, then the command
+or URL, request dimensions, duration, bytes, exit status and whether it may have been charged
+(not sent, known or unresolved); never a key. A run's spend is the journal's, whatever its status.
 
 Shipped recipes, embedded and addressable by name as well as by path:
 

@@ -10,8 +10,8 @@ use rascal_core::Error;
 use rascal_core::error::Result;
 
 use super::{
-    CallOutcome, FillRequest, Filler, FillerCall, answer_cap, decode_answer, excerpt, runtime,
-    scrub,
+    CallOutcome, Charge, FillRequest, Filler, FillerCall, answer_cap, decode_answer, excerpt,
+    runtime, scrub,
 };
 
 /// Where a key comes from: the process environment, or in a test a closure.
@@ -82,6 +82,7 @@ impl Filler for HttpFiller {
             duration_ms: 0,
             status: -1,
             outcome: String::new(),
+            charge: Charge::NotSent,
         };
         let fill = self.run(request, &mut call);
         call.outcome = match &fill {
@@ -126,7 +127,12 @@ impl HttpFiller {
             if let Some(key) = &key {
                 builder = builder.bearer_auth(key);
             }
+            // Sent from here: an outcome that does not settle the call leaves it unresolved.
+            call.charge = Charge::Unresolved;
             let response = builder.send().await.map_err(|e| {
+                if e.is_connect() {
+                    call.charge = Charge::NotSent;
+                }
                 let kind = if e.is_timeout() {
                     format!("no answer within {} s", self.timeout.as_secs())
                 } else {
@@ -136,6 +142,11 @@ impl HttpFiller {
                 Error::op("filler", format!("fillers.{}: {kind}", self.name))
             })?;
             let status = response.status().as_u16();
+            call.charge = match status {
+                200..=299 => Charge::Known,
+                401 | 403 => Charge::NotSent,
+                _ => Charge::Unresolved,
+            };
             let content_type = response
                 .headers()
                 .get(reqwest::header::CONTENT_TYPE)

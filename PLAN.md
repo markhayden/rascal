@@ -1359,9 +1359,9 @@ the unresolved part in `body.spend_unresolved_usd` with a note; never zero for a
 have been charged.
 
 **Acceptance.**
-- [ ] A heal cancelled after the fill (serve, before `apply`) reports the price; a filler that
+- [x] A heal cancelled after the fill (serve, before `apply`) reports the price; a filler that
       times out or exits non-zero reports it as unresolved; a filler that cannot start reports 0.
-- [ ] `rascal heal` killed by SIGTERM during the filler call writes `run.json` with the price,
+- [x] `rascal heal` killed by SIGTERM during the filler call writes `run.json` with the price,
       unresolved.
 
 **Files.** `crates/rascal-mask/src/filler/{mod,http,command}.rs`, `heal.rs`, `run_json.rs`,
@@ -1376,9 +1376,9 @@ unresolved part kept as such. A run that ends without settling (a panic) settles
 as unresolved spend. `estimate` reports the reserved and unresolved parts.
 
 **Acceptance.**
-- [ ] Under `--concurrency 2` with a budget for one call and a slow fake filler, two calls give
+- [x] Under `--concurrency 2` with a budget for one call and a slow fake filler, two calls give
       one run and one refusal before any filler call; the session total is the one price.
-- [ ] `estimate` during a run shows the reservation; after it, the spend.
+- [x] `estimate` during a run shows the reservation; after it, the spend.
 
 **Files.** `crates/rascal-mask/src/actions.rs`, tests, `docs/contract.md`. **Size.** S.
 

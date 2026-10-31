@@ -99,8 +99,8 @@ with green CI on both platforms, and then the tag.
 - [x] Checkpoint M8 → tag `m8` (2026-10-31, `ebb773f`, CI green on both platforms)
 
 ## M9 Spend and launcher (Wafflehouse's review; decision 14; PLAN.md M9)
-- [ ] 9.1 Spend survives the status: not sent, known and unresolved calls; `filler call started`; the journal's spend in `run.json`, the unresolved part in the body
-- [ ] 9.2 The budget reserved, then settled: one atomic check and reservation in `serve`
+- [x] 9.1 Spend survives the status: not sent, known and unresolved calls; `filler call started`; the journal's spend in `run.json`, the unresolved part in the body (done: `filler::Charge`, `filler::spent`; tests in `fillers.rs`, `run_json.rs`, `serve_contract.rs`)
+- [x] 9.2 The budget reserved, then settled: one atomic check and reservation in `serve` (done: `actions::Ledger` and its reservation; found and fixed with it: two runs allocated in one millisecond shared an id and a directory, now `run_json::allocate_ms`)
 - [ ] 9.3 Reads never wait on a run: `describe` and `estimate` off the permit
 - [ ] 9.4 Runs listed from allocation
 - [ ] 9.5 The Wafflehouse launcher by H1

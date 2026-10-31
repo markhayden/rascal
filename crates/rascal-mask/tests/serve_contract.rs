@@ -28,7 +28,7 @@ fn config(dir: &Path) -> PathBuf {
     std::fs::write(
         &path,
         format!(
-            "config_version = 1\n[fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"fake\"\n\n[fillers.slow]\ncommand = [{bin:?}, \"fake-filler\", \"slow\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"slow\"\n"
+            "config_version = 1\n[fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"fake\"\n\n[fillers.slow]\ncommand = [{bin:?}, \"fake-filler\", \"slow\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"slow\"\nspend_usd_per_call = 0.04\n"
         ),
     )
     .unwrap();
@@ -242,8 +242,26 @@ fn a_cancelled_call_gets_no_result_and_its_run_says_cancelled() {
     };
     let text = first["params"]["message"].as_str().unwrap().to_string();
     let run_id = text.split_whitespace().nth(1).unwrap().to_string();
-    // Let the run reach the slow fill before cancelling.
-    std::thread::sleep(std::time::Duration::from_millis(800));
+    // Let the run reach the slow fill before cancelling: the call is journaled as started.
+    let reached = std::time::Instant::now();
+    // The journal is a resource once the run has written its first line.
+    while !client
+        .request(
+            "resources/read",
+            serde_json::json!({ "uri": format!("rascal://run/{run_id}/journal") }),
+        )
+        .is_ok_and(|r| {
+            r["contents"][0]["text"]
+                .as_str()
+                .is_some_and(|j| j.contains("filler call started"))
+        })
+    {
+        assert!(
+            reached.elapsed().as_secs() < 30,
+            "the run never reached the fill"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
     client
         .notify(
             "notifications/cancelled",
@@ -283,6 +301,10 @@ fn a_cancelled_call_gets_no_result_and_its_run_says_cancelled() {
     )
     .unwrap();
     assert_eq!(stored["error"], serde_json::Value::Null);
+    // The run stops before its next step; a filler call already in flight runs to its end, and
+    // its price stays spent: cancelling does not erase the cost (task 9.1).
+    assert_eq!(stored["spend"]["usd"], 0.04, "{stored:#}");
+    assert!(stored["body"].get("spend_unresolved_usd").is_none());
     // The run stops before its next step; a filler call already in flight runs to its end.
     assert!(
         stored["body"]["stopped_before"]
@@ -365,6 +387,144 @@ fn the_cap_and_the_budget_refuse_a_call_that_would_spend_too_much() {
         )
         .unwrap();
     assert_eq!(second.structured.unwrap()["error"]["code"], "budget");
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Reads messages until every id in `ids` has its response; returns them by id.
+fn responses(
+    client: &mut Client,
+    ids: &[u64],
+) -> std::collections::BTreeMap<u64, serde_json::Value> {
+    let mut got = std::collections::BTreeMap::new();
+    while got.len() < ids.len() {
+        let message = client.next_message().unwrap();
+        if let Some(id) = message.get("id").and_then(|v| v.as_u64())
+            && ids.contains(&id)
+        {
+            got.insert(id, message);
+        }
+    }
+    got
+}
+
+/// Task 9.2: the limits check and the reservation are one step. Under `--concurrency 2` with a
+/// budget for one call, two calls at once give one run and one refusal before any filler call;
+/// while a run is under way its worst case is held, and its end settles it into the spend.
+#[test]
+fn concurrent_calls_reserve_the_budget_atomically() {
+    let dir = scratch("reserve");
+    let bin = env!("CARGO_BIN_EXE_rascal");
+    let config = dir.join("reserve.toml");
+    std::fs::write(
+        &config,
+        format!(
+            "config_version = 1\n[limits]\nsession_budget_usd = 0.05\n[fillers.slow]\ncommand = [{bin:?}, \"fake-filler\", \"slow\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"slow\"\nspend_usd_per_call = 0.04\n"
+        ),
+    )
+    .unwrap();
+    let mut command = Command::new(bin);
+    command
+        .args([
+            "serve",
+            "--workspace",
+            dir.join("ws").to_str().unwrap(),
+            "--config",
+            config.to_str().unwrap(),
+            "--runs",
+            dir.join("runs").to_str().unwrap(),
+            "--concurrency",
+            "2",
+        ])
+        .env_remove("RASCAL_LOG");
+    let mut client = Client::start(&mut command).unwrap();
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let call = serde_json::json!({ "name": "seam", "arguments": { "image": { "path": pano.to_str().unwrap() }, "filler": "slow" } });
+    let a = client.begin("tools/call", call.clone()).unwrap();
+    let b = client.begin("tools/call", call.clone()).unwrap();
+    let got = responses(&mut client, &[a, b]);
+    let statuses: Vec<(String, f64)> = got
+        .values()
+        .map(|m| {
+            let s = &m["result"]["structuredContent"];
+            (
+                s["status"].as_str().unwrap().to_string(),
+                s["spend"]["usd"].as_f64().unwrap(),
+            )
+        })
+        .collect();
+    assert!(
+        statuses.contains(&("completed".to_string(), 0.04)),
+        "{statuses:?} {got:#?}"
+    );
+    assert!(
+        statuses.contains(&("error".to_string(), 0.0)),
+        "{statuses:?}"
+    );
+    let refused = got
+        .values()
+        .map(|m| &m["result"]["structuredContent"])
+        .find(|s| s["status"] == "error")
+        .unwrap();
+    assert_eq!(refused["error"]["code"], "budget");
+    let estimate = |client: &mut Client| {
+        client
+            .call(
+                "estimate",
+                serde_json::json!({ "action": "seam", "filler": "slow" }),
+            )
+            .unwrap()
+            .structured
+            .unwrap()
+    };
+    let after = estimate(&mut client);
+    assert_eq!(after["session_spent_usd"], 0.04, "{after:#}");
+    assert_eq!(after["session_reserved_usd"], 0.0);
+    assert_eq!(after["allowed"], false);
+    client.close().unwrap();
+
+    // A run under way holds its worst case: with a budget for two, a second call is allowed
+    // and a third, while both are held, is not.
+    std::fs::write(
+        &config,
+        std::fs::read_to_string(&config)
+            .unwrap()
+            .replace("session_budget_usd = 0.05", "session_budget_usd = 0.10"),
+    )
+    .unwrap();
+    let mut command = Command::new(bin);
+    command
+        .args([
+            "serve",
+            "--workspace",
+            dir.join("ws2").to_str().unwrap(),
+            "--config",
+            config.to_str().unwrap(),
+            "--runs",
+            dir.join("runs2").to_str().unwrap(),
+            "--concurrency",
+            "2",
+        ])
+        .env_remove("RASCAL_LOG");
+    let mut client = Client::start(&mut command).unwrap();
+    let mut with_token = call.clone();
+    with_token["_meta"] = serde_json::json!({ "progressToken": "r-1" });
+    let a = client.begin("tools/call", with_token).unwrap();
+    // The run is under way once its first progress names it.
+    loop {
+        let message = client.next_message().unwrap();
+        if message["method"] == "notifications/progress" {
+            break;
+        }
+    }
+    let held = estimate(&mut client);
+    assert_eq!(held["session_reserved_usd"], 0.04, "{held:#}");
+    assert_eq!(held["allowed"], true);
+    let got = responses(&mut client, &[a]);
+    assert_eq!(got[&a]["result"]["structuredContent"]["spend"]["usd"], 0.04);
+    let settled = estimate(&mut client);
+    assert_eq!(settled["session_reserved_usd"], 0.0, "{settled:#}");
+    assert_eq!(settled["session_spent_usd"], 0.04);
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }

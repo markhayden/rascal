@@ -131,6 +131,72 @@ fn a_completed_heal_names_its_input_its_mask_and_its_result() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A filler at 0.04 USD a call, for the spend tests (task 9.1); `command` replaces the fake.
+fn priced(dir: &Path, behaviour: &str, command: Option<&str>) -> PathBuf {
+    let path = dir.join(format!("priced-{behaviour}.toml"));
+    let program = command.unwrap_or(env!("CARGO_BIN_EXE_rascal"));
+    std::fs::write(
+        &path,
+        format!(
+            "config_version = 1\n[fillers.fake]\ncommand = [{program:?}, \"fake-filler\", \"{behaviour}\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\npaste = \"feather\"\ntimeout_s = 30\nrevision = \"fake\"\nspend_usd_per_call = 0.04\n"
+        ),
+    )
+    .unwrap();
+    path
+}
+
+fn heal_with(config: &Path, out: &Path) -> Output {
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    rascal(&[
+        "heal",
+        "seam",
+        pano.to_str().unwrap(),
+        "--filler",
+        "fake",
+        "--config",
+        config.to_str().unwrap(),
+        "--out",
+        out.to_str().unwrap(),
+        "--no-dash",
+    ])
+}
+
+/// Task 9.1: a call that may have been charged is never reported as zero. A filler that ran and
+/// failed is unresolved at its price; one that could not start cost nothing.
+#[test]
+fn a_failed_call_keeps_its_spend_unresolved_and_an_unsent_one_is_free() {
+    let dir = scratch("spend-failed");
+    let out = heal_with(&priced(&dir, "failing", None), &dir.join("failing"));
+    assert_eq!(out.status.code(), Some(3));
+    let r = run_json(&dir.join("failing"));
+    assert_eq!(r["status"], "error");
+    assert_eq!(r["spend"]["usd"], 0.04, "{r:#}");
+    assert_eq!(r["body"]["spend_unresolved_usd"], 0.04);
+    assert!(
+        r["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n.as_str().unwrap().contains("unresolved"))
+    );
+    let missing = dir.join("no-such-filler");
+    let out = heal_with(
+        &priced(&dir, "exact", Some(missing.to_str().unwrap())),
+        &dir.join("unsent"),
+    );
+    assert_eq!(out.status.code(), Some(3));
+    let r = run_json(&dir.join("unsent"));
+    assert_eq!(r["spend"]["usd"], 0.0, "{r:#}");
+    assert!(r["body"].get("spend_unresolved_usd").is_none());
+    // A call that answered is known: the price, nothing unresolved.
+    let out = heal_with(&priced(&dir, "exact", None), &dir.join("known"));
+    assert_eq!(out.status.code(), Some(0));
+    let r = run_json(&dir.join("known"));
+    assert_eq!(r["spend"]["usd"], 0.04);
+    assert!(r["body"].get("spend_unresolved_usd").is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn a_failed_filler_is_an_error_that_keeps_the_mask() {
     let dir = scratch("failing");
@@ -252,7 +318,7 @@ fn an_out_that_held_something_is_left_untouched() {
 fn a_signal_cancels_the_run_and_says_so() {
     let dir = scratch("signal");
     let pano = repo_root().join("fixtures/images/step-pano.png");
-    let slow = config(&dir, "slow");
+    let slow = priced(&dir, "slow", None);
     for (signal, code) in [("TERM", 143), ("INT", 130)] {
         let run = dir.join(format!("run-{signal}"));
         let mut child = Command::new(env!("CARGO_BIN_EXE_rascal"))
@@ -273,9 +339,11 @@ fn a_signal_cancels_the_run_and_says_so() {
             .stderr(std::process::Stdio::piped())
             .spawn()
             .unwrap();
-        // Wait until the fill is under way: the mask has been rendered.
+        // Wait until the fill is under way: the call is journaled as started.
         let started = std::time::Instant::now();
-        while !run.join("seam-grey.png").exists() {
+        while !std::fs::read_to_string(run.join("journal.jsonl"))
+            .is_ok_and(|j| j.contains("filler call started"))
+        {
             assert!(
                 started.elapsed().as_secs() < 30,
                 "the run never reached the fill"
@@ -293,6 +361,9 @@ fn a_signal_cancels_the_run_and_says_so() {
         assert_eq!(r["status"], "cancelled", "SIG{signal}");
         assert_eq!(r["error"], serde_json::Value::Null);
         assert_eq!(r["body"]["signal"], format!("SIG{signal}"));
+        // Stopped mid-call: the charge is unresolved, counted at the price (task 9.1).
+        assert_eq!(r["spend"]["usd"], 0.04, "SIG{signal}: {r:#}");
+        assert_eq!(r["body"]["spend_unresolved_usd"], 0.04);
         assert_eq!(r["images"]["in"].as_array().unwrap().len(), 1);
     }
     let _ = std::fs::remove_dir_all(&dir);

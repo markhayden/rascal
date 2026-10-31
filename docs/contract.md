@@ -126,12 +126,26 @@ A filler entry's `spend_usd_per_call` is the run's price; `[cache] dir` keeps ev
 request, filler and revision, so an identical request (a retry, a second arm with the same mask)
 is answered without calling the filler: `run.json` says `cache: hit` and spend 0, a call says
 `miss` with the price (table-manners 4.4). The lab always caches, in `fills/` under its directory.
+
+A run's spend is its journal's, whatever its status (task 9.1): a call that may have been charged
+is never reported as zero, and cancelling does not erase a cost. Each call is *not sent* (refused
+before its request left rascal: no key, the connection refused, the command not started, or 401
+and 403), *known* (the filler answered: a 2xx, or exit 0) or *unresolved* (sent and not settled:
+a timeout, a failure status, a non-zero exit, or the run killed mid-call). Known and unresolved
+calls count at the price; `heal` journals `filler call started` before each call, so a run stopped
+mid-call counts it too. `spend.usd` is the total; the unresolved part is `body.spend_unresolved_usd`
+with a note, until table-manners v0.2 names a shared field.
 `[limits]` holds `serve` to `call_cap_usd` (a call's `max_spend_usd` may lower it, never raise
 it) and `session_budget_usd` across the process's calls; a call whose price would pass either is
-refused before it runs, an `error` result with code `budget` (4.5). The `estimate` action returns
-the worst case for an action and filler, the cap, the budget, what the session has spent and
-whether the call would be allowed. An action `may_spend` in the description when a configured
-filler has a price.
+refused before it runs, an `error` result with code `budget` (4.5). The check and a reservation of
+the call's worst case are one step under the session ledger's lock (task 9.2), so concurrent calls
+(`--concurrency`) never both pass against the same spend; the run's end settles the reservation
+into what it spent (unresolved charges included), and a run that ends without settling counts its
+reservation as unresolved spend. The `estimate` action returns the worst case for an action and
+filler, the cap, the budget, the session's spent, unresolved and reserved amounts, what is left
+after both, and whether the call would be allowed. An action `may_spend` in the description when a
+configured filler has a price. Each run's start time is strictly increasing within the process, so
+calls allocated in the same millisecond still get distinct ids and directories.
 
 ```toml
 [cache]
@@ -179,7 +193,7 @@ contract's `MAPPING.md` can say so:
 | a polygon of 65 to 256 vertices | refused inbound | rascal's location schema is the copied envelope's (64, ADR 0009) |
 | `absent` with a `reason` | taken; the reason is not kept in rascal's own record | the copied schema's `absent` has no reason; `run.json` carries it |
 | a `mask` location in a location slot | refused | a mask goes to `--mask`; the handoff milestone adds the rendering both ways |
-| cancelling a call | the run stops before its next step | a filler call already in flight runs to its end, bounded by its timeout |
+| cancelling a call | the run stops before its next step | a filler call already in flight runs to its end, bounded by its timeout, and its price stays spent |
 | `view` | accepted, never emitted | as the contract says |
 
 The `rect` recipe's action is `mask_rect`, because `serve` already has a `rect` op tool.

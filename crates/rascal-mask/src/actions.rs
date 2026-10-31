@@ -21,14 +21,67 @@ use serde_json::{Map, Value, json};
 use crate::run_json::{self, Ended};
 use crate::{heal, run};
 use rascal_mask::describe::{self, INLINE_BYTES, recipe_of};
+use rascal_mask::filler::Spent;
 
 /// The contract's actions over the shipped recipes, with runs under `runs`.
 pub struct ContractActions {
     pub config_path: Option<PathBuf>,
     pub config: Option<Config>,
     pub runs: PathBuf,
-    /// What this server process has spent, by the fillers' prices (table-manners 4.5).
-    pub spent: std::sync::Mutex<f64>,
+    /// What this server process has spent and holds for calls under way (table-manners 4.5).
+    pub ledger: std::sync::Mutex<Ledger>,
+}
+
+/// The session's spend: a call reserves its worst case when the limits pass, in the same step
+/// under the ledger's lock, and its end settles the reservation into what the run spent.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Ledger {
+    /// What finished calls spent, unresolved charges included.
+    pub spent_usd: f64,
+    /// The part of `spent_usd` no answer settled (task 9.1).
+    pub unresolved_usd: f64,
+    /// The worst cases held for calls under way.
+    pub reserved_usd: f64,
+}
+
+/// A call's hold on the session budget, settled when the run ends. Dropped unsettled (the run
+/// panicked), the whole reservation is counted as unresolved spend, never released.
+struct Reservation<'a> {
+    ledger: &'a std::sync::Mutex<Ledger>,
+    usd: f64,
+    settled: bool,
+}
+
+impl Reservation<'_> {
+    /// Releases the hold and adds what the run spent; `None` (no `run.json` was written)
+    /// counts the hold as unresolved.
+    fn settle(mut self, spent: Option<Spent>) {
+        let spent = spent.unwrap_or(Spent {
+            usd: self.usd,
+            unresolved_usd: self.usd,
+        });
+        self.apply(spent);
+    }
+
+    fn apply(&mut self, spent: Spent) {
+        let mut ledger = self.ledger.lock().unwrap_or_else(|e| e.into_inner());
+        ledger.reserved_usd = (ledger.reserved_usd - self.usd).max(0.0);
+        ledger.spent_usd += spent.usd;
+        ledger.unresolved_usd += spent.unresolved_usd;
+        self.settled = true;
+    }
+}
+
+impl Drop for Reservation<'_> {
+    fn drop(&mut self) {
+        if !self.settled {
+            let usd = self.usd;
+            self.apply(Spent {
+                usd,
+                unresolved_usd: usd,
+            });
+        }
+    }
 }
 
 /// The default runs root: `$XDG_DATA_HOME/rascal/runs`, else `~/.local/share/rascal/runs`.
@@ -253,7 +306,7 @@ impl ContractActions {
 
     /// What a call to the filler costs at worst, and the limits that apply: the per-call cap
     /// (the configuration's, lowered by `max_spend_usd`) and the session budget.
-    fn limits(&self, filler: Option<&str>, args: &Map<String, Value>) -> Limits {
+    fn limits(&self, filler: Option<&str>, args: &Map<String, Value>, ledger: &Ledger) -> Limits {
         let price = filler
             .and_then(|f| self.config.as_ref()?.fillers.get(f)?.spend_usd_per_call)
             .unwrap_or(0.0);
@@ -267,13 +320,35 @@ impl ContractActions {
             (Some(c), Some(a)) => Some(c.min(a)),
             (c, a) => c.or(a),
         };
-        let spent = self.spent.lock().map(|s| *s).unwrap_or(0.0);
         Limits {
             worst_case_usd: price,
             call_cap_usd: cap,
             session_budget_usd: configured.session_budget_usd,
-            session_spent_usd: spent,
+            session_held_usd: ledger.spent_usd + ledger.reserved_usd,
         }
+    }
+
+    /// The ledger as it stands.
+    fn ledger(&self) -> Ledger {
+        *self.ledger.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Checks the limits and reserves the call's worst case in one step under the ledger's
+    /// lock, so two calls never both pass against the same spend.
+    fn reserve(
+        &self,
+        filler: Option<&str>,
+        args: &Map<String, Value>,
+    ) -> rascal_core::error::Result<Reservation<'_>> {
+        let mut ledger = self.ledger.lock().unwrap_or_else(|e| e.into_inner());
+        let limits = self.limits(filler, args, &ledger);
+        limits.check()?;
+        ledger.reserved_usd += limits.worst_case_usd;
+        Ok(Reservation {
+            ledger: &self.ledger,
+            usd: limits.worst_case_usd,
+            settled: false,
+        })
     }
 
     /// Runs one action to its `run.json`.
@@ -285,7 +360,7 @@ impl ContractActions {
         cancel: Arc<Cancel>,
     ) -> std::result::Result<ActionResult, String> {
         std::fs::create_dir_all(&self.runs).map_err(|e| e.to_string())?;
-        let started_ms = run_json::now_ms();
+        let started_ms = run_json::allocate_ms();
         let id = run_json::new_id(started_ms);
         let out = self.runs.join(&id);
         let inputs = self.runs.join(format!("{id}.in"));
@@ -296,11 +371,13 @@ impl ContractActions {
         let _ = std::fs::create_dir_all(&inputs);
         let _ = std::fs::write(inputs.join("action"), describe::action_name(recipe));
         progress(format!("run {id} started (rascal://run/{id}/run.json)"));
-        let limits = self.limits(filler.as_deref(), args);
         let prepared = self
             .run_args(recipe, args, &out, &inputs, cancel)
-            .and_then(|run_args| limits.check().map(|()| run_args));
-        let (pending, ended) = match prepared {
+            .and_then(|run_args| {
+                self.reserve(filler.as_deref(), args)
+                    .map(|reservation| (run_args, reservation))
+            });
+        let (pending, ended, reservation) = match prepared {
             Err(error) => {
                 std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
                 let pending = run_json::Pending {
@@ -317,9 +394,9 @@ impl ContractActions {
                     images_in: Vec::new(),
                     locations_used: Vec::new(),
                 };
-                (pending, run_json::ended_with(recipe, &error))
+                (pending, run_json::ended_with(recipe, &error), None)
             }
-            Ok(run_args) => {
+            Ok((run_args, reservation)) => {
                 let mut pending = run_json::pending_for(&run_args, filler.as_deref());
                 pending.id = id.clone();
                 pending.started_ms = started_ms;
@@ -331,14 +408,14 @@ impl ContractActions {
                     done.store(true, Ordering::SeqCst);
                     ended
                 });
-                (pending, ended)
+                (pending, ended, Some(reservation))
             }
         };
-        if let Ok(mut spent) = self.spent.lock() {
-            *spent += ended.spend_usd;
-        }
         let cancelled = ended.status == rascal_core::contract::table_manners::Status::Cancelled;
-        run_json::conclude(&pending, ended);
+        let spent = run_json::conclude(&pending, ended);
+        if let Some(reservation) = reservation {
+            reservation.settle(spent);
+        }
         if cancelled {
             return Err("cancelled".to_string());
         }
@@ -364,7 +441,6 @@ impl ContractActions {
                     Some(filler),
                     report.renders,
                     report.result,
-                    report.spend_usd,
                     report.cache,
                 ),
                 Err(error) => run_json::ended_with(recipe, &error),
@@ -379,7 +455,6 @@ impl ContractActions {
                     None,
                     report.renders,
                     None,
-                    0.0,
                     None,
                 ),
                 Err(error) => run_json::ended_with(recipe, &error),
@@ -596,7 +671,8 @@ impl Actions for ContractActions {
                 return Err(format!("estimate: no action {action}"));
             }
             let filler = args.get("filler").and_then(|v| v.as_str());
-            let limits = self.limits(filler, args);
+            let ledger = self.ledger();
+            let limits = self.limits(filler, args, &ledger);
             return Ok(ActionResult {
                 structured: json!({
                     "contract": rascal_core::contract::CONTRACT_VERSION,
@@ -604,8 +680,10 @@ impl Actions for ContractActions {
                     "worst_case_usd": limits.worst_case_usd,
                     "call_cap_usd": limits.call_cap_usd,
                     "session_budget_usd": limits.session_budget_usd,
-                    "session_spent_usd": limits.session_spent_usd,
-                    "session_left_usd": limits.session_budget_usd.map(|b| (b - limits.session_spent_usd).max(0.0)),
+                    "session_spent_usd": ledger.spent_usd,
+                    "session_unresolved_usd": ledger.unresolved_usd,
+                    "session_reserved_usd": ledger.reserved_usd,
+                    "session_left_usd": limits.session_budget_usd.map(|b| (b - limits.session_held_usd).max(0.0)),
                     "allowed": limits.check().is_ok(),
                 }),
                 is_error: false,
@@ -692,7 +770,8 @@ struct Limits {
     worst_case_usd: f64,
     call_cap_usd: Option<f64>,
     session_budget_usd: Option<f64>,
-    session_spent_usd: f64,
+    /// What the session has spent plus what calls under way hold.
+    session_held_usd: f64,
 }
 
 impl Limits {
@@ -709,13 +788,13 @@ impl Limits {
             });
         }
         if let Some(budget) = self.session_budget_usd
-            && self.session_spent_usd + self.worst_case_usd > budget
+            && self.session_held_usd + self.worst_case_usd > budget
         {
             return Err(Error::Budget {
                 reason: format!(
                     "the call may spend {:.4} USD; the session has {:.4} of {budget:.4} left",
                     self.worst_case_usd,
-                    (budget - self.session_spent_usd).max(0.0)
+                    (budget - self.session_held_usd).max(0.0)
                 ),
             });
         }

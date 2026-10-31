@@ -8,7 +8,9 @@ use image::DynamicImage;
 use rascal_core::Error;
 use rascal_core::error::Result;
 
-use super::{CallOutcome, FillRequest, Filler, FillerCall, decode_answer, excerpt, runtime};
+use super::{
+    CallOutcome, Charge, FillRequest, Filler, FillerCall, decode_answer, excerpt, runtime,
+};
 
 pub struct CommandFiller {
     name: String,
@@ -71,6 +73,7 @@ impl Filler for CommandFiller {
             duration_ms: 0,
             status: -1,
             outcome: String::new(),
+            charge: Charge::NotSent,
         };
         let fill = self.run(request, scratch, &mut call);
         call.outcome = match &fill {
@@ -118,6 +121,8 @@ impl CommandFiller {
                     format!("fillers.{}: cannot start {}: {e}", self.name, argv[0]),
                 )
             })?;
+            // Started: whatever happens now may have been charged.
+            call.charge = Charge::Unresolved;
             match tokio::time::timeout(self.timeout, child.wait_with_output()).await {
                 Ok(Ok(output)) => Ok(output),
                 Ok(Err(e)) => Err(Error::op("filler", format!("fillers.{}: {e}", self.name))),
@@ -134,7 +139,9 @@ impl CommandFiller {
         call.duration_ms = started.elapsed().as_millis() as u64;
         let output = outcome?;
         call.status = i64::from(output.status.code().unwrap_or(-1));
-        if !output.status.success() {
+        if output.status.success() {
+            call.charge = Charge::Known;
+        } else {
             return Err(Error::op(
                 "filler",
                 format!(
