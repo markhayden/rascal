@@ -13,6 +13,7 @@ mod measure;
 mod ops;
 mod packs;
 mod paste;
+mod playground;
 mod render;
 mod run;
 mod run_json;
@@ -195,6 +196,14 @@ enum Command {
         /// The configuration file (rascal.toml): its fillers name the spend and the keys.
         #[arg(long)]
         config: Option<PathBuf>,
+    },
+    /// Start the shared playground over the waffle tools (a separate program; rascal carries no
+    /// UI): hands over with `--tool rascal` and the arguments given; exit 69 when it is not
+    /// installed.
+    Playground {
+        /// Passed to the playground as given.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
     /// The op catalogue: every manifest as a client sees it.
     Ops {
@@ -900,6 +909,7 @@ fn main() {
             }
         }
         Command::Ops { command } => ops::run(&registry, command),
+        Command::Playground { args } => playground::run(&args),
         Command::Describe { json, config } => match describe_cmd(json, config.as_deref()) {
             Ok(()) => exit::OK,
             Err(error) => {

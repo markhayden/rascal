@@ -1303,8 +1303,8 @@ directory), starts it with `--tool rascal`, and when it is absent says where to 
 69 (unavailable). No UI, no server.
 
 **Acceptance.**
-- [ ] With a fake `playground` on `PATH` the subcommand execs it with the arguments; without, the
-      message and exit 69.
+- [x] With a fake `playground` on `PATH` the subcommand runs it with `--tool rascal` and the
+      arguments and keeps its exit code; without, the message and exit 69.
 
 **Files.** `crates/rascal-mask/src/main.rs`, `playground.rs` (new). **Size.** S.
 

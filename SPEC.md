@@ -1047,7 +1047,7 @@ uv run --frozen --offline --no-sync ruff check . && uv run --frozen --offline --
 # the binary
 rascal run seam pano.jpg --out run/
 rascal describe --json                         # the contract's description document (table-manners, M8)
-rascal playground                              # start the shared playground program (M8)
+rascal playground [args…]                      # start the shared playground program with --tool rascal; 69 when not installed
 rascal run remove room.jpg --location chairs.json --out run/   # chairs.json: rascal's location or a table-manners one
 rascal run remove-prompt room.jpg --prompt "chair" --config rascal.toml --out run/   # segment through the pack
 rascal run repair print.jpg --stroke scratch.json --out run/

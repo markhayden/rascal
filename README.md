@@ -92,6 +92,8 @@ rascal ops list                                           # every op's manifest,
 rascal inspect run/artifacts/<id> --json                  # or --out pages/ for the overlay and chart, --replay to rebuild
 rascal export --compat run/journal.jsonl --step rasterize --out e.json
 rascal dash run/ --out run/dash.html                     # the run page: timings, envelopes, every artifact; --serve for loopback
+rascal describe --json                                    # what rascal can run, in the shared contract's words
+rascal playground                                         # start the shared playground (a separate program)
 rascal serve --workspace ws/                              # every op as an MCP tool over stdio, plus import/list/describe/read/dash,
                                                           # and the table-manners actions (one per recipe) with run resources
 rascal tools call rascal-tools segment --config rascal.toml --workspace ws/ --image photo.png --prompt "the chair"   # a pack's tool from the shell

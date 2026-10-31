@@ -143,3 +143,15 @@ session_budget_usd = 5.00
 spend_usd_per_call = 0.04
 ```
 
+## `rascal playground` (8.7)
+
+```
+rascal playground [args…]
+```
+
+The playground is one program shared by the waffle tools, in its own repository; rascal carries
+no UI and no server for it. The command finds the `playground` binary (`PLAYGROUND` when set,
+else `PATH`, else `$XDG_DATA_HOME/waffle/bin`, else `~/.local/share/waffle/bin`) and runs it
+with `--tool rascal` and the arguments given, returning its exit code. When none is installed it
+says where to put it and exits 69.
+
