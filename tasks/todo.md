@@ -97,3 +97,14 @@ with green CI on both platforms, and then the tag.
 - [x] 8.7 `rascal playground`: finds and starts the shared playground, no UI
 - [x] 8.8 Fixtures under `fixtures/contract/`, the first half of the cross-tool acceptance test in CI, `docs/contract.md`, SPEC "External interface", README, architecture (done: `fixtures/contract/results/` masked and compared; rascal's half of the acceptance test is `contract_locations.rs`; rascal's v0.1 limits written up for the contract's MAPPING in `docs/contract.md`)
 - [x] Checkpoint M8 → tag `m8` (2026-10-31, `ebb773f`, CI green on both platforms)
+
+## M9 Spend and launcher (Wafflehouse's review; decision 14; PLAN.md M9)
+- [ ] 9.1 Spend survives the status: not sent, known and unresolved calls; `filler call started`; the journal's spend in `run.json`, the unresolved part in the body
+- [ ] 9.2 The budget reserved, then settled: one atomic check and reservation in `serve`
+- [ ] 9.3 Reads never wait on a run: `describe` and `estimate` off the permit
+- [ ] 9.4 Runs listed from allocation
+- [ ] 9.5 The Wafflehouse launcher by H1
+- [ ] Checkpoint M9 → tag `m9`
+
+## M10 Operations (R3; decision 14; PLAN.md M10)
+- [ ] 10.1 to 10.7 as in PLAN.md; 10.5 (portable native artifacts) first, 10.2 to 10.4 after the operations profile is agreed

@@ -132,4 +132,16 @@ and tagged v0.1.0 the same day. rascal conforms to it, core and images profile, 
 across the repositories: squint conforms first (its long paid runs are where the contract is
 riskiest), rascal in parallel against the same tag, then the mask handoff (rascal's mask to squint
 as the region where change was allowed), then the playground. ADR 0020 records the dependency.
-\n
+
+## 14. Wafflehouse's review: M9 and M10
+
+2026-10-31. Wafflehouse, the shared local program over the owner's tools, reviewed its
+integration interfaces against rascal. The owner authorised rascal's independent fixes as M9,
+with the two spending bugs first ("cancellation must not erase costs, and concurrent calls must
+reserve budget atomically"), and accepted M10 as the home of R3, independent operations. Unknown
+spend stays unknown: a call that may have been charged is counted at its price and marked
+unresolved, never reported as zero. The launcher follows H1 with a test-only installer seam,
+consistent with squint; Wafflehouse owns the eventual installer. The shared names for run
+association and the session wait for table-manners v0.2; operation bindings are validated by
+rascal (type, schema version, frame, resolution), never by type name alone.
+

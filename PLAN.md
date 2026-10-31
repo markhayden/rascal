@@ -30,6 +30,9 @@ fan-and-ramp mask on the owner's corpus, and last the Poisson paste.
 | M5 Pack | the Python pack with `echo_region`, `fetch` and the parity harness; `segment` under branch A; the bundle with wheelhouse and model bytes; offline setup and launch | `m5` |
 | M6 Lab | corpus manifest, protocol, matrix, cells with pre-execution identity, attempts, pairs, decode; the owner's first lab round | `m6` |
 | M7 Poisson | the gradient-domain paste wired into `paste` and `heal`; the final timing run; the v0.1.0 release | `m7`, `v0.1.0` |
+| M8 Table manners | conformance to the shared contract, `table-manners` v0.1.0 | `m8` |
+| M9 Spend and launcher | spend that survives every status, the reserved budget, reads off the permit, runs listed from allocation, the Wafflehouse launcher | `m9` |
+| M10 Operations | the ops under the contract: declared, bound by checked reference, portable native artifacts (R3) | `m10` |
 
 Deferred past M7 with their own ADRs: the Node, Swift and WASM bindings; the path fan; scaled
 windows; replace with homography; retouch; extend; isolate; `segment` under branch B.
@@ -1333,6 +1336,134 @@ interface", `README.md`, `docs/architecture.md`.
   filler is the mask alone); not one action per recipe and filler. Recommended, assumed.
 - The op tools keep their envelopes and mapping in v0.1 (ADR 0020). Recommended, assumed.
 - The runs root for `serve` defaults under `$XDG_DATA_HOME/rascal/runs`. Recommended, assumed.
+
+## Milestone M9: Spend and launcher
+
+Wafflehouse's review of rascal against the shared contract (decision 14) found two spending bugs
+and asked for the launcher it defines (H1). None of this waits on table-manners v0.2: the shared
+names for run association and the session (C4) are adopted after v0.2 is tagged, and rascal says
+the unresolved part of a spend in its own `body` until then. The spending bugs come first. Each
+task is a branch merged on a green check; the checkpoint tags `m9`.
+
+### Task 9.1: Spend survives the status
+
+**Description.** A filler call is *not sent* (refused before its request left rascal: no key,
+connection refused, the command could not start, authentication rejected with 401 or 403),
+*known* (the filler answered: a 2xx, or a command that exited 0), or *unresolved* (sent with no
+answer that settles it: timed out, killed, a failure status, a non-zero exit). The call record
+says which (`charge`) and what it costs (`spend_usd`: the entry's price unless not sent). `heal`
+notes `filler call started` before the call, so a run killed mid-call still shows it. A run's
+spend is the journal's: every known and unresolved call at its price, and a started call with no
+record as unresolved, whatever the run's status. `run.json` reports the total in `spend.usd` and
+the unresolved part in `body.spend_unresolved_usd` with a note; never zero for a call that may
+have been charged.
+
+**Acceptance.**
+- [ ] A heal cancelled after the fill (serve, before `apply`) reports the price; a filler that
+      times out or exits non-zero reports it as unresolved; a filler that cannot start reports 0.
+- [ ] `rascal heal` killed by SIGTERM during the filler call writes `run.json` with the price,
+      unresolved.
+
+**Files.** `crates/rascal-mask/src/filler/{mod,http,command}.rs`, `heal.rs`, `run_json.rs`,
+`actions.rs`, tests, `docs/contract.md`, `docs/fillers.md`. **Size.** M.
+
+### Task 9.2: The budget reserved, then settled
+
+**Description.** `serve`'s ledger holds `spent`, `reserved` and `unresolved`. The cap and budget
+check and the reservation of the call's worst case are one step under the ledger's lock; the
+run's end settles it from the run's spend (9.1): the reservation released, the spend added, the
+unresolved part kept as such. A run that ends without settling (a panic) settles its reservation
+as unresolved spend. `estimate` reports the reserved and unresolved parts.
+
+**Acceptance.**
+- [ ] Under `--concurrency 2` with a budget for one call and a slow fake filler, two calls give
+      one run and one refusal before any filler call; the session total is the one price.
+- [ ] `estimate` during a run shows the reservation; after it, the spend.
+
+**Files.** `crates/rascal-mask/src/actions.rs`, tests, `docs/contract.md`. **Size.** S.
+
+### Task 9.3: Reads never wait on a run
+
+**Description.** `describe` and `estimate` answer while a run holds the call permit, as the
+resources already do: the `Actions` trait says which calls are exclusive.
+
+**Acceptance.**
+- [ ] With a slow run holding the permit, `estimate`, `describe` and `rascal://runs` answer
+      before it ends.
+
+**Files.** `crates/rascal-mcp/src/server.rs`, `crates/rascal-mask/src/actions.rs`, tests. **Size.** S.
+
+### Task 9.4: Runs listed from allocation
+
+**Description.** `serve` creates a run's directory when it allocates the run, before the first
+progress line and any paid work, so `rascal://runs` lists it as `running` with its action from
+that moment.
+
+**Acceptance.**
+- [ ] A slow run is in the runs list, `running`, while its first step works.
+
+**Files.** `crates/rascal-mask/src/actions.rs`, tests. **Size.** XS.
+
+### Task 9.5: The Wafflehouse launcher
+
+**Description.** `rascal playground` hands off to the shared program by Wafflehouse's H1, as
+squint's 7.9 does: it finds `wafflehouse` (`WAFFLEHOUSE_BIN`, absolute, never falling through when
+it is wrong; then `PATH`; then `~/.local/bin`), runs it with exactly `--tool rascal` without a
+shell, and keeps its exit code (128 + N for a signal). Missing on a terminal (stdin and stderr),
+it offers to install: no exits 0 and changes nothing; yes runs the installer into
+`~/.local/bin`, then that path; an installer failure exits 74 and runs nothing. Off a terminal,
+69 with instructions. The production installer waits for an approved release artifact, so a
+release build exits 69 with no offer; the installer is a testkit-only seam (`--installer`, with
+`--terminal` to take the answer from stdin). The subcommand takes no arguments (64).
+
+**Acceptance.**
+- [ ] Fake programs show the exact argv, a path with spaces, exit codes and signals kept, an
+      invalid override 69 without fall-through, the lookup order, a symlinked program; missing:
+      no 0, yes installs and runs, installer failure 74, off a terminal 69, extra arguments 64.
+
+**Files.** `crates/rascal-mask/src/playground.rs`, `main.rs`, `tests/playground.rs`,
+`docs/contract.md`, `SPEC.md`, `README.md`. **Size.** S.
+
+### Checkpoint M9
+- [ ] Tasks 9.1 to 9.5 merged, `just check` green, CI green on both platforms; tag `m9`.
+
+### After table-manners v0.2 (not yet a task)
+The pin moves to v0.2; `client_run_id` claimed atomically (a reuse is `client_run_id_reused` with
+the earlier run, never its result); the run reference in progress `_meta`; `rascal://session`;
+the session in `estimate`; the unresolved spend in the shared field; fixtures from rascal's own
+client. Planned when the schema is agreed (rascal's review is in table-manners' PROPOSALS.md).
+
+## Milestone M10: Operations (R3)
+
+The ops under the contract, so a client tests one piece at a time: Line on an image, its Location
+to Rasterize, a saved Mask to Feather with a changed sigma, without a finder or filler and without
+rerunning anything upstream. Accepted as R3's home by decision 14; the shared declaration is an
+operations profile in table-manners that rascal drafts and squint and Wafflehouse review, so
+10.2 to 10.4 wait on it and 10.5 starts first.
+
+- **10.1** The operations profile drafted into table-manners' PROPOSALS.md: `operations` in the
+  description (name, purpose, category, the manifest's parameter schema, typed ports with `many`,
+  constant sets); shared types `image` and `location`, rascal's own namespaced and opaque
+  (`rascal:Mask`, `rascal:BandProfile`, `rascal:Series`, `rascal:Plan`); an artifact reference
+  (type, schema version, identity, frame). A host may suggest a binding by type; rascal validates
+  it: type, schema version, frame compatibility, and resolution in its own store.
+- **10.2** `describe` emits the operations from the manifests.
+- **10.3** An op call is a run: `run.json` with the typed references out and an overlay or
+  preview image for every output, so each result can be inspected while native artifacts stay
+  opaque to the host.
+- **10.4** Binding by reference: a wrong type, schema version or frame, or an unresolved
+  artifact, is `invalid` naming the port, what it takes and what it got; upstream steps never
+  rerun.
+- **10.5** Native artifacts portable: a Mask exported as a hash-checked bundle (record, frame
+  chain, rasters) and imported into another workspace with the same identity; a PNG is never
+  taken as a Mask; Locations import as JSON. Starts first.
+- **10.6** Persistence and relocation: a saved binding reopens after a restart, and after the
+  workspace moves, by identity through rascal, never by the host searching folders. After the
+  binding interface (10.1, 10.4) is settled.
+- **10.7** The Line → Rasterize → Feather path through the independent client, positive and
+  negative fixtures, ADR 0021, `docs/contract.md`, `docs/tools.md`.
+
+Tasks with acceptance and files are written when the profile is agreed.
 
 ## Risks and mitigations
 
