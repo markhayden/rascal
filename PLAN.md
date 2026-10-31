@@ -1388,7 +1388,7 @@ as unresolved spend. `estimate` reports the reserved and unresolved parts.
 resources already do: the `Actions` trait says which calls are exclusive.
 
 **Acceptance.**
-- [ ] With a slow run holding the permit, `estimate`, `describe` and `rascal://runs` answer
+- [x] With a slow run holding the permit, `estimate`, `describe` and `rascal://runs` answer
       before it ends.
 
 **Files.** `crates/rascal-mcp/src/server.rs`, `crates/rascal-mask/src/actions.rs`, tests. **Size.** S.
@@ -1400,7 +1400,7 @@ progress line and any paid work, so `rascal://runs` lists it as `running` with i
 that moment.
 
 **Acceptance.**
-- [ ] A slow run is in the runs list, `running`, while its first step works.
+- [x] A slow run is in the runs list, `running`, while its first step works.
 
 **Files.** `crates/rascal-mask/src/actions.rs`, tests. **Size.** XS.
 

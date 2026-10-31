@@ -787,7 +787,8 @@ injected; the server resolves ids against its own workspace. Workspace tools: `w
 is `invalid_args`). Results are the envelope as `structuredContent` plus image content blocks in
 exactly the count and order of `images`. Errors map: validation to `invalid_args` in the
 envelope; operational failure to a JSON-RPC error carrying the error class. Calls are serial per
-workspace by default; `--concurrency n` allows parallel calls, each still committing in turn. A
+workspace by default; `--concurrency n` allows parallel calls, each still committing in turn; `describe` and
+`estimate` never wait for a call. A
 standard MCP client with no knowledge of rascal can import an image, list tools, run a recipe's
 steps one by one and read the result; the testkit's independently written minimal client proves
 it.
