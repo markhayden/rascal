@@ -37,7 +37,7 @@ pub fn serve(args: &ServeArgs) -> Result<()> {
             .runs
             .clone()
             .unwrap_or_else(crate::actions::default_runs_root),
-        spent: std::sync::Mutex::new(0.0),
+        ledger: std::sync::Mutex::default(),
     });
     let server = Server::new(
         workspace,

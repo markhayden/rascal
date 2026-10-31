@@ -137,10 +137,15 @@ mid-call counts it too. `spend.usd` is the total; the unresolved part is `body.s
 with a note, until table-manners v0.2 names a shared field.
 `[limits]` holds `serve` to `call_cap_usd` (a call's `max_spend_usd` may lower it, never raise
 it) and `session_budget_usd` across the process's calls; a call whose price would pass either is
-refused before it runs, an `error` result with code `budget` (4.5). The `estimate` action returns
-the worst case for an action and filler, the cap, the budget, what the session has spent and
-whether the call would be allowed. An action `may_spend` in the description when a configured
-filler has a price.
+refused before it runs, an `error` result with code `budget` (4.5). The check and a reservation of
+the call's worst case are one step under the session ledger's lock (task 9.2), so concurrent calls
+(`--concurrency`) never both pass against the same spend; the run's end settles the reservation
+into what it spent (unresolved charges included), and a run that ends without settling counts its
+reservation as unresolved spend. The `estimate` action returns the worst case for an action and
+filler, the cap, the budget, the session's spent, unresolved and reserved amounts, what is left
+after both, and whether the call would be allowed. An action `may_spend` in the description when a
+configured filler has a price. Each run's start time is strictly increasing within the process, so
+calls allocated in the same millisecond still get distinct ids and directories.
 
 ```toml
 [cache]

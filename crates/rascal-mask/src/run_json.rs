@@ -36,6 +36,15 @@ pub fn now_ms() -> u128 {
         .unwrap_or(0)
 }
 
+/// A run's start time, strictly increasing within the process, so two runs allocated in the
+/// same millisecond (concurrent `serve` calls) get distinct ids and directories.
+pub fn allocate_ms() -> u128 {
+    static LAST: Mutex<u128> = Mutex::new(0);
+    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+    *last = now_ms().max(*last + 1);
+    *last
+}
+
 /// RFC 3339 in UTC with milliseconds, from epoch milliseconds.
 pub fn rfc3339(ms: u128) -> String {
     let secs = (ms / 1000) as i64;
@@ -394,7 +403,7 @@ pub fn write(dir: &Path, result: &RunResult) -> rascal_core::error::Result<()> {
 /// The pending record for a `run` or `heal` of `args` (with `filler` for heal), before it
 /// starts: its id, action, directory, start time and input identity.
 pub fn pending_for(args: &crate::run::RunArgs, filler: Option<&str>) -> Pending {
-    let started_ms = now_ms();
+    let started_ms = allocate_ms();
     let digest_of = |p: &Option<PathBuf>| {
         p.as_ref()
             .and_then(|p| std::fs::read(p).ok())

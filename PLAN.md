@@ -1376,9 +1376,9 @@ unresolved part kept as such. A run that ends without settling (a panic) settles
 as unresolved spend. `estimate` reports the reserved and unresolved parts.
 
 **Acceptance.**
-- [ ] Under `--concurrency 2` with a budget for one call and a slow fake filler, two calls give
+- [x] Under `--concurrency 2` with a budget for one call and a slow fake filler, two calls give
       one run and one refusal before any filler call; the session total is the one price.
-- [ ] `estimate` during a run shows the reservation; after it, the spend.
+- [x] `estimate` during a run shows the reservation; after it, the spend.
 
 **Files.** `crates/rascal-mask/src/actions.rs`, tests, `docs/contract.md`. **Size.** S.
 
