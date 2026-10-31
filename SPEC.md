@@ -993,7 +993,8 @@ rascal conforms to **table-manners** v0.1.0 (https://github.com/markhayden/table
 0020, decision 13), the shared contract of the owner's tools: what an agent, a script or the
 playground sees from outside is the same for squint, rascal and the tools after them, so they
 chain in one pipeline without glue code. The contract's text is the specification of that
-surface; this section is rascal's mapping onto it, built in milestone M8 (PLAN.md).
+surface; this section is rascal's mapping onto it, built in milestone M8 (PLAN.md;
+`docs/contract.md` has the details and rascal's v0.1 limits).
 
 | the contract | rascal |
 |---|---|

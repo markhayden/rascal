@@ -355,3 +355,115 @@ fn a_repeated_heal_is_a_cache_hit_that_spends_nothing() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A run.json with what changes per run masked: times, the run's id and paths, temporary paths
+/// in any string, so a stored fixture pins everything else.
+fn masked(mut value: serde_json::Value, scratch: &Path) -> serde_json::Value {
+    /// `"duration_ms":<digits>` inside a string (a journal note) as `"duration_ms":0`.
+    fn durations(s: &str) -> String {
+        let key = "\"duration_ms\":";
+        let mut out = String::new();
+        let mut rest = s;
+        while let Some(i) = rest.find(key) {
+            out.push_str(&rest[..i + key.len()]);
+            rest = rest[i + key.len()..].trim_start_matches(|c: char| c.is_ascii_digit());
+            out.push('0');
+        }
+        out.push_str(rest);
+        out
+    }
+    fn walk(v: &mut serde_json::Value, scratch: &str) {
+        match v {
+            serde_json::Value::String(s) if s.contains(scratch) || s.contains("duration_ms") => {
+                *s = durations(&s.replace(scratch, "<path>"));
+            }
+            serde_json::Value::Array(items) => items.iter_mut().for_each(|i| walk(i, scratch)),
+            serde_json::Value::Object(map) => map.values_mut().for_each(|i| walk(i, scratch)),
+            _ => {}
+        }
+    }
+    let scratch = scratch.to_str().unwrap().to_string();
+    walk(&mut value, &scratch);
+    let root = repo_root().canonicalize().unwrap();
+    walk(&mut value, root.to_str().unwrap());
+    for key in ["started", "finished"] {
+        value[key] = serde_json::json!("<time>");
+    }
+    value["duration_ms"] = serde_json::json!(0);
+    value["run"]["id"] = serde_json::json!("<id>");
+    value["run"]["resource"] = serde_json::json!("rascal://run/<id>/run.json");
+    value["tool"]["version"] = serde_json::json!("<version>");
+    value
+}
+
+/// The conformance fixtures (table-manners 7): one run.json per status rascal produces from the
+/// command line, masked, compared with `fixtures/contract/results/`; `UPDATE_FIXTURES=1`
+/// rewrites them. Each is valid against the contract's result schema.
+#[test]
+fn the_conformance_fixtures_hold() {
+    let dir = scratch("fixtures").canonicalize().unwrap();
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let image = repo_root().join("fixtures/images/chair-blob.png");
+    let exact = config(&dir, "exact");
+    let failing = config(&dir, "failing");
+    let heal = |name: &str, cfg: &Path| {
+        rascal(&[
+            "heal",
+            "seam",
+            pano.to_str().unwrap(),
+            "--filler",
+            "fake",
+            "--config",
+            cfg.to_str().unwrap(),
+            "--out",
+            dir.join(name).to_str().unwrap(),
+            "--no-dash",
+        ])
+    };
+    assert_eq!(heal("completed", &exact).status.code(), Some(0));
+    assert_eq!(heal("error", &failing).status.code(), Some(3));
+    let invalid = rascal(&[
+        "run",
+        "remove",
+        image.to_str().unwrap(),
+        "--location",
+        repo_root()
+            .join("fixtures/contract/locations/bbox-squint-finding.json")
+            .to_str()
+            .unwrap(),
+        "--out",
+        dir.join("invalid").to_str().unwrap(),
+    ]);
+    assert_eq!(invalid.status.code(), Some(64));
+    let found = rascal(&[
+        "run",
+        "remove",
+        image.to_str().unwrap(),
+        "--location",
+        repo_root()
+            .join("fixtures/locations/chairs.json")
+            .to_str()
+            .unwrap(),
+        "--out",
+        dir.join("completed-remove").to_str().unwrap(),
+    ]);
+    assert_eq!(found.status.code(), Some(0));
+    let stored = repo_root().join("fixtures/contract/results");
+    for name in ["completed", "completed-remove", "error", "invalid"] {
+        let value = masked(run_json(&dir.join(name)), &dir);
+        let path = stored.join(format!("{name}.json"));
+        if std::env::var_os("UPDATE_FIXTURES").is_some() {
+            std::fs::create_dir_all(&stored).unwrap();
+            std::fs::write(&path, serde_json::to_string_pretty(&value).unwrap() + "\n").unwrap();
+        }
+        let expected: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            value,
+            expected,
+            "{name}: UPDATE_FIXTURES=1 regenerates {}",
+            path.display()
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

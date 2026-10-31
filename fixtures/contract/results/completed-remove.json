@@ -1,0 +1,86 @@
+{
+  "action": "remove",
+  "body": {
+    "mask_dir": "<path>/completed-remove/artifacts/a63448926389bb8b2e29c9094b7f2a2ba1feb4a29e8a1b6cb907a2b76b9b029c.mask",
+    "outcome": "ok",
+    "recipe": "remove"
+  },
+  "cache": "off",
+  "contract": "0.1.0",
+  "duration_ms": 0,
+  "error": null,
+  "finished": "<time>",
+  "images": {
+    "in": [
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "role": "source",
+        "slot": "image"
+      }
+    ],
+    "out": [
+      {
+        "image": {
+          "file_sha256": "349e23493a5b589b7176149c5ba75079e47ef2ce26f1e8aaaef976f930911ac5",
+          "height": 320,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "path": "<path>/completed-remove/remove-grey.png",
+        "role": "mask"
+      }
+    ]
+  },
+  "input_identity": "sha256:e9a2526c9081d60aeb1b0da43cf2c896591782fedf1e4176dc6aec39139264cf",
+  "locations": {
+    "found": [],
+    "used": [
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "bbox",
+        "parts": [
+          {
+            "bbox": [
+              0.27,
+              0.21,
+              0.53,
+              0.79
+            ]
+          }
+        ],
+        "straddles_wrap": false
+      }
+    ]
+  },
+  "notes": [],
+  "run": {
+    "dir": "<path>/completed-remove",
+    "id": "<id>",
+    "resource": "rascal://run/<id>/run.json"
+  },
+  "spend": {
+    "basis": "estimated",
+    "usd": 0.0
+  },
+  "started": "<time>",
+  "status": "completed",
+  "tool": {
+    "name": "rascal",
+    "version": "<version>"
+  }
+}

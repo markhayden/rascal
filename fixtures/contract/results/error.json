@@ -1,0 +1,67 @@
+{
+  "action": "seam",
+  "body": {
+    "recipe": "seam"
+  },
+  "cache": "off",
+  "contract": "0.1.0",
+  "duration_ms": 0,
+  "error": {
+    "code": "tool_process",
+    "reason": "filler: fillers.fake: exited with 2: fake filler: failing as asked",
+    "retryable": true
+  },
+  "finished": "<time>",
+  "images": {
+    "in": [
+      {
+        "image": {
+          "file_sha256": "6b2cc035c6a965b3acc1b302f368c5976fe2073d0dc5edb651f3e8f56993d3c4",
+          "height": 400,
+          "pixel_sha256": "894b4c9db72b3252f86d31c4c5c5539b2e62db427b1465940b749bfddc26b66b",
+          "projection": "equirectangular",
+          "topology": "wrap",
+          "width": 800
+        },
+        "role": "source",
+        "slot": "image"
+      }
+    ],
+    "out": [
+      {
+        "image": {
+          "file_sha256": "b5dfa6acb21fbf4a6ed2b7961ec840f20495e0e2c6a225fb2e95dbaed14d9013",
+          "height": 400,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 112
+        },
+        "path": "<path>/error/seam-grey.png",
+        "role": "mask"
+      }
+    ]
+  },
+  "input_identity": "sha256:9de6b8af7fb984ace591bd164f304e389d7bd8990b35497c39e336d44243ff5a",
+  "locations": {
+    "found": [],
+    "used": []
+  },
+  "notes": [
+    "filler call: {\"filler\":\"fake\",\"target\":\"<path>/target/debug/rascal fake-filler failing {image} {mask} {out}\",\"request_width\":112,\"request_height\":400,\"request_bytes\":34089,\"response_bytes\":0,\"duration_ms\":0,\"status\":2,\"outcome\":\"filler: fillers.fake: exited with 2: fake filler: failing as asked\"}"
+  ],
+  "run": {
+    "dir": "<path>/error",
+    "id": "<id>",
+    "resource": "rascal://run/<id>/run.json"
+  },
+  "spend": {
+    "basis": "estimated",
+    "usd": 0.0
+  },
+  "started": "<time>",
+  "status": "error",
+  "tool": {
+    "name": "rascal",
+    "version": "<version>"
+  }
+}

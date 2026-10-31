@@ -116,12 +116,30 @@ pub fn error_of(error: &Error) -> (Status, ErrorInfo) {
         Error::Image { .. } => (Status::Invalid, ErrorCode::Input, false),
         other => {
             let text = other.to_string();
-            if text.contains("timed out") || text.contains("timeout") {
+            // A filler command's failures (it could not start, exited non-zero, wrote nothing,
+            // was killed) are a helper process's; an endpoint's are a provider's; a pack that
+            // died is a helper process too. Timeouts first: both kinds have them.
+            let timeout = text.contains("no answer within") || text.contains("timed out");
+            let process = text.contains("cannot start")
+                || text.contains("exited with")
+                || text.contains("exited 0 but wrote no")
+                || text.contains("the pack")
+                || text.contains("pack ");
+            let provider = text.contains("HTTP ")
+                || text.contains("client:")
+                || text.contains("reading the body")
+                || text.contains("byte cap")
+                || text.contains("key_env");
+            if timeout {
                 (Status::Error, ErrorCode::Timeout, true)
-            } else if text.contains("pack") || text.contains("filler command") {
+            } else if process {
                 (Status::Error, ErrorCode::ToolProcess, true)
-            } else if text.contains("filler") || text.contains("HTTP") || text.contains("http") {
-                (Status::Error, ErrorCode::Provider, true)
+            } else if provider {
+                (
+                    Status::Error,
+                    ErrorCode::Provider,
+                    !text.contains("key_env"),
+                )
             } else {
                 (Status::Error, ErrorCode::Internal, false)
             }

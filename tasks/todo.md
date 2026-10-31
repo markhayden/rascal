@@ -95,5 +95,5 @@ with green CI on both platforms, and then the tag.
 - [x] 8.5 `serve` under the contract: action tools beside the op tools, images by path or inline, `isError` results, progress heartbeat, cancellation, run resources and the runs list (done: `rascal_mcp::server::Actions`, `actions.rs`, `--runs`; the `rect` recipe's action is `mask_rect` so no action shadows an op; the cap and budget move to 8.6 with prices)
 - [x] 8.6 The fill cache keyed by request identity (closes the lab's pay-twice note), `spend_usd_per_call`, `estimate` (done: `[cache]`, `[limits]`, the lab's `fills/`, `Error::Budget`; arms with identical requests share one call, a repeated heal is a hit with no spend, serve refuses past the cap or budget)
 - [x] 8.7 `rascal playground`: finds and starts the shared playground, no UI
-- [ ] 8.8 Fixtures under `fixtures/contract/`, the first half of the cross-tool acceptance test in CI, `docs/contract.md`, SPEC "External interface", README, architecture
+- [x] 8.8 Fixtures under `fixtures/contract/`, the first half of the cross-tool acceptance test in CI, `docs/contract.md`, SPEC "External interface", README, architecture (done: `fixtures/contract/results/` masked and compared; rascal's half of the acceptance test is `contract_locations.rs`; rascal's v0.1 limits written up for the contract's MAPPING in `docs/contract.md`)
 - [ ] Checkpoint M8 → tag `m8`

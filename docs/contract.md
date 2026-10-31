@@ -155,3 +155,32 @@ else `PATH`, else `$XDG_DATA_HOME/waffle/bin`, else `~/.local/share/waffle/bin`)
 with `--tool rascal` and the arguments given, returning its exit code. When none is installed it
 says where to put it and exits 69.
 
+## Conformance (8.8)
+
+- **Fixtures.** `fixtures/contract/results/` holds one masked `run.json` per outcome from the
+  command line; `fixtures/contract/describe.json` the description; both are validated against
+  the contract's schemas and compared in the test suite. They are what the contract repository's
+  `fixtures/rascal/` takes.
+- **The cross-tool acceptance test, rascal's half.** A squint-shaped finding (a table-manners
+  location with squint's `source`, `disposition` and `confidence`) masks exactly what rascal's own
+  location does, and a finding on another image is refused
+  (`crates/rascal-mask/tests/contract_locations.rs`), in CI against the pinned contract. The other
+  half, rascal's mask back to squint as the region where change was allowed, lands with the mask
+  handoff milestone.
+
+## rascal's v0.1 limits, for the contract's MAPPING
+
+What rascal refuses at its boundary in v0.1, each with the reason in the error, so the
+contract's `MAPPING.md` can say so:
+
+| the contract allows | rascal v0.1 | why |
+|---|---|---|
+| a location in several parts (`straddles_wrap`) | refused inbound (`input`); emitted outbound | rascal holds one shape per location; send each part as its own location |
+| a polygon of 65 to 256 vertices | refused inbound | rascal's location schema is the copied envelope's (64, ADR 0009) |
+| `absent` with a `reason` | taken; the reason is not kept in rascal's own record | the copied schema's `absent` has no reason; `run.json` carries it |
+| a `mask` location in a location slot | refused | a mask goes to `--mask`; the handoff milestone adds the rendering both ways |
+| cancelling a call | the run stops before its next step | a filler call already in flight runs to its end, bounded by its timeout |
+| `view` | accepted, never emitted | as the contract says |
+
+The `rect` recipe's action is `mask_rect`, because `serve` already has a `rect` op tool.
+

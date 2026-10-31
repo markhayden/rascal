@@ -1318,8 +1318,9 @@ in rascal's CI against the tagged contract. `docs/contract.md` (new), `SPEC.md` 
 interface", `README.md`, `docs/architecture.md`.
 
 **Acceptance.**
-- [ ] `just check` green; `scripts/check-docs.sh` covers `describe` and `playground`; the
-      acceptance half passes in CI.
+- [x] `just check` green; the conformance fixtures (`fixtures/contract/results/`, `describe.json`)
+      are generated, masked and compared; rascal's half of the acceptance test
+      (`contract_locations.rs`) passes in CI against the pinned contract.
 
 **Size.** M.
 
