@@ -16,6 +16,14 @@ if grep -q 'unexpected prod edge: rascal-mask -> rascal-ops' <<< "$out"; then ok
 else bad "crate-graph check did not name the missing edge: $out"; fi
 rm -f "$empty" "$one"
 
+# --- contract pin -----------------------------------------------------------------------------
+out="$(CONTRACT_LATEST=999.0.0 scripts/check-contract.sh 2>&1)"
+if grep -q '::warning title=table-manners::' <<< "$out"; then ok
+else bad "contract check did not warn on a newer release: $out"; fi
+out="$(CONTRACT_LATEST=0.0.1 scripts/check-contract.sh 2>&1)"
+if grep -q 'is the newest' <<< "$out"; then ok
+else bad "contract check warned on an older release: $out"; fi
+
 # --- packaging --------------------------------------------------------------------------------
 probe="$(mktemp -d)"; mkdir -p "$probe/crate/src" "$probe/crate/assets"
 printf 'x = 1\n' > "$probe/outside.toml"; printf 'y = 2\n' > "$probe/crate/assets/a.toml"

@@ -1188,8 +1188,8 @@ import: `ImageRecord` gains the source file's SHA-256 for an imported image, and
 pixel vectors copied to `fixtures/contract/pixels/` with their digests, reproduced by a test.
 
 **Acceptance.**
-- [ ] Every reference rascal emits validates against `urn:table-manners:images:image-reference`.
-- [ ] The vectors reproduce; an import records the file digest; `workspace describe` shows it.
+- [x] Every reference rascal emits validates against `urn:table-manners:images:image-reference`.
+- [x] The vectors reproduce; an import records the file digest; `workspace import` prints it.
 
 **Files.** `Cargo.toml`, `crates/rascal-core/src/image.rs`, `crates/rascal-core/src/contract.rs`
 (new), `scripts/check-contract.sh`, `.github/workflows/ci.yml`, `fixtures/contract/pixels/`.

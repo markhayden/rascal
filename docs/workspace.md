@@ -81,7 +81,7 @@ repairs to the previous generation with the failed commit's files gone.
 ## Commands
 
 ```
-rascal workspace import ws/ photo.jpg [--projection flat|equirectangular]   # prints the id and the frame
+rascal workspace import ws/ photo.jpg [--projection flat|equirectangular]   # prints the id, the frame and file_sha256:<the file's SHA-256>
 rascal workspace list ws/ [--type Mask] [--json]
 rascal workspace repair ws/ [--json]
 rascal <op> --workspace ws/ --<port> <id> [--<param> <value>] [--constants <set>] [--strict]

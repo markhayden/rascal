@@ -286,7 +286,9 @@ impl Workspace {
         path: &Path,
         projection: Option<crate::frame::Projection>,
     ) -> Result<(String, Frame, Artifact)> {
+        // Decoded from the path (so a decode error names it) and hashed from the bytes.
         let (image, frame, assumed) = Image::import(path, projection)?;
+        let bytes = std::fs::read(path).map_err(|e| Error::io(path, e))?;
         if assumed {
             self.note(format!(
                 "projection assumed equirectangular: {} is exactly 2:1 and --projection was not given",
@@ -298,7 +300,12 @@ impl Workspace {
             .and_then(|n| n.to_str())
             .unwrap_or_default()
             .to_string();
-        let (id, artifact) = self.add_canonical(image, &frame, &source)?;
+        let (id, artifact) = self.add_import(
+            image,
+            &frame,
+            &source,
+            &crate::contract::file_sha256(&bytes),
+        )?;
         Ok((id, frame, artifact))
     }
 
@@ -315,16 +322,51 @@ impl Workspace {
                 "projection assumed equirectangular: {source} is exactly 2:1 and no projection was given"
             ))?;
         }
-        let (id, artifact) = self.add_canonical(image, &frame, source)?;
+        let (id, artifact) =
+            self.add_import(image, &frame, source, &crate::contract::file_sha256(bytes))?;
         Ok((id, frame, artifact))
     }
 
-    /// Adds an already decoded canonical image and its raw frame as an `import` record.
+    /// Adds an already decoded canonical image and its raw frame as an `import` record: an
+    /// image built in memory, with no file behind it.
     pub fn add_canonical(
         &self,
         image: Image,
         frame: &Frame,
         source: &str,
+    ) -> Result<(String, Artifact)> {
+        self.add_import_record(
+            image,
+            frame,
+            serde_json::json!({ "source": source, "projection": frame.projection }),
+        )
+    }
+
+    /// `add_canonical` for an image decoded from a file: the record carries the file's SHA-256,
+    /// the contract's `file_sha256` (ADR 0020), so a reference to the caller's file can be given.
+    pub fn add_import(
+        &self,
+        image: Image,
+        frame: &Frame,
+        source: &str,
+        file_sha256: &str,
+    ) -> Result<(String, Artifact)> {
+        self.add_import_record(
+            image,
+            frame,
+            serde_json::json!({
+                "source": source,
+                "projection": frame.projection,
+                crate::contract::FILE_SHA256: file_sha256,
+            }),
+        )
+    }
+
+    fn add_import_record(
+        &self,
+        image: Image,
+        frame: &Frame,
+        params: serde_json::Value,
     ) -> Result<(String, Artifact)> {
         if image.record.frame != frame.id {
             return Err(Error::usage(format!(
@@ -332,12 +374,7 @@ impl Workspace {
                 image.record.frame, frame.id
             )));
         }
-        self.add_external(
-            image,
-            frame,
-            "import",
-            serde_json::json!({ "source": source, "projection": frame.projection }),
-        )
+        self.add_external(image, frame, "import", params)
     }
 
     /// Adds an image that came from outside the op graph (an import, a filler's answer) as a

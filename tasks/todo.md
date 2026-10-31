@@ -88,7 +88,7 @@ with green CI on both platforms, and then the tag.
 - [ ] Checkpoint M7 → tag `m7` → tag `v0.1.0` when the owner calls the work ready (decision 11); the machinery is complete
 
 ## M8 Table manners (the shared contract, `table-manners` v0.1.0; ADR 0020, decision 13; PLAN.md M8)
-- [ ] 8.1 The contract pinned (`=0.1.0`, a warn-on-newer CI step) and the image reference: the source file's digest at import, projection and topology, the twelve pixel vectors reproduced
+- [x] 8.1 The contract pinned (`=0.1.0`, a warn-on-newer CI step) and the image reference: the source file's digest at import, projection and topology, the twelve pixel vectors reproduced (`rascal-core::contract`, `fixtures/contract/pixels/`, `scripts/check-contract.sh`; `workspace import` prints the file digest)
 - [ ] 8.2 Locations across the boundary: the contract's location to and from rascal's (`parts` ↔ `group`, every kind, `reason`, `score`/`score_kind`), verified against the imported image; `--location` takes a contract file; `locations.used` and `found` per run
 - [ ] 8.3 `describe --json` and the `describe` tool: one action per shipped recipe plus `estimate`, validated against the contract's schema
 - [ ] 8.4 `run.json` with the shared header on every `run` and `heal`, atomically and last, on completed, invalid, error and cancelled runs; exit 130 and 143 on signals

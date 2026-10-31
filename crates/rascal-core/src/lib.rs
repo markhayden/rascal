@@ -8,6 +8,7 @@
 pub mod artifact;
 pub mod canonical;
 pub mod config;
+pub mod contract;
 pub mod error;
 pub mod export;
 pub mod frame;
