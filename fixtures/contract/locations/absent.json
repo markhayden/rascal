@@ -1,0 +1,13 @@
+{
+  "image": {
+    "file_sha256": "3f9a000000000000000000000000000000000000000000000000000000000000",
+    "width": 2048,
+    "height": 1024,
+    "projection": "equirectangular",
+    "topology": "wrap"
+  },
+  "kind": "absent",
+  "parts": [],
+  "straddles_wrap": false,
+  "reason": "the requested lighthouse is not in the image"
+}

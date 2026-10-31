@@ -117,3 +117,219 @@ pub fn image_reference(
     };
     Ok(reference(&image, &frame, file))
 }
+
+/// The most vertices rascal's own polygon holds (its location schema is the copied envelope's,
+/// ADR 0009); a contract polygon with more is refused at the boundary, not resampled.
+pub const RASCAL_POLYGON_MAX: usize = 64;
+
+/// Whether two references name the same file (8.1): the digest and the dimensions. Projection
+/// and topology are the receiver's to decide from its own import.
+pub fn same_file(a: &ImageReference, b: &ImageReference) -> bool {
+    a.file_sha256 == b.file_sha256 && a.width == b.width && a.height == b.height
+}
+
+/// A contract location (9) as rascal's, in `frame`, after checking that it is on the image the
+/// caller gave (`given`). Refusals are usage errors naming what is wrong: another image, a shape
+/// in several parts (rascal holds one shape per location), more vertices than rascal's polygon
+/// holds, a `mask` in a location slot, a kind whose part does not match it.
+pub fn location_in(
+    location: &table_manners::images::Location,
+    given: &ImageReference,
+    frame: &Frame,
+) -> crate::error::Result<crate::location::Location> {
+    use crate::error::Error;
+    use crate::location::Location;
+    use table_manners::images::{LocationKind as K, Part as P};
+    if !same_file(&location.image, given) {
+        return Err(Error::usage(format!(
+            "the location is on another image: it names file_sha256 {} ({}x{}), the image given is {} ({}x{})",
+            location.image.file_sha256,
+            location.image.width,
+            location.image.height,
+            given.file_sha256,
+            given.width,
+            given.height
+        )));
+    }
+    let f = frame.id.clone();
+    let one = |what: &str| -> crate::error::Result<&P> {
+        match location.parts.as_slice() {
+            [part] => Ok(part),
+            [] => Err(Error::usage(format!(
+                "a {what} location needs one part, got none"
+            ))),
+            _ => Err(Error::usage(format!(
+                "a {what} location in {} parts (straddles_wrap: {}): rascal holds one shape per location; send each part as its own location",
+                location.parts.len(),
+                location.straddles_wrap
+            ))),
+        }
+    };
+    let mismatch =
+        |kind: &str| Error::usage(format!("a {kind} location whose part is not a {kind}"));
+    let out = match location.kind {
+        K::Bbox => match one("bbox")? {
+            P::Bbox(p) => Location::Bbox {
+                frame: f,
+                bbox: p.bbox,
+            },
+            _ => return Err(mismatch("bbox")),
+        },
+        K::Polygon => match one("polygon")? {
+            P::Polygon(p) if p.polygon.len() > RASCAL_POLYGON_MAX => {
+                return Err(Error::usage(format!(
+                    "a polygon of {} vertices: rascal holds at most {RASCAL_POLYGON_MAX}",
+                    p.polygon.len()
+                )));
+            }
+            P::Polygon(p) => Location::Polygon {
+                frame: f,
+                polygon: p.polygon.clone(),
+            },
+            _ => return Err(mismatch("polygon")),
+        },
+        K::Line => match one("line")? {
+            P::Column(p) => Location::Line {
+                frame: f,
+                column: Some(p.column),
+                path: None,
+                width_px: p.width_px,
+                group: None,
+            },
+            P::Path(p) => Location::Line {
+                frame: f,
+                column: None,
+                path: Some(p.path.clone()),
+                width_px: p.width_px,
+                group: None,
+            },
+            _ => return Err(mismatch("line")),
+        },
+        K::Stroke => match one("stroke")? {
+            P::Stroke(p) => Location::Stroke {
+                frame: f,
+                path: p.path.clone(),
+                radius_px: p.radius_px,
+                group: None,
+            },
+            _ => return Err(mismatch("stroke")),
+        },
+        K::View => match one("view")? {
+            P::View(p) => Location::View {
+                frame: f,
+                yaw: p.yaw,
+                pitch: p.pitch,
+                fov: p.fov,
+            },
+            _ => return Err(mismatch("view")),
+        },
+        K::WholeImage => Location::WholeImage { frame: f },
+        K::Absent => Location::Absent { frame: f },
+        K::Mask => {
+            return Err(Error::usage(
+                "a mask location goes to a mask slot (--mask), not a location slot",
+            ));
+        }
+    };
+    out.validate(frame)?;
+    Ok(out)
+}
+
+/// What else a location leaving rascal carries besides its shape.
+#[derive(Debug, Clone, Default)]
+pub struct LocationMeta {
+    pub label: Option<String>,
+    pub score: Option<f64>,
+    pub score_kind: Option<String>,
+    pub reason: Option<String>,
+    pub source: Option<table_manners::images::Source>,
+}
+
+/// rascal's locations as one contract location (9) on the image `reference` names. Several
+/// locations are the parts of one shape split at the wrap edge (rascal's `group`), and must share
+/// a kind; one location is one part. `view` never leaves rascal (9.2): a view is refused here.
+pub fn location_out(
+    parts: &[crate::location::Location],
+    reference: ImageReference,
+    meta: LocationMeta,
+) -> crate::error::Result<table_manners::images::Location> {
+    use crate::error::Error;
+    use crate::location::Location;
+    use table_manners::images::Part as P;
+    use table_manners::images::{
+        BboxPart, ColumnPart, LocationKind as K, PathPart, PolygonPart, StrokePart,
+    };
+    let first = parts
+        .first()
+        .ok_or_else(|| Error::usage("a location needs at least one part"))?;
+    if parts.iter().any(|p| p.kind() != first.kind()) {
+        return Err(Error::usage("the parts of one location share a kind"));
+    }
+    let mut out = Vec::new();
+    for part in parts {
+        match part {
+            Location::Bbox { bbox, .. } => out.push(P::Bbox(BboxPart { bbox: *bbox })),
+            Location::Polygon { polygon, .. } => out.push(P::Polygon(PolygonPart {
+                polygon: polygon.clone(),
+            })),
+            Location::Line {
+                column: Some(c),
+                width_px,
+                ..
+            } => out.push(P::Column(ColumnPart {
+                column: *c,
+                width_px: *width_px,
+            })),
+            Location::Line {
+                path: Some(path),
+                width_px,
+                ..
+            } => out.push(P::Path(PathPart {
+                path: path.clone(),
+                width_px: *width_px,
+            })),
+            Location::Line { .. } => {
+                return Err(Error::usage("a line with neither column nor path"));
+            }
+            Location::Stroke {
+                path, radius_px, ..
+            } => out.push(P::Stroke(StrokePart {
+                path: path.clone(),
+                radius_px: *radius_px,
+            })),
+            Location::WholeImage { .. } | Location::Absent { .. } => {}
+            Location::View { .. } => {
+                return Err(Error::usage(
+                    "a view never leaves a tool (CONTRACT.md 9.2): its footprint does, as polygons",
+                ));
+            }
+        }
+    }
+    let kind = match first {
+        Location::Bbox { .. } => K::Bbox,
+        Location::Polygon { .. } => K::Polygon,
+        Location::Line { .. } => K::Line,
+        Location::Stroke { .. } => K::Stroke,
+        Location::WholeImage { .. } => K::WholeImage,
+        Location::Absent { .. } => K::Absent,
+        Location::View { .. } => K::View,
+    };
+    let straddles_wrap = out.len() > 1 && reference.topology == TmTopology::Wrap;
+    Ok(table_manners::images::Location {
+        image: reference,
+        kind,
+        parts: out,
+        straddles_wrap,
+        label: meta.label,
+        disposition: None,
+        confidence: None,
+        evidence: None,
+        score: meta.score,
+        score_kind: meta.score_kind,
+        reason: match kind {
+            K::Absent => Some(meta.reason.unwrap_or_else(|| "not found".to_string())),
+            _ => meta.reason,
+        },
+        source: meta.source,
+    })
+}

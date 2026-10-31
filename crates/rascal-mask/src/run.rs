@@ -237,9 +237,12 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
         }
     })?;
 
-    let (_, frame, image) = run
+    let (image_id, frame, image) = run
         .workspace
         .import(&args.image, args.projection.or(recipe.projection))?;
+    // The contract's reference to the caller's file (ADR 0020): a table-manners location must
+    // name it.
+    let given = rascal_core::contract::image_reference(&run.workspace, &image_id)?;
     let mut inputs: BTreeMap<String, Artifact> = BTreeMap::new();
     inputs.insert("image".to_string(), image);
     if let Some(bbox) = bbox {
@@ -249,12 +252,12 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
         inputs.insert("location".to_string(), artifact);
     }
     if let Some(path) = &args.location {
-        let location = location_from_file(path, &frame, None)?;
+        let location = location_from_file(path, &frame, &given, None)?;
         let (_, artifact) = run.workspace.add_location(location)?;
         inputs.insert("location".to_string(), artifact);
     }
     if let Some(path) = &args.stroke {
-        let location = location_from_file(path, &frame, Some("stroke"))?;
+        let location = location_from_file(path, &frame, &given, Some("stroke"))?;
         let (_, artifact) = run.workspace.add_location(location)?;
         inputs.insert("stroke".to_string(), artifact);
     }
@@ -307,10 +310,13 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
 }
 
 /// A location from a JSON file, validated against the schema and the image's frame. The file
-/// may name the frame by its id or leave `frame` out; the image's frame is used.
+/// is either rascal's own location, which may name the frame by its id or leave `frame` out
+/// (the image's frame is used), or a table-manners location (it has `image`), which must be on
+/// the file the run was given (ADR 0020).
 fn location_from_file(
     path: &Path,
     frame: &rascal_core::frame::Frame,
+    given: &rascal_core::contract::table_manners::images::ImageReference,
     kind: Option<&str>,
 ) -> Result<Location> {
     let text = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
@@ -319,6 +325,18 @@ fn location_from_file(
             path: path.to_path_buf(),
             source,
         })?;
+    if value.get("image").is_some() {
+        let contract: rascal_core::contract::table_manners::images::Location =
+            serde_json::from_value(value).map_err(|e| {
+                Error::usage(format!(
+                    "{}: not a table-manners location: {e}",
+                    path.display()
+                ))
+            })?;
+        let location = rascal_core::contract::location_in(&contract, given, frame)
+            .map_err(|e| Error::usage(format!("{}: {e}", path.display())))?;
+        return check_kind(path, location, kind);
+    }
     if let Some(object) = value.as_object_mut() {
         match object.get("frame").and_then(|f| f.as_str()) {
             None => {
@@ -340,6 +358,11 @@ fn location_from_file(
     let location: Location = serde_json::from_value(value)
         .map_err(|e| Error::usage(format!("{}: not a location: {e}", path.display())))?;
     location.validate(frame)?;
+    check_kind(path, location, kind)
+}
+
+/// The location, when it is the kind the flag takes.
+fn check_kind(path: &Path, location: Location, kind: Option<&str>) -> Result<Location> {
     if let Some(kind) = kind
         && location.kind() != kind
     {

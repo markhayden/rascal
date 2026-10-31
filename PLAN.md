@@ -1206,10 +1206,13 @@ location file (recognised by its `image` field) beside rascal's own. `locations.
 `locations.found` are recorded per run: `remove-prompt`'s findings from `segment`, the seam line.
 
 **Acceptance.**
-- [ ] The contract's valid location examples round-trip through rascal's types; a bbox across the
-      wrap becomes a two-part location and back.
-- [ ] `rascal run remove img.png --location finding.json` with a squint-shaped finding masks it;
-      a finding on another image is refused with `invalid`.
+- [x] The contract's valid location examples round-trip through rascal's types; rascal's split
+      location leaves as one two-part location. Inbound, a shape in several parts, a polygon over
+      rascal's 64 vertices (its schema is the copied envelope's, ADR 0009) and a `mask` in a
+      location slot are refused with the reason: rascal v0.1's limits, recorded here.
+- [x] `rascal run remove img.png --location finding.json` with a squint-shaped finding masks it,
+      byte-identically to rascal's own location; a finding on another image is refused (64).
+- `locations.used` and `locations.found` are recorded with the header in 8.4.
 
 **Files.** `crates/rascal-core/src/location.rs`, `contract.rs`, `crates/rascal-mask/src/run.rs`,
 tests. **Size.** M.

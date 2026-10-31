@@ -125,3 +125,93 @@ fn an_import_names_the_callers_file_and_a_made_image_names_the_png_rascal_wrote(
     );
     let _ = std::fs::remove_dir_all(&ws_dir);
 }
+
+/// The contract's valid location examples (`fixtures/contract/locations/`, its
+/// `examples/location/valid/` at v0.1.0) through rascal and back: every single-part shape
+/// rascal holds returns unchanged; the rest are refused with the reason.
+#[test]
+fn the_contracts_location_examples_cross_rascals_boundary() {
+    use table_manners::images::{Location as TmLocation, Projection as P};
+    let dir = root().join("fixtures/contract/locations");
+    let schema = validator("urn:table-manners:images:location");
+    let mut names: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
+    names.sort();
+    assert!(names.len() >= 11);
+    for path in names {
+        let name = path.file_stem().unwrap().to_str().unwrap().to_string();
+        let tm: TmLocation =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let projection = match tm.image.projection {
+            P::Flat => Projection::Flat,
+            P::Equirectangular => Projection::Equirectangular,
+        };
+        let frame = rascal_core::frame::Frame::raw(tm.image.width, tm.image.height, projection);
+        let back = contract::location_in(&tm, &tm.image, &frame);
+        let refused = |words: &str| {
+            let e = back
+                .as_ref()
+                .err()
+                .map(|e| e.to_string())
+                .unwrap_or_default();
+            assert!(e.contains(words), "{name}: {e}");
+        };
+        match name.as_str() {
+            "bbox-across-wrap" => refused("one shape per location"),
+            "polygon-256-vertices" => refused("at most 64"),
+            "mask" => refused("goes to a mask slot"),
+            _ => {
+                let rascal = back.unwrap_or_else(|e| panic!("{name}: {e}"));
+                if name == "view-input" {
+                    // Accepted in; a view never leaves a tool.
+                    assert!(
+                        contract::location_out(&[rascal], tm.image.clone(), Default::default())
+                            .is_err()
+                    );
+                    continue;
+                }
+                let meta = contract::LocationMeta {
+                    label: tm.label.clone(),
+                    score: tm.score,
+                    score_kind: tm.score_kind.clone(),
+                    reason: tm.reason.clone(),
+                    source: tm.source.clone(),
+                };
+                let out = contract::location_out(&[rascal], tm.image.clone(), meta).unwrap();
+                assert_eq!(out.kind, tm.kind, "{name}");
+                assert_eq!(out.parts, tm.parts, "{name}");
+                assert_eq!(out.straddles_wrap, tm.straddles_wrap, "{name}");
+                assert_eq!(out.score, tm.score, "{name}");
+                let json = serde_json::to_value(&out).unwrap();
+                assert!(schema.is_valid(&json), "{name}: {json}");
+            }
+        }
+    }
+}
+
+/// rascal's split location (two boxes, one on each side of the wrap edge) leaves as one
+/// contract location in two parts.
+#[test]
+fn a_split_location_leaves_as_one_location_in_two_parts() {
+    use rascal_core::location::Location;
+    let frame = rascal_core::frame::Frame::raw(400, 200, Projection::Equirectangular);
+    let left = Location::bbox(&frame.id, [0.0, 0.4, 0.05, 0.6]).unwrap();
+    let right = Location::bbox(&frame.id, [0.95, 0.4, 1.0, 0.6]).unwrap();
+    let reference = table_manners::images::ImageReference {
+        file_sha256: "a".repeat(64),
+        width: 400,
+        height: 200,
+        projection: table_manners::images::Projection::Equirectangular,
+        topology: table_manners::images::Topology::Wrap,
+        pixel_sha256: None,
+    };
+    let out = contract::location_out(&[left, right], reference, Default::default()).unwrap();
+    assert_eq!(out.parts.len(), 2);
+    assert!(out.straddles_wrap);
+    assert!(
+        validator("urn:table-manners:images:location")
+            .is_valid(&serde_json::to_value(&out).unwrap())
+    );
+}

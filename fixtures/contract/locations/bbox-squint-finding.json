@@ -1,0 +1,31 @@
+{
+  "image": {
+    "file_sha256": "3f9a000000000000000000000000000000000000000000000000000000000000",
+    "width": 2048,
+    "height": 1024,
+    "projection": "equirectangular",
+    "topology": "wrap"
+  },
+  "kind": "bbox",
+  "parts": [
+    {
+      "bbox": [
+        0.41,
+        0.22,
+        0.47,
+        0.31
+      ]
+    }
+  ],
+  "straddles_wrap": false,
+  "label": "a seagull on the left lamp post",
+  "disposition": "violation",
+  "confidence": "confident",
+  "evidence": "source",
+  "source": {
+    "tool": "squint",
+    "version": "0.2.0",
+    "run": "decision-1793386884140-53022",
+    "item": "F1"
+  }
+}

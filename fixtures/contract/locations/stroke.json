@@ -1,0 +1,26 @@
+{
+  "image": {
+    "file_sha256": "3f9a000000000000000000000000000000000000000000000000000000000000",
+    "width": 2048,
+    "height": 1024,
+    "projection": "equirectangular",
+    "topology": "wrap"
+  },
+  "kind": "stroke",
+  "parts": [
+    {
+      "path": [
+        [
+          0.1,
+          0.2
+        ],
+        [
+          0.12,
+          0.25
+        ]
+      ],
+      "radius_px": 12
+    }
+  ],
+  "straddles_wrap": false
+}
