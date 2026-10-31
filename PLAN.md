@@ -1325,8 +1325,8 @@ interface", `README.md`, `docs/architecture.md`.
 **Size.** M.
 
 ### Checkpoint M8
-- [ ] Tasks 8.1 to 8.8 merged, `just check` green, CI green on both platforms.
-- [ ] Tag `m8`. Then the contract's pin moves to v0.2 when it is tagged after squint's M7.
+- [x] Tasks 8.1 to 8.8 merged, `just check` green, CI green on both platforms.
+- [x] Tag `m8` (2026-10-31, `ebb773f`). Then the contract's pin moves to v0.2 when it is tagged after squint's M7.
 
 ### Owner decisions for M8
 - Actions are the shipped recipes, one each, with the filler as a parameter (a run without a
