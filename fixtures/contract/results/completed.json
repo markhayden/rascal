@@ -1,0 +1,77 @@
+{
+  "action": "seam",
+  "body": {
+    "filler": "fake",
+    "outcome": "ok",
+    "recipe": "seam"
+  },
+  "cache": "off",
+  "contract": "0.1.0",
+  "duration_ms": 0,
+  "error": null,
+  "finished": "<time>",
+  "images": {
+    "in": [
+      {
+        "image": {
+          "file_sha256": "6b2cc035c6a965b3acc1b302f368c5976fe2073d0dc5edb651f3e8f56993d3c4",
+          "height": 400,
+          "pixel_sha256": "894b4c9db72b3252f86d31c4c5c5539b2e62db427b1465940b749bfddc26b66b",
+          "projection": "equirectangular",
+          "topology": "wrap",
+          "width": 800
+        },
+        "role": "source",
+        "slot": "image"
+      }
+    ],
+    "out": [
+      {
+        "image": {
+          "file_sha256": "b5dfa6acb21fbf4a6ed2b7961ec840f20495e0e2c6a225fb2e95dbaed14d9013",
+          "height": 400,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 112
+        },
+        "path": "<path>/completed/seam-grey.png",
+        "role": "mask"
+      },
+      {
+        "image": {
+          "file_sha256": "07cb0b641886d777beb4ec2729ac4147c57327841431a6a7a845becb0d8b657f",
+          "height": 400,
+          "projection": "equirectangular",
+          "topology": "wrap",
+          "width": 800
+        },
+        "path": "<path>/completed/result.png",
+        "role": "result"
+      }
+    ]
+  },
+  "input_identity": "sha256:9de6b8af7fb984ace591bd164f304e389d7bd8990b35497c39e336d44243ff5a",
+  "locations": {
+    "found": [],
+    "used": []
+  },
+  "notes": [
+    "filler call: {\"filler\":\"fake\",\"target\":\"<path>/target/debug/rascal fake-filler exact {image} {mask} {out}\",\"request_width\":112,\"request_height\":400,\"request_bytes\":34089,\"response_bytes\":38363,\"duration_ms\":0,\"status\":0,\"outcome\":\"ok\"}",
+    "fill stored: {\"request\":\"sha256:bea027a9d987529c3493afc03c99979900a192483d236377292bd568fc457973\",\"fill\":\"sha256:8ea650419700c8457757321c4e7761027c13b36e320df95f0e9ede5a92eb9031\",\"filler\":\"fake\",\"revision\":\"fake\"}"
+  ],
+  "run": {
+    "dir": "<path>/completed",
+    "id": "<id>",
+    "resource": "rascal://run/<id>/run.json"
+  },
+  "spend": {
+    "basis": "estimated",
+    "usd": 0.0
+  },
+  "started": "<time>",
+  "status": "completed",
+  "tool": {
+    "name": "rascal",
+    "version": "<version>"
+  }
+}

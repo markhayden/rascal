@@ -44,6 +44,8 @@ pub struct RunArgs {
     /// `--set <step>.<param>=<value>`, applied after the filler's overrides: the command line
     /// wins. Parsed here, so a bad one is a usage error naming it.
     pub sets: Vec<String>,
+    /// Set by a caller (a client's cancellation) to stop the run between steps.
+    pub cancel: Option<Arc<rascal_core::workspace::Cancel>>,
 }
 
 /// One `--set`: `<step>.<param>=<value>`, the value read as TOML (`0.3`, `1`, `true`,
@@ -198,7 +200,8 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
     let run = match &args.workspace {
         Some(dir) => Run::open_in(&out, Arc::new(Workspace::open(dir)?))?,
         None => Run::open(&out)?,
-    };
+    }
+    .with_cancel(args.cancel.clone());
     let (registry, packs) =
         crate::packs::registry_for(config.as_ref(), &run.workspace, args.replay.as_deref())?;
     for (key, value) in &args.overrides {

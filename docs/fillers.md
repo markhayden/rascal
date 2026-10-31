@@ -18,6 +18,7 @@ timeout_s = 120                                                 # default 120
 revision = "fill.py 2026-10-28"                                 # the lab hashes it into a cell's identity
 overrides = { "fan.constants" = "fan-thin-v1", "fan.wide_max" = 0.05 }   # the band this filler can carry (heal only)
 fill_max_side = 1024                                            # send the request scaled to this longest side; the fill is scaled back
+spend_usd_per_call = 0.04                                       # the price of one call: run.json's spend, serve's limits (unset: free)
 
 [fillers.hosted]
 url = "https://example.invalid/inpaint"   # multipart POST: image, mask (when the profile has one), prompt (when given)
@@ -27,6 +28,24 @@ key_env = "HOSTED_FILLER_KEY"             # Authorization: Bearer; read at call 
 timeout_s = 180
 max_side = 2048                           # the heal graph windows to it
 ```
+
+Two sections beside the fillers (ADR 0020, `docs/contract.md`):
+
+```toml
+[cache]
+dir = ".rascal/fills"          # keep every fill by its request, filler and revision; an identical
+                               # request is answered from here and the filler is not called
+
+[limits]                       # rascal serve only
+call_cap_usd = 0.50            # the most one call may spend; a call may lower it (max_spend_usd)
+session_budget_usd = 5.00      # the most one serve process may spend
+```
+
+A fill is cached under a key over the request's bytes (the image, the mask, the prompt) with the
+filler's name and `revision`, so one filler's pixels are never another's. A hit writes `fill from
+the cache` in the journal, and the run's `run.json` says `cache: hit` with spend 0; a call says
+`miss` with the filler's `spend_usd_per_call`. The limits refuse a call whose price would pass
+the cap or the session's budget before anything runs, as an `error` with code `budget`.
 
 Exactly one of `command` and `url`; `key_env` goes with `url`; `send_mask = true` on an
 image-input profile also sends the `grey` rendering as `mask`. `examples/rascal.toml` has both

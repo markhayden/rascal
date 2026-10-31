@@ -60,7 +60,17 @@ fn the_independent_client_imports_finds_masks_renders_and_reads_back() {
     ] {
         assert!(names.contains(&w), "{w}");
     }
-    assert_eq!(names.len(), catalogue.len() + 5, "no other tool");
+    // The ops, the five workspace tools, and the contract's actions (ADR 0020): one per shipped
+    // recipe, `estimate` and `describe`; no name twice.
+    assert_eq!(
+        names.len(),
+        catalogue.len() + 5 + 9,
+        "no other tool: {names:?}"
+    );
+    let mut unique = names.clone();
+    unique.sort();
+    unique.dedup();
+    assert_eq!(unique.len(), names.len(), "no name twice");
     // The op tools take ordinary arguments: ids for ports, parameters by name.
     let rect = tools.iter().find(|t| t.name == "rect").unwrap();
     assert_eq!(rect.input_schema["properties"]["image"]["type"], "string");

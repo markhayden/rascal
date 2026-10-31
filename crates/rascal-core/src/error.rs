@@ -71,6 +71,14 @@ pub enum Error {
         step: String,
         message: String,
     },
+    /// The call would spend more than its cap or the session budget allows; nothing was run.
+    #[error("budget: {reason}")]
+    Budget { reason: String },
+    /// The caller cancelled the run (a client's cancellation, a signal); the step it stopped
+    /// before published nothing. A cancelled run is not an error to report: its result says
+    /// `cancelled` (table-manners 4.2).
+    #[error("cancelled before step {step}; nothing published by it")]
+    Cancelled { step: String },
     /// A mask that breaks one of its invariants, named. Exit 3.
     #[error("mask {id}: invariant broken: {invariant}")]
     MaskInvariant { id: String, invariant: String },

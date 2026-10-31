@@ -18,8 +18,11 @@ use rascal_core::registry::OpRegistry;
 use rascal_core::workspace::Workspace;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResponse, CallToolResult, ErrorData, InitializeResult,
-    ListToolsResult, PaginatedRequestParams, ProtocolVersion, ServerCapabilities, Tool,
+    CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, ErrorData,
+    InitializeResult, ListResourceTemplatesResult, ListResourcesResult, ListToolsResult,
+    PaginatedRequestParams, ProgressNotificationParam, ProtocolVersion, ReadResourceRequestParams,
+    ReadResourceResponse, ReadResourceResult, Resource, ResourceContents, ResourceTemplate,
+    ServerCapabilities, Tool,
 };
 use rmcp::service::{RequestContext, RoleServer};
 use tokio::sync::Semaphore;
@@ -30,6 +33,52 @@ use crate::transport;
 
 /// Writes the run page into a workspace and returns its path.
 pub type DashWriter = Arc<dyn Fn(&std::path::Path) -> Result<PathBuf> + Send + Sync>;
+
+/// The MCP types an [`Actions`] implementation builds, so it needs no SDK of its own.
+pub use rmcp::model::{
+    Resource as McpResource, ResourceTemplate as McpResourceTemplate, Tool as McpTool,
+};
+
+/// What a contract action returned (table-manners 2 and 5; ADR 0020): the result as
+/// structured content, whether it is an error result, and image blocks the caller asked for.
+pub struct ActionResult {
+    pub structured: serde_json::Value,
+    pub is_error: bool,
+    pub images: Vec<Vec<u8>>,
+}
+
+/// A resource's body: text with its media type, or bytes (sent as base64).
+pub enum ResourceBody {
+    Text { mime: String, text: String },
+    Blob { mime: String, bytes: Vec<u8> },
+}
+
+/// The contract's action tools and run resources, supplied by the binary (the recipes, `run`
+/// and `heal` live there): the server lists the action tools beside the ops, runs them with
+/// progress and cancellation, and serves the resources.
+pub trait Actions: Send + Sync {
+    /// The action tools, `describe` included.
+    fn tools(&self) -> Vec<Tool>;
+    /// Whether a tool name is one of them.
+    fn handles(&self, name: &str) -> bool;
+    /// Runs one. `progress` takes a line about each step; `cancel` is set when the client
+    /// cancels. `Err` is a failure before a run exists (a JSON-RPC error); a run's own outcome,
+    /// `invalid` and `error` included, is an `ActionResult`. A cancelled run returns `Err`, and
+    /// the server sends no result for it.
+    fn call(
+        &self,
+        name: &str,
+        args: &serde_json::Map<String, serde_json::Value>,
+        progress: &(dyn Fn(String) + Send + Sync),
+        cancel: Arc<rascal_core::workspace::Cancel>,
+    ) -> std::result::Result<ActionResult, String>;
+    /// Fixed resources (`rascal://runs`).
+    fn resources(&self) -> Vec<Resource>;
+    /// Resource templates (`rascal://run/{id}/run.json`, …).
+    fn templates(&self) -> Vec<ResourceTemplate>;
+    /// A resource by URI, when there is one.
+    fn read(&self, uri: &str) -> Option<ResourceBody>;
+}
 
 /// The workspace tools, with their descriptions.
 pub const WORKSPACE_TOOLS: [(&str, &str); 5] = [
@@ -76,6 +125,8 @@ struct Inner {
     max_image_bytes: u64,
     /// A hook for the dash writer, supplied by the binary (the page template lives there).
     dash: Option<DashWriter>,
+    /// The contract's action tools and run resources, supplied by the binary.
+    actions: Option<Arc<dyn Actions>>,
 }
 
 impl Server {
@@ -103,8 +154,18 @@ impl Server {
                 packs: by_tool,
                 max_image_bytes: 64 << 20,
                 dash,
+                actions: None,
             }),
         })
+    }
+
+    /// The server with the contract's action tools and run resources (ADR 0020). Called on a
+    /// new server, before it is shared.
+    pub fn with_actions(mut self, actions: Arc<dyn Actions>) -> Server {
+        if let Some(inner) = Arc::get_mut(&mut self.inner) {
+            inner.actions = Some(actions);
+        }
+        self
     }
 
     /// The pack a tool belongs to, when it is a pack's.
@@ -134,6 +195,17 @@ impl Server {
                 description,
                 Arc::new(workspace_tool_schema(name)),
             ));
+        }
+        if let Some(actions) = &self.inner.actions {
+            // An action never shadows an op or a workspace tool: the op keeps its name.
+            let taken: std::collections::BTreeSet<String> =
+                tools.iter().map(|t| t.name.to_string()).collect();
+            tools.extend(
+                actions
+                    .tools()
+                    .into_iter()
+                    .filter(|t| !taken.contains(t.name.as_ref())),
+            );
         }
         tools
     }
@@ -554,7 +626,15 @@ fn png_bytes(image: &Image) -> Result<Vec<u8>> {
 
 impl ServerHandler for Server {
     fn get_info(&self) -> InitializeResult {
-        InitializeResult::new(ServerCapabilities::builder().enable_tools().build())
+        let capabilities = if self.inner.actions.is_some() {
+            ServerCapabilities::builder()
+                .enable_tools()
+                .enable_resources()
+                .build()
+        } else {
+            ServerCapabilities::builder().enable_tools().build()
+        };
+        InitializeResult::new(capabilities)
             .with_protocol_version(ProtocolVersion::V_2025_11_25)
             .with_server_info(transport::implementation())
             .with_instructions(
@@ -593,6 +673,16 @@ impl ServerHandler for Server {
     ) -> std::result::Result<CallToolResponse, ErrorData> {
         let args = request.arguments.clone().unwrap_or_default();
         let name = request.name.to_string();
+        let is_op = self.inner.registry.get(&name).is_some()
+            || WORKSPACE_TOOLS.iter().any(|(w, _)| *w == name);
+        if let Some(actions) = self
+            .inner
+            .actions
+            .clone()
+            .filter(|a| !is_op && a.handles(&name))
+        {
+            return self.call_action(actions, name, args, context).await;
+        }
         // Serial by default: the permit is held for the whole call, cancellation included.
         let permit = tokio::select! {
             p = self.inner.permits.clone().acquire_owned() => p.map_err(|e| ErrorData::internal_error(e.to_string(), None))?,
@@ -632,4 +722,179 @@ impl ServerHandler for Server {
             Err(e) => Err(operational(&e)),
         }
     }
+
+    async fn list_resources(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> std::result::Result<ListResourcesResult, ErrorData> {
+        Ok(ListResourcesResult::with_all_items(
+            self.inner
+                .actions
+                .as_ref()
+                .map(|a| a.resources())
+                .unwrap_or_default(),
+        ))
+    }
+
+    async fn list_resource_templates(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> std::result::Result<ListResourceTemplatesResult, ErrorData> {
+        Ok(ListResourceTemplatesResult::with_all_items(
+            self.inner
+                .actions
+                .as_ref()
+                .map(|a| a.templates())
+                .unwrap_or_default(),
+        ))
+    }
+
+    async fn read_resource(
+        &self,
+        request: ReadResourceRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> std::result::Result<ReadResourceResponse, ErrorData> {
+        let uri = request.uri.clone();
+        let actions = self
+            .inner
+            .actions
+            .clone()
+            .ok_or_else(|| ErrorData::resource_not_found(format!("no resource {uri}"), None))?;
+        let lookup = uri.clone();
+        let body = tokio::task::spawn_blocking(move || actions.read(&lookup))
+            .await
+            .map_err(|e| ErrorData::internal_error(e.to_string(), None))?
+            .ok_or_else(|| ErrorData::resource_not_found(format!("no resource {uri}"), None))?;
+        let contents = match body {
+            ResourceBody::Text { mime, text } => {
+                with_mime(ResourceContents::text(text, uri.clone()), mime)
+            }
+            ResourceBody::Blob { mime, bytes } => with_mime(
+                ResourceContents::blob(rascal_core::panel::base64(&bytes), uri.clone()),
+                mime,
+            ),
+        };
+        Ok(ReadResourceResult::new(vec![contents]).into())
+    }
+}
+
+fn with_mime(contents: ResourceContents, mime: String) -> ResourceContents {
+    match contents {
+        ResourceContents::TextResourceContents {
+            uri, text, meta, ..
+        } => ResourceContents::TextResourceContents {
+            uri,
+            mime_type: Some(mime),
+            text,
+            meta,
+        },
+        ResourceContents::BlobResourceContents {
+            uri, blob, meta, ..
+        } => ResourceContents::BlobResourceContents {
+            uri,
+            mime_type: Some(mime),
+            blob,
+            meta,
+        },
+        other => other,
+    }
+}
+
+impl Server {
+    /// Runs a contract action (table-manners 4): under the call permit, on a blocking thread,
+    /// with every progress line forwarded and a heartbeat at least every `HEARTBEAT` while it
+    /// works, `progress` strictly increasing; a client's cancellation sets the run's flag and
+    /// the call returns no result.
+    async fn call_action(
+        &self,
+        actions: Arc<dyn Actions>,
+        name: String,
+        args: serde_json::Map<String, serde_json::Value>,
+        context: RequestContext<RoleServer>,
+    ) -> std::result::Result<CallToolResponse, ErrorData> {
+        let permit = tokio::select! {
+            p = self.inner.permits.clone().acquire_owned() => p.map_err(|e| ErrorData::internal_error(e.to_string(), None))?,
+            () = context.ct.cancelled() => return Err(cancelled_error()),
+        };
+        let token = context.meta.get_progress_token();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+        let cancel = Arc::new(rascal_core::workspace::Cancel::new(false));
+        let flag = cancel.clone();
+        let mut task = tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            let send = move |line: String| {
+                let _ = tx.send(line);
+            };
+            actions.call(&name, &args, &send, flag)
+        });
+        let started = std::time::Instant::now();
+        let mut sent = 0.0_f64;
+        let mut heartbeat = tokio::time::interval(HEARTBEAT);
+        heartbeat.tick().await;
+        let mut last_line = String::from("started");
+        let outcome = loop {
+            tokio::select! {
+                r = &mut task => break r,
+                Some(line) = rx.recv() => {
+                    last_line = line.clone();
+                    if let Some(token) = &token {
+                        sent += 1.0;
+                        let _ = context.peer.notify_progress(
+                            ProgressNotificationParam::new(token.clone(), sent).with_message(line),
+                        ).await;
+                    }
+                }
+                _ = heartbeat.tick() => {
+                    if let Some(token) = &token {
+                        sent += 1.0;
+                        let message = format!("{last_line}; {} s", started.elapsed().as_secs());
+                        let _ = context.peer.notify_progress(
+                            ProgressNotificationParam::new(token.clone(), sent).with_message(message),
+                        ).await;
+                    }
+                }
+                () = context.ct.cancelled() => {
+                    cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+                    // The run stops before its next step and writes `run.json` as cancelled;
+                    // the protocol sends no result for a cancelled request.
+                    let _ = (&mut task).await;
+                    return Err(cancelled_error());
+                }
+            }
+        };
+        let result = outcome
+            .map_err(|e| ErrorData::internal_error(format!("the call panicked: {e}"), None))?
+            .map_err(invalid)?;
+        let summary = result
+            .structured
+            .get("status")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string();
+        let mut content = vec![ContentBlock::text(summary)];
+        for bytes in &result.images {
+            content.push(ContentBlock::image(
+                rascal_core::panel::base64(bytes),
+                jsonrpc::PNG,
+            ));
+        }
+        let mut call = CallToolResult::success(content);
+        call.structured_content = Some(result.structured);
+        call.is_error = Some(result.is_error);
+        Ok(call.into())
+    }
+}
+
+/// The longest gap between progress notifications on a live action run (table-manners 4.1
+/// allows ten seconds; five leaves room for a slow client).
+pub const HEARTBEAT: std::time::Duration = std::time::Duration::from_secs(5);
+
+fn cancelled_error() -> ErrorData {
+    ErrorData::new(
+        rmcp::model::ErrorCode::INTERNAL_ERROR,
+        "cancelled",
+        Some(serde_json::json!({ "class": "cancelled" })),
+    )
 }

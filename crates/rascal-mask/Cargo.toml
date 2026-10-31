@@ -44,5 +44,6 @@ rustls = { workspace = true }
 workspace = true
 
 [dev-dependencies]
+jsonschema = { workspace = true }
 image = { workspace = true }
 rascal-testkit = { path = "../rascal-testkit" }

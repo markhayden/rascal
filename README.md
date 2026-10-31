@@ -24,7 +24,7 @@ detectors) are a Python tool pack over MCP. rascal has no model loop of its own:
 pipelines drive its tools. It is conforming to [table-manners](https://github.com/markhayden/table-manners),
 the shared contract of its sibling tools, so an agent can chain it with
 [squint](https://github.com/markhayden/squint) and the tools after them without glue code
-(milestone M8).
+(`docs/contract.md`).
 
 ## Install
 
@@ -92,7 +92,10 @@ rascal ops list                                           # every op's manifest,
 rascal inspect run/artifacts/<id> --json                  # or --out pages/ for the overlay and chart, --replay to rebuild
 rascal export --compat run/journal.jsonl --step rasterize --out e.json
 rascal dash run/ --out run/dash.html                     # the run page: timings, envelopes, every artifact; --serve for loopback
-rascal serve --workspace ws/                              # every op as an MCP tool over stdio, plus import/list/describe/read/dash
+rascal describe --json                                    # what rascal can run, in the shared contract's words
+rascal playground                                         # start the shared playground (a separate program)
+rascal serve --workspace ws/                              # every op as an MCP tool over stdio, plus import/list/describe/read/dash,
+                                                          # and the table-manners actions (one per recipe) with run resources
 rascal tools call rascal-tools segment --config rascal.toml --workspace ws/ --image photo.png --prompt "the chair"   # a pack's tool from the shell
 rascal tools setup --bundle bundle-macos-arm64/ --into ~/rascal-tools   # the Python pack installed offline from its bundle
 rascal corpus verify corpus.toml --root ~/rascal/corpus                 # every image's file against its digest

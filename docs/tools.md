@@ -104,8 +104,10 @@ through a configured pack like any pack tool.
 
 ## The server
 
-`rascal serve --workspace ws/ [--config rascal.toml] [--concurrency n]` is an MCP server over
-stdio at protocol revision `2025-11-25` (ADR 0015). It advertises one tool per op in the table
+`rascal serve --workspace ws/ [--config rascal.toml] [--concurrency n] [--runs dir]` is an MCP
+server over stdio at protocol revision `2025-11-25` (ADR 0015). Beside the op tools below it
+serves the contract's action tools, one per shipped recipe, and `describe`, with run resources
+(table-manners, ADR 0020; `docs/contract.md`). It advertises one tool per op in the table
 above, named as the op, with ordinary arguments only: one string property per input port (an
 artifact id or identity in the workspace) plus the op's parameters by name, and `constants`
 when the op has sets. No argument is injected; ids resolve against the served workspace and

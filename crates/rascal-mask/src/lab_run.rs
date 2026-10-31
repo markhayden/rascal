@@ -316,10 +316,14 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
                 overrides: BTreeMap::new(),
                 overrides_from: None,
                 sets: Vec::new(),
+                cancel: None,
             },
             filler: arm.filler.clone(),
             no_dash: args.no_dash,
             replay: None,
+            // One cache for the lab: arms whose fill requests are identical (the same mask
+            // under the same filler and revision) share one call (objects-01, objects-02).
+            cache: Some(args.out.join("fills")),
         };
         let outcome = heal::heal(&heal_args);
         let calls = calls_in(&run_dir.join("journal.jsonl"));

@@ -209,6 +209,38 @@ impl Client {
         }
     }
 
+    /// [`Client::finish`], keeping the notifications that arrived before the response
+    /// (progress, for a long call).
+    pub fn finish_collecting(
+        &mut self,
+        id: u64,
+    ) -> Result<(serde_json::Value, Vec<serde_json::Value>), Failure> {
+        let mut notifications = Vec::new();
+        loop {
+            let message = self.receive()?;
+            if message.get("id").is_none() && message.get("method").is_some() {
+                notifications.push(message);
+                continue;
+            }
+            if message.get("id").and_then(|v| v.as_u64()) != Some(id) {
+                continue;
+            }
+            if let Some(error) = message.get("error") {
+                return Err(Failure::Rpc {
+                    code: error["code"].as_i64().unwrap_or(0),
+                    message: error["message"].as_str().unwrap_or("").to_string(),
+                    data: error.get("data").cloned(),
+                });
+            }
+            return Ok((message["result"].clone(), notifications));
+        }
+    }
+
+    /// Reads one message: a response or a notification, whichever comes next.
+    pub fn next_message(&mut self) -> Result<serde_json::Value, Failure> {
+        self.receive()
+    }
+
     /// A notification: no id, no reply.
     pub fn notify(&mut self, method: &str, params: serde_json::Value) -> Result<(), Failure> {
         self.send(&serde_json::json!({ "jsonrpc": "2.0", "method": method, "params": params }))

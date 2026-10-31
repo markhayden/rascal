@@ -568,14 +568,31 @@ pub struct Run {
     pub dir: PathBuf,
     /// The workspace artifacts and the journal live in; the run directory unless given.
     pub workspace: Arc<Workspace>,
+    /// Set by a caller to stop the run: every op checks it before it commits, and a step that
+    /// sees it ends the run with [`Error::Cancelled`].
+    pub cancel: Option<Arc<crate::workspace::Cancel>>,
 }
 
 impl Run {
+    /// The run, stopped by `cancel` when it is set.
+    pub fn with_cancel(mut self, cancel: Option<Arc<crate::workspace::Cancel>>) -> Run {
+        self.cancel = cancel;
+        self
+    }
+
+    /// Whether the caller has asked the run to stop.
+    pub fn cancelled(&self) -> bool {
+        self.cancel
+            .as_ref()
+            .is_some_and(|c| c.load(std::sync::atomic::Ordering::SeqCst))
+    }
+
     /// Opens a run whose workspace is the run directory.
     pub fn open(dir: &Path) -> Result<Run> {
         Ok(Run {
             dir: dir.to_path_buf(),
             workspace: Arc::new(Workspace::open(dir)?),
+            cancel: None,
         })
     }
 
@@ -585,6 +602,7 @@ impl Run {
         Ok(Run {
             dir: dir.to_path_buf(),
             workspace,
+            cancel: None,
         })
     }
 
@@ -633,10 +651,25 @@ impl Run {
         inputs: &Inputs,
         params: &Params,
     ) -> Result<op::Output> {
-        Ok(self
-            .workspace
-            .invoke(step_id, op_name, registry, inputs, params)?
-            .output)
+        if self.cancelled() {
+            return Err(Error::Cancelled {
+                step: step_id.to_string(),
+            });
+        }
+        let invocation = self.workspace.invoke_with(
+            step_id,
+            op_name,
+            registry,
+            inputs,
+            params,
+            self.cancel.as_deref(),
+        )?;
+        if invocation.cancelled {
+            return Err(Error::Cancelled {
+                step: step_id.to_string(),
+            });
+        }
+        Ok(invocation.output)
     }
 }
 

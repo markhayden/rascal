@@ -8,12 +8,15 @@ mod heal;
 mod inspect;
 mod lab_run;
 use rascal_mask::lab;
+mod actions;
 mod measure;
 mod ops;
 mod packs;
 mod paste;
+mod playground;
 mod render;
 mod run;
+mod run_json;
 mod serve;
 mod tools;
 mod workspace_cmd;
@@ -153,6 +156,10 @@ enum Command {
         /// Calls that may run at once; each still commits in turn.
         #[arg(long, default_value_t = 1)]
         concurrency: usize,
+        /// Where the contract's action runs go, one directory each (table-manners);
+        /// `$XDG_DATA_HOME/rascal/runs` by default.
+        #[arg(long)]
+        runs: Option<PathBuf>,
     },
     /// The configured tool packs: list their tools, or call one from the shell.
     Tools {
@@ -179,6 +186,24 @@ enum Command {
     Lab {
         #[command(subcommand)]
         command: LabCommand,
+    },
+    /// The table-manners description document (ADR 0020): one action per shipped recipe, what
+    /// it takes, returns and may spend, so a client that knows only the contract can call it.
+    Describe {
+        /// Print the document as JSON (the contract's form); without it, one line per action.
+        #[arg(long)]
+        json: bool,
+        /// The configuration file (rascal.toml): its fillers name the spend and the keys.
+        #[arg(long)]
+        config: Option<PathBuf>,
+    },
+    /// Start the shared playground over the waffle tools (a separate program; rascal carries no
+    /// UI): hands over with `--tool rascal` and the arguments given; exit 69 when it is not
+    /// installed.
+    Playground {
+        /// Passed to the playground as given.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
     /// The op catalogue: every manifest as a client sees it.
     Ops {
@@ -597,8 +622,28 @@ fn main() {
                 overrides: BTreeMap::new(),
                 overrides_from: None,
                 sets: set,
+                cancel: None,
             };
-            match run::run(&args) {
+            let pending = run_json::begin(run_json::pending_for(&args, None));
+            run_json::watch_signals();
+            let result = run::run(&args);
+            let ended = match &result {
+                Ok(report) => run_json::ended_ok(
+                    &args.recipe,
+                    report.status,
+                    report.stopped_at.as_deref(),
+                    report.reason.as_deref(),
+                    report.mask_dir.as_deref(),
+                    None,
+                    report.renders.clone(),
+                    None,
+                    0.0,
+                    None,
+                ),
+                Err(error) => run_json::ended_with(&args.recipe, error),
+            };
+            run_json::conclude(&pending, ended);
+            match result {
                 Ok(report) => {
                     for (profile, path) in &report.renders {
                         println!("{profile}: {}", path.display());
@@ -669,12 +714,33 @@ fn main() {
                     overrides: BTreeMap::new(),
                     overrides_from: None,
                     sets: set,
+                    cancel: None,
                 },
                 filler,
                 no_dash,
                 replay,
+                cache: None,
             };
-            match heal::heal(&args) {
+            let pending = run_json::begin(run_json::pending_for(&args.run, Some(&args.filler)));
+            run_json::watch_signals();
+            let result = heal::heal(&args);
+            let ended = match &result {
+                Ok(report) => run_json::ended_ok(
+                    &args.run.recipe,
+                    report.status,
+                    report.stopped_at.as_deref(),
+                    report.reason.as_deref(),
+                    None,
+                    Some(&args.filler),
+                    report.renders.clone(),
+                    report.result.clone(),
+                    report.spend_usd,
+                    report.cache,
+                ),
+                Err(error) => run_json::ended_with(&args.run.recipe, error),
+            };
+            run_json::conclude(&pending, ended);
+            match result {
                 Ok(report) => {
                     for (profile, path) in &report.renders {
                         println!("{profile}: {}", path.display());
@@ -714,10 +780,12 @@ fn main() {
             workspace,
             config,
             concurrency,
+            runs,
         } => match serve::serve(&serve::ServeArgs {
             workspace,
             config,
             concurrency,
+            runs,
         }) {
             Ok(()) => exit::OK,
             Err(error) => {
@@ -841,6 +909,14 @@ fn main() {
             }
         }
         Command::Ops { command } => ops::run(&registry, command),
+        Command::Playground { args } => playground::run(&args),
+        Command::Describe { json, config } => match describe_cmd(json, config.as_deref()) {
+            Ok(()) => exit::OK,
+            Err(error) => {
+                eprintln!("rascal describe: {error}");
+                exit::code_for(&error)
+            }
+        },
         Command::Inspect {
             mask,
             json,
@@ -1080,4 +1156,24 @@ fn main() {
         }
     };
     std::process::exit(code);
+}
+
+/// `rascal describe`: the contract's description document, as JSON or one line per action.
+fn describe_cmd(json: bool, config: Option<&std::path::Path>) -> rascal_core::error::Result<()> {
+    let config = config.map(rascal_core::config::Config::read).transpose()?;
+    let description = rascal_mask::describe::description(config.as_ref())?;
+    if json {
+        let text = serde_json::to_string_pretty(&description)
+            .map_err(|e| rascal_core::Error::usage(format!("description: {e}")))?;
+        println!("{text}");
+        return Ok(());
+    }
+    println!(
+        "{} {} (table-manners {}, profiles: images)",
+        description.tool.name, description.tool.version, description.contract
+    );
+    for action in &description.actions {
+        println!("{:<14} {}", action.name, action.title);
+    }
+    Ok(())
 }

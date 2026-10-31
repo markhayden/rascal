@@ -993,7 +993,8 @@ rascal conforms to **table-manners** v0.1.0 (https://github.com/markhayden/table
 0020, decision 13), the shared contract of the owner's tools: what an agent, a script or the
 playground sees from outside is the same for squint, rascal and the tools after them, so they
 chain in one pipeline without glue code. The contract's text is the specification of that
-surface; this section is rascal's mapping onto it, built in milestone M8 (PLAN.md).
+surface; this section is rascal's mapping onto it, built in milestone M8 (PLAN.md;
+`docs/contract.md` has the details and rascal's v0.1 limits).
 
 | the contract | rascal |
 |---|---|
@@ -1047,7 +1048,7 @@ uv run --frozen --offline --no-sync ruff check . && uv run --frozen --offline --
 # the binary
 rascal run seam pano.jpg --out run/
 rascal describe --json                         # the contract's description document (table-manners, M8)
-rascal playground                              # start the shared playground program (M8)
+rascal playground [args…]                      # start the shared playground program with --tool rascal; 69 when not installed
 rascal run remove room.jpg --location chairs.json --out run/   # chairs.json: rascal's location or a table-manners one
 rascal run remove-prompt room.jpg --prompt "chair" --config rascal.toml --out run/   # segment through the pack
 rascal run repair print.jpg --stroke scratch.json --out run/
@@ -1076,8 +1077,10 @@ rascal corpus verify corpus.toml
 
 Exit codes: 0 ok; 1 the op reported `not_applicable` or `measured_nothing` under `--strict`; 3
 operational error (a filler failed, a pack died, IO, non-convergence, a preservation check, a
-result that failed validation); 64 usage error. A bad parameter (`invalid_args`) is a usage
-error, 64, with or without `--strict`. Three kinds of `--out`: a **run directory** (`run`,
+result that failed validation); 64 usage error; 130 and 143 a `run` or `heal` cancelled by
+SIGINT or SIGTERM (table-manners 6, ADR 0020). A bad parameter (`invalid_args`) is a usage
+error, 64, with or without `--strict`. Every `run` and `heal` whose run directory was new or
+empty writes `run.json` there, last and atomically, whatever the outcome (`docs/contract.md`). Three kinds of `--out`: a **run directory** (`run`,
 `heal`, `inspect --out`, `dash --out <dir>`) must be new or empty, else usage error 64; a
 **file destination** (`render`, `put`, `paste`, `export`, `dash --out <file>`) is written over an
 existing file, as `cp` would; a **lab directory** (`lab run --out`) is resumable: it must be new

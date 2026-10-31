@@ -1,0 +1,53 @@
+{
+  "action": "remove",
+  "body": {
+    "recipe": "remove"
+  },
+  "cache": "off",
+  "contract": "0.1.0",
+  "duration_ms": 0,
+  "error": {
+    "code": "input",
+    "reason": "<path>/crates/rascal-mask/../../fixtures/contract/locations/bbox-squint-finding.json: the location is on another image: it names file_sha256 3f9a000000000000000000000000000000000000000000000000000000000000 (2048x1024), the image given is 40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242 (480x320)",
+    "retryable": false
+  },
+  "finished": "<time>",
+  "images": {
+    "in": [
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "role": "source",
+        "slot": "image"
+      }
+    ],
+    "out": []
+  },
+  "input_identity": "sha256:02ef9ca5896ae3eef09769d38fa6ff841f98c25759615593fafc5450051d19fc",
+  "locations": {
+    "found": [],
+    "used": []
+  },
+  "notes": [],
+  "run": {
+    "dir": "<path>/invalid",
+    "id": "<id>",
+    "resource": "rascal://run/<id>/run.json"
+  },
+  "spend": {
+    "basis": "estimated",
+    "usd": 0.0
+  },
+  "started": "<time>",
+  "status": "invalid",
+  "tool": {
+    "name": "rascal",
+    "version": "<version>"
+  }
+}
