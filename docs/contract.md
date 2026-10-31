@@ -52,3 +52,35 @@ With `--config`, the configured fillers are the `filler` enum, and any configure
 action `may_spend` with its key's variable named (never its value).
 `fixtures/contract/describe.json` pins the document without a configuration. The `describe` MCP
 tool returns the same document once `serve` conforms (8.5).
+
+## `run.json` and the header (8.4)
+
+Every `run` and `heal` writes `run.json` into its run directory, last and atomically (a
+temporary name, then a rename), whatever the outcome, when the directory was new or empty at the
+start; an `--out` that held something is refused untouched. It is the contract's result: the
+header (`status`, `error`, `run` with `rascal://run/<id>/run.json` and the absolute directory,
+`started`, `finished`, `duration_ms`, `input_identity`, `spend`, `cache`, `notes` from the
+journal) and rascal's body (`recipe`, `outcome` in rascal's own statuses, `stopped_at`,
+`reason`, `mask_dir`, `filler`).
+
+| rascal | `status` | `error.code` |
+|---|---|---|
+| the recipe ran, whatever its steps reported (`ok`, `measured_nothing`, `not_applicable`) | `completed` | |
+| a usage or recipe error, a bad parameter | `invalid` | `usage` |
+| a location on another image, one rascal cannot hold, an image it cannot decode | `invalid` | `input` |
+| reading or writing its files | `error` | `io` (retryable) |
+| a filler endpoint | `error` | `provider` (retryable) |
+| a filler command or a pack that died | `error` | `tool_process` (retryable) |
+| a timeout | `error` | `timeout` (retryable) |
+| anything else | `error` | `internal` |
+| SIGINT or SIGTERM | `cancelled`, exit 130 or 143 | |
+
+`images.in` is the input image's reference (slot `image`, role `source`); `images.out` is the
+mask (the `grey` rendering, role `mask`) and, for `heal`, the result (role `result`), each with
+its file's digest and dimensions and an absolute `path`. A heal whose filler fails is an `error`
+that still lists the mask. `locations.used` holds the location the run took in;
+`locations.found` the segmenter's boxes, with `score` and `score_kind: owlv2-detection`.
+`input_identity` is a SHA-256 over what was asked (the action, the recipe, the image's file
+digest, the location files, `--set`, the prompt, the filler), so equal requests have equal
+identities. `spend` is 0 and `cache` is `off` until 8.6.
+

@@ -1248,9 +1248,11 @@ identity over the recipe, the inputs and the overrides), `spend` (`estimated` fr
 and the heal report. SIGINT exits 130 and SIGTERM 143, after `run.json` is written.
 
 **Acceptance.**
-- [ ] `run.json` validates against `urn:table-manners:core:result` on completed, invalid, error
+- [x] `run.json` validates against `urn:table-manners:core:result` on completed, invalid, error
       and cancelled runs; a heal whose filler fails keeps the mask in `images.out`.
-- [ ] A golden `run.json` for the step-sky seam under the fake filler.
+- [x] The step-sky seam under the fake filler is checked field by field (its times and paths
+      change per run, so a byte golden would pin nothing useful); SIGTERM and SIGINT mid-fill
+      give 143 and 130 with `run.json` `cancelled`.
 
 **Files.** `crates/rascal-mask/src/run.rs`, `heal.rs`, `main.rs`, `crates/rascal-core/src/contract.rs`.
 **Size.** L, split into the header (8.4a) and the signals (8.4b) if it runs long.

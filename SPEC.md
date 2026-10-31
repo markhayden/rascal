@@ -1076,8 +1076,10 @@ rascal corpus verify corpus.toml
 
 Exit codes: 0 ok; 1 the op reported `not_applicable` or `measured_nothing` under `--strict`; 3
 operational error (a filler failed, a pack died, IO, non-convergence, a preservation check, a
-result that failed validation); 64 usage error. A bad parameter (`invalid_args`) is a usage
-error, 64, with or without `--strict`. Three kinds of `--out`: a **run directory** (`run`,
+result that failed validation); 64 usage error; 130 and 143 a `run` or `heal` cancelled by
+SIGINT or SIGTERM (table-manners 6, ADR 0020). A bad parameter (`invalid_args`) is a usage
+error, 64, with or without `--strict`. Every `run` and `heal` whose run directory was new or
+empty writes `run.json` there, last and atomically, whatever the outcome (`docs/contract.md`). Three kinds of `--out`: a **run directory** (`run`,
 `heal`, `inspect --out`, `dash --out <dir>`) must be new or empty, else usage error 64; a
 **file destination** (`render`, `put`, `paste`, `export`, `dash --out <file>`) is written over an
 existing file, as `cp` would; a **lab directory** (`lab run --out`) is resumable: it must be new

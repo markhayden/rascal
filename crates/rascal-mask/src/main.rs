@@ -14,6 +14,7 @@ mod packs;
 mod paste;
 mod render;
 mod run;
+mod run_json;
 mod serve;
 mod tools;
 mod workspace_cmd;
@@ -608,7 +609,28 @@ fn main() {
                 overrides_from: None,
                 sets: set,
             };
-            match run::run(&args) {
+            let pending = run_json::begin(run_json::pending_for(&args, None));
+            run_json::watch_signals();
+            let result = run::run(&args);
+            let ended = match &result {
+                Ok(report) => run_json::Ended {
+                    status: rascal_core::contract::table_manners::Status::Completed,
+                    error: None,
+                    renders: report.renders.clone(),
+                    result: None,
+                    body: run_json::body_of(
+                        &args.recipe,
+                        report.status,
+                        report.stopped_at.as_deref(),
+                        report.reason.as_deref(),
+                        report.mask_dir.as_deref(),
+                        None,
+                    ),
+                },
+                Err(error) => run_json::ended_with(&args.recipe, error),
+            };
+            run_json::conclude(&pending, ended);
+            match result {
                 Ok(report) => {
                     for (profile, path) in &report.renders {
                         println!("{profile}: {}", path.display());
@@ -684,7 +706,28 @@ fn main() {
                 no_dash,
                 replay,
             };
-            match heal::heal(&args) {
+            let pending = run_json::begin(run_json::pending_for(&args.run, Some(&args.filler)));
+            run_json::watch_signals();
+            let result = heal::heal(&args);
+            let ended = match &result {
+                Ok(report) => run_json::Ended {
+                    status: rascal_core::contract::table_manners::Status::Completed,
+                    error: None,
+                    renders: report.renders.clone(),
+                    result: report.result.clone(),
+                    body: run_json::body_of(
+                        &args.run.recipe,
+                        report.status,
+                        report.stopped_at.as_deref(),
+                        report.reason.as_deref(),
+                        None,
+                        Some(&args.filler),
+                    ),
+                },
+                Err(error) => run_json::ended_with(&args.run.recipe, error),
+            };
+            run_json::conclude(&pending, ended);
+            match result {
                 Ok(report) => {
                     for (profile, path) in &report.renders {
                         println!("{profile}: {}", path.display());
