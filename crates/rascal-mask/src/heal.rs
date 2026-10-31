@@ -50,9 +50,6 @@ pub struct HealReport {
     /// Whether the fill came from the cache: `Some(true)` a hit, `Some(false)` a miss (the
     /// filler was called and the fill stored), `None` no cache or no fill.
     pub cache: Option<bool>,
-    /// What the run spent, by the filler's configured price: the price when the filler was
-    /// called, 0 for a cache hit, a replay or a free filler.
-    pub spend_usd: f64,
 }
 
 /// The journal note prefix of a reusable fill: the request identity and the fill artifact.
@@ -258,7 +255,6 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         .clone()
         .or_else(|| config.cache.as_ref().map(|c| c.dir.clone()));
     let mut cache_use: Option<bool> = None;
-    let mut spend_usd = 0.0;
     let mut origin = serde_json::json!({ "filler": args.filler, "profile": entry.profile, "request": request_identity, "scaled_from": scaled_from.map(|(w, h)| format!("{w}x{h}")) });
     let fill = match args
         .replay
@@ -322,10 +318,16 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
                     width = request.width,
                     height = request.height
                 );
+                run.note(
+                    filler::CallStarted {
+                        filler: args.filler.clone(),
+                        spend_usd: entry.spend_usd_per_call.unwrap_or(0.0),
+                    }
+                    .note(),
+                )?;
                 let outcome = span.in_scope(|| filler.call(&request, &scratch));
                 let _ = std::fs::remove_dir_all(&scratch);
                 note_call(&run, &outcome.call)?;
-                spend_usd = entry.spend_usd_per_call.unwrap_or(0.0);
                 let fill = outcome.fill?;
                 if let Some(dir) = &cache_dir {
                     store_fill(dir, &wanted, &fill)?;
@@ -449,7 +451,6 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         dash,
         renders: outcome.renders,
         cache: cache_use,
-        spend_usd,
     })
 }
 
@@ -478,7 +479,6 @@ fn stopped(
         dash,
         renders,
         cache: None,
-        spend_usd: 0.0,
     })
 }
 

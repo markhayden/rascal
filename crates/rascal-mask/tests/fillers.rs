@@ -15,7 +15,9 @@ use rascal_core::frame::{Frame, Projection};
 use rascal_core::image::{Image, RenderingRole, Role};
 use rascal_core::rendering::Profile;
 use rascal_mask::filler::http::HttpFiller;
-use rascal_mask::filler::{self, FillRequest, Filler, ImageSource, MaskSource, request_fields};
+use rascal_mask::filler::{
+    self, Charge, FillRequest, Filler, ImageSource, MaskSource, request_fields,
+};
 use rascal_testkit::fake_filler::{Behaviour, spawn};
 use std::time::Duration;
 
@@ -415,6 +417,82 @@ fn each_fake_behaviour_produces_its_outcome_over_http_and_the_key_stays_out_of_e
         .to_string();
     assert!(err.contains(var) && err.contains("not set"), "{err}");
     assert_eq!(seen.lock().unwrap().len(), 2, "the unset key made no call");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 9.1: each call says whether it may have been charged. Not sent: refused before the
+/// request left (no key, nothing listening, a command that cannot start) or rejected as
+/// unauthenticated; known: an answer; unresolved: sent and not settled (a failure status, a
+/// timeout, a non-zero exit).
+#[test]
+fn each_call_says_whether_it_may_have_been_charged() {
+    let dir = scratch("charge");
+    let (request, _, _) = sample_request();
+    let http = |behaviour: Behaviour, timeout_s: u64| {
+        let (url, _) = spawn(behaviour, None);
+        filler::from_config("hosted", &http_config(&url, None, timeout_s))
+            .unwrap()
+            .call(&request, &dir)
+            .call
+            .charge
+    };
+    assert_eq!(http(Behaviour::Exact, 5), Charge::Known);
+    assert_eq!(http(Behaviour::NonPng, 5), Charge::Known);
+    assert_eq!(http(Behaviour::Failing, 5), Charge::Unresolved);
+    assert_eq!(http(Behaviour::Slow, 1), Charge::Unresolved);
+    // Nothing listening: the connection is refused before the request is sent.
+    let closed = {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        format!("http://{}/fill", listener.local_addr().unwrap())
+    };
+    let refused = filler::from_config("hosted", &http_config(&closed, None, 5))
+        .unwrap()
+        .call(&request, &dir);
+    assert_eq!(
+        refused.call.charge,
+        Charge::NotSent,
+        "{}",
+        refused.call.outcome
+    );
+    // A rejected key is not charged.
+    let (url, _) = spawn(Behaviour::Exact, Some("the-key".to_string()));
+    let wrong = HttpFiller::new(
+        "hosted",
+        &url,
+        Some("K".to_string()),
+        Duration::from_secs(5),
+    )
+    .unwrap()
+    .with_key_source(|_| Some("not-the-key".to_string()));
+    assert_eq!(wrong.call(&request, &dir).call.charge, Charge::NotSent);
+    // Commands.
+    let command = |behaviour: Behaviour, timeout_s: u64| {
+        filler::from_config("fake", &command_config(behaviour, true, timeout_s))
+            .unwrap()
+            .call(&request, &dir)
+            .call
+            .charge
+    };
+    assert_eq!(command(Behaviour::Exact, 5), Charge::Known);
+    assert_eq!(command(Behaviour::Failing, 5), Charge::Unresolved);
+    assert_eq!(command(Behaviour::Slow, 1), Charge::Unresolved);
+    let missing = FillerConfig {
+        command: Some(vec![
+            "/no/such/filler".into(),
+            "{image}".into(),
+            "{out}".into(),
+        ]),
+        ..command_config(Behaviour::Exact, false, 5)
+    };
+    let unstarted = filler::from_config("fake", &missing)
+        .unwrap()
+        .call(&request, &dir);
+    assert_eq!(
+        unstarted.call.charge,
+        Charge::NotSent,
+        "{}",
+        unstarted.call.outcome
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 

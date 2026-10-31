@@ -334,11 +334,11 @@ impl ContractActions {
                 (pending, ended)
             }
         };
-        if let Ok(mut spent) = self.spent.lock() {
-            *spent += ended.spend_usd;
-        }
         let cancelled = ended.status == rascal_core::contract::table_manners::Status::Cancelled;
-        run_json::conclude(&pending, ended);
+        let spent = run_json::conclude(&pending, ended).unwrap_or_default();
+        if let Ok(mut total) = self.spent.lock() {
+            *total += spent.usd;
+        }
         if cancelled {
             return Err("cancelled".to_string());
         }
@@ -364,7 +364,6 @@ impl ContractActions {
                     Some(filler),
                     report.renders,
                     report.result,
-                    report.spend_usd,
                     report.cache,
                 ),
                 Err(error) => run_json::ended_with(recipe, &error),
@@ -379,7 +378,6 @@ impl ContractActions {
                     None,
                     report.renders,
                     None,
-                    0.0,
                     None,
                 ),
                 Err(error) => run_json::ended_with(recipe, &error),

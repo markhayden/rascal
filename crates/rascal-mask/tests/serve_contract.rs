@@ -28,7 +28,7 @@ fn config(dir: &Path) -> PathBuf {
     std::fs::write(
         &path,
         format!(
-            "config_version = 1\n[fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"fake\"\n\n[fillers.slow]\ncommand = [{bin:?}, \"fake-filler\", \"slow\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"slow\"\n"
+            "config_version = 1\n[fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"fake\"\n\n[fillers.slow]\ncommand = [{bin:?}, \"fake-filler\", \"slow\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"slow\"\nspend_usd_per_call = 0.04\n"
         ),
     )
     .unwrap();
@@ -242,8 +242,26 @@ fn a_cancelled_call_gets_no_result_and_its_run_says_cancelled() {
     };
     let text = first["params"]["message"].as_str().unwrap().to_string();
     let run_id = text.split_whitespace().nth(1).unwrap().to_string();
-    // Let the run reach the slow fill before cancelling.
-    std::thread::sleep(std::time::Duration::from_millis(800));
+    // Let the run reach the slow fill before cancelling: the call is journaled as started.
+    let reached = std::time::Instant::now();
+    // The journal is a resource once the run has written its first line.
+    while !client
+        .request(
+            "resources/read",
+            serde_json::json!({ "uri": format!("rascal://run/{run_id}/journal") }),
+        )
+        .is_ok_and(|r| {
+            r["contents"][0]["text"]
+                .as_str()
+                .is_some_and(|j| j.contains("filler call started"))
+        })
+    {
+        assert!(
+            reached.elapsed().as_secs() < 30,
+            "the run never reached the fill"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
     client
         .notify(
             "notifications/cancelled",
@@ -283,6 +301,10 @@ fn a_cancelled_call_gets_no_result_and_its_run_says_cancelled() {
     )
     .unwrap();
     assert_eq!(stored["error"], serde_json::Value::Null);
+    // The run stops before its next step; a filler call already in flight runs to its end, and
+    // its price stays spent: cancelling does not erase the cost (task 9.1).
+    assert_eq!(stored["spend"]["usd"], 0.04, "{stored:#}");
+    assert!(stored["body"].get("spend_unresolved_usd").is_none());
     // The run stops before its next step; a filler call already in flight runs to its end.
     assert!(
         stored["body"]["stopped_before"]

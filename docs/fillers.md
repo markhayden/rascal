@@ -91,9 +91,12 @@ anything runs.
 
 ## The call in the journal
 
-Every call is a journal note, `filler call: {…}`, with the entry's name, the command as
-configured (placeholders shown) or the URL, the request's dimensions and bytes, the answer's
-bytes, the duration, the exit code or HTTP status, and the outcome. The key is handed to the
+Every call is two journal notes. Before it, `filler call started: {…}` with the entry's name and
+its price; after it, `filler call: {…}` with the entry's name, the command as configured
+(placeholders shown) or the URL, the request's dimensions and bytes, the answer's bytes, the
+duration, the exit code or HTTP status, the outcome, and `charge`: `not_sent`, `known` or
+`unresolved` (`docs/contract.md`, "The fill cache, prices and limits"). A run's spend is read from
+these notes, so a failed, cancelled or interrupted run keeps what it may have been charged. The key is handed to the
 `Authorization` header and appears in no file, message or span; a wrong key is reported as the
 server's status, and an unset `key_env` as a usage error naming the variable.
 

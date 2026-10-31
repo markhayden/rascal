@@ -15,6 +15,7 @@ use rascal_core::contract::table_manners::{
     Cache, ErrorCode, ErrorInfo, Run, RunResult, Spend, SpendBasis, Status, Tool,
 };
 use rascal_core::contract::{self, LocationMeta, location_out};
+use rascal_mask::filler::{self, Spent};
 use serde_json::Value;
 
 use rascal_mask::describe::{SEGMENT_SCORE_KIND, action_name};
@@ -181,8 +182,6 @@ pub struct Ended {
     /// The healed image, for `heal`.
     pub result: Option<PathBuf>,
     pub body: serde_json::Map<String, Value>,
-    /// What the run spent, by the filler's configured price.
-    pub spend_usd: f64,
     /// The fill cache: `Some(true)` a hit, `Some(false)` a miss, `None` not consulted.
     pub cache: Option<bool>,
 }
@@ -288,12 +287,26 @@ pub fn finish(
     pending: &Pending,
     workspace_dir: &Path,
     ended: Ended,
-) -> rascal_core::error::Result<()> {
+) -> rascal_core::error::Result<Spent> {
     if let Ok(mut current) = CURRENT.lock() {
         *current = None;
     }
     let finished = now_ms();
-    let (input, used, found, notes) = from_workspace(workspace_dir);
+    let (input, used, found, mut notes) = from_workspace(workspace_dir);
+    // The spend is the journal's, whatever the status (2.1, 4.5): a call that may have been
+    // charged is never reported as zero; the part no answer settled is said in the body.
+    let spent = filler::spent(&notes);
+    let mut body = ended.body;
+    if spent.unresolved_usd > 0.0 {
+        body.insert(
+            "spend_unresolved_usd".into(),
+            serde_json::json!(spent.unresolved_usd),
+        );
+        notes.push(format!(
+            "{:.4} USD of the spend is unresolved: a filler call was sent and no answer settles whether it was charged; it is counted at its price",
+            spent.unresolved_usd
+        ));
+    }
     let mut taken = pending.images_in.clone();
     if taken.is_empty()
         && let Some(reference) = &input
@@ -344,7 +357,7 @@ pub fn finish(
         duration_ms: u64::try_from(finished.saturating_sub(pending.started_ms)).unwrap_or(u64::MAX),
         input_identity: pending.input_identity.clone(),
         spend: Spend {
-            usd: ended.spend_usd,
+            usd: spent.usd,
             basis: SpendBasis::Estimated,
         },
         cache: match ended.cache {
@@ -362,9 +375,9 @@ pub fn finish(
             found,
         }),
         notes,
-        body: ended.body,
+        body,
     };
-    write(&pending.dir, &result)
+    write(&pending.dir, &result).map(|()| spent)
 }
 
 /// `run.json` into `dir`, atomically.
@@ -450,15 +463,16 @@ pub fn body_of(
 }
 
 /// Writes `run.json` for a command that ended, when the run directory is the caller's and the
-/// run got as far as making it. A failure to write is reported on stderr, never as the run's.
-pub fn conclude(pending: &Pending, ended: Ended) {
+/// run got as far as making it, and returns what the run spent; `None` when nothing was written
+/// (a failure to write is reported on stderr, never as the run's).
+pub fn conclude(pending: &Pending, ended: Ended) -> Option<Spent> {
     let workspace_dir = pending.workspace.clone();
     let workspace_dir = workspace_dir.as_path();
     if !pending.fresh || !pending.dir.is_dir() {
         if let Ok(mut current) = CURRENT.lock() {
             *current = None;
         }
-        return;
+        return None;
     }
     let mut ended = ended;
     if ended.renders.is_empty() {
@@ -475,9 +489,9 @@ pub fn conclude(pending: &Pending, ended: Ended) {
                 .extend(greys.into_iter().map(|p| ("grey".to_string(), p)));
         }
     }
-    if let Err(error) = finish(pending, workspace_dir, ended) {
-        eprintln!("rascal: run.json: {error}");
-    }
+    finish(pending, workspace_dir, ended)
+        .map_err(|error| eprintln!("rascal: run.json: {error}"))
+        .ok()
 }
 
 /// How a command that failed ended: the contract's status and error, the body naming the step.
@@ -493,7 +507,6 @@ pub fn ended_with(recipe: &str, error: &Error) -> Ended {
             renders: Vec::new(),
             result: None,
             body,
-            spend_usd: 0.0,
             cache: None,
         };
     }
@@ -506,7 +519,6 @@ pub fn ended_with(recipe: &str, error: &Error) -> Ended {
         renders: Vec::new(),
         result: None,
         body,
-        spend_usd: 0.0,
         cache: None,
     }
 }
@@ -556,7 +568,6 @@ pub fn watch_signals() {
                     renders: Vec::new(),
                     result: None,
                     body,
-                    spend_usd: 0.0,
                     cache: None,
                 },
             );
@@ -577,7 +588,6 @@ pub fn ended_ok(
     filler: Option<&str>,
     renders: Vec<(String, PathBuf)>,
     result: Option<PathBuf>,
-    spend_usd: f64,
     cache: Option<bool>,
 ) -> Ended {
     Ended {
@@ -586,7 +596,6 @@ pub fn ended_ok(
         renders,
         result,
         body: body_of(recipe, status, stopped_at, reason, mask_dir, filler),
-        spend_usd,
         cache,
     }
 }

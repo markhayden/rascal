@@ -198,13 +198,93 @@ pub struct FillerCall {
     pub status: i64,
     /// `ok`, or the error the call ended in.
     pub outcome: String,
+    /// Whether the call may have been charged.
+    pub charge: Charge,
+}
+
+/// Whether a call may have been charged, by how far its request got.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Charge {
+    /// Refused before the request left rascal: no key, the connection refused, the command
+    /// not started, or the authentication rejected (401, 403). Free.
+    NotSent,
+    /// The filler answered: a 2xx, or a command that exited 0. Charged at the price.
+    Known,
+    /// Sent with no answer that settles it: timed out, killed, a failure status, a non-zero
+    /// exit. Counted at the price, as unresolved; never as zero.
+    Unresolved,
+}
+
+/// The note `heal` journals before a call, so a run stopped mid-call still shows it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CallStarted {
+    /// The filler entry's name.
+    pub filler: String,
+    /// The entry's price per call (`spend_usd_per_call`, 0 without one).
+    pub spend_usd: f64,
+}
+
+impl CallStarted {
+    /// The journal note text: a fixed prefix and the record as JSON.
+    pub fn note(&self) -> String {
+        format!(
+            "{STARTED_PREFIX}{}",
+            serde_json::to_string(self).unwrap_or_default()
+        )
+    }
+}
+
+/// The prefix of a [`CallStarted`] note.
+pub const STARTED_PREFIX: &str = "filler call started: ";
+/// The prefix of a [`FillerCall`] note.
+pub const CALL_PREFIX: &str = "filler call: ";
+
+/// What a run's filler calls cost, from its journal notes.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Spent {
+    /// Every known and unresolved call at its price.
+    pub usd: f64,
+    /// The part of `usd` no answer settled.
+    pub unresolved_usd: f64,
+}
+
+/// The spend in a run's notes: each started call is settled by the call record that follows it
+/// (in order), at its price unless not sent; a started call with no record, or a record that
+/// does not parse, is unresolved.
+pub fn spent(notes: &[String]) -> Spent {
+    let mut open: std::collections::VecDeque<f64> = std::collections::VecDeque::new();
+    let mut spent = Spent::default();
+    for note in notes {
+        if let Some(json) = note.strip_prefix(STARTED_PREFIX) {
+            let price = serde_json::from_str::<CallStarted>(json)
+                .map(|s| s.spend_usd)
+                .unwrap_or(0.0);
+            open.push_back(price);
+        } else if let Some(json) = note.strip_prefix(CALL_PREFIX) {
+            let price = open.pop_front().unwrap_or(0.0);
+            match serde_json::from_str::<FillerCall>(json).map(|c| c.charge) {
+                Ok(Charge::NotSent) => {}
+                Ok(Charge::Known) => spent.usd += price,
+                Ok(Charge::Unresolved) | Err(_) => {
+                    spent.usd += price;
+                    spent.unresolved_usd += price;
+                }
+            }
+        }
+    }
+    for price in open {
+        spent.usd += price;
+        spent.unresolved_usd += price;
+    }
+    spent
 }
 
 impl FillerCall {
     /// The journal note text: a fixed prefix and the record as JSON.
     pub fn note(&self) -> String {
         format!(
-            "filler call: {}",
+            "{CALL_PREFIX}{}",
             serde_json::to_string(self).unwrap_or_default()
         )
     }
@@ -311,5 +391,73 @@ pub(crate) fn scrub(text: String, secret: Option<&str>) -> String {
     match secret {
         Some(key) if !key.is_empty() => text.replace(key, "[key]"),
         _ => text,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    fn started(price: f64) -> String {
+        CallStarted {
+            filler: "f".into(),
+            spend_usd: price,
+        }
+        .note()
+    }
+
+    fn call(charge: Charge) -> String {
+        FillerCall {
+            filler: "f".into(),
+            target: "t".into(),
+            request_width: 1,
+            request_height: 1,
+            request_bytes: 1,
+            response_bytes: 0,
+            duration_ms: 0,
+            status: -1,
+            outcome: "x".into(),
+            charge,
+        }
+        .note()
+    }
+
+    #[test]
+    fn known_and_unresolved_calls_count_and_unsent_ones_do_not() {
+        let notes = vec![
+            started(0.04),
+            call(Charge::Known),
+            started(0.04),
+            call(Charge::NotSent),
+            started(0.25),
+            call(Charge::Unresolved),
+            "an unrelated note".to_string(),
+        ];
+        let s = spent(&notes);
+        assert!((s.usd - 0.29).abs() < 1e-9, "{s:?}");
+        assert!((s.unresolved_usd - 0.25).abs() < 1e-9, "{s:?}");
+    }
+
+    #[test]
+    fn a_started_call_with_no_record_is_unresolved() {
+        let s = spent(&[started(0.04)]);
+        assert_eq!(
+            s,
+            Spent {
+                usd: 0.04,
+                unresolved_usd: 0.04
+            }
+        );
+        let s = spent(&[started(0.04), format!("{CALL_PREFIX}not json")]);
+        assert_eq!(
+            s,
+            Spent {
+                usd: 0.04,
+                unresolved_usd: 0.04
+            }
+        );
+        assert_eq!(spent(&[]), Spent::default());
     }
 }

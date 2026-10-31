@@ -1359,9 +1359,9 @@ the unresolved part in `body.spend_unresolved_usd` with a note; never zero for a
 have been charged.
 
 **Acceptance.**
-- [ ] A heal cancelled after the fill (serve, before `apply`) reports the price; a filler that
+- [x] A heal cancelled after the fill (serve, before `apply`) reports the price; a filler that
       times out or exits non-zero reports it as unresolved; a filler that cannot start reports 0.
-- [ ] `rascal heal` killed by SIGTERM during the filler call writes `run.json` with the price,
+- [x] `rascal heal` killed by SIGTERM during the filler call writes `run.json` with the price,
       unresolved.
 
 **Files.** `crates/rascal-mask/src/filler/{mod,http,command}.rs`, `heal.rs`, `run_json.rs`,
