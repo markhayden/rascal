@@ -125,7 +125,8 @@ JSON-RPC invalid-params error; an operational failure is a JSON-RPC internal err
 `data.class` names rascal's error class (`io`, `op`, `image`, `format`, `mask_invariant`,
 `usage`, `operational` for anything else, and `cancelled` when the client cancelled the call:
 nothing is published after a cancellation reaches the op). Calls are serial per workspace by
-default; `--concurrency n` lets `n` run at once, each still committing in turn. One request is
+default; `--concurrency n` lets `n` run at once, each still committing in turn; the contract's
+`describe` and `estimate` never wait for the permit. One request is
 one line of at most 256 MiB (a longer line is dropped by the transport and gets no answer), so
 a `workspace_import` of base64 bytes fits any image rascal decodes; a `path` import reads any
 file the server process can, as the spec says, so give a host only the workspace it should

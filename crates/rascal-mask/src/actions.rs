@@ -369,6 +369,9 @@ impl ContractActions {
             .and_then(|v| v.as_str())
             .map(str::to_string);
         let _ = std::fs::create_dir_all(&inputs);
+        // The run's directory exists from allocation, before the first progress line and any
+        // paid work, so the runs list shows it `running` from that moment (task 9.4).
+        std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
         let _ = std::fs::write(inputs.join("action"), describe::action_name(recipe));
         progress(format!("run {id} started (rascal://run/{id}/run.json)"));
         let prepared = self
@@ -379,7 +382,6 @@ impl ContractActions {
             });
         let (pending, ended, reservation) = match prepared {
             Err(error) => {
-                std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
                 let pending = run_json::Pending {
                     id: id.clone(),
                     action: describe::action_name(recipe),
@@ -646,6 +648,10 @@ impl Actions for ContractActions {
 
     fn handles(&self, name: &str) -> bool {
         name == "describe" || name == "estimate" || recipe_of(name).is_some()
+    }
+
+    fn exclusive(&self, name: &str) -> bool {
+        recipe_of(name).is_some()
     }
 
     fn call(

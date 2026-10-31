@@ -528,3 +528,77 @@ fn concurrent_calls_reserve_the_budget_atomically() {
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Tasks 9.3 and 9.4: with the one call permit held by a slow run, `estimate`, `describe` and
+/// the runs list answer before the run ends, and the run is listed `running` from the moment
+/// its first progress names it.
+#[test]
+fn reads_answer_while_a_run_holds_the_permit_and_the_run_is_listed() {
+    let dir = scratch("reads");
+    let mut client = start(&dir);
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let run = client
+        .begin(
+            "tools/call",
+            serde_json::json!({
+                "name": "seam",
+                "arguments": { "image": { "path": pano.to_str().unwrap() }, "filler": "slow" },
+                "_meta": { "progressToken": "reads" }
+            }),
+        )
+        .unwrap();
+    let first = loop {
+        let message = client.next_message().unwrap();
+        if message["method"] == "notifications/progress" {
+            break message;
+        }
+    };
+    let text = first["params"]["message"].as_str().unwrap().to_string();
+    let run_id = text.split_whitespace().nth(1).unwrap().to_string();
+    // Listed, running, from its first notification.
+    let runs = client
+        .request(
+            "resources/read",
+            serde_json::json!({ "uri": "rascal://runs" }),
+        )
+        .unwrap();
+    let list: serde_json::Value =
+        serde_json::from_str(runs["contents"][0]["text"].as_str().unwrap()).unwrap();
+    let listed = list["runs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == run_id.as_str())
+        .cloned();
+    assert_eq!(
+        listed.as_ref().map(|r| r["status"].clone()),
+        Some(serde_json::json!("running")),
+        "{list:#}"
+    );
+    assert_eq!(listed.unwrap()["action"], "seam");
+    // The reads answer before the run does.
+    let estimate = client
+        .begin(
+            "tools/call",
+            serde_json::json!({ "name": "estimate", "arguments": { "action": "seam", "filler": "slow" } }),
+        )
+        .unwrap();
+    let describe = client
+        .begin(
+            "tools/call",
+            serde_json::json!({ "name": "describe", "arguments": {} }),
+        )
+        .unwrap();
+    let mut order = Vec::new();
+    while order.len() < 3 {
+        let message = client.next_message().unwrap();
+        if let Some(id) = message.get("id").and_then(|v| v.as_u64())
+            && [run, estimate, describe].contains(&id)
+        {
+            order.push(id);
+        }
+    }
+    assert_eq!(order.last(), Some(&run), "the reads waited for the run");
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}

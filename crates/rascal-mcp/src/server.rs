@@ -61,6 +61,9 @@ pub trait Actions: Send + Sync {
     fn tools(&self) -> Vec<Tool>;
     /// Whether a tool name is one of them.
     fn handles(&self, name: &str) -> bool;
+    /// Whether a call holds the call permit while it works: a run does; a read (`describe`,
+    /// `estimate`) does not, so it answers while a run is under way.
+    fn exclusive(&self, name: &str) -> bool;
     /// Runs one. `progress` takes a line about each step; `cancel` is set when the client
     /// cancels. `Err` is a failure before a run exists (a JSON-RPC error); a run's own outcome,
     /// `invalid` and `error` included, is an `ActionResult`. A cancelled run returns `Err`, and
@@ -803,10 +806,10 @@ fn with_mime(contents: ResourceContents, mime: String) -> ResourceContents {
 }
 
 impl Server {
-    /// Runs a contract action (table-manners 4): under the call permit, on a blocking thread,
-    /// with every progress line forwarded and a heartbeat at least every `HEARTBEAT` while it
-    /// works, `progress` strictly increasing; a client's cancellation sets the run's flag and
-    /// the call returns no result.
+    /// Runs a contract action (table-manners 4): under the call permit when it is exclusive, on
+    /// a blocking thread, with every progress line forwarded and a heartbeat at least every
+    /// `HEARTBEAT` while it works, `progress` strictly increasing; a client's cancellation sets
+    /// the run's flag and the call returns no result.
     async fn call_action(
         &self,
         actions: Arc<dyn Actions>,
@@ -814,9 +817,13 @@ impl Server {
         args: serde_json::Map<String, serde_json::Value>,
         context: RequestContext<RoleServer>,
     ) -> std::result::Result<CallToolResponse, ErrorData> {
-        let permit = tokio::select! {
-            p = self.inner.permits.clone().acquire_owned() => p.map_err(|e| ErrorData::internal_error(e.to_string(), None))?,
-            () = context.ct.cancelled() => return Err(cancelled_error()),
+        let permit = if actions.exclusive(&name) {
+            Some(tokio::select! {
+                p = self.inner.permits.clone().acquire_owned() => p.map_err(|e| ErrorData::internal_error(e.to_string(), None))?,
+                () = context.ct.cancelled() => return Err(cancelled_error()),
+            })
+        } else {
+            None
         };
         let token = context.meta.get_progress_token();
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();

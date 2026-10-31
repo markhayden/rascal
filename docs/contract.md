@@ -115,8 +115,12 @@ are left for failures before a run exists (an unknown tool, malformed arguments)
   step (each op checks the flag before it commits, and `heal` before it calls the filler), writes
   `run.json` as `cancelled` with `stopped_before`, and the call gets no result. A filler call
   already in flight runs to its end (its timeout bounds it).
+- **Reads never wait on a run.** A run holds the call permit (serial by default,
+  `--concurrency n` for more); `describe`, `estimate` and every resource read do not, so they
+  answer while a run is under way (task 9.3).
 - **Resources.** `rascal://runs` (the contract's runs list, newest first, a run still going is
-  `running`), `rascal://run/{id}/run.json`, `rascal://run/{id}/journal`,
+  `running` from its allocation: its directory is made before the first progress line and any
+  paid work, task 9.4), `rascal://run/{id}/run.json`, `rascal://run/{id}/journal`,
   `rascal://run/{id}/images/{role}`. An id is exactly `run-<ms>-<pid>`; nothing else under the
   runs root, and nothing outside it, can be read.
 
