@@ -197,13 +197,18 @@ enum Command {
         #[arg(long)]
         config: Option<PathBuf>,
     },
-    /// Start the shared playground over the waffle tools (a separate program; rascal carries no
-    /// UI): hands over with `--tool rascal` and the arguments given; exit 69 when it is not
+    /// Open Wafflehouse, the shared program over the waffle tools (separate; rascal carries no
+    /// UI): runs `wafflehouse --tool rascal` and keeps its exit code; 69 when it is not
     /// installed.
     Playground {
-        /// Passed to the playground as given.
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
+        /// The testkit's installer, offered when Wafflehouse is missing (test builds only).
+        #[cfg(feature = "testkit")]
+        #[arg(long, hide = true)]
+        installer: Option<PathBuf>,
+        /// Take the offer's answer from stdin as on a terminal (test builds only).
+        #[cfg(feature = "testkit")]
+        #[arg(long, hide = true)]
+        terminal: bool,
     },
     /// The op catalogue: every manifest as a client sees it.
     Ops {
@@ -907,7 +912,16 @@ fn main() {
             }
         }
         Command::Ops { command } => ops::run(&registry, command),
-        Command::Playground { args } => playground::run(&args),
+        #[cfg(feature = "testkit")]
+        Command::Playground {
+            installer,
+            terminal,
+        } => playground::run(&playground::Seam {
+            installer,
+            terminal,
+        }),
+        #[cfg(not(feature = "testkit"))]
+        Command::Playground {} => playground::run(&playground::Seam::default()),
         Command::Describe { json, config } => match describe_cmd(json, config.as_deref()) {
             Ok(()) => exit::OK,
             Err(error) => {

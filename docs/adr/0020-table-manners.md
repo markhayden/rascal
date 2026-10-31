@@ -41,7 +41,8 @@ What changes in rascal, in the contract's words:
   per-session budget;
 - a fill cache keyed by the fill request's identity, so a retry never pays twice;
 - exit codes 130 and 143 on SIGINT and SIGTERM;
-- a `playground` subcommand that starts the shared playground program and carries no UI.
+- a `playground` subcommand that starts the shared playground program and carries no UI (since
+  M9, Wafflehouse by its launcher agreement: `wafflehouse --tool rascal`, decision 14).
 
 What does not change: the op tools (ADR 0015) keep their envelopes and their error mapping in
 v0.1; the copied `manifest-v1` and `envelope-v1` schemas (ADR 0009) stay, because they are the

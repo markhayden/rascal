@@ -1417,7 +1417,7 @@ release build exits 69 with no offer; the installer is a testkit-only seam (`--i
 `--terminal` to take the answer from stdin). The subcommand takes no arguments (64).
 
 **Acceptance.**
-- [ ] Fake programs show the exact argv, a path with spaces, exit codes and signals kept, an
+- [x] Fake programs show the exact argv, a path with spaces, exit codes and signals kept, an
       invalid override 69 without fall-through, the lookup order, a symlinked program; missing:
       no 0, yes installs and runs, installer failure 74, off a terminal 69, extra arguments 64.
 

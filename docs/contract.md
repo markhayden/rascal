@@ -161,17 +161,26 @@ session_budget_usd = 5.00
 spend_usd_per_call = 0.04
 ```
 
-## `rascal playground` (8.7)
+## `rascal playground` (8.7, 9.5)
 
 ```
-rascal playground [args…]
+rascal playground
 ```
 
-The playground is one program shared by the waffle tools, in its own repository; rascal carries
-no UI and no server for it. The command finds the `playground` binary (`PLAYGROUND` when set,
-else `PATH`, else `$XDG_DATA_HOME/waffle/bin`, else `~/.local/share/waffle/bin`) and runs it
-with `--tool rascal` and the arguments given, returning its exit code. When none is installed it
-says where to put it and exits 69.
+Wafflehouse is the one local program shared by the waffle tools, in its own repository; rascal
+carries no UI and no server for it, and follows Wafflehouse's launcher agreement (H1), as squint
+does. The command finds `wafflehouse`: `WAFFLEHOUSE_BIN` when set (an absolute path to an
+executable file; anything else is 69 naming the variable, never a fall-through to another
+program), else `PATH`, else `~/.local/bin`. It runs it with exactly `--tool rascal`, without a
+shell, and returns its exit code (128 + N when a signal ended it). The subcommand takes no
+arguments (64). Wafflehouse owns everything after the hand-off: the host, its locks, the browser.
+
+When it is missing, rascal says where to get it and exits 69. The installer waits for an
+approved Wafflehouse release, so a release build makes no offer; test builds reach the offer
+through a seam (`--installer <program>`, run as `<program> --prefix ~/.local/bin`, and
+`--terminal` to answer from stdin). On a terminal (stdin and stderr) rascal asks on stderr: no,
+or no answer, exits 0 and changes nothing; yes installs, then runs `~/.local/bin/wafflehouse`; an
+installation that fails, or leaves no program, exits 74 and runs nothing. Off a terminal: 69.
 
 ## Conformance (8.8)
 
