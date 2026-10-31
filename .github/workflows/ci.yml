@@ -49,5 +49,7 @@ jobs:
         run: uv sync --frozen --project tools/python
       - run: just check
       - run: just deny-advisories
+      - name: Warn when the shared contract has a newer release (ADR 0020)
+        run: scripts/check-contract.sh
       - name: Smoke the debug binary
         run: cargo build -p rascal-mask && just smoke

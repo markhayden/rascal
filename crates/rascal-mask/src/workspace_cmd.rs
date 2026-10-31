@@ -42,11 +42,13 @@ pub fn list(dir: &Path, type_filter: Option<&str>, json: bool) -> Result<()> {
     Ok(())
 }
 
-/// Imports an image into a workspace and prints its id.
+/// Imports an image into a workspace and prints its id, its frame and the SHA-256 of the file
+/// (the contract's `file_sha256`, ADR 0020).
 pub fn import(dir: &Path, image: &Path, projection: Option<Projection>) -> Result<()> {
     let ws = Workspace::open(dir)?;
     let (id, frame, _) = ws.import(image, projection)?;
-    println!("{id} {}", frame.id);
+    let reference = rascal_core::contract::image_reference(&ws, &id)?;
+    println!("{id} {} file_sha256:{}", frame.id, reference.file_sha256);
     Ok(())
 }
 

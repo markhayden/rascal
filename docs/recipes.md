@@ -75,8 +75,12 @@ rascal run <recipe> <image> --out run/ [--bbox x0,y0,x1,y1 | --location l.json]
 
 The positional image binds `inputs.image`. `--bbox` is sugar that binds `inputs.location` to a
 new bbox location in the image's frame; `--location` binds any location kind from a JSON file
-(the `frame` may be omitted; if named it must be the image's frame); `--stroke` binds a stroke
-location to `inputs.stroke`; `--protect` and `--mask` bind stored mask directories in the
+(the `frame` may be omitted; if named it must be the image's frame), or a
+[table-manners](https://github.com/markhayden/table-manners) location, recognised by its `image`
+field, such as a squint finding: its image reference must name the file the run was given (the
+SHA-256 and the dimensions), and rascal takes one shape per location, so a shape in several parts
+(split at the wrap edge), a polygon over 64 vertices or a `mask` kind is refused with exit 64 and
+the reason (ADR 0020); `--stroke` binds a stroke location (either form) to `inputs.stroke`; `--protect` and `--mask` bind stored mask directories in the
 image's frame, or (for `protect`) in a frame derived from it that the workspace knows (frames
 carry sizes and projections, not images, so the check is on the frame chain: give the mask the
 run that made it). `--prompt` binds `inputs.prompt`, a `Text` input: not an artifact but a

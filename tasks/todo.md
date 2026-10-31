@@ -86,3 +86,14 @@ with green CI on both platforms, and then the tag.
 - [ ] **Thin parts escape the plane** (the eagle's far wingtip, `~/Downloads/penguin-eagle-test.png`): SAM's plane stops short of the thinnest feathers and a 4 px grow does not reach them, so a faint trace stays under either filler; `--set grow.px=8` is the knob, a plane that follows thin structure the answer.
 - [~] 7.2 The final timing run and the release: timing recorded (`docs/results/suite-timing.md`, 2 min 41 s), the criteria table in `docs/architecture.md`, `setup` from an archive or URL with its digest, the `bundles` workflow, the README install section; left: the owner's word to push `v0.1.0` (and the models release)
 - [ ] Checkpoint M7 → tag `m7` → tag `v0.1.0` when the owner calls the work ready (decision 11); the machinery is complete
+
+## M8 Table manners (the shared contract, `table-manners` v0.1.0; ADR 0020, decision 13; PLAN.md M8)
+- [x] 8.1 The contract pinned (`=0.1.0`, a warn-on-newer CI step) and the image reference: the source file's digest at import, projection and topology, the twelve pixel vectors reproduced (`rascal-core::contract`, `fixtures/contract/pixels/`, `scripts/check-contract.sh`; `workspace import` prints the file digest)
+- [x] 8.2 Locations across the boundary: the contract's location to and from rascal's (`parts` ↔ `group`, every kind, `reason`, `score`/`score_kind`), verified against the imported image; `--location` takes a contract file (done: `contract::location_in`/`location_out`, the contract's location examples round-trip, a squint-shaped finding masks byte-identically to rascal's own location; rascal's v0.1 limits refused with the reason: several parts, over 64 vertices, `mask` in a location slot); `locations.used` and `found` move to 8.4 with the header
+- [ ] 8.3 `describe --json` and the `describe` tool: one action per shipped recipe plus `estimate`, validated against the contract's schema
+- [ ] 8.4 `run.json` with the shared header on every `run` and `heal`, atomically and last, on completed, invalid, error and cancelled runs; exit 130 and 143 on signals
+- [ ] 8.5 `serve` under the contract: action tools beside the op tools, images by path or inline, `isError` results, progress heartbeat, cancellation, run resources and the runs list, per-call cap and session budget
+- [ ] 8.6 The fill cache keyed by request identity (closes the lab's pay-twice note), `spend_usd_per_call`, `estimate`
+- [ ] 8.7 `rascal playground`: finds and starts the shared playground, no UI
+- [ ] 8.8 Fixtures under `fixtures/contract/`, the first half of the cross-tool acceptance test in CI, `docs/contract.md`, SPEC "External interface", README, architecture
+- [ ] Checkpoint M8 → tag `m8`

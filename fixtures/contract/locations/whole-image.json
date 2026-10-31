@@ -1,0 +1,14 @@
+{
+  "image": {
+    "file_sha256": "3f9a000000000000000000000000000000000000000000000000000000000000",
+    "width": 2048,
+    "height": 1024,
+    "projection": "equirectangular",
+    "topology": "wrap"
+  },
+  "kind": "whole_image",
+  "parts": [],
+  "straddles_wrap": false,
+  "label": "the render is black",
+  "disposition": "violation"
+}

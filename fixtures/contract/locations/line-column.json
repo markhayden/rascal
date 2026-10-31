@@ -1,0 +1,17 @@
+{
+  "image": {
+    "file_sha256": "3f9a000000000000000000000000000000000000000000000000000000000000",
+    "width": 2048,
+    "height": 1024,
+    "projection": "equirectangular",
+    "topology": "wrap"
+  },
+  "kind": "line",
+  "parts": [
+    {
+      "column": 0.5,
+      "width_px": 24
+    }
+  ],
+  "straddles_wrap": false
+}

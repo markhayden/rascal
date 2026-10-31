@@ -1173,6 +1173,159 @@ directory; `rascal run seam` from the unpacked release archive runs on the fixtu
 - [ ] Owner review → merge to `main` → push → CI green → tag `m7` → tag `v0.1.0` → the owner
       publishes.
 
+## Milestone M8: Table manners
+
+rascal conforms to the shared contract (`table-manners` v0.1.0, ADR 0020, decision 13): the
+images profile and the core. The contract's text is the specification; this milestone is the
+mapping. Each task is a branch merged on a green check; the checkpoint tags `m8`.
+
+### Task 8.1: The contract pinned, and the image reference
+
+**Description.** `table-manners = "=0.1.0"` in the workspace dependencies; `scripts/check-contract.sh`
+warns when the contract has a newer tag (a CI step, never a failure). The image reference at
+import: `ImageRecord` gains the source file's SHA-256 for an imported image, and
+`ImageReference` is built from an image and its frame (projection and topology). The twelve
+pixel vectors copied to `fixtures/contract/pixels/` with their digests, reproduced by a test.
+
+**Acceptance.**
+- [x] Every reference rascal emits validates against `urn:table-manners:images:image-reference`.
+- [x] The vectors reproduce; an import records the file digest; `workspace import` prints it.
+
+**Files.** `Cargo.toml`, `crates/rascal-core/src/image.rs`, `crates/rascal-core/src/contract.rs`
+(new), `scripts/check-contract.sh`, `.github/workflows/ci.yml`, `fixtures/contract/pixels/`.
+**Size.** M.
+
+### Task 8.2: Locations across the boundary
+
+**Description.** Conversion both ways between the contract's location and rascal's: `parts` ↔ the
+`group` of a split location, every kind (`bbox`, `polygon` to 256 vertices, `line`, `stroke`,
+`mask`, `whole_image`, `absent` with `reason`, `view` accepted and never emitted), `score` and
+`score_kind` (`owlv2-detection` for the segmenter). The reference is verified against the imported
+image (`invalid`, code `input`, on a mismatch). `--location` and `--stroke` accept a contract
+location file (recognised by its `image` field) beside rascal's own. `locations.used` and
+`locations.found` are recorded per run: `remove-prompt`'s findings from `segment`, the seam line.
+
+**Acceptance.**
+- [x] The contract's valid location examples round-trip through rascal's types; rascal's split
+      location leaves as one two-part location. Inbound, a shape in several parts, a polygon over
+      rascal's 64 vertices (its schema is the copied envelope's, ADR 0009) and a `mask` in a
+      location slot are refused with the reason: rascal v0.1's limits, recorded here.
+- [x] `rascal run remove img.png --location finding.json` with a squint-shaped finding masks it,
+      byte-identically to rascal's own location; a finding on another image is refused (64).
+- `locations.used` and `locations.found` are recorded with the header in 8.4.
+
+**Files.** `crates/rascal-core/src/location.rs`, `contract.rs`, `crates/rascal-mask/src/run.rs`,
+tests. **Size.** M.
+
+### Task 8.3: `describe --json` and the `describe` tool
+
+**Description.** The description document: one action per shipped recipe (`seam`, `remove`,
+`remove_prompt`, `repair`, `repair_area`, `protect`, `rect`) plus `estimate`; `params_schema` from
+the recipe's overridable step parameters (`set`), `filler`, `strict`, `projection`; image slots
+from the recipe's inputs with roles; location slots with the kinds each takes; `outputs` (`mask`,
+`result`); `cost` from the config's fillers (`may_spend`, `basis: estimated`, `needs_env`);
+`duration`; `renders` (`rascal dash {run.dir} --serve --port 0`); `vocabulary`; `limits`;
+`profiles: ["images"]`. The MCP tool `describe` returns the same document.
+
+**Acceptance.**
+- [ ] The document validates against `urn:table-manners:core:description`; `ops list` is unchanged.
+- [ ] A fixture under `fixtures/contract/describe.json` is compared in the test suite.
+
+**Files.** `crates/rascal-mask/src/describe.rs` (new), `main.rs`, `crates/rascal-mcp/src/server.rs`.
+**Size.** M.
+
+### Task 8.4: `run.json` and the header
+
+**Description.** Every `run` and `heal` writes `run.json` atomically and last: `status` from the
+outcome (`ok`, `measured_nothing`, `not_applicable` → `completed` with the step statuses in the
+body; `invalid_args`, usage and recipe errors → `invalid`; operational errors → `error` with the
+code map: io → `io`, a filler endpoint → `provider`, a filler command or pack → `tool_process`, a
+timeout → `timeout`, the rest → `internal`; a signal → `cancelled`), `input_identity` (the run's
+identity over the recipe, the inputs and the overrides), `spend` (`estimated` from the filler's
+`spend_usd_per_call`), `cache`, `images.in` and `images.out` with roles and path locators,
+`locations`, `notes` from the journal, and a body with the envelope statuses, the outputs by role
+and the heal report. SIGINT exits 130 and SIGTERM 143, after `run.json` is written.
+
+**Acceptance.**
+- [ ] `run.json` validates against `urn:table-manners:core:result` on completed, invalid, error
+      and cancelled runs; a heal whose filler fails keeps the mask in `images.out`.
+- [ ] A golden `run.json` for the step-sky seam under the fake filler.
+
+**Files.** `crates/rascal-mask/src/run.rs`, `heal.rs`, `main.rs`, `crates/rascal-core/src/contract.rs`.
+**Size.** L, split into the header (8.4a) and the signals (8.4b) if it runs long.
+
+### Task 8.5: `serve` under the contract
+
+**Description.** One MCP tool per action beside the op tools (ADR 0015 unchanged for those):
+image slots by `path` or `inline` with `expect`, an implicit journaled import; `return_images`,
+`image_blocks` (opt-in blocks), `max_spend_usd`; results as `structuredContent` with `isError`
+for `invalid` and `error`; JSON-RPC errors only before a run exists; progress on every journal
+step and a heartbeat under `progress_interval_s` with a strictly increasing value; cancellation
+writes `run.json` as `cancelled` and returns no result; resources `rascal://runs`,
+`rascal://run/{id}/run.json`, `/journal`, `/images/{role}`; a runs root for `serve` (`--runs`,
+default `$XDG_DATA_HOME/rascal/runs`); `--budget-usd` per session; paths refused over a network
+transport (none in v0.1, the check is there). The testkit client grows the calls it needs.
+
+**Acceptance.**
+- [ ] The independent client runs the `seam` action end to end with the fake filler, reads the
+      run resource and the runs list, and sees strictly increasing progress on a slow fake filler.
+- [ ] A cancelled call leaves `run.json` as `cancelled`; a digest mismatch is `invalid`/`input`.
+
+**Files.** `crates/rascal-mcp/src/server.rs`, `jsonrpc.rs`, `crates/rascal-testkit/src/mcp_client.rs`,
+tests. **Size.** L.
+
+### Task 8.6: The fill cache and spend
+
+**Description.** A cache of fills keyed by the fill request's identity, shared across runs and
+lab arms (`[cache] dir` in `rascal.toml`); a hit reports `cache: hit` and spend 0;
+`spend_usd_per_call` on a filler entry; `estimate` returns the worst case (fills × price) and the
+session budget left. The lab's identical-mask arms share one fill (the objects-01 and objects-02
+finding).
+
+**Acceptance.**
+- [ ] Two identical heals: the second is a hit with no filler call; a lab run with two arms whose
+      masks are identical makes one external call.
+
+**Files.** `crates/rascal-mask/src/heal.rs`, `filler/`, `crates/rascal-core/src/config.rs`,
+`lab/`. **Size.** M.
+
+### Task 8.7: The `playground` subcommand
+
+**Description.** `rascal playground` finds the shared playground program (`PATH`, then the data
+directory), starts it with `--tool rascal`, and when it is absent says where to get it and exits
+69 (unavailable). No UI, no server.
+
+**Acceptance.**
+- [ ] With a fake `playground` on `PATH` the subcommand execs it with the arguments; without, the
+      message and exit 69.
+
+**Files.** `crates/rascal-mask/src/main.rs`, `playground.rs` (new). **Size.** S.
+
+### Task 8.8: Fixtures, the acceptance half, docs
+
+**Description.** rascal's conformance fixtures (`describe.json`, a `run.json` per status, the
+locations) under `fixtures/contract/`, validated in the test suite against the crate's embedded
+schemas, and copied to the contract repository's `fixtures/rascal/` by a pull request there; the
+first half of the cross-tool acceptance test (a squint-shaped finding to `rascal run remove`) run
+in rascal's CI against the tagged contract. `docs/contract.md` (new), `SPEC.md` "External
+interface", `README.md`, `docs/architecture.md`.
+
+**Acceptance.**
+- [ ] `just check` green; `scripts/check-docs.sh` covers `describe` and `playground`; the
+      acceptance half passes in CI.
+
+**Size.** M.
+
+### Checkpoint M8
+- [ ] Tasks 8.1 to 8.8 merged, `just check` green, CI green on both platforms.
+- [ ] Tag `m8`. Then the contract's pin moves to v0.2 when it is tagged after squint's M7.
+
+### Owner decisions for M8
+- Actions are the shipped recipes, one each, with the filler as a parameter (a run without a
+  filler is the mask alone); not one action per recipe and filler. Recommended, assumed.
+- The op tools keep their envelopes and mapping in v0.1 (ADR 0020). Recommended, assumed.
+- The runs root for `serve` defaults under `$XDG_DATA_HOME/rascal/runs`. Recommended, assumed.
+
 ## Risks and mitigations
 
 | Risk | Impact | Mitigation |

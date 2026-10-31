@@ -40,6 +40,9 @@ sha2 = "0.11"
 fs4 = "1.1"
 tracing = "0.1"
 # The MCP SDK (ADR 0015): pinned; stdio for `serve`, a child process for the packs; no macros.
+# The shared contract of the waffle tools (ADR 0020): types and schemas, no logic; pinned exactly,
+# moved by a deliberate commit (scripts/check-contract.sh warns in CI when a newer one exists).
+table-manners = "=0.1.0"
 rmcp = { version = "=3.8.0", default-features = false, features = ["server", "client", "transport-io", "transport-child-process", "schemars"] }
 # The subscriber behind RASCAL_LOG (SPEC "Diagnostics"): spans to stderr, off by default.
 tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "std", "ansi"] }

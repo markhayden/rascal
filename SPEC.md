@@ -987,6 +987,28 @@ Every op that produces something a person would want to see (a chart, a profile,
 registers a **panel** with the run page in the task that adds the op, so the view is never
 behind the tool.
 
+## External interface (table-manners)
+
+rascal conforms to **table-manners** v0.1.0 (https://github.com/markhayden/table-manners; ADR
+0020, decision 13), the shared contract of the owner's tools: what an agent, a script or the
+playground sees from outside is the same for squint, rascal and the tools after them, so they
+chain in one pipeline without glue code. The contract's text is the specification of that
+surface; this section is rascal's mapping onto it, built in milestone M8 (PLAN.md).
+
+| the contract | rascal |
+|---|---|
+| image reference: `file_sha256`, `width`, `height`, `projection`, `topology`, optional `pixel_sha256` | the import records the source file's digest; projection and topology from the raw frame; the pixel digest is rascal's own recipe, byte for byte |
+| location: `parts`, `straddles_wrap`, kinds `bbox`, `polygon` (256), `line`, `stroke`, `mask`, `whole_image`, `absent` (`reason`), `view` (input only) | converted to and from `Location` (the seam rule's `group` ↔ `parts`); a mask rendering crosses as the `mask` kind; `score`/`score_kind` from the segmenter |
+| images in: `path` or `inline`, optional `expect`; images out: role, reference, one locator | an implicit, journaled import; `images.out` with `source`, `mask`, `result` |
+| the result header and `run.json` | every `run` and `heal` writes it atomically and last; the body holds the envelope statuses, the outputs by role and the heal report |
+| `describe --json`, the `describe` tool | one action per shipped recipe, plus `estimate` |
+| `serve`: action tools, `isError` results, progress heartbeat, cancellation, run resources, the runs list, caps and budget | beside the op tools of ADR 0015, which keep their envelopes in v0.1 |
+| exit codes 0, 3, 64, 130, 143; 1 under `--strict` | as before, plus the signals |
+| `playground` | starts the shared playground program; no UI in rascal |
+
+The copied `manifest-v1` and `envelope-v1` schemas (ADR 0009) remain the pack-facing shapes
+inside rascal; the contract's result carries the envelope as its body.
+
 ## Tech stack
 
 - Rust stable, edition 2024, pinned by `rust-toolchain.toml`. Crates: `image`, `imageproc`,
@@ -1024,7 +1046,9 @@ uv run --frozen --offline --no-sync ruff check . && uv run --frozen --offline --
 
 # the binary
 rascal run seam pano.jpg --out run/
-rascal run remove room.jpg --location chairs.json --out run/
+rascal describe --json                         # the contract's description document (table-manners, M8)
+rascal playground                              # start the shared playground program (M8)
+rascal run remove room.jpg --location chairs.json --out run/   # chairs.json: rascal's location or a table-manners one
 rascal run remove-prompt room.jpg --prompt "chair" --config rascal.toml --out run/   # segment through the pack
 rascal run repair print.jpg --stroke scratch.json --out run/
 rascal run ./my-recipe.toml image.jpg --out run/

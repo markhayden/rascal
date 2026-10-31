@@ -50,7 +50,8 @@ enum Command {
         /// start with a minus sign (a box reaching past the left edge of a flat image).
         #[arg(long, allow_hyphen_values = true, conflicts_with = "location")]
         bbox: Option<String>,
-        /// Bind inputs.location to a location JSON file (any kind) in the image's frame.
+        /// Bind inputs.location to a location JSON file (any kind) in the image's frame, or a
+        /// table-manners location (it has `image`) on the image given.
         #[arg(long)]
         location: Option<PathBuf>,
         /// Bind inputs.stroke to a stroke location JSON file in the image's frame.

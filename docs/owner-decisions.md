@@ -121,3 +121,15 @@ follow-ups (objects on the line kept, base and stand, thin parts) are built. The
 that ran under fan-v1 name their set explicitly, so they stay reproducible. "For now": the
 default is revisited after the next mask round.
 
+
+
+## 13. rascal conforms to table-manners
+
+2026-10-30. The owner created `table-manners`, the shared contract of their tools (squint,
+rascal, the tools after them, and one playground over all of them), reviewed from rascal's side
+and tagged v0.1.0 the same day. rascal conforms to it, core and images profile, as milestone M8:
+"the contract should be pushed. need you to review it and make sure rascal adheres". The order
+across the repositories: squint conforms first (its long paid runs are where the contract is
+riskiest), rascal in parallel against the same tag, then the mask handoff (rascal's mask to squint
+as the region where change was allowed), then the playground. ADR 0020 records the dependency.
+\n
