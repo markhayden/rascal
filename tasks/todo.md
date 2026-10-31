@@ -103,7 +103,7 @@ with green CI on both platforms, and then the tag.
 - [x] 9.2 The budget reserved, then settled: one atomic check and reservation in `serve` (done: `actions::Ledger` and its reservation; found and fixed with it: two runs allocated in one millisecond shared an id and a directory, now `run_json::allocate_ms`)
 - [x] 9.3 Reads never wait on a run: `describe` and `estimate` off the permit (done: `Actions::exclusive`)
 - [x] 9.4 Runs listed from allocation (done: the run directory is made at allocation; both in `serve_contract.rs`)
-- [ ] 9.5 The Wafflehouse launcher by H1
+- [x] 9.5 The Wafflehouse launcher by H1 (done: `playground.rs`, the testkit seam `--installer`/`--terminal`; `tests/playground.rs`)
 - [ ] Checkpoint M9 → tag `m9`
 
 ## M10 Operations (R3; decision 14; PLAN.md M10)
