@@ -8,6 +8,7 @@ mod heal;
 mod inspect;
 mod lab_run;
 use rascal_mask::lab;
+mod actions;
 mod measure;
 mod ops;
 mod packs;
@@ -154,6 +155,10 @@ enum Command {
         /// Calls that may run at once; each still commits in turn.
         #[arg(long, default_value_t = 1)]
         concurrency: usize,
+        /// Where the contract's action runs go, one directory each (table-manners);
+        /// `$XDG_DATA_HOME/rascal/runs` by default.
+        #[arg(long)]
+        runs: Option<PathBuf>,
     },
     /// The configured tool packs: list their tools, or call one from the shell.
     Tools {
@@ -608,25 +613,22 @@ fn main() {
                 overrides: BTreeMap::new(),
                 overrides_from: None,
                 sets: set,
+                cancel: None,
             };
             let pending = run_json::begin(run_json::pending_for(&args, None));
             run_json::watch_signals();
             let result = run::run(&args);
             let ended = match &result {
-                Ok(report) => run_json::Ended {
-                    status: rascal_core::contract::table_manners::Status::Completed,
-                    error: None,
-                    renders: report.renders.clone(),
-                    result: None,
-                    body: run_json::body_of(
-                        &args.recipe,
-                        report.status,
-                        report.stopped_at.as_deref(),
-                        report.reason.as_deref(),
-                        report.mask_dir.as_deref(),
-                        None,
-                    ),
-                },
+                Ok(report) => run_json::ended_ok(
+                    &args.recipe,
+                    report.status,
+                    report.stopped_at.as_deref(),
+                    report.reason.as_deref(),
+                    report.mask_dir.as_deref(),
+                    None,
+                    report.renders.clone(),
+                    None,
+                ),
                 Err(error) => run_json::ended_with(&args.recipe, error),
             };
             run_json::conclude(&pending, ended);
@@ -701,6 +703,7 @@ fn main() {
                     overrides: BTreeMap::new(),
                     overrides_from: None,
                     sets: set,
+                    cancel: None,
                 },
                 filler,
                 no_dash,
@@ -710,20 +713,16 @@ fn main() {
             run_json::watch_signals();
             let result = heal::heal(&args);
             let ended = match &result {
-                Ok(report) => run_json::Ended {
-                    status: rascal_core::contract::table_manners::Status::Completed,
-                    error: None,
-                    renders: report.renders.clone(),
-                    result: report.result.clone(),
-                    body: run_json::body_of(
-                        &args.run.recipe,
-                        report.status,
-                        report.stopped_at.as_deref(),
-                        report.reason.as_deref(),
-                        None,
-                        Some(&args.filler),
-                    ),
-                },
+                Ok(report) => run_json::ended_ok(
+                    &args.run.recipe,
+                    report.status,
+                    report.stopped_at.as_deref(),
+                    report.reason.as_deref(),
+                    None,
+                    Some(&args.filler),
+                    report.renders.clone(),
+                    report.result.clone(),
+                ),
                 Err(error) => run_json::ended_with(&args.run.recipe, error),
             };
             run_json::conclude(&pending, ended);
@@ -767,10 +766,12 @@ fn main() {
             workspace,
             config,
             concurrency,
+            runs,
         } => match serve::serve(&serve::ServeArgs {
             workspace,
             config,
             concurrency,
+            runs,
         }) {
             Ok(()) => exit::OK,
             Err(error) => {

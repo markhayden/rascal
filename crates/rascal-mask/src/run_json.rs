@@ -454,7 +454,20 @@ pub fn conclude(pending: &Pending, ended: Ended) {
 }
 
 /// How a command that failed ended: the contract's status and error, the body naming the step.
+/// A cancellation is not an error: `cancelled`, with the step it stopped before.
 pub fn ended_with(recipe: &str, error: &Error) -> Ended {
+    if let Error::Cancelled { step } = error {
+        let mut body = serde_json::Map::new();
+        body.insert("recipe".into(), Value::String(recipe.to_string()));
+        body.insert("stopped_before".into(), Value::String(step.clone()));
+        return Ended {
+            status: Status::Cancelled,
+            error: None,
+            renders: Vec::new(),
+            result: None,
+            body,
+        };
+    }
     let (status, info) = error_of(error);
     let mut body = serde_json::Map::new();
     body.insert("recipe".into(), Value::String(recipe.to_string()));
@@ -518,4 +531,25 @@ pub fn watch_signals() {
         eprintln!("rascal: cancelled by signal");
         std::process::exit(code);
     });
+}
+
+/// How a command that returned ended: `completed`, with rascal's outcome in the body.
+#[allow(clippy::too_many_arguments)]
+pub fn ended_ok(
+    recipe: &str,
+    status: rascal_core::op::Status,
+    stopped_at: Option<&str>,
+    reason: Option<&str>,
+    mask_dir: Option<&Path>,
+    filler: Option<&str>,
+    renders: Vec<(String, PathBuf)>,
+    result: Option<PathBuf>,
+) -> Ended {
+    Ended {
+        status: Status::Completed,
+        error: None,
+        renders,
+        result,
+        body: body_of(recipe, status, stopped_at, reason, mask_dir, filler),
+    }
 }

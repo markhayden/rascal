@@ -25,7 +25,7 @@
           "slot": "location"
         }
       ],
-      "name": "rect",
+      "name": "mask_rect",
       "outputs": {
         "images": [
           "mask",

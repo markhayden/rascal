@@ -1270,9 +1270,11 @@ default `$XDG_DATA_HOME/rascal/runs`); `--budget-usd` per session; paths refused
 transport (none in v0.1, the check is there). The testkit client grows the calls it needs.
 
 **Acceptance.**
-- [ ] The independent client runs the `seam` action end to end with the fake filler, reads the
-      run resource and the runs list, and sees strictly increasing progress on a slow fake filler.
-- [ ] A cancelled call leaves `run.json` as `cancelled`; a digest mismatch is `invalid`/`input`.
+- [x] The independent client runs the `seam` action end to end with the fake filler, reads the
+      run resource and the runs list, and sees strictly increasing progress.
+- [x] A cancelled call leaves `run.json` as `cancelled`; a digest mismatch is `invalid`/`input`.
+- The `rect` recipe's action is `mask_rect` (an action never shadows an op); the per-call cap and
+  the session budget move to 8.6, where runs carry a price.
 
 **Files.** `crates/rascal-mcp/src/server.rs`, `jsonrpc.rs`, `crates/rascal-testkit/src/mcp_client.rs`,
 tests. **Size.** L.

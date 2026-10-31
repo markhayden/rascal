@@ -92,7 +92,8 @@ rascal ops list                                           # every op's manifest,
 rascal inspect run/artifacts/<id> --json                  # or --out pages/ for the overlay and chart, --replay to rebuild
 rascal export --compat run/journal.jsonl --step rasterize --out e.json
 rascal dash run/ --out run/dash.html                     # the run page: timings, envelopes, every artifact; --serve for loopback
-rascal serve --workspace ws/                              # every op as an MCP tool over stdio, plus import/list/describe/read/dash
+rascal serve --workspace ws/                              # every op as an MCP tool over stdio, plus import/list/describe/read/dash,
+                                                          # and the table-manners actions (one per recipe) with run resources
 rascal tools call rascal-tools segment --config rascal.toml --workspace ws/ --image photo.png --prompt "the chair"   # a pack's tool from the shell
 rascal tools setup --bundle bundle-macos-arm64/ --into ~/rascal-tools   # the Python pack installed offline from its bundle
 rascal corpus verify corpus.toml --root ~/rascal/corpus                 # every image's file against its digest

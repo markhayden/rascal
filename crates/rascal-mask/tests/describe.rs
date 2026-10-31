@@ -76,7 +76,7 @@ fn describe_is_the_contracts_document_and_matches_its_fixture() {
         "repair",
         "repair_area",
         "protect",
-        "rect",
+        "mask_rect",
     ] {
         assert!(names.contains(&name), "{names:?}");
     }

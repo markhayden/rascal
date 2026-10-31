@@ -44,14 +44,15 @@ rascal describe --json [--config rascal.toml]
 ```
 
 The contract's description document: one action per shipped recipe (`seam`, `remove`,
-`remove_prompt`, `repair`, `repair_area`, `protect`, `rect`), with the image slots (role
+`remove_prompt`, `repair`, `repair_area`, `protect`, and `mask_rect` for the `rect` recipe, so
+it does not take the `rect` op's name in `serve`), with the image slots (role
 `source`), the location slots and the kinds each takes, the text and mask inputs and the common
 arguments (`filler`, `set`, `projection`, `strict`) as `params_schema`, the outputs (`mask`,
 `result`; `remove_prompt` fills `locations.found`), the cost, the duration and the `dash` render.
 With `--config`, the configured fillers are the `filler` enum, and any configured filler makes an
 action `may_spend` with its key's variable named (never its value).
 `fixtures/contract/describe.json` pins the document without a configuration. The `describe` MCP
-tool returns the same document once `serve` conforms (8.5).
+tool returns the same document (8.5).
 
 ## `run.json` and the header (8.4)
 
@@ -83,4 +84,40 @@ that still lists the mask. `locations.used` holds the location the run took in;
 `input_identity` is a SHA-256 over what was asked (the action, the recipe, the image's file
 digest, the location files, `--set`, the prompt, the filler), so equal requests have equal
 identities. `spend` is 0 and `cache` is `off` until 8.6.
+
+## `serve` (8.5)
+
+```
+rascal serve --workspace ws/ [--config rascal.toml] [--concurrency n] [--runs dir]
+```
+
+Beside the op tools and the workspace tools (ADR 0015, unchanged), `serve` lists one MCP tool per
+action in the description and `describe`; an action never shadows an op's name. A call runs the
+recipe, through `heal` when `filler` is given, in its own run directory under `--runs`
+(`$XDG_DATA_HOME/rascal/runs`, else `~/.local/share/rascal/runs`), and its result is that run's
+`run.json` as `structuredContent`, with `isError` true for `invalid` and `error`. JSON-RPC errors
+are left for failures before a run exists (an unknown tool, malformed arguments).
+
+- **Images in.** `image` is `{ "path": "/abs/…" }` or `{ "inline": { "media_type", "data" } }`,
+  each with an optional `expect` reference checked against the file (digest and dimensions; a
+  mismatch is `invalid` with code `input`). A path must be absolute; inline bytes are written to
+  the run's input directory (`<runs>/<id>.in/`) and imported like a file, journaled; the limit is
+  the description's `limits.inline_bytes` (64 MiB).
+- **Images out.** `return_images` chooses the locator: `path` (the default), `inline`, or
+  `resource` (`rascal://run/<id>/images/<role>`). `image_blocks: true` also sends each as an MCP
+  image block.
+- **Locations in.** `location` and `stroke` take a table-manners location object (8.2).
+- **Progress.** With a progress token, every op the run journals is a notification
+  (`step fan (fan): ok`), and a heartbeat goes at least every five seconds while it waits;
+  `progress` is a counter that only increases, the words are in `message`, and the first message
+  names the run's resource.
+- **Cancellation.** `notifications/cancelled` sets the run's flag: the run stops before its next
+  step (each op checks the flag before it commits, and `heal` before it calls the filler), writes
+  `run.json` as `cancelled` with `stopped_before`, and the call gets no result. A filler call
+  already in flight runs to its end (its timeout bounds it).
+- **Resources.** `rascal://runs` (the contract's runs list, newest first, a run still going is
+  `running`), `rascal://run/{id}/run.json`, `rascal://run/{id}/journal`,
+  `rascal://run/{id}/images/{role}`. An id is exactly `run-<ms>-<pid>`; nothing else under the
+  runs root, and nothing outside it, can be read.
+- **Spend limits** (`max_spend_usd`, the session budget) arrive with prices in 8.6.
 

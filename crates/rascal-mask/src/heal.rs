@@ -278,6 +278,11 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
             pixels
         }
         None => {
+            if run.cancelled() {
+                return Err(Error::Cancelled {
+                    step: "filler".to_string(),
+                });
+            }
             let scratch = run.dir.join("filler");
             std::fs::create_dir_all(&scratch).map_err(|e| Error::io(&scratch, e))?;
             let span = tracing::info_span!(

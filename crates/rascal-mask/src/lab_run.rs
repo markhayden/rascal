@@ -316,6 +316,7 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
                 overrides: BTreeMap::new(),
                 overrides_from: None,
                 sets: Vec::new(),
+                cancel: None,
             },
             filler: arm.filler.clone(),
             no_dash: args.no_dash,
