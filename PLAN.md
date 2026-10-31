@@ -1228,8 +1228,9 @@ from the recipe's inputs with roles; location slots with the kinds each takes; `
 `profiles: ["images"]`. The MCP tool `describe` returns the same document.
 
 **Acceptance.**
-- [ ] The document validates against `urn:table-manners:core:description`; `ops list` is unchanged.
-- [ ] A fixture under `fixtures/contract/describe.json` is compared in the test suite.
+- [x] The document validates against `urn:table-manners:core:description`; `ops list` is unchanged.
+- [x] A fixture under `fixtures/contract/describe.json` is compared in the test suite.
+- The `describe` MCP tool is wired with the action tools in 8.5, and `estimate` with spend in 8.6.
 
 **Files.** `crates/rascal-mask/src/describe.rs` (new), `main.rs`, `crates/rascal-mcp/src/server.rs`.
 **Size.** M.

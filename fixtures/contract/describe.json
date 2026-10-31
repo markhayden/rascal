@@ -1,0 +1,634 @@
+{
+  "actions": [
+    {
+      "cost": {
+        "may_spend": false,
+        "needs_env": []
+      },
+      "duration": {
+        "max_s": 120.0,
+        "typical_s": 5.0
+      },
+      "images": [
+        {
+          "required": true,
+          "role": "source",
+          "slot": "image"
+        }
+      ],
+      "locations": [
+        {
+          "kinds": [
+            "bbox"
+          ],
+          "required": true,
+          "slot": "location"
+        }
+      ],
+      "name": "rect",
+      "outputs": {
+        "images": [
+          "mask",
+          "result"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "filler": {
+            "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone. None is configured.",
+            "type": "string"
+          },
+          "projection": {
+            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "enum": [
+              "flat",
+              "equirectangular"
+            ],
+            "type": "string"
+          },
+          "set": {
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "description": "Step overrides for this run, `<step>.<param>` to a value (`fan.constants`: `fan-v1`, `grow.px`: 8); journaled.",
+            "propertyNames": {
+              "pattern": "^[a-z_][a-z0-9_-]*\\.[a-z_][a-z0-9_]*$"
+            },
+            "type": "object"
+          },
+          "strict": {
+            "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "purpose": "A feathered rectangle as a mask.",
+      "renders": [
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--serve",
+            "--port",
+            "0"
+          ],
+          "name": "dash"
+        }
+      ],
+      "title": "Mask a rectangle"
+    },
+    {
+      "cost": {
+        "may_spend": false,
+        "needs_env": []
+      },
+      "duration": {
+        "max_s": 120.0,
+        "typical_s": 5.0
+      },
+      "images": [
+        {
+          "required": true,
+          "role": "source",
+          "slot": "image"
+        }
+      ],
+      "locations": [],
+      "name": "seam",
+      "outputs": {
+        "images": [
+          "mask",
+          "result"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "filler": {
+            "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone. None is configured.",
+            "type": "string"
+          },
+          "projection": {
+            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "enum": [
+              "flat",
+              "equirectangular"
+            ],
+            "type": "string"
+          },
+          "set": {
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "description": "Step overrides for this run, `<step>.<param>` to a value (`fan.constants`: `fan-v1`, `grow.px`: 8); journaled.",
+            "propertyNames": {
+              "pattern": "^[a-z_][a-z0-9_-]*\\.[a-z_][a-z0-9_]*$"
+            },
+            "type": "object"
+          },
+          "strict": {
+            "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "purpose": "Masks the wrap edge of a panorama (or any vertical line) as a band, wide on smooth surfaces and thin on detail, with a tone ramp across it; with a filler, heals it.",
+      "renders": [
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--serve",
+            "--port",
+            "0"
+          ],
+          "name": "dash"
+        }
+      ],
+      "title": "Heal a seam"
+    },
+    {
+      "cost": {
+        "may_spend": false,
+        "needs_env": []
+      },
+      "duration": {
+        "max_s": 120.0,
+        "typical_s": 5.0
+      },
+      "images": [
+        {
+          "required": true,
+          "role": "source",
+          "slot": "image"
+        }
+      ],
+      "locations": [
+        {
+          "kinds": [
+            "bbox",
+            "polygon",
+            "stroke"
+          ],
+          "required": true,
+          "slot": "location"
+        }
+      ],
+      "name": "remove",
+      "outputs": {
+        "images": [
+          "mask",
+          "result"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "filler": {
+            "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone. None is configured.",
+            "type": "string"
+          },
+          "projection": {
+            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "enum": [
+              "flat",
+              "equirectangular"
+            ],
+            "type": "string"
+          },
+          "protect": {
+            "description": "A stored rascal mask directory (an earlier run's `mask`), by absolute path.",
+            "type": "string"
+          },
+          "set": {
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "description": "Step overrides for this run, `<step>.<param>` to a value (`fan.constants`: `fan-v1`, `grow.px`: 8); journaled.",
+            "propertyNames": {
+              "pattern": "^[a-z_][a-z0-9_-]*\\.[a-z_][a-z0-9_]*$"
+            },
+            "type": "object"
+          },
+          "strict": {
+            "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "purpose": "Masks an object at a location with its shadow, kept off protected regions and feathered; with a filler, removes it.",
+      "renders": [
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--serve",
+            "--port",
+            "0"
+          ],
+          "name": "dash"
+        }
+      ],
+      "title": "Remove an object"
+    },
+    {
+      "cost": {
+        "may_spend": false,
+        "needs_env": []
+      },
+      "duration": {
+        "max_s": 120.0,
+        "typical_s": 20.0
+      },
+      "images": [
+        {
+          "required": true,
+          "role": "source",
+          "slot": "image"
+        }
+      ],
+      "locations": [],
+      "name": "remove_prompt",
+      "outputs": {
+        "images": [
+          "mask",
+          "result"
+        ],
+        "locations": [
+          "found"
+        ]
+      },
+      "params_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "filler": {
+            "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone. None is configured.",
+            "type": "string"
+          },
+          "projection": {
+            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "enum": [
+              "flat",
+              "equirectangular"
+            ],
+            "type": "string"
+          },
+          "prompt": {
+            "description": "The recipe's prompt (text).",
+            "minLength": 1,
+            "type": "string"
+          },
+          "protect": {
+            "description": "A stored rascal mask directory (an earlier run's `mask`), by absolute path.",
+            "type": "string"
+          },
+          "set": {
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "description": "Step overrides for this run, `<step>.<param>` to a value (`fan.constants`: `fan-v1`, `grow.px`: 8); journaled.",
+            "propertyNames": {
+              "pattern": "^[a-z_][a-z0-9_-]*\\.[a-z_][a-z0-9_]*$"
+            },
+            "type": "object"
+          },
+          "strict": {
+            "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "type": "object"
+      },
+      "purpose": "Finds the objects a text prompt names with the segmenter pack and masks them as remove does; with a filler, removes them.",
+      "renders": [
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--serve",
+            "--port",
+            "0"
+          ],
+          "name": "dash"
+        }
+      ],
+      "title": "Remove what a prompt names"
+    },
+    {
+      "cost": {
+        "may_spend": false,
+        "needs_env": []
+      },
+      "duration": {
+        "max_s": 120.0,
+        "typical_s": 5.0
+      },
+      "images": [
+        {
+          "required": true,
+          "role": "source",
+          "slot": "image"
+        }
+      ],
+      "locations": [
+        {
+          "kinds": [
+            "stroke"
+          ],
+          "required": true,
+          "slot": "stroke"
+        }
+      ],
+      "name": "repair",
+      "outputs": {
+        "images": [
+          "mask",
+          "result"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "filler": {
+            "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone. None is configured.",
+            "type": "string"
+          },
+          "projection": {
+            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "enum": [
+              "flat",
+              "equirectangular"
+            ],
+            "type": "string"
+          },
+          "set": {
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "description": "Step overrides for this run, `<step>.<param>` to a value (`fan.constants`: `fan-v1`, `grow.px`: 8); journaled.",
+            "propertyNames": {
+              "pattern": "^[a-z_][a-z0-9_-]*\\.[a-z_][a-z0-9_]*$"
+            },
+            "type": "object"
+          },
+          "strict": {
+            "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "purpose": "Tightens a stroke drawn along a scratch or tear to the defect's edges and feathers it; with a filler, repairs it.",
+      "renders": [
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--serve",
+            "--port",
+            "0"
+          ],
+          "name": "dash"
+        }
+      ],
+      "title": "Repair a scratch"
+    },
+    {
+      "cost": {
+        "may_spend": false,
+        "needs_env": []
+      },
+      "duration": {
+        "max_s": 120.0,
+        "typical_s": 5.0
+      },
+      "images": [
+        {
+          "required": true,
+          "role": "source",
+          "slot": "image"
+        }
+      ],
+      "locations": [
+        {
+          "kinds": [
+            "bbox",
+            "polygon"
+          ],
+          "required": true,
+          "slot": "location"
+        }
+      ],
+      "name": "repair_area",
+      "outputs": {
+        "images": [
+          "mask",
+          "result"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "filler": {
+            "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone. None is configured.",
+            "type": "string"
+          },
+          "projection": {
+            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "enum": [
+              "flat",
+              "equirectangular"
+            ],
+            "type": "string"
+          },
+          "set": {
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "description": "Step overrides for this run, `<step>.<param>` to a value (`fan.constants`: `fan-v1`, `grow.px`: 8); journaled.",
+            "propertyNames": {
+              "pattern": "^[a-z_][a-z0-9_-]*\\.[a-z_][a-z0-9_]*$"
+            },
+            "type": "object"
+          },
+          "strict": {
+            "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "purpose": "Masks a stain or spot as drawn, feathered; with a filler, repairs it.",
+      "renders": [
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--serve",
+            "--port",
+            "0"
+          ],
+          "name": "dash"
+        }
+      ],
+      "title": "Repair a stain"
+    },
+    {
+      "cost": {
+        "may_spend": false,
+        "needs_env": []
+      },
+      "duration": {
+        "max_s": 120.0,
+        "typical_s": 5.0
+      },
+      "images": [
+        {
+          "required": true,
+          "role": "source",
+          "slot": "image"
+        }
+      ],
+      "locations": [],
+      "name": "protect",
+      "outputs": {
+        "images": [
+          "mask",
+          "result"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "filler": {
+            "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone. None is configured.",
+            "type": "string"
+          },
+          "mask": {
+            "description": "A stored rascal mask directory (an earlier run's `mask`), by absolute path.",
+            "type": "string"
+          },
+          "projection": {
+            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "enum": [
+              "flat",
+              "equirectangular"
+            ],
+            "type": "string"
+          },
+          "set": {
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "description": "Step overrides for this run, `<step>.<param>` to a value (`fan.constants`: `fan-v1`, `grow.px`: 8); journaled.",
+            "propertyNames": {
+              "pattern": "^[a-z_][a-z0-9_-]*\\.[a-z_][a-z0-9_]*$"
+            },
+            "type": "object"
+          },
+          "strict": {
+            "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mask"
+        ],
+        "type": "object"
+      },
+      "purpose": "Inverts an earlier mask so a second pass may change everything else.",
+      "renders": [
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--serve",
+            "--port",
+            "0"
+          ],
+          "name": "dash"
+        }
+      ],
+      "title": "Protect an earlier edit"
+    }
+  ],
+  "contract": "0.1.0",
+  "limits": {
+    "inline_bytes": 67108864
+  },
+  "profiles": [
+    "images"
+  ],
+  "progress_interval_s": 10,
+  "resources": [
+    "rascal://runs",
+    "rascal://run/{id}/run.json",
+    "rascal://run/{id}/journal"
+  ],
+  "tool": {
+    "name": "rascal",
+    "purpose": "Finds, masks and composites regions of an image.",
+    "version": "<version>"
+  },
+  "vocabulary": {
+    "confidence": [],
+    "disposition": [],
+    "evidence": [],
+    "score_kind": [
+      "owlv2-detection"
+    ]
+  }
+}

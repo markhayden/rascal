@@ -24,7 +24,7 @@ detectors) are a Python tool pack over MCP. rascal has no model loop of its own:
 pipelines drive its tools. It is conforming to [table-manners](https://github.com/markhayden/table-manners),
 the shared contract of its sibling tools, so an agent can chain it with
 [squint](https://github.com/markhayden/squint) and the tools after them without glue code
-(milestone M8).
+(milestone M8, `docs/contract.md`).
 
 ## Install
 

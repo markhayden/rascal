@@ -180,6 +180,16 @@ enum Command {
         #[command(subcommand)]
         command: LabCommand,
     },
+    /// The table-manners description document (ADR 0020): one action per shipped recipe, what
+    /// it takes, returns and may spend, so a client that knows only the contract can call it.
+    Describe {
+        /// Print the document as JSON (the contract's form); without it, one line per action.
+        #[arg(long)]
+        json: bool,
+        /// The configuration file (rascal.toml): its fillers name the spend and the keys.
+        #[arg(long)]
+        config: Option<PathBuf>,
+    },
     /// The op catalogue: every manifest as a client sees it.
     Ops {
         #[command(subcommand)]
@@ -841,6 +851,13 @@ fn main() {
             }
         }
         Command::Ops { command } => ops::run(&registry, command),
+        Command::Describe { json, config } => match describe_cmd(json, config.as_deref()) {
+            Ok(()) => exit::OK,
+            Err(error) => {
+                eprintln!("rascal describe: {error}");
+                exit::code_for(&error)
+            }
+        },
         Command::Inspect {
             mask,
             json,
@@ -1080,4 +1097,24 @@ fn main() {
         }
     };
     std::process::exit(code);
+}
+
+/// `rascal describe`: the contract's description document, as JSON or one line per action.
+fn describe_cmd(json: bool, config: Option<&std::path::Path>) -> rascal_core::error::Result<()> {
+    let config = config.map(rascal_core::config::Config::read).transpose()?;
+    let description = rascal_mask::describe::description(config.as_ref())?;
+    if json {
+        let text = serde_json::to_string_pretty(&description)
+            .map_err(|e| rascal_core::Error::usage(format!("description: {e}")))?;
+        println!("{text}");
+        return Ok(());
+    }
+    println!(
+        "{} {} (table-manners {}, profiles: images)",
+        description.tool.name, description.tool.version, description.contract
+    );
+    for action in &description.actions {
+        println!("{:<14} {}", action.name, action.title);
+    }
+    Ok(())
 }
