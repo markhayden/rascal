@@ -33,6 +33,7 @@ fan-and-ramp mask on the owner's corpus, and last the Poisson paste.
 | M8 Table manners | conformance to the shared contract, `table-manners` v0.1.0 | `m8` |
 | M9 Spend and launcher | spend that survives every status, the reserved budget, reads off the permit, runs listed from allocation, the Wafflehouse launcher | `m9` |
 | M10 Operations | the ops under the contract: declared, bound by checked reference, portable native artifacts (R3) | `m10` |
+| M11 Table manners v0.2 | run association (ids in `_meta`, correlation ids, the paged runs list) and the session ledger | `m11` |
 
 Deferred past M7 with their own ADRs: the Node, Swift and WASM bindings; the path fan; scaled
 windows; replace with homography; retouch; extend; isolate; `segment` under branch B.
@@ -1427,11 +1428,7 @@ release build exits 69 with no offer; the installer is a testkit-only seam (`--i
 ### Checkpoint M9
 - [x] Tasks 9.1 to 9.5 merged, `just check` green, CI green on both platforms; tag `m9` (2026-10-31, `a461801`).
 
-### After table-manners v0.2 (not yet a task)
-The pin moves to v0.2; `client_run_id` claimed atomically (a reuse is `client_run_id_reused` with
-the earlier run, never its result); the run reference in progress `_meta`; `rascal://session`;
-the session in `estimate`; the unresolved spend in the shared field; fixtures from rascal's own
-client. Planned when the schema is agreed (rascal's review is in table-manners' PROPOSALS.md).
+The shared names for run association and the session are adopted in M11.
 
 ## Milestone M10: Operations (R3)
 
@@ -1464,6 +1461,138 @@ operations profile in table-manners that rascal drafts and squint and Wafflehous
   negative fixtures, ADR 0021, `docs/contract.md`, `docs/tools.md`.
 
 Tasks with acceptance and files are written when the profile is agreed.
+
+## Milestone M11: Table manners v0.2
+
+rascal adopts table-manners v0.2: run association and the session ledger (Wafflehouse's C4, as
+squint and rascal agreed it; the contract's 2.3, 4.1 to 4.6). The contract is drafted on
+table-manners' `v0.2-contract` branch and is tagged only when squint's and rascal's fixtures
+validate against it, so rascal builds against the crate by path (`../table-manners`, on that
+branch) on one milestone branch, `m11-table-manners-v02`. Each task is a commit there with
+`just check` green locally. The branch cannot merge while the pin is a path (CI has no sibling
+checkout), so it merges at 11.7, after the owner tags and publishes v0.2.0 and the pin is
+`=0.2.0`. Nothing here waits on squint: its fixtures come in parallel under its own M8.
+
+### Task 11.1: The pin and the shapes
+
+**Description.** The pin moves to the v0.2 crate by path. The result's `run` carries
+`session_id` and `client_run_id` (null for a CLI run and for a call that sent no id);
+`spend.unresolved_usd` replaces M9's `body.spend_unresolved_usd`; runs entries are run references
+with `action`, `status` and `started`; `contract` is `0.2.0` everywhere.
+
+**Acceptance.**
+- [ ] A CLI `run` and `heal` write `run.json` that validates against the v0.2 result schema, with
+      both ids null.
+- [ ] A heal whose filler call is unresolved reports it in `spend.unresolved_usd`, never in the
+      body; a known call gives 0 there.
+- [ ] `fixtures/contract/` regenerated and valid against v0.2.
+
+**Files.** `Cargo.toml`, `crates/rascal-mask/src/{run_json,actions}.rs`, tests,
+`fixtures/contract/`. **Size.** M.
+
+### Task 11.2: The session
+
+**Description.** `serve` starts a session: a random UUID (v4, from the `uuid` crate that rmcp
+already brings in, with its `v4` feature) and the start time. `rascal://session` returns one
+atomic observation of the ledger (contract 4.6): budget and remaining null together when
+uncapped, `remaining = max(0, budget - spent - reserved)`, amounts at most six decimals. Served
+runs carry the session id. `estimate` keeps the worst case, the effective per-call cap and
+whether the call fits, and drops M9's private `session_*` fields: the session is the resource's
+until C1 places it in the estimate.
+
+**Acceptance.**
+- [ ] `rascal://session` validates against v0.2, is listed in `resources/list` and in describe's
+      `resources`, and answers while a run holds the permit, showing its reservation.
+- [ ] Two `serve` processes give two ids; a run's `session_id` is its server's.
+- [ ] Uncapped, `budget_usd` and `remaining_usd` are both null; after an unresolved heal,
+      `unresolved_usd` is the price and is included in `spent_usd`.
+
+**Files.** `crates/rascal-mask/src/{actions,serve}.rs`, `Cargo.toml`, tests. **Size.** S.
+
+### Task 11.3: Correlation ids
+
+**Description.** A `tools/call` may carry `_meta["table-manners/client_run_id"]` (contract 4.4).
+`serve` checks its form (1 to 128 of `[A-Za-z0-9._:-]`; otherwise `-32602` before any run) and
+claims it atomically when it accepts the request, before the permit wait. A claimed id is
+refused with `-32602` and `data: {reason: "client_run_id_reused", run}`, where `run` is the
+earlier request's run reference, or null while that request has none. A claimed id stays
+claimed for the session, a cancelled-while-queued one included. The id is echoed in the run's
+reference and persisted with the session id and action in the run's inputs directory at
+allocation, so a `running` entry carries it.
+
+**Acceptance.**
+- [ ] Two concurrent calls with one id give one run and one refusal that validates against
+      `refusal.json`; at most one filler call is made.
+- [ ] A reuse after the first run ended carries that run's reference; a reuse of an id whose
+      request was cancelled while queued carries `run: null`.
+- [ ] A malformed id is refused before any run; a call without one has `client_run_id: null`.
+- [ ] The runs list shows a running run's ids before its first step ends.
+
+**Files.** `crates/rascal-mcp/src/server.rs`, `crates/rascal-mask/src/actions.rs`,
+`crates/rascal-testkit/src/mcp_client.rs`, tests. **Size.** M.
+
+### Task 11.4: The run in progress `_meta`
+
+**Description.** From allocation, every progress notification, heartbeats included, carries the
+run's reference under `_meta["table-manners/run"]`; none before (a call waiting on the permit).
+The run leaves `message`: no `rascal://` there. Cancellation is checked again after the permit
+and just before allocation, so a cancel landing between them leaves no run (contract 4.2). The
+`Actions` trait gains a way to hand the server the run reference at allocation, which the server
+attaches to every later notification.
+
+**Acceptance.**
+- [ ] Through the independent client: a queued call's heartbeats carry no `_meta`; after
+      allocation every notification carries a reference equal to the result's `run` without
+      `dir`; no message contains `rascal://`.
+- [ ] A cancel between the permit and allocation leaves no run directory and no runs entry.
+
+**Files.** `crates/rascal-mcp/src/server.rs`, `crates/rascal-mask/src/actions.rs`,
+`crates/rascal-testkit/src/mcp_client.rs`, tests. **Size.** M.
+
+### Task 11.5: The runs page
+
+**Description.** `rascal://runs{?cursor}` (contract 4.3): newest first by (started, id), 50 a
+page, `next_cursor` null on the last. The cursor is the last entry's run id, which is already
+URI-unreserved and ordered; clients treat it as opaque. `rascal://runs` stays the listed first
+page; an unknown cursor is a resource error, not an empty page.
+
+**Acceptance.**
+- [ ] 120 runs read as three pages with no gap or repeat; the last `next_cursor` is null; every
+      page validates.
+- [ ] A run started after page one was read appears on a fresh page one, not on page two.
+
+**Files.** `crates/rascal-mask/src/actions.rs`, tests. **Size.** S.
+
+### Task 11.6: Fixtures and docs
+
+**Description.** rascal's v0.2 fixtures for table-manners `fixtures/rascal/`, produced by
+rascal's own server through its independent client, never written by hand: `describe.json`;
+`run-*.json` for completed, cancelled, error, invalid and an unresolved spend; `runs.json` and a
+second page; `session.json`; `refusal-*.json` with an earlier run and with none. A test writes
+them under `UPDATE_FIXTURES=1` and checks them otherwise; rascal copies them into the
+table-manners branch and commits there. Docs move to v0.2: `docs/contract.md`, SPEC's external
+interface, README, ADR 0020, `docs/architecture.md`, and rascal's column in table-manners'
+MAPPING.md.
+
+**Acceptance.**
+- [ ] table-manners' fixtures test passes for `fixtures/rascal/`.
+- [ ] The docs name v0.2 and no longer describe the v0.1 body field or the run in the message.
+
+**Files.** `crates/rascal-mask/tests/`, `fixtures/contract/`, docs, table-manners
+`fixtures/rascal/` and `MAPPING.md`. **Size.** M.
+
+### Task 11.7: The pin to the release (owner)
+
+**Description.** Once squint's fixtures pass too, the table-manners branch merges, the owner
+tags `v0.2.0` and publishes the crate, and rascal pins `=0.2.0` in place of the path.
+
+**Acceptance.**
+- [ ] `just check` and CI green on the pinned release; the milestone branch merged; tag `m11`.
+
+**Files.** `Cargo.toml`, `Cargo.lock`, `PLAN.md`, `tasks/todo.md`. **Size.** XS.
+
+### Checkpoint M11
+- [ ] Tasks 11.1 to 11.7 done, CI green on both platforms; tag `m11`.
 
 ## Risks and mitigations
 

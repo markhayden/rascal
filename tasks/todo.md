@@ -108,3 +108,12 @@ with green CI on both platforms, and then the tag.
 
 ## M10 Operations (R3; decision 14; PLAN.md M10)
 - [ ] 10.1 to 10.7 as in PLAN.md; 10.5 (portable native artifacts) first, 10.2 to 10.4 after the operations profile is agreed
+
+## M11 Table manners v0.2 (contract C4; PLAN.md M11; on branch `m11-table-manners-v02`, pinned by path until v0.2.0 is published)
+- [ ] 11.1 The pin and the shapes: run ids in `run`, `spend.unresolved_usd`, runs entries as run references
+- [ ] 11.2 The session: UUID v4, `rascal://session`, the estimate without private session fields
+- [ ] 11.3 Correlation ids: claimed on acceptance, the `client_run_id_reused` refusal, persisted at allocation
+- [ ] 11.4 The run in progress `_meta`; cancellation rechecked before allocation
+- [ ] 11.5 The runs page: `rascal://runs{?cursor}`
+- [ ] 11.6 Fixtures for table-manners `fixtures/rascal/`, and docs
+- [ ] 11.7 The pin to v0.2.0 once tagged and published (owner) → tag `m11`
