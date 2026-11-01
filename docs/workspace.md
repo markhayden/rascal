@@ -79,12 +79,53 @@ A run killed between the pointer rename and the journal append therefore repairs
 whose identities equal those of an uninterrupted run of the same recipe; a run killed earlier
 repairs to the previous generation with the failed commit's files gone.
 
+## Portable masks
+
+A Mask leaves a workspace as a **mask bundle** and enters another with the same identity (task
+10.5, ADR 0022). The bundle is one uncompressed tar, readable with `tar tf`:
+
+```
+bundle.json          mask_bundle_version, the mask's identity, its frame chain from the root
+                     raw frame to the mask's frame, every other member's path, size and SHA-256
+mask/blend.png       the files mask.toml names, sorted by name
+mask/core.png
+mask/mask.toml
+mask/protect.png
+...                  for a band: the profile and the sigma series; each prescription's series
+```
+
+Every header is fixed (mode 0644, uid and gid 0, mtime 0), so the same stored mask always gives
+the same bytes, and exporting an imported mask gives the bundle it came from. `export-mask` prints
+the bundle's SHA-256; `import-mask --sha256` checks it before anything else.
+
+Import trusts nothing in the file. It reads at most 256 MiB (a larger file is refused from its
+size), at most 16 members, a `bundle.json` of at most 1 MiB, member names `mask/<plain name>` of
+at most 64 bytes, and checks each member's declared size against what remains before reading it.
+Then: each member against the manifest's size and digest, both ways (a missing, an extra or a
+renamed member is named); the archive against the canonical bytes rebuilt from its members (a
+changed header, padding or anything after the end); `bundle.json` in its canonical form; each
+frame of the chain rebuilt from its fields and its parent, ending at a raw frame, the mask's frame
+its last; every mask invariant; and the identity recomputed from the pixels against the record
+and the manifest. Any fault refuses the whole bundle with exit 64, naming it, and nothing is
+published. What the digest cannot vouch for is a bundle rebuilt whole with fresh member digests;
+`--sha256` from the sender closes that.
+
+On success one `import_mask` record publishes the mask and the frames of its chain the workspace
+does not know. A frame the workspace has (by identity) keeps the workspace's id, and a `crop:<n>`
+another frame holds moves to the next free number; the record's `frame` follows, since ids are not
+identity. A mask whose identity is already present publishes nothing and the command prints the
+existing id with `(already present)`. A PNG, a JPEG, a directory, a gzip file or any other archive
+is refused naming what it is: a rendering of a mask is an `Image`, and an image goes in with
+`workspace import`. Images are not bundled; a mask's frame is coordinates, not pixels.
+
 ## Commands
 
 ```
 rascal workspace import ws/ photo.jpg [--projection flat|equirectangular]   # prints the id, the frame and file_sha256:<the file's SHA-256>
 rascal workspace list ws/ [--type Mask] [--json]
 rascal workspace repair ws/ [--json]
+rascal workspace export-mask ws/ mask-3 --out seam.mask.tar    # prints the identity and sha256:<the bundle's digest>
+rascal workspace import-mask ws2/ seam.mask.tar [--sha256 <digest>]   # prints the id, the frame and the identity
 rascal <op> --workspace ws/ --<port> <id> [--<param> <value>] [--constants <set>] [--strict]
 rascal run <recipe> <image> --out run/ [--workspace ws/]
 ```

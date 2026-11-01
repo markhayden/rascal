@@ -25,6 +25,7 @@ mod packs;
 mod packs_real;
 mod paste_cli;
 mod playground;
+mod portable_cli;
 mod recipes;
 mod recipes_by_name;
 mod remove_prompt;
