@@ -1032,12 +1032,13 @@ inside rascal; the contract's result carries the envelope as its body.
 
 ```
 # everything a commit must pass
-just check                                     # fmt, clippy -D warnings (both feature sets), cargo test, deny, crate graph, packaging
+just check                                     # fmt, clippy -D warnings (both feature sets), the tests (nextest), deny, crate graph, packaging
 
 # Rust
 cargo build --workspace
-cargo test --workspace                         # unit, golden, schema, workspace, fake MCP both sides, offline e2e; no network
-cargo test --workspace --features rascal-mask/testkit
+cargo nextest run --workspace --features rascal-mask/testkit   # unit, golden, schema, workspace, fake MCP both sides, offline e2e; no network
+cargo nextest run -p rascal-mask               # the release build's behaviour, without the testkit
+cargo test -p rascal-mask --test it -- heal::  # one file's tests: each crate's tests are one binary, tests/it/
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 scripts/acceptance.sh                          # release acceptance: install, recipes by name, serve, bundle offline, docs coverage
@@ -1166,7 +1167,8 @@ location ids `loc-<n>`; artifact ids as the recipe step names them or `<op>-<n>`
 
 ## Testing strategy
 
-Two suites. `cargo test --workspace` is the timed offline suite; `scripts/acceptance.sh` is
+Two suites. The workspace's tests under `cargo nextest run` are the timed offline suite (each
+crate's integration tests one binary, `tests/it/main.rs`, each test in its own process); `scripts/acceptance.sh` is
 release acceptance, run by the release workflow and by hand.
 
 - **Primitives**: row smoothing's normalisation at the ends and identity under half a pixel;
@@ -1222,7 +1224,7 @@ release acceptance, run by the release workflow and by hand.
   concurrent calls under the AND rule, timeout and cancellation failing every in-flight call and
   shutting the pack down, late responses, process death, the environment allowlist removing a
   credential-named variable, shutdown): the pure parts in `rascal-mcp`'s tests, the process
-  parts in `rascal-mask`'s `tests/packs.rs` where the fake runs as `rascal fake-pack`; the
+  parts in `rascal-mask`'s `tests/it/packs.rs` where the fake runs as `rascal fake-pack`; the
   server driven by the independent minimal client through import, list, every op, read,
   describe, and the error mappings.
 - **End to end offline**: `heal` through each fake filler on the synthetic panorama (exact: a
@@ -1275,8 +1277,8 @@ Each names the command that proves it.
 2. `rascal heal seam` with a configured local filler produces a healed 360 whose `w = 0` and
    protected pixels equal `B`, with the fan, the ramp, the filler call and the measures in the
    journal; the mis-sized filler is refused. (`cargo test`, end to end)
-3. `cargo test --workspace` passes offline in under three minutes of test execution, compilation
-   excluded, on the owner's Apple silicon machine. (`cargo test`)
+3. The workspace's tests pass offline in under three minutes of test execution, compilation
+   excluded, on the owner's Apple silicon machine. (`cargo nextest run`)
 4. The independent minimal client drives `rascal serve` through import, find, refine, render and
    paste on a workspace, and the CLI reads the same workspace afterwards. (`cargo test`,
    `scripts/acceptance.sh`)

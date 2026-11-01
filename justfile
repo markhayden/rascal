@@ -4,11 +4,13 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 deny_version := "0.20.2"
 dist_version := "0.33.1"
+nextest_version := "0.9.148"
 
 # Install the pinned helper tools (idempotent).
 bootstrap:
     cargo install cargo-deny --version {{deny_version}} --locked
     cargo install cargo-dist --version {{dist_version}} --locked
+    cargo install cargo-nextest --version {{nextest_version}} --locked
 
 # Everything a commit must pass. Exactly the list in PLAN.md "Commit strategy".
 check: fmt-check clippy test deny graph packaging clean-room docs hooks-test checks-test python
@@ -20,9 +22,12 @@ clippy:
     cargo clippy --workspace --all-targets -- -D warnings
     cargo clippy --workspace --all-targets --features rascal-mask/testkit -- -D warnings
 
+# nextest runs each test in its own process and the crates' test binaries side by side (one per
+# crate, `tests/it/main.rs`); there are no doctests to lose. The plain pass is rascal-mask without
+# the testkit feature, whose release build behaves differently (the playground has no installer).
 test:
-    cargo test --workspace
-    cargo test --workspace --features rascal-mask/testkit
+    cargo nextest run --workspace --features rascal-mask/testkit
+    cargo nextest run -p rascal-mask
 
 # The Python pack's gates (ruff, pytest), offline against its synced environment; a machine
 # without `uv` or without `tools/python/.venv` (`uv sync --frozen` there, once) skips them and

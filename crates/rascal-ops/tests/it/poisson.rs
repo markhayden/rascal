@@ -428,7 +428,7 @@ fn an_rgba_base_keeps_its_alpha_under_poisson() {
     assert_eq!(got, &base);
 }
 
-/// Not a gate: `cargo test --release -p rascal-ops --test poisson -- --ignored --nocapture bench`
+/// Not a gate: `cargo test --release -p rascal-ops --test it -- --ignored --nocapture poisson::bench`
 /// prints the solve time for a 1000×1000 domain (`docs/results/poisson-bench.md`).
 #[test]
 #[ignore = "benchmark; run in release and record the time"]

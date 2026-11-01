@@ -147,4 +147,4 @@ The testkit's fake filler is one implementation with six behaviours, reachable a
 | `failing` | exit 2 (HTTP 500) with a message: an operational error carrying it |
 | `non-png` | text where a PNG was expected: refused |
 
-`crates/rascal-mask/tests/fillers.rs` drives the port with each behaviour both ways.
+`crates/rascal-mask/tests/it/fillers.rs` drives the port with each behaviour both ways.

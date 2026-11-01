@@ -119,8 +119,9 @@ owner's review, which happens at the owner's pace; `main` is never force pushed.
 **Commits.** Conventional Commits with a scope (`feat(ops): …`, `test(core): …`,
 `docs(adr): …`). From task 0.1 on, every commit leaves `just check` green. `just check` is,
 exactly: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets -- -D warnings`
-and the same with `--features rascal-mask/testkit`; `cargo test --workspace` and the same with
-`--features rascal-mask/testkit`; `cargo deny check licenses bans sources`;
+and the same with `--features rascal-mask/testkit`; `cargo nextest run --workspace --features
+rascal-mask/testkit` and `cargo nextest run -p rascal-mask` (each crate's tests one binary,
+`tests/it/`); `cargo deny check licenses bans sources`;
 `scripts/check-crate-graph.sh`; `scripts/check-packaging.sh`; `scripts/scan-clean-room.sh`
 (built in 0.1, passing trivially when `RASCAL_FORBIDDEN_WORDS` is unset, as in CI);
 `scripts/test-hooks.sh` and `scripts/test-checks.sh` (the self-tests of the hook and the
@@ -255,7 +256,7 @@ committed schema; every later task that adds a boundary type registers it and ad
 **Verification.** `cargo test -p rascal-core -- schemas`.
 
 **Dependencies.** 0.1. **Files.** `schemas/`, `crates/rascal-core/src/schema_drift.rs`,
-`crates/rascal-core/tests/schemas.rs`. **Size.** S.
+`crates/rascal-core/tests/it/schemas.rs`. **Size.** S.
 
 ### Task 0.5: Owner readiness
 
@@ -305,7 +306,7 @@ image exits 3, a bad flag exits 64, and `--bbox` wholly outside the image exits 
       input and output identities are stable across two runs; a run directory that is non-empty
       is refused with 64 and a file destination is overwritten (the spec's three `--out` kinds).
 
-**Verification.** `cargo test -p rascal-mask --test walking_slice`.
+**Verification.** `cargo test -p rascal-mask --test it -- walking_slice::`.
 
 **Dependencies.** 0.1, 0.4. **Files.** `crates/rascal-core/src/{artifact,recipe,mask,journal,op,registry}.rs`,
 `crates/rascal-ops/src/{rect,rasterize}.rs`, `crates/rascal-mask/src/{main,run,exit}.rs`,
@@ -355,7 +356,7 @@ invariant named.
 - [ ] Invariant tests on all three planes; effective weight exhaustively; identity excludes ids,
       filenames and provenance and includes referenced identities.
 
-**Verification.** `cargo test -p rascal-core -- mask weight` and `cargo test -p rascal-mask --test inspect_json`.
+**Verification.** `cargo test -p rascal-core -- mask weight` and `cargo test -p rascal-mask --test it -- inspect_json::`.
 
 **Dependencies.** 1.2. **Files.** `crates/rascal-core/src/{mask,weight,profile,series}.rs`,
 `crates/rascal-mask/src/inspect.rs`, `schemas/rascal/`. **Size.** M.
@@ -425,7 +426,7 @@ Location, got Image from render.image`.
 - [ ] A table test covers every validation error with its step id; resolved defaults appear in
       provenance; the by-name and by-path journals agree on semantic content.
 
-**Verification.** `cargo test -p rascal-core -- recipe` and `cargo test -p rascal-mask --test recipes_by_name`.
+**Verification.** `cargo test -p rascal-core -- recipe` and `cargo test -p rascal-mask --test it -- recipes_by_name::`.
 
 **Dependencies.** 1.4, 1.5. **Files.** `crates/rascal-core/src/{recipe,config}.rs`, `crates/rascal-mask/src/{args,run}.rs`,
 `crates/rascal-mask/recipes/`, `schemas/rascal/`. **Size.** M.
@@ -536,7 +537,7 @@ run/ elsewhere/ && rascal inspect elsewhere/artifacts/<mask> --replay` reports a
       named plane on a tampered one; relocation replay; `check-docs.sh` fails on an undocumented
       op and on a stale documented name; no `REPLACED BY` comment remains.
 
-**Verification.** `cargo test -p rascal-core -- export replay` and `cargo test -p rascal-mask --test inspect`; `scripts/check-docs.sh`.
+**Verification.** `cargo test -p rascal-core -- export replay` and `cargo test -p rascal-mask --test it -- inspect::`; `scripts/check-docs.sh`.
 
 **Dependencies.** 1.5, 1.6, 1.7b, 1.8b. **Files.** `crates/rascal-ops/src/inspect.rs`,
 `crates/rascal-core/src/{export,replay}.rs`, `scripts/check-docs.sh`, `docs/`. **Size.** M.
@@ -562,7 +563,7 @@ rascal run rect …` prints one span per op.
       every artifact the journal names is embedded as a `data:` URI (parsed, not grepped);
       `RASCAL_LOG` output on a fixture run contains no pixel bytes; `--serve` binds loopback only.
 
-**Verification.** `cargo test -p rascal-mask --test dash`.
+**Verification.** `cargo test -p rascal-mask --test it -- dash::`.
 
 **Dependencies.** 1.9. **Files.** `crates/rascal-mask/src/dash.rs`, `crates/rascal-mask/pages/dash.html`,
 `crates/rascal-core/src/panel.rs`, `docs/diagnostics.md`. **Size.** M; tag `m1.2`.
@@ -735,7 +736,7 @@ and real panorama (owner decision), the same command on the panorama.
       and status; `RASCAL_LOG` output and every file under `--out` on a run with a configured
       `key_env` contain no key.
 
-**Verification.** `cargo test -p rascal-mask --features testkit --test heal`.
+**Verification.** `cargo test -p rascal-mask --features testkit --test it -- heal::`.
 
 **Dependencies.** 2.3, 2.4, 2.5, 2.6, 2.7. **Files.** `crates/rascal-mask/src/heal.rs`,
 `crates/rascal-mask/recipes/seam.toml`, `fixtures/masks/seam-step-sky.mask/`, `docs/`. **Size.** M; tag `m2.1`.
@@ -788,7 +789,7 @@ are exercised through `serve` in 4.4's acceptance once M2 is merged.)
       registry); `workspace_read` on a mask is `invalid_args`; an operational failure arrives as a
       JSON-RPC error with the class; the CLI/serve interchange test passes.
 
-**Verification.** `cargo test -p rascal-mask --features testkit --test serve`.
+**Verification.** `cargo test -p rascal-mask --features testkit --test it -- serve::`.
 
 **Dependencies.** 3.1, 1.7b, 1.9. **Files.** `crates/rascal-mcp/src/server/`, `crates/rascal-mask/src/serve.rs`.
 **Size.** M; tag `m3.1`.
@@ -824,7 +825,7 @@ error and nothing is stored.
       span carries request size and status; the pack call row on the run page; the
       isolation suite; the `segment` export validates.
 
-**Verification.** `cargo test -p rascal-mcp --test client` (the pure parts) and `cargo test -p rascal-mask --features testkit --test packs --test isolation` (the fake runs as `rascal fake-pack`).
+**Verification.** `cargo test -p rascal-mcp --test it -- client::` (the pure parts) and `cargo test -p rascal-mask --features testkit --test it -- packs:: isolation::` (the fake runs as `rascal fake-pack`).
 
 **Dependencies.** 3.1, 1.7b, 2.7. **Files.** `crates/rascal-mcp/src/client/`, `crates/rascal-core/src/pack.rs`,
 `crates/rascal-testkit/src/fake_pack.rs`, `crates/rascal-mask/src/{packs,tools}.rs`,
@@ -923,7 +924,7 @@ then `rascal heal protect --image run/result.png --mask run/artifacts/<mask> --f
 - [ ] Goldens for the four recipes; the two-pass test preserves the first edit and allows a
       middle pixel to change; the acceptance script is green locally and in the package workflow.
 
-**Verification.** `cargo test -p rascal-mask --features testkit --test recipes`; `scripts/acceptance.sh`.
+**Verification.** `cargo test -p rascal-mask --features testkit --test it -- recipes::`; `scripts/acceptance.sh`.
 
 **Dependencies.** 4.2, 4.3, 2.8, 3.2. **Files.** `crates/rascal-mask/recipes/`, `fixtures/masks/`,
 `scripts/acceptance.sh`, `docs/recipes.md`. **Size.** M; tag `m4.1`.
@@ -969,7 +970,7 @@ real pack; `rascal tools call rascal-tools echo_region --image i --bbox …` rou
       Rust pack client accepts the real pack's manifest; the env allowlist is observed by the
       pack (a test tool echoes its environment); `fetch` refuses a bad digest.
 
-**Verification.** `uv run --frozen --offline --no-sync pytest`; `uv run --frozen --offline --no-sync ruff check . && … ruff format --check .`; `cargo test -p rascal-mask --features testkit --test packs_real`.
+**Verification.** `uv run --frozen --offline --no-sync pytest`; `uv run --frozen --offline --no-sync ruff check . && … ruff format --check .`; `cargo test -p rascal-mask --features testkit --test it -- packs_real::`.
 
 **Dependencies.** 3.3. **Files.** `tools/python/`, `examples/rascal.toml`. **Size.** M.
 
@@ -991,7 +992,7 @@ rascal.toml` removes the chairs on the chair-blob fixture.
       downloads anything. (The export took ADR 0018's drop-in decoder, SAM 2.1 Hiera-Tiny;
       `--prompt` binds a recipe `Text` input and the prompt recipe is `remove-prompt`.)
 
-**Verification.** `uv run --frozen --offline --no-sync pytest -m segmenter`; `cargo test -p rascal-mask --features testkit --test remove_prompt`.
+**Verification.** `uv run --frozen --offline --no-sync pytest -m segmenter`; `cargo test -p rascal-mask --features testkit --test it -- remove_prompt::`.
 
 **Dependencies.** 5.1, 4.5. **Files.** `tools/python/src/rascal_tools/segment.py`, `tools/python/MODEL.md`,
 `tools/python/src/rascal_tools/artifacts.toml`, `crates/rascal-mask/recipes/remove.toml`. **Size.** M.
@@ -1042,7 +1043,7 @@ dependent-finder rejection, is unit-tested here; its CLI form is 6.2's scenario.
       `protocol` and the dependent-finder rejection naming the binding; `fan-thin-v1` yields `thin` on every row of the step-sky fixture at three image widths
       (the effective upper width is `max(thin, wide_max · w)`).
 
-**Verification.** `cargo test -p rascal-mask --test lab_config --test corpus_cli` and `cargo test -p rascal-ops --test fan_thin_widths`.
+**Verification.** `cargo test -p rascal-mask --test it -- lab_config:: corpus_cli::` and `cargo test -p rascal-ops --test it -- fan_thin_widths::`.
 
 **Dependencies.** 1.6, 0.5, 2.1. **Files.** `crates/rascal-mask/src/lab/{corpus,protocol,matrix}.rs`,
 `crates/rascal-ops/constants/fan-thin-v1.toml`, `schemas/rascal/`, `examples/`. **Size.** S.
@@ -1064,7 +1065,7 @@ directory.
 - [ ] Identity changes on prompt, parameter or revision changes only; resume skips complete
       cells; `--redo` adds an attempt and keeps the old one.
 
-**Verification.** `cargo test -p rascal-mask --features testkit --test lab_run --test lab_identity`.
+**Verification.** `cargo test -p rascal-mask --features testkit --test it -- lab_run:: lab_identity::`.
 
 **Dependencies.** 6.1, 2.8, 4.4, 5.3. **Files.** `crates/rascal-mask/src/lab/{run,cell,ledger}.rs`. **Size.** M.
 
@@ -1085,7 +1086,7 @@ writes `picks.json`; `rascal lab decode lab/demo/ picks.json` prints the per-gro
       wrap edge of a panorama) at full size, whole, and from inside the sphere for an
       equirectangular frame; the attempt record names the source image.
 
-**Verification.** `cargo test -p rascal-core --test lab_decode` and `cargo test -p rascal-mask --features testkit --test lab_pairs`.
+**Verification.** `cargo test -p rascal-core --test it -- lab_decode::` and `cargo test -p rascal-mask --features testkit --test it -- lab_pairs::`.
 
 **Dependencies.** 6.2. **Files.** `crates/rascal-mask/src/lab/{pairs,decode}.rs`, `crates/rascal-mask/pages/pairs.html`,
 `schemas/rascal/`, `docs/lab.md`. **Size.** M; tag `m6.1`.
@@ -1138,7 +1139,7 @@ entry with `paste = "poisson"`) heals the step-sky fixture through the fake fill
       frame is refused; a **benchmark** (not a gate) records the solve time for a 1000×1000 domain
       in release on the owner's machine in `docs/results/poisson-bench.md`.
 
-**Verification.** `cargo test -p rascal-ops -- poisson paste::poisson` and `cargo test -p rascal-mask --features testkit --test heal_poisson`.
+**Verification.** `cargo test -p rascal-ops -- poisson paste::poisson` and `cargo test -p rascal-mask --features testkit --test it -- heal_poisson::`.
 
 **Dependencies.** 2.5, 2.8. **Files.** `crates/rascal-ops/src/{poisson,paste}.rs`, constants,
 `crates/rascal-mask/src/heal.rs`. **Size.** M.
@@ -1422,7 +1423,7 @@ release build exits 69 with no offer; the installer is a testkit-only seam (`--i
       invalid override 69 without fall-through, the lookup order, a symlinked program; missing:
       no 0, yes installs and runs, installer failure 74, off a terminal 69, extra arguments 64.
 
-**Files.** `crates/rascal-mask/src/playground.rs`, `main.rs`, `tests/playground.rs`,
+**Files.** `crates/rascal-mask/src/playground.rs`, `main.rs`, `tests/it/playground.rs`,
 `docs/contract.md`, `SPEC.md`, `README.md`. **Size.** S.
 
 ### Checkpoint M9

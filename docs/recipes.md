@@ -121,7 +121,7 @@ when the request is the same, or fails naming the request.
 | `repair-area` | 4.4 | `inputs.location` (a box or a polygon) → `rasterize` → `feather` (3 px) |
 | `protect` | 4.4 | `inputs.image` (the earlier composite, in its raw frame) and `inputs.mask` (the earlier mask, in that frame or one derived from it that the workspace knows) → `invert` into the raw frame; outputs the inverted mask and the image, no plan: the second pass edits everything the first left alone and keeps what it painted |
 
-Goldens for the four M4 recipes live under `fixtures/masks/` and `crates/rascal-mask/tests/recipes.rs`
+Goldens for the four M4 recipes live under `fixtures/masks/` and `crates/rascal-mask/tests/it/recipes.rs`
 reproduces them; `heal seam` followed by `heal protect` in one workspace is the two-pass test.
 `scripts/acceptance.sh` (`just acceptance`, and the package workflow) installs `rascal` from
 the packaged crates and runs the six by name on the fixtures with no configuration file.

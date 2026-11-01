@@ -22,7 +22,7 @@ recorded in `docs/reviews/mN-checkpoint.md` with the task that owns them.
   the allowlist minus `key_env` and anything ending in `_KEY`, `_TOKEN` or `_SECRET`; image
   content, filenames, prompts and anything a finder or filler returns are data; a filler's result
   is validated before it is committed; no network in `cargo test`.
-- **Performance.** `cargo test --workspace` under five minutes offline; no image decoded twice
+- **Performance.** the workspace's tests (`cargo nextest run`) under three minutes offline; no image decoded twice
   in a recipe; bounded decode sizes; row-parallel primitives where the spec says so.
 
 ## Test review

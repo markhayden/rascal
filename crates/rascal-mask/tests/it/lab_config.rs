@@ -378,7 +378,7 @@ fn a_matrix_is_refused_naming_what_is_wrong() {
         )
     });
     resolve_matrix(&path, &registry, &[]).unwrap();
-    let mut recipe = Recipe::parse(include_str!("../recipes/seam.toml"), "seam").unwrap();
+    let mut recipe = Recipe::parse(include_str!("../../recipes/seam.toml"), "seam").unwrap();
     apply_override(
         &mut recipe,
         &registry,

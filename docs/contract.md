@@ -213,11 +213,11 @@ installation that fails, or leaves no program, exits 74 and runs nothing. Off a 
   contract repository's `fixtures/rascal/` takes (task 11.6): from `rascal serve` through the
   independent client, the description, a run per status (an error with an unresolved charge
   among them), two runs pages, the session and both reuse refusals, with machine values replaced
-  by stand-ins that stay valid; `tests/table_manners_fixtures.rs` regenerates and compares them.
+  by stand-ins that stay valid; `tests/it/table_manners_fixtures.rs` regenerates and compares them.
 - **The cross-tool acceptance test, rascal's half.** A squint-shaped finding (a table-manners
   location with squint's `source`, `disposition` and `confidence`) masks exactly what rascal's own
   location does, and a finding on another image is refused
-  (`crates/rascal-mask/tests/contract_locations.rs`), in CI against the pinned contract. The other
+  (`crates/rascal-mask/tests/it/contract_locations.rs`), in CI against the pinned contract. The other
   half, rascal's mask back to squint as the region where change was allowed, lands with the mask
   handoff milestone.
 

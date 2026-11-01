@@ -35,7 +35,7 @@ jobs:
       - name: Install the pinned helper tools
         uses: taiki-e/install-action@v2
         with:
-          tool: just@1.59.0,cargo-deny@0.20.2
+          tool: just@1.59.0,cargo-deny@0.20.2,cargo-nextest@0.9.148
       - name: Scripts are executable
         run: |
           for f in scripts/*.sh scripts/hooks/pre-commit; do test -x "$f" || { echo "$f is not executable"; exit 1; }; done

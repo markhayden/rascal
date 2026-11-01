@@ -1,0 +1,6 @@
+# nextest (`just test`). Every test binary runs side by side, so the machine is busy; the tests
+# that assert wall-clock bounds (pack timeouts, graces, overlap, a bounded morphology) run alone,
+# with every thread to themselves, so load cannot make them miss.
+[[profile.default.overrides]]
+filter = 'test(/^packs::/) | test(/^tighten::.*bounded/)'
+threads-required = "num-cpus"
