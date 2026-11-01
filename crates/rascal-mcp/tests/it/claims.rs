@@ -1,7 +1,8 @@
 //! Task 12.7 (table-manners v0.3, 4.4 and 5): a correlation id's claim is released when its
 //! request ends in a JSON-RPC error with no run, so the corrected request retries under the same
 //! id; it is kept once a run is allocated, whatever the outcome, and kept with no run when the
-//! request is cancelled before allocation. The server runs in process over a pipe with an
+//! request is cancelled before allocation. Task 12.6: the call's metadata reaches the action
+//! (`CallMeta`), the named estimate included. The server runs in process over a pipe with an
 //! actions double, driven by raw JSON-RPC lines written here (no SDK client).
 #![allow(clippy::unwrap_used)]
 
@@ -11,8 +12,8 @@ use std::sync::{Arc, Condvar, Mutex};
 use rascal_core::registry::OpRegistry;
 use rascal_core::workspace::{Cancel, Workspace};
 use rascal_mcp::server::{
-    ActionResult, Actions, CallError, McpResource, McpResourceTemplate, McpTool, Progress,
-    ResourceBody, Server,
+    ActionResult, Actions, CallError, CallMeta, McpResource, McpResourceTemplate, McpTool,
+    Progress, ResourceBody, Server,
 };
 use rascal_mcp::transport::rmcp;
 use rmcp::ServiceExt;
@@ -22,7 +23,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 /// The actions double: one exclusive action, `act`, whose arguments choose what it does:
 /// `{"fail": "before"}` returns `Err` before allocating a run, `{"panic": "before"}` panics
 /// there, `{"fail": "after"}` allocates and then returns `Err`, `{"hold": true}` allocates and
-/// waits for the gate, anything else allocates and completes.
+/// waits for the gate, anything else allocates and completes, its result echoing the estimate
+/// the call named.
 #[derive(Default)]
 struct Double {
     allocated: AtomicUsize,
@@ -56,7 +58,7 @@ impl Actions for Double {
         &self,
         _name: &str,
         args: &Map<String, Value>,
-        client_run_id: Option<&str>,
+        meta: &CallMeta,
         progress: &(dyn Fn(Progress) + Send + Sync),
         _cancel: Arc<Cancel>,
     ) -> Result<ActionResult, CallError> {
@@ -74,7 +76,7 @@ impl Actions for Double {
             "id": format!("run-{n}-1"),
             "resource": format!("double://run/run-{n}-1/run.json"),
             "session_id": null,
-            "client_run_id": client_run_id,
+            "client_run_id": meta.client_run_id,
         });
         progress(Progress::Run(reference.clone()));
         progress(Progress::Line("allocated".to_string()));
@@ -89,7 +91,8 @@ impl Actions for Double {
             }
         }
         Ok(ActionResult {
-            structured: json!({ "status": "completed", "run": reference }),
+            structured: json!({ "status": "completed", "run": reference,
+                                "estimate": meta.estimate }),
             is_error: false,
             images: Vec::new(),
         })
@@ -302,4 +305,32 @@ async fn a_request_cancelled_while_queued_keeps_its_id_with_no_run() {
     let later = wire.until(later).await;
     assert_eq!(reused(&later)["run"], Value::Null, "{later:#}");
     assert_eq!(double.allocated.load(Ordering::SeqCst), 1);
+}
+
+/// Task 12.6 (table-manners 4.5): `_meta["table-manners/estimate"]` reaches the action as sent,
+/// whatever its form (the action judges it, since a run exists by then); without it, none.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_named_estimate_reaches_the_action() {
+    let double = Arc::new(Double::default());
+    let mut wire = serve("estimate-meta", double.clone()).await;
+    for named in [json!("sha256:abc"), json!(7)] {
+        let call = wire
+            .begin(
+                "tools/call",
+                json!({ "name": "act", "arguments": {},
+                        "_meta": { "table-manners/estimate": named.clone() } }),
+            )
+            .await;
+        let answer = wire.until(call).await;
+        assert_eq!(
+            answer["result"]["structuredContent"]["estimate"], named,
+            "{answer:#}"
+        );
+    }
+    let plain = wire.act(json!({}), None, "plain").await;
+    let plain = wire.until(plain).await;
+    assert_eq!(
+        plain["result"]["structuredContent"]["estimate"],
+        Value::Null
+    );
 }

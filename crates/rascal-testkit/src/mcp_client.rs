@@ -142,10 +142,22 @@ impl Client {
         name: &str,
         arguments: serde_json::Value,
     ) -> Result<CallResult, Failure> {
-        let result = self.request(
-            "tools/call",
-            serde_json::json!({ "name": name, "arguments": arguments }),
-        )?;
+        self.call_params(serde_json::json!({ "name": name, "arguments": arguments }))
+    }
+
+    /// Calls a tool with JSON arguments and the request's `_meta` (any object: a progress
+    /// token, a correlation id, a named estimate).
+    pub fn call_with_meta(
+        &mut self,
+        name: &str,
+        arguments: serde_json::Value,
+        meta: serde_json::Value,
+    ) -> Result<CallResult, Failure> {
+        self.call_params(serde_json::json!({ "name": name, "arguments": arguments, "_meta": meta }))
+    }
+
+    fn call_params(&mut self, params: serde_json::Value) -> Result<CallResult, Failure> {
+        let result = self.request("tools/call", params)?;
         let mut texts = Vec::new();
         let mut images = Vec::new();
         for block in result["content"].as_array().cloned().unwrap_or_default() {

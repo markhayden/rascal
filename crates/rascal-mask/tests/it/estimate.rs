@@ -5,6 +5,12 @@
 //! a run: it leaves the runs root, the workspace and the session's reservations as they were. A
 //! wrong request is a JSON-RPC `-32602` (with `invalid_arguments` refusal data when the request
 //! has the estimate's shape); `rascal estimate --json` answers with no session.
+//!
+//! Task 12.6: a call may name its estimate in `_meta["table-manners/estimate"]`. At the limits
+//! check, after the arguments, the binding is recomputed for the call as it arrived; one this
+//! session never issued, one that differs (naming what changed) or one past its `expires` fails
+//! the run `stale_estimate`, before any reservation or filler call. A matching estimate is no
+//! reservation: the cap and the budget are checked again.
 #![cfg(feature = "testkit")]
 #![allow(clippy::unwrap_used)]
 
@@ -49,6 +55,11 @@ fn config(dir: &Path, url: &str, limits: &str) -> PathBuf {
 
 /// `rascal serve` over `dir`, with `config` when given and the key set when `key` is.
 fn serve(dir: &Path, config: Option<&Path>, key: bool) -> Client {
+    serve_with(dir, config, key, &[])
+}
+
+/// [`serve`] with more of the environment set.
+fn serve_with(dir: &Path, config: Option<&Path>, key: bool, env: &[(&str, &str)]) -> Client {
     let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
     command
         .args([
@@ -65,6 +76,9 @@ fn serve(dir: &Path, config: Option<&Path>, key: bool) -> Client {
     }
     if key {
         command.env("ESTIMATE_TEST_KEY", "sentinel-key-value");
+    }
+    for (name, value) in env {
+        command.env(name, value);
     }
     Client::start(&mut command).unwrap()
 }
@@ -589,6 +603,148 @@ fn a_wrong_request_is_invalid_params() {
         );
     }
     assert!(seen.lock().unwrap().is_empty());
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A `seam` call naming `binding` as its estimate; the result, valid.
+fn bound_call(
+    client: &mut Client,
+    arguments: serde_json::Value,
+    binding: serde_json::Value,
+) -> serde_json::Value {
+    let out = client
+        .call_with_meta(
+            "seam",
+            arguments,
+            serde_json::json!({ "table-manners/estimate": binding }),
+        )
+        .unwrap();
+    let s = out.structured.unwrap();
+    valid("urn:table-manners:core:result", &s);
+    assert_eq!(out.is_error, s["status"] != "completed", "{s:#}");
+    s
+}
+
+/// Asserts a run failed `stale_estimate` naming `why`: invalid, never retryable, nothing spent,
+/// no request to the filler and nothing left reserved.
+fn assert_stale(
+    client: &mut Client,
+    seen: &std::sync::Mutex<Vec<rascal_testkit::fake_filler::Seen>>,
+    requests_before: usize,
+    s: &serde_json::Value,
+    why: &str,
+) {
+    assert_eq!(s["status"], "invalid", "{s:#}");
+    assert_eq!(s["error"]["code"], "stale_estimate", "{s:#}");
+    assert_eq!(s["error"]["retryable"], false);
+    assert_eq!(s["spend"]["usd"], 0.0, "{s:#}");
+    assert!(
+        s["error"]["reason"].as_str().unwrap().contains(why),
+        "{why}: {s:#}"
+    );
+    assert_eq!(seen.lock().unwrap().len(), requests_before, "{s:#}");
+    assert_eq!(session(client)["reserved_usd"], 0.0);
+}
+
+#[test]
+fn a_call_carrying_its_estimate_runs_and_a_stale_one_fails_before_spending() {
+    let dir = scratch("bound");
+    let (url, seen) = spawn(Behaviour::Exact, None);
+    let config = config(&dir, &url, "");
+    let image = dir.join("pano.png");
+    std::fs::copy(pano(), &image).unwrap();
+    let args =
+        serde_json::json!({ "image": { "path": image.to_str().unwrap() }, "filler": "hosted" });
+    let mut client = serve(&dir.join("one"), Some(&config), true);
+
+    // Its own estimate: the call runs.
+    let e = estimate(&mut client, "seam", args.clone());
+    let ran = bound_call(&mut client, args.clone(), e["binding"].clone());
+    assert_eq!(ran["status"], "completed", "{ran:#}");
+    assert_eq!(seen.lock().unwrap().len(), 1);
+
+    // Another argument than the one estimated.
+    let mut strict = args.clone();
+    strict["strict"] = serde_json::json!(true);
+    let s = bound_call(&mut client, strict, e["binding"].clone());
+    assert_stale(&mut client, &seen, 1, &s, "strict");
+
+    // Not the command line's binding, and not something that is no binding at all.
+    let cli = cli_estimate(
+        Some(&config),
+        &serde_json::json!({ "action": "seam", "arguments": args.clone() }),
+    );
+    let s = bound_call(&mut client, args.clone(), cli["binding"].clone());
+    assert_stale(&mut client, &seen, 1, &s, "never issued");
+    for nonsense in [serde_json::json!("sha256:nope"), serde_json::json!(7)] {
+        let s = bound_call(&mut client, args.clone(), nonsense);
+        assert_stale(&mut client, &seen, 1, &s, "not a binding");
+    }
+
+    // A byte of the image changed since the estimate.
+    let e = estimate(&mut client, "seam", args.clone());
+    let mut bytes = std::fs::read(&image).unwrap();
+    let last = bytes.len() - 1;
+    bytes[last] ^= 1;
+    std::fs::write(&image, &bytes).unwrap();
+    let s = bound_call(&mut client, args.clone(), e["binding"].clone());
+    assert_stale(&mut client, &seen, 1, &s, "image");
+    std::fs::copy(pano(), &image).unwrap();
+    let e = estimate(&mut client, "seam", args.clone());
+    client.close().unwrap();
+
+    // A new session over the same configuration never issued it.
+    let mut client = serve(&dir.join("two"), Some(&config), true);
+    let s = bound_call(&mut client, args.clone(), e["binding"].clone());
+    assert_stale(&mut client, &seen, 1, &s, "never issued");
+    client.close().unwrap();
+
+    // Nor did a server under another configuration.
+    let other = dir.join("other.toml");
+    std::fs::write(
+        &other,
+        std::fs::read_to_string(&config)
+            .unwrap()
+            .replace("revision = \"hosted-1\"", "revision = \"hosted-2\""),
+    )
+    .unwrap();
+    let mut client = serve(&dir.join("three"), Some(&other), true);
+    let s = bound_call(&mut client, args.clone(), e["binding"].clone());
+    assert_stale(&mut client, &seen, 1, &s, "never issued");
+    client.close().unwrap();
+
+    // Past its expires (a testkit build honours a binding for no time at all).
+    let mut client = serve_with(
+        &dir.join("four"),
+        Some(&config),
+        true,
+        &[("RASCAL_TESTKIT_ESTIMATE_TTL_MS", "0")],
+    );
+    let e = estimate(&mut client, "seam", args.clone());
+    let s = bound_call(&mut client, args.clone(), e["binding"].clone());
+    assert_stale(&mut client, &seen, 1, &s, "expired");
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_allowed_estimate_is_no_reservation() {
+    let dir = scratch("no-reservation");
+    let (url, seen) = spawn(Behaviour::Exact, None);
+    let config = config(&dir, &url, "session_budget_usd = 0.05");
+    let mut client = serve(&dir, Some(&config), true);
+    let args = seam_with(Some("hosted"));
+    let e = estimate(&mut client, "seam", args.clone());
+    assert_eq!(e["allowed"], true);
+    // Another call spends in between, naming no estimate.
+    let spent = client.call("seam", args.clone()).unwrap();
+    assert_eq!(spent.structured.unwrap()["status"], "completed");
+    // The estimate still matches the call, and the budget no longer holds it.
+    let s = bound_call(&mut client, args, e["binding"].clone());
+    assert_eq!(s["status"], "error", "{s:#}");
+    assert_eq!(s["error"]["code"], "budget", "{s:#}");
+    assert_eq!(seen.lock().unwrap().len(), 1);
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }

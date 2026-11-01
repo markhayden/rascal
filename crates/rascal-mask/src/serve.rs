@@ -81,6 +81,7 @@ pub fn serve(args: &ServeArgs) -> Result<()> {
             .unwrap_or_else(crate::actions::default_runs_root),
         ledger: std::sync::Mutex::default(),
         session: crate::actions::Session::start(),
+        issued: std::sync::Mutex::default(),
     });
     let server = Server::new(
         workspace,

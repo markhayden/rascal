@@ -19,7 +19,7 @@ use rascal_core::contract::table_manners::{
 };
 use rascal_core::workspace::Cancel;
 use rascal_mcp::server::{
-    ActionResult, Actions, CallError, McpResource as Resource,
+    ActionResult, Actions, CallError, CallMeta, McpResource as Resource,
     McpResourceTemplate as ResourceTemplate, McpTool as Tool, Progress, ResourceBody,
 };
 use serde_json::{Map, Value, json};
@@ -48,6 +48,8 @@ pub struct ContractActions {
     pub ledger: std::sync::Mutex<Ledger>,
     /// The serving session the ledger belongs to (table-manners 4.6).
     pub session: Session,
+    /// The estimates this session issued, for the calls that name them (table-manners 4.5).
+    pub issued: std::sync::Mutex<estimate::Issued>,
 }
 
 /// A serving session: one process's ledger, named by a random UUID (v4) when `serve` starts.
@@ -393,18 +395,24 @@ impl ContractActions {
 
     /// The limits check (table-manners 4.5, docs/contract.md): after allocation and before any
     /// paid step, in a fixed order. The arguments first (`run_args`, `max_spend_usd` among
-    /// them: not above zero or above the configured cap is `invalid`/`usage`), then the cap
-    /// (the worst case over the effective cap is `cap`), then the budget (a session that
-    /// cannot hold it is `budget`), and the reservation of the worst case in the same step
-    /// under the ledger's lock, so two calls never both pass against the same spend. The call is
-    /// priced by `estimate::price`, as its estimate is.
+    /// them: not above zero or above the configured cap is `invalid`/`usage`), then the
+    /// estimate the call names (`stale_estimate`), then the cap (the worst case over the
+    /// effective cap is `cap`), then the budget (a session that cannot hold it is `budget`), and
+    /// the reservation of the worst case in the same step under the ledger's lock, so two calls
+    /// never both pass against the same spend. The call is priced by `estimate::price`, as its
+    /// estimate is; a matching estimate is no reservation, so the cap and the budget are
+    /// checked as for any call.
     fn reserve(
         &self,
         recipe: &str,
         args: &Map<String, Value>,
+        named: Option<&Value>,
     ) -> rascal_core::error::Result<Reservation<'_>> {
         let action = describe::action_name(recipe);
         let price = self.with_setup(|setup| estimate::price(setup, &action, args))?;
+        if let Some(named) = named {
+            self.check_estimate(named, recipe, &action, args, &price)?;
+        }
         let mut ledger = self.ledger.lock().unwrap_or_else(|e| e.into_inner());
         let held = self.held(&ledger);
         let limits = estimate::Limits {
@@ -420,6 +428,62 @@ impl ContractActions {
             usd: limits.worst_case_usd,
             settled: false,
         })
+    }
+
+    /// Checks the estimate a call names against the call as it arrived (table-manners 4.5): a
+    /// value that is not a binding, a binding this session never issued (another session's,
+    /// which for rascal is also any other configuration's, or the command line's), one that
+    /// differs from the call's recomputed binding (naming what changed) or one past its
+    /// `expires` is `stale_estimate`.
+    fn check_estimate(
+        &self,
+        named: &Value,
+        recipe: &str,
+        action: &str,
+        args: &Map<String, Value>,
+        price: &estimate::Price,
+    ) -> rascal_core::error::Result<()> {
+        let stale = |reason: String| Error::StaleEstimate { reason };
+        let Some(binding) = named
+            .as_str()
+            .filter(|b| rascal_core::identity::Identity::parse(b).is_some())
+        else {
+            return Err(stale(format!(
+                "the estimate named, {named}, is not a binding (sha256:<64 hex>)"
+            )));
+        };
+        let issued = self
+            .issued
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(binding)
+            .cloned();
+        let Some(issued) = issued else {
+            return Err(stale(format!(
+                "this session never issued the estimate {binding} (another session's, another configuration's or the command line's); ask this server for a new estimate"
+            )));
+        };
+        let bound = estimate::bind(
+            recipe,
+            action,
+            args,
+            price.config_identity.as_deref(),
+            Some(&self.session.id),
+            estimate::VERSION,
+        )?;
+        if bound.binding != binding {
+            return Err(stale(format!(
+                "the call differs from its estimate: {}; ask for a new estimate",
+                estimate::changed(recipe, &issued, action, &bound.parts)
+            )));
+        }
+        if run_json::now_ms() >= issued.expires_ms {
+            return Err(stale(format!(
+                "the estimate expired at {}; ask for a new estimate",
+                run_json::rfc3339(issued.expires_ms)
+            )));
+        }
+        Ok(())
     }
 
     /// The session budget and what the ledger holds against it.
@@ -460,13 +524,25 @@ impl ContractActions {
             estimate::VERSION,
         )?;
         let ledger = self.ledger();
+        let expires_ms = run_json::now_ms() + estimate::ttl_ms();
+        self.issued
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .record(
+                &bound.binding,
+                estimate::IssuedEstimate {
+                    action: action.to_string(),
+                    expires_ms,
+                    parts: bound.parts.clone(),
+                },
+            );
         let document = estimate::document(
             action,
             &bound,
             price,
             Some(self.held(&ledger)),
             Some(self.session_view_of(&ledger)),
-            run_json::now_ms() + estimate::ttl_ms(),
+            expires_ms,
         );
         serde_json::to_value(&document).map_err(|e| Error::usage(format!("estimate: {e}")))
     }
@@ -476,10 +552,11 @@ impl ContractActions {
         &self,
         recipe: &str,
         args: &Map<String, Value>,
-        client_run_id: Option<&str>,
+        meta: &CallMeta,
         progress: &(dyn Fn(Progress) + Send + Sync),
         cancel: Arc<Cancel>,
     ) -> std::result::Result<ActionResult, String> {
+        let client_run_id = meta.client_run_id.as_deref();
         // A cancel that lands before allocation leaves no run (table-manners 4.2).
         if cancel.load(Ordering::SeqCst) {
             return Err("cancelled".to_string());
@@ -517,7 +594,7 @@ impl ContractActions {
         let prepared = self
             .run_args(recipe, args, &out, &inputs, cancel)
             .and_then(|run_args| {
-                self.reserve(recipe, args)
+                self.reserve(recipe, args, meta.estimate.as_ref())
                     .map(|reservation| (run_args, reservation))
             });
         let (pending, ended, reservation) = match prepared {
@@ -907,7 +984,7 @@ impl Actions for ContractActions {
         &self,
         name: &str,
         args: &Map<String, Value>,
-        client_run_id: Option<&str>,
+        meta: &CallMeta,
         progress: &(dyn Fn(Progress) + Send + Sync),
         cancel: Arc<Cancel>,
     ) -> std::result::Result<ActionResult, CallError> {
@@ -937,7 +1014,7 @@ impl Actions for ContractActions {
         let recipe = recipe_of(name).ok_or_else(|| format!("no action {name}"))?;
         self.ready_for(name, args)?;
         let result = self
-            .run_action(recipe, args, client_run_id, progress, cancel)
+            .run_action(recipe, args, meta, progress, cancel)
             .map_err(CallError::from)?;
         self.learn(&result.structured);
         Ok(result)

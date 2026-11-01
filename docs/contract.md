@@ -133,6 +133,9 @@ journal) and rascal's body (`recipe`, `outcome` in rascal's own statuses, `stopp
 | reading or writing its files | `error` | `io` (retryable) |
 | a filler endpoint | `error` | `provider` (retryable) |
 | a filler endpoint that rejects the key (HTTP 401 or 403) | `error` | `credential` (never retryable; exit 3) |
+| a `serve` call whose named estimate no longer matches it (task 12.6) | `invalid` | `stale_estimate` (never retryable) |
+| a worst case over the effective per-call cap (task 12.4) | `error` | `cap` (never retryable) |
+| a session budget that cannot hold the worst case (task 12.4) | `error` | `budget` (never retryable) |
 | a filler command or a pack that died | `error` | `tool_process` (retryable) |
 | a timeout | `error` | `timeout` (retryable) |
 | anything else | `error` | `internal` |
@@ -244,7 +247,8 @@ with code `usage` naming the amounts, never silently lowered (task 12.4). The li
 after allocation and before any paid step, in this order:
 
 1. the arguments, `max_spend_usd` among them (`invalid`, `usage`);
-2. from task 12.6, the estimate the call names (`stale_estimate`);
+2. the estimate the call names, when it names one (`stale_estimate`, task 12.6; see
+   "Estimates");
 3. the cap: a worst case (the filler's price) over the effective cap is an `error` with code `cap`;
 4. the budget: a worst case the session's budget left cannot hold is an `error` with code
    `budget`, and otherwise the worst case is reserved in the same step.
@@ -324,6 +328,22 @@ not above zero or above the configured cap, an `expect` that does not match its 
 "retryable": false, "reason"}}`, the code as the run would give it (`input` for an image rascal
 cannot take, `usage` otherwise) and the reason naming the argument. A run checks its arguments
 the same way first, so an argument an action does not take is now an `invalid` run too.
+
+**A call bound to its estimate (task 12.6).** A call may send its estimate's binding as
+`_meta["table-manners/estimate"]`; `serve` hands it to the action with the correlation id
+(`CallMeta` in `rascal-mcp`). At the limits check, after the arguments and before the cap, the
+binding is recomputed for the call as it arrived (the same `estimate::bind`, over the same
+images) and compared with what this server issued: it remembers every binding it issues, with
+its expiry and the digest of each argument (images by slot), the newest 1024. The run fails
+`invalid` with code `stale_estimate` (never retryable, spend 0, before any step's paid work, any
+reservation and any filler call) when the value is not a binding (`sha256:<64 hex>`, or not a
+string at all: a run exists by then, so it is no JSON-RPC error), when this session never issued
+it (another session's, which for rascal also means any other configuration's, since a session
+reads its configuration once; or the command line's), when the call differs (the reason names
+each image whose bytes changed and each argument added, removed or changed), or when it is past
+its `expires`. A matching estimate is no reservation: the cap and the budget are checked again,
+so an allowed estimate followed by a call the budget can no longer hold ends `budget`. A call
+that names no estimate is checked against the limits alone.
 
 `rascal estimate --json` prints the same document with no session: `session_id` and `session`
 are null and the binding is made over a null session id, so no server accepts it; the budget is

@@ -2022,7 +2022,7 @@ image changed by a byte the binding changes.
       and so do calls differing only in `return_images` or `image_blocks`), and changes with the
       image's bytes, any other argument, the configuration, the session and the version (the
       version through a unit test of the recipe).
-- [ ] `rascal estimate --json` prints an estimate with `session_id` and `session` null that
+- [x] `rascal estimate --json` prints an estimate with `session_id` and `session` null that
       validates; a served call carrying its binding fails `stale_estimate` (12.6).
 - [x] `estimate` is in `tools/list` with the `{action, arguments}` schema, never in `actions`; it
       answers while a run holds the permit; it leaves the runs root, the workspace's generation and
@@ -2056,13 +2056,13 @@ is checked against the limits alone, and a matching estimate is no reservation: 
 budget are checked again as in 12.4.
 
 **Acceptance.**
-- [ ] A call carrying its estimate's binding runs; the same call after a byte of its image
+- [x] A call carrying its estimate's binding runs; the same call after a byte of its image
       changed, with another argument, under a restarted server (a new session) or under a server
       with another configuration, and after the testkit expiry, each ends
       `invalid`/`stale_estimate` naming why, with no filler call and `reserved_usd` unchanged.
-- [ ] An allowed estimate followed by a call that the budget can no longer hold (another call
+- [x] An allowed estimate followed by a call that the budget can no longer hold (another call
       spent in between) ends `budget`, not `stale_estimate`.
-- [ ] The testkit client sends any `_meta`; a call with no estimate behaves as in 12.4.
+- [x] The testkit client sends any `_meta`; a call with no estimate behaves as in 12.4.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- estimate::
 serve_contract::`; `cargo nextest run -p rascal-mcp --test it`; `just check`.

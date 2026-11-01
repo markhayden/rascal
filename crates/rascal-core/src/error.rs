@@ -79,6 +79,12 @@ pub enum Error {
     /// retryable (table-manners 2.2).
     #[error("budget: {reason}")]
     Budget { reason: String },
+    /// The call named an estimate that no longer matches it (table-manners 4.5): one this
+    /// session never issued, one made for other arguments or images, or one past its
+    /// `expires`; nothing was run or reserved. Never retryable unchanged: the caller asks for a
+    /// new estimate. Exit 64.
+    #[error("stale estimate: {reason}")]
+    StaleEstimate { reason: String },
     /// The caller cancelled the run (a client's cancellation, a signal); the step it stopped
     /// before published nothing. A cancelled run is not an error to report: its result says
     /// `cancelled` (table-manners 4.2).

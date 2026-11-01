@@ -5,6 +5,10 @@
 //! them and nothing else: it never allocates, imports, writes a run, touches the workspace,
 //! starts a pack or calls a filler.
 //!
+//! A server records the bindings it issues ([`Issued`]); a call naming one is checked at the
+//! limits check, after its arguments and before the cap (PLAN.md 12.6), and fails
+//! `stale_estimate` when this session never issued it, when it differs, or when it expired.
+//!
 //! The binding is rascal's recipe: the record identity (ADR 0016, kind `estimate`) of
 //! `{action, arguments, tool_version, config_identity, session_id}`, where `arguments` leaves
 //! out the delivery choices (`return_images`, `image_blocks`), each image slot's value is
@@ -502,6 +506,75 @@ pub fn bind(
     })
 }
 
+/// A binding the server issued (PLAN.md 12.6): when it stops being honoured, and what it was
+/// made from, so a call that no longer matches is told what changed.
+#[derive(Debug, Clone, PartialEq)]
+pub struct IssuedEstimate {
+    pub action: String,
+    pub expires_ms: u128,
+    pub parts: BTreeMap<String, String>,
+}
+
+/// The bindings a server issued, newest last, bounded to the newest [`Issued::LIMIT`].
+#[derive(Debug, Default)]
+pub struct Issued {
+    entries: std::collections::VecDeque<(String, IssuedEstimate)>,
+}
+
+impl Issued {
+    /// How many bindings a server remembers.
+    pub const LIMIT: usize = 1024;
+
+    /// Records a binding (again, when it was issued before: the newest expiry stands).
+    pub fn record(&mut self, binding: &str, issued: IssuedEstimate) {
+        self.entries.retain(|(b, _)| b != binding);
+        self.entries.push_back((binding.to_string(), issued));
+        while self.entries.len() > Self::LIMIT {
+            self.entries.pop_front();
+        }
+    }
+
+    /// The binding, when this server issued it and still remembers it.
+    pub fn get(&self, binding: &str) -> Option<&IssuedEstimate> {
+        self.entries
+            .iter()
+            .find(|(b, _)| b == binding)
+            .map(|(_, issued)| issued)
+    }
+}
+
+/// What differs between the call an estimate was made for and the call as it arrived, for
+/// people: each image whose bytes changed and each argument added, removed or changed.
+pub fn changed(
+    recipe: &str,
+    issued: &IssuedEstimate,
+    action: &str,
+    now: &BTreeMap<String, String>,
+) -> String {
+    let images = slots(recipe).map(|s| s.images).unwrap_or_default();
+    let mut what = Vec::new();
+    if issued.action != action {
+        what.push(format!("it was made for {}, not {action}", issued.action));
+    }
+    let names: std::collections::BTreeSet<&String> =
+        issued.parts.keys().chain(now.keys()).collect();
+    for name in names {
+        let image = images.contains(name);
+        match (issued.parts.get(name), now.get(name)) {
+            (Some(a), Some(b)) if a == b => {}
+            (Some(_), Some(_)) if image => what.push(format!("the image `{name}` changed")),
+            (Some(_), Some(_)) => what.push(format!("the argument `{name}` changed")),
+            (Some(_), None) => what.push(format!("the argument `{name}` was removed")),
+            (None, _) => what.push(format!("the argument `{name}` was added")),
+        }
+    }
+    if what.is_empty() {
+        "the call is not the one estimated".to_string()
+    } else {
+        what.join("; ")
+    }
+}
+
 /// The estimate document (`schemas/core/estimate.json`).
 pub fn document(
     action: &str,
@@ -614,5 +687,52 @@ mod tests {
             &json!({ "file_sha256": rascal_core::contract::file_sha256(&bytes) }),
         );
         assert_eq!(bind_of(&plain).parts["image"], digest.as_str());
+    }
+
+    fn issued(parts: &[(&str, &str)]) -> IssuedEstimate {
+        IssuedEstimate {
+            action: "seam".to_string(),
+            expires_ms: 0,
+            parts: parts
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        }
+    }
+
+    /// The table keeps the newest [`Issued::LIMIT`] bindings.
+    #[test]
+    fn the_issued_table_keeps_the_newest() {
+        let mut table = Issued::default();
+        for n in 0..=Issued::LIMIT {
+            table.record(&format!("b{n}"), issued(&[]));
+        }
+        assert!(table.get("b0").is_none());
+        assert!(table.get("b1").is_some());
+        assert!(table.get(&format!("b{}", Issued::LIMIT)).is_some());
+        // Recording one again makes it the newest.
+        table.record("b1", issued(&[]));
+        table.record("fresh", issued(&[]));
+        assert!(table.get("b1").is_some());
+        assert!(table.get("b2").is_none());
+    }
+
+    /// What changed is named: an image by its slot, any other argument added, removed or changed.
+    #[test]
+    fn what_changed_is_named() {
+        let then = issued(&[("image", "a"), ("filler", "f"), ("strict", "t")]);
+        let now: BTreeMap<String, String> = [("image", "b"), ("filler", "g"), ("set", "s")]
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        let text = changed("seam", &then, "seam", &now);
+        assert_eq!(
+            text,
+            "the argument `filler` changed; the image `image` changed; the argument `set` was added; the argument `strict` was removed"
+        );
+        assert_eq!(
+            changed("seam", &then, "remove", &then.parts),
+            "it was made for seam, not remove"
+        );
     }
 }
