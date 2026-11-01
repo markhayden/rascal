@@ -68,7 +68,7 @@ with green CI on both platforms, and then the tag.
 - [x] 5.1 The pack skeleton, `echo_region`, `fetch` and the harness
 - [x] 5.2 `segment` under branch A (ADR 0018): OWLv2 + SAM 2.1 on onnxruntime, `remove-prompt`, the models in the bundle
 - [x] 5.3 The bundle and offline setup (the model artifacts' bytes join the bundle with 5.2; a bundle URL for `setup` comes with the release, 7.2) → tag `m5.1`
-- [ ] Checkpoint M5 → tag `m5` once the model files are published as the `models-2026-10` release (the owner runs the release command; everything else of M5 is merged)
+- [x] Checkpoint M5 → tag `m5` (2026-11-01: the model files published as the `models-2026-10` release, digests checked against `artifacts.toml`; `m5` on the M5 merge `ddf2a3e`)
 
 ## M6 Lab
 - [x] 6.1 Corpus, protocol, matrix and `fan-thin-v1` (built on the example corpus over the fixtures; owner decision 6 names the private corpus for 6.4)
@@ -84,8 +84,8 @@ with green CI on both platforms, and then the tag.
 - [ ] **An object on or near the line is kept, not removed** (owner, 2026-10-30, after objects-02): the harbour chimney on the wrap edge is covered whole by every band and the filler invents stubs; fan-v2's stripe through it doubled it. The band cannot settle this: the mask builder should recognise a solid object on or near the line and keep it, healing the seam through it (and, for a generated panorama whose halves do not meet, say so). Cells: `objects-02`, `sunburst-training-18-harbor-promenade` (identical masks under both arms, `neither`); `objects-01`, the break-room light.
 - [ ] **An object's base and stand are left behind** (owner, 2026-10-29, the gumball-machine test with `remove-prompt`): the segmenter's plane covered the globe and body and stopped above the pedestal and base, so the fill left them standing. Two queries (`"gumball machine. black metal stand"`, `max_instances` 2) work around it; the improvement is to extend a standing object's plane down to where it meets the floor, the same family as the light fixture. The owner's photo is `~/Downloads/neon-retro.png`.
 - [ ] **Thin parts escape the plane** (the eagle's far wingtip, `~/Downloads/penguin-eagle-test.png`): SAM's plane stops short of the thinnest feathers and a 4 px grow does not reach them, so a faint trace stays under either filler; `--set grow.px=8` is the knob, a plane that follows thin structure the answer.
-- [~] 7.2 The final timing run and the release: timing recorded (`docs/results/suite-timing.md`, 2 min 41 s), the criteria table in `docs/architecture.md`, `setup` from an archive or URL with its digest, the `bundles` workflow, the README install section; left: the owner's word to push `v0.1.0` (and the models release)
-- [ ] Checkpoint M7 → tag `m7` → tag `v0.1.0` when the owner calls the work ready (decision 11); the machinery is complete
+- [x] 7.2 The final timing run and the release (released as `v0.1.0`, 2026-11-01): timing recorded (`docs/results/suite-timing.md`, 2 min 41 s), the criteria table in `docs/architecture.md`, `setup` from an archive or URL with its digest, the `bundles` workflow, the README install section; the owner called it ready on 2026-11-01
+- [ ] Checkpoint M7 → tag `m7`: `v0.1.0` released 2026-11-01 on the owner's word (decision 11); `m7` waits on the review and test passes, `docs/reviews/m7-checkpoint.md`
 
 ## M8 Table manners (the shared contract, `table-manners` v0.1.0; ADR 0020, decision 13; PLAN.md M8)
 - [x] 8.1 The contract pinned (`=0.1.0`, a warn-on-newer CI step) and the image reference: the source file's digest at import, projection and topology, the twelve pixel vectors reproduced (`rascal-core::contract`, `fixtures/contract/pixels/`, `scripts/check-contract.sh`; `workspace import` prints the file digest)

@@ -1022,9 +1022,10 @@ rascal-tools echo_region …` works, and under branch A `rascal heal remove … 
 
 ### Checkpoint M5
 
-- [ ] The pack installs offline on both platforms; the branch in force is proven by acceptance.
-- [ ] Review and test passes applied; `docs/reviews/m5-checkpoint.md`.
-- [ ] Owner review → merge to `main` → push → CI green → tag `m5`.
+- [x] The pack installs offline on both platforms; the branch in force is proven by acceptance.
+- [x] Review and test passes applied; `docs/reviews/m5-checkpoint.md`.
+- [x] Owner review → merge to `main` → push → CI green → tag `m5` (2026-11-01, after the
+      `models-2026-10` release).
 
 ## Milestone M6: Lab
 
@@ -1176,7 +1177,8 @@ directory; `rascal run seam` from the unpacked release archive runs on the fixtu
       `docs/architecture.md`, or a dated scope change recorded for any exception.
 - [ ] Review and test passes applied; `docs/reviews/m7-checkpoint.md`.
 - [ ] Owner review → merge to `main` → push → CI green → tag `m7` → tag `v0.1.0` → the owner
-      publishes.
+      publishes. (`v0.1.0` released 2026-11-01 on the owner's word; `m7` follows the review
+      record above.)
 
 ## Milestone M8: Table manners
 

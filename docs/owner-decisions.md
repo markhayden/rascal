@@ -111,6 +111,10 @@ noted during the lab rounds, starting with the fan's band swallowing solid objec
 surfaces (`tasks/todo.md`). The release machinery is complete and proven (`docs/results/suite-timing.md`);
 pushing the tag is the one step left, on the owner's word.
 
+2026-11-01: the owner called it ("go ahead and do the release"). `v0.1.0` was tagged after
+task 10.5 and its follow-up landed, with the `models-2026-10` release published first so the
+release bundles carry the models.
+
 ## 12. fan-v3 is the default band, for now
 
 2026-10-30. After objects-01 and objects-02 (`docs/results/`), the owner made fan-v3 the seam
