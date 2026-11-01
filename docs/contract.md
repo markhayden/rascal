@@ -173,15 +173,28 @@ mid-call counts it too. `spend.usd` is the total and `spend.unresolved_usd` the 
 settled, with a note (table-manners v0.2, 4.5). The contract files an authentication refusal as
 *known* at zero; rascal records it as `not_sent`, which also counts zero, so the spend is the
 same.
-`[limits]` holds `serve` to `call_cap_usd` (a call's `max_spend_usd` may lower it, never raise
-it; it must be above zero, and 0 or less is an `invalid` run with code `usage`, since a cap of zero
-is not a cap) and `session_budget_usd` across the process's calls; a call whose price would pass either is
-refused before it runs, an `error` result with code `budget` (4.5). The check and a reservation of
-the call's worst case are one step under the session ledger's lock (task 9.2), so concurrent calls
+`[limits]` holds `serve` to `call_cap_usd` per call and `session_budget_usd` across the process's
+calls (4.5). A call's `max_spend_usd` lowers the cap: the effective cap is the configured one
+lowered by it, or the caller's value when no cap is configured. It is an argument like any other,
+so 0 or less (a cap of zero is not a cap) and a value above the configured cap are an `invalid` run
+with code `usage` naming the amounts, never silently lowered (task 12.4). The limits check runs
+after allocation and before any paid step, in this order:
+
+1. the arguments, `max_spend_usd` among them (`invalid`, `usage`);
+2. from task 12.6, the estimate the call names (`stale_estimate`);
+3. the cap: a worst case (the filler's price) over the effective cap is an `error` with code `cap`;
+4. the budget: a worst case the session's budget left cannot hold is an `error` with code
+   `budget`, and otherwise the worst case is reserved in the same step.
+
+`cap` and `budget` are never retryable, and a refused call spends nothing and never reaches the
+filler. From task 12.2, a requirement the call needs that is missing or invalid is refused before
+allocation, with no run. The budget check and the reservation are one step under the session ledger's
+lock (task 9.2), so concurrent calls
 (`--concurrency`) never both pass against the same spend; the run's end settles the reservation
 into what it spent (unresolved charges included), and a run that ends without settling counts its
 reservation as unresolved spend. The `estimate` tool (still M9's input and output until task 12.5) returns the worst case for an action and
-filler, the effective per-call cap and whether the call would be allowed; the session is read
+filler, the effective per-call cap and whether the call would be allowed (a bad `max_spend_usd` is
+a JSON-RPC error there); the session is read
 from `rascal://session` (table-manners 4.6, task 11.2): one atomic observation of the ledger
 under a random UUID made when `serve` starts, with `budget_usd` and `remaining_usd` (both null
 when uncapped), `spent_usd` (unresolved included), `unresolved_usd` and `reserved_usd`, amounts at

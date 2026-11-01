@@ -374,22 +374,26 @@ fn a_cancelled_call_gets_no_result_and_its_run_says_cancelled() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// Task 8.6: `[limits]` hold `serve` to a per-call cap a call may only lower and a session
-/// budget; `estimate` says so before anything runs; a refused call is an `error` result with
-/// code `budget`.
-#[test]
-fn the_cap_and_the_budget_refuse_a_call_that_would_spend_too_much() {
-    let dir = scratch("budget");
-    let bin = env!("CARGO_BIN_EXE_rascal");
+/// `serve` under `[limits]` with one priced HTTP filler, `hosted` at 0.04 a call, served by the
+/// fake on loopback; returns the client and the requests the fake saw.
+fn limits_server(
+    dir: &Path,
+    limits: &str,
+) -> (
+    Client,
+    std::sync::Arc<std::sync::Mutex<Vec<rascal_testkit::fake_filler::Seen>>>,
+) {
+    let (url, seen) =
+        rascal_testkit::fake_filler::spawn(rascal_testkit::fake_filler::Behaviour::Exact, None);
     let config = dir.join("limits.toml");
     std::fs::write(
         &config,
         format!(
-            "config_version = 1\n[limits]\ncall_cap_usd = 0.10\nsession_budget_usd = 0.05\n[fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\nrevision = \"fake\"\nspend_usd_per_call = 0.04\n"
+            "config_version = 1\n[limits]\n{limits}\n[fillers.hosted]\nurl = {url:?}\nprofile = \"grey\"\nrevision = \"hosted\"\nspend_usd_per_call = 0.04\n"
         ),
     )
     .unwrap();
-    let mut command = Command::new(bin);
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
     command
         .args([
             "serve",
@@ -401,50 +405,122 @@ fn the_cap_and_the_budget_refuse_a_call_that_would_spend_too_much() {
             dir.join("runs").to_str().unwrap(),
         ])
         .env_remove("RASCAL_LOG");
-    let mut client = Client::start(&mut command).unwrap();
+    (Client::start(&mut command).unwrap(), seen)
+}
+
+/// A `seam` call healed by `hosted`, lowered to `max_spend_usd` when given; its result,
+/// validated.
+fn spend_call(client: &mut Client, max_spend_usd: Option<f64>) -> serde_json::Value {
     let pano = repo_root().join("fixtures/images/step-pano.png");
-    let estimate = client
-        .call(
-            "estimate",
-            serde_json::json!({ "action": "seam", "filler": "fake" }),
-        )
+    let mut args =
+        serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "hosted" });
+    if let Some(asked) = max_spend_usd {
+        args["max_spend_usd"] = serde_json::json!(asked);
+    }
+    let out = client.call("seam", args).unwrap();
+    let s = out.structured.unwrap();
+    valid("urn:table-manners:core:result", &s);
+    assert_eq!(out.is_error, s["status"] != "completed", "{s:#}");
+    s
+}
+
+/// Asserts a call was refused at the limits check: the status and code, never retryable, zero
+/// spend, no request to the filler, and nothing left reserved in the session.
+fn assert_refused(
+    client: &mut Client,
+    seen: &std::sync::Mutex<Vec<rascal_testkit::fake_filler::Seen>>,
+    s: &serde_json::Value,
+    status: &str,
+    code: &str,
+    requests_before: usize,
+) {
+    assert_eq!(s["status"], status, "{s:#}");
+    assert_eq!(s["error"]["code"], code, "{s:#}");
+    assert_eq!(s["error"]["retryable"], false, "{s:#}");
+    assert_eq!(s["spend"]["usd"], 0.0, "{s:#}");
+    assert_eq!(seen.lock().unwrap().len(), requests_before, "{s:#}");
+    let ledger = session(client);
+    assert_eq!(ledger["reserved_usd"], 0.0, "{ledger:#}");
+}
+
+/// Task 12.4 (table-manners 2.2, 4.5): the per-call cap and the session budget fail apart. A
+/// `max_spend_usd` above the configured cap is a bad argument naming both amounts, never
+/// silently lowered; a worst case over the effective cap is `cap`; a session that cannot
+/// reserve it is `budget`. Each spends nothing and never reaches the filler.
+#[test]
+fn the_cap_and_the_budget_fail_with_their_own_codes() {
+    let dir = scratch("budget");
+    let (mut client, seen) = limits_server(&dir, "call_cap_usd = 0.10\nsession_budget_usd = 0.05");
+    let estimate = |client: &mut Client, extra: serde_json::Value| {
+        let mut args = serde_json::json!({ "action": "seam", "filler": "hosted" });
+        args.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        client.call("estimate", args)
+    };
+    let before = estimate(&mut client, serde_json::json!({}))
         .unwrap()
         .structured
         .unwrap();
-    assert_eq!(estimate["worst_case_usd"], 0.04);
-    assert_eq!(estimate["allowed"], true);
-    // Lowered under the price: refused before anything runs.
-    let low = client
-        .call("seam", serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "fake", "max_spend_usd": 0.01 }))
-        .unwrap();
-    assert!(low.is_error);
-    let s = low.structured.unwrap();
-    assert_eq!(s["status"], "error");
-    assert_eq!(s["error"]["code"], "budget");
+    assert_eq!(before["worst_case_usd"], 0.04);
+    assert_eq!(before["call_cap_usd"], 0.10);
+    assert_eq!(before["allowed"], true);
+
+    // Above the configured cap: refused as an argument, naming both amounts.
+    let over = spend_call(&mut client, Some(0.2));
+    assert_refused(&mut client, &seen, &over, "invalid", "usage", 0);
+    let reason = over["error"]["reason"].as_str().unwrap();
+    assert!(
+        reason.contains("max_spend_usd") && reason.contains("0.2") && reason.contains("0.1"),
+        "{reason}"
+    );
+    assert!(matches!(
+        estimate(&mut client, serde_json::json!({ "max_spend_usd": 0.2 })),
+        Err(Failure::Rpc { .. })
+    ));
+
+    // Lowered under the price: the call's worst case is over its effective cap.
+    let low = spend_call(&mut client, Some(0.03));
+    assert_refused(&mut client, &seen, &low, "error", "cap", 0);
+    assert!(
+        low["error"]["reason"].as_str().unwrap().contains("cap"),
+        "{low:#}"
+    );
+
     // The first call fits the budget and spends 0.04; the second would go over 0.05.
-    let first = client
-        .call(
-            "seam",
-            serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "fake" }),
-        )
-        .unwrap();
-    assert_eq!(first.structured.unwrap()["spend"]["usd"], 0.04);
-    let after = client
-        .call(
-            "estimate",
-            serde_json::json!({ "action": "seam", "filler": "fake" }),
-        )
+    let first = spend_call(&mut client, None);
+    assert_eq!(first["status"], "completed", "{first:#}");
+    assert_eq!(first["spend"]["usd"], 0.04);
+    assert_eq!(seen.lock().unwrap().len(), 1);
+    let after = estimate(&mut client, serde_json::json!({}))
         .unwrap()
         .structured
         .unwrap();
     assert_eq!(after["allowed"], false);
-    let second = client
-        .call(
-            "seam",
-            serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "fake" }),
-        )
-        .unwrap();
-    assert_eq!(second.structured.unwrap()["error"]["code"], "budget");
+    let second = spend_call(&mut client, None);
+    assert_refused(&mut client, &seen, &second, "error", "budget", 1);
+    assert!(
+        second["error"]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("session"),
+        "{second:#}"
+    );
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 12.4: with no configured cap the caller's `max_spend_usd` is the cap.
+#[test]
+fn uncapped_the_callers_max_spend_is_the_cap() {
+    let dir = scratch("uncapped");
+    let (mut client, seen) = limits_server(&dir, "");
+    let low = spend_call(&mut client, Some(0.03));
+    assert_refused(&mut client, &seen, &low, "error", "cap", 0);
+    let enough = spend_call(&mut client, Some(0.05));
+    assert_eq!(enough["status"], "completed", "{enough:#}");
+    assert_eq!(enough["spend"]["usd"], 0.04);
+    assert_eq!(seen.lock().unwrap().len(), 1);
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -467,8 +543,9 @@ fn responses(
 }
 
 /// Task 9.2: the limits check and the reservation are one step. Under `--concurrency 2` with a
-/// budget for one call, two calls at once give one run and one refusal before any filler call;
-/// while a run is under way its worst case is held, and its end settles it into the spend.
+/// budget for one call, two calls at once give one run and one refusal (`budget`, task 12.4)
+/// before any filler call; while a run is under way its worst case is held, and its end settles
+/// it into the spend.
 #[test]
 fn concurrent_calls_reserve_the_budget_atomically() {
     let dir = scratch("reserve");
