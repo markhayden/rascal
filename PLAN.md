@@ -1942,12 +1942,12 @@ configured cap the caller's value is the cap. The order at the limits check (`ac
 the budget (requirements are checked before allocation, 12.2) and the reservation in the same step under the ledger's lock (9.2 unchanged).
 
 **Acceptance.**
-- [ ] With `call_cap_usd = 0.10` and a filler at 0.04: `max_spend_usd: 0.2` is `invalid`/`usage`;
+- [x] With `call_cap_usd = 0.10` and a filler at 0.04: `max_spend_usd: 0.2` is `invalid`/`usage`;
       `max_spend_usd: 0.03` is `error`/`cap`; with `session_budget_usd = 0.05` the second call is
       `error`/`budget`; each with zero spend, no filler call, and the ledger's `reserved_usd` back
       at 0.
-- [ ] Uncapped, `max_spend_usd: 0.03` gives `cap` and `0.05` runs.
-- [ ] The 9.2 race test still gives one run and one refusal, now `budget`.
+- [x] Uncapped, `max_spend_usd: 0.03` gives `cap` and `0.05` runs.
+- [x] The 9.2 race test still gives one run and one refusal, now `budget`.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it --
 serve_contract::`; `just check`.

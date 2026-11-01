@@ -71,7 +71,12 @@ pub enum Error {
         step: String,
         message: String,
     },
-    /// The call would spend more than its cap or the session budget allows; nothing was run.
+    /// The call's worst case is over its effective per-call cap (the configured cap, lowered by
+    /// the call's `max_spend_usd`); nothing was run. Never retryable (table-manners 2.2).
+    #[error("cap: {reason}")]
+    Cap { reason: String },
+    /// The session budget cannot reserve the call's worst case; nothing was run. Never
+    /// retryable (table-manners 2.2).
     #[error("budget: {reason}")]
     Budget { reason: String },
     /// The caller cancelled the run (a client's cancellation, a signal); the step it stopped

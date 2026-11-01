@@ -128,6 +128,7 @@ pub fn error_of(error: &Error) -> (Status, ErrorInfo) {
             )
         }
         Error::Io { .. } => (Status::Error, ErrorCode::Io, true),
+        Error::Cap { .. } => (Status::Error, ErrorCode::Cap, false),
         Error::Budget { .. } => (Status::Error, ErrorCode::Budget, false),
         Error::Image { .. } => (Status::Invalid, ErrorCode::Input, false),
         other => {

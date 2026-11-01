@@ -359,15 +359,9 @@ impl ContractActions {
         inputs: &Path,
         cancel: Arc<Cancel>,
     ) -> rascal_core::error::Result<run::RunArgs> {
-        // A cap of zero is not a cap (table-manners 4.5): the description declares
-        // `max_spend_usd` above zero, and anything else is a bad argument.
-        if let Some(asked) = args.get("max_spend_usd")
-            && !asked.as_f64().is_some_and(|a| a > 0.0)
-        {
-            return Err(Error::usage(format!(
-                "max_spend_usd: {asked} is not a number above zero; a call that must not spend names no filler"
-            )));
-        }
+        // `max_spend_usd` is an argument like any other: checked here, the first step of the
+        // limits check's order (`reserve`).
+        self.effective_cap(args)?;
         let image = self.image_file(
             args.get("image")
                 .ok_or_else(|| Error::usage("image: required"))?,
@@ -425,28 +419,56 @@ impl ContractActions {
         })
     }
 
-    /// What a call to the filler costs at worst, and the limits that apply: the per-call cap
-    /// (the configuration's, lowered by `max_spend_usd`) and the session budget.
-    fn limits(&self, filler: Option<&str>, args: &Map<String, Value>, ledger: &Ledger) -> Limits {
-        let price = filler
-            .and_then(|f| self.config.as_ref()?.fillers.get(f)?.spend_usd_per_call)
-            .unwrap_or(0.0);
+    /// The call's effective per-call cap (table-manners 4.5): the configured `call_cap_usd`
+    /// lowered by `max_spend_usd`, the caller's value when no cap is configured, `None` when
+    /// neither is. A `max_spend_usd` that is not a number above zero (a cap of zero is not a
+    /// cap), or that is above the configured cap, is a bad argument (`usage`) naming the
+    /// amounts, never silently lowered.
+    fn effective_cap(&self, args: &Map<String, Value>) -> rascal_core::error::Result<Option<f64>> {
         let configured = self
             .config
             .as_ref()
-            .and_then(|c| c.limits.clone())
-            .unwrap_or_default();
-        let asked = args.get("max_spend_usd").and_then(|v| v.as_f64());
-        let cap = match (configured.call_cap_usd, asked) {
-            (Some(c), Some(a)) => Some(c.min(a)),
-            (c, a) => c.or(a),
+            .and_then(|c| c.limits.as_ref())
+            .and_then(|l| l.call_cap_usd);
+        let Some(value) = args.get("max_spend_usd") else {
+            return Ok(configured);
         };
-        Limits {
-            worst_case_usd: price,
-            call_cap_usd: cap,
-            session_budget_usd: configured.session_budget_usd,
-            session_held_usd: ledger.spent_usd + ledger.reserved_usd,
+        let asked = value.as_f64().filter(|a| *a > 0.0).ok_or_else(|| {
+            Error::usage(format!(
+                "max_spend_usd: {value} is not a number above zero; a call that must not spend names no filler"
+            ))
+        })?;
+        if let Some(cap) = configured
+            && asked > cap
+        {
+            return Err(Error::usage(format!(
+                "max_spend_usd: {asked} is above the configured per-call cap of {cap}; a call may lower the cap, never raise it"
+            )));
         }
+        Ok(Some(asked))
+    }
+
+    /// What a call to the filler costs at worst, and the limits that apply: the effective
+    /// per-call cap and the session budget. A bad `max_spend_usd` is the error.
+    fn limits(
+        &self,
+        filler: Option<&str>,
+        args: &Map<String, Value>,
+        ledger: &Ledger,
+    ) -> rascal_core::error::Result<Limits> {
+        let price = filler
+            .and_then(|f| self.config.as_ref()?.fillers.get(f)?.spend_usd_per_call)
+            .unwrap_or(0.0);
+        Ok(Limits {
+            worst_case_usd: price,
+            call_cap_usd: self.effective_cap(args)?,
+            session_budget_usd: self
+                .config
+                .as_ref()
+                .and_then(|c| c.limits.as_ref())
+                .and_then(|l| l.session_budget_usd),
+            session_held_usd: ledger.spent_usd + ledger.reserved_usd,
+        })
     }
 
     /// The ledger as it stands.
@@ -454,15 +476,19 @@ impl ContractActions {
         *self.ledger.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// Checks the limits and reserves the call's worst case in one step under the ledger's
-    /// lock, so two calls never both pass against the same spend.
+    /// The limits check (table-manners 4.5, docs/contract.md): after allocation and before any
+    /// paid step, in a fixed order. The arguments first (`run_args`, `max_spend_usd` among
+    /// them: not above zero or above the configured cap is `invalid`/`usage`), then the cap
+    /// (the worst case over the effective cap is `cap`), then the budget (a session that
+    /// cannot hold it is `budget`), and the reservation of the worst case in the same step
+    /// under the ledger's lock, so two calls never both pass against the same spend.
     fn reserve(
         &self,
         filler: Option<&str>,
         args: &Map<String, Value>,
     ) -> rascal_core::error::Result<Reservation<'_>> {
         let mut ledger = self.ledger.lock().unwrap_or_else(|e| e.into_inner());
-        let limits = self.limits(filler, args, &ledger);
+        let limits = self.limits(filler, args, &ledger)?;
         limits.check()?;
         ledger.reserved_usd += limits.worst_case_usd;
         Ok(Reservation {
@@ -911,7 +937,9 @@ impl Actions for ContractActions {
             }
             let filler = args.get("filler").and_then(|v| v.as_str());
             let ledger = self.ledger();
-            let limits = self.limits(filler, args, &ledger);
+            let limits = self
+                .limits(filler, args, &ledger)
+                .map_err(|e| format!("estimate: {e}"))?;
             return Ok(ActionResult {
                 structured: json!({
                     "contract": rascal_core::contract::CONTRACT_VERSION,
@@ -1032,12 +1060,13 @@ struct Limits {
 }
 
 impl Limits {
-    /// Refuses a call whose worst case is over the cap or the budget left.
+    /// Refuses a call whose worst case is over the effective cap (`cap`), then one the
+    /// session's budget left cannot hold (`budget`).
     fn check(&self) -> rascal_core::error::Result<()> {
         if let Some(cap) = self.call_cap_usd
             && self.worst_case_usd > cap
         {
-            return Err(Error::Budget {
+            return Err(Error::Cap {
                 reason: format!(
                     "the call may spend {:.4} USD, over the per-call cap of {cap:.4}",
                     self.worst_case_usd

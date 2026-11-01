@@ -37,7 +37,7 @@ dir = ".rascal/fills"          # keep every fill by its request, filler and revi
                                # request is answered from here and the filler is not called
 
 [limits]                       # rascal serve only
-call_cap_usd = 0.50            # the most one call may spend; a call may lower it (max_spend_usd)
+call_cap_usd = 0.50            # the most one call may spend; a call may lower it (max_spend_usd), never raise it
 session_budget_usd = 5.00      # the most one serve process may spend
 ```
 
