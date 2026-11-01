@@ -53,7 +53,9 @@ it does not take the `rect` op's name in `serve`), with the image slots (role
 `source`), the location slots and the kinds each takes, the text and mask inputs and the common
 arguments (`filler`, `set`, `projection`, `strict`) as `params_schema`, the outputs (`mask`,
 `result`; `remove_prompt` fills `locations.found`), the cost, the readiness, the duration and the
-`dash` render (`kind: "server"`, `ready_timeout_s: 10`). Every action's `params_schema` declares
+two renders (3.2): `dash` (`kind: "server"`, `ready_timeout_s: 10`, `rascal dash {run.dir}
+--serve --port 0 --frame-ancestor {frame_ancestor}`) and `page` (`kind: "document"`, `rascal
+dash {run.dir} --document`), described in `docs/diagnostics.md`. Every action's `params_schema` declares
 `max_spend_usd` as `{"type": "number", "exclusiveMinimum": 0}`, since every action takes a filler
 and so may be paid. With `--config`, the configured fillers are the `filler` enum, a configured
 filler with a price makes an action `may_spend`, and each filler's key is a `credential`

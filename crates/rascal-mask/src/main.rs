@@ -236,17 +236,26 @@ enum Command {
         #[arg(required_unless_present = "panels")]
         root: Option<PathBuf>,
         /// Write the page here (overwritten).
-        #[arg(long, conflicts_with = "serve")]
+        #[arg(long, conflicts_with_all = ["serve", "document"])]
         out: Option<PathBuf>,
         /// List the registered panels, one per line, and exit.
-        #[arg(long, conflicts_with_all = ["out", "serve"])]
+        #[arg(long, conflicts_with_all = ["out", "serve", "document"])]
         panels: bool,
-        /// Serve the page on loopback and print the URL; each request rebuilds it.
+        /// The document render: write the page as one self-contained file under
+        /// `$XDG_CACHE_HOME/rascal/dash/`, outside the run, and print its absolute path.
+        #[arg(long, conflicts_with = "serve")]
+        document: bool,
+        /// The server render: serve the page on loopback, print the URL as the only stdout line,
+        /// and serve until stdin ends or SIGTERM (exit 0); each request rebuilds the page.
         #[arg(long)]
         serve: bool,
         /// The loopback port for --serve (0 picks a free one).
         #[arg(long, default_value_t = 0)]
         port: u16,
+        /// The one origin allowed to frame the page served by --serve (`http://` or `https://`,
+        /// a host, an optional port); without it, no page may frame it.
+        #[arg(long)]
+        frame_ancestor: Option<String>,
     },
     /// Project a native envelope or a location onto the copied schemas (ADR 0009).
     Export {
@@ -1023,22 +1032,34 @@ fn main() {
         Command::Dash {
             root,
             out,
+            document,
             serve,
             port,
+            frame_ancestor,
             panels,
         } => {
-            let result = match (root, out, serve) {
+            let result = match (root, out, document, serve) {
+                _ if frame_ancestor.is_some() && !serve => Err(Error::usage(
+                    "dash: --frame-ancestor belongs to --serve, the render a host frames",
+                )),
                 _ if panels => {
                     for name in dash::panels().names() {
                         println!("{name}");
                     }
                     Ok(())
                 }
-                (Some(root), Some(out), _) => {
+                (Some(root), Some(out), _, _) => {
                     dash::write(&root, &out).map(|p| println!("{}", p.display()))
                 }
-                (Some(root), None, true) => dash::serve(&root, port),
-                _ => Err(Error::usage("dash: give --out <file> or --serve")),
+                (Some(root), None, true, _) => {
+                    dash::document(&root).map(|p| println!("{}", p.display()))
+                }
+                (Some(root), None, false, true) => {
+                    dash::serve(&root, port, frame_ancestor.as_deref())
+                }
+                _ => Err(Error::usage(
+                    "dash: give --out <file>, --document or --serve",
+                )),
             };
             match result {
                 Ok(()) => exit::OK,

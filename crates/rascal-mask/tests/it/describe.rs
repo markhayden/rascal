@@ -48,11 +48,38 @@ fn assert_v03_shapes(doc: &serde_json::Value) {
         for slot in action["images"].as_array().unwrap() {
             assert!(slot.get("many").is_none(), "{name}: {slot}");
         }
+        // The two renders (3.2): the page served for a host to frame, and the one-file page.
+        // Each runs the tool's own executable, so `command[0]` is `tool.name`.
         let renders = action["renders"].as_array().unwrap();
+        assert_eq!(renders.len(), 2, "{name}");
         let dash = renders.iter().find(|r| r["name"] == "dash").unwrap();
         assert_eq!(dash["kind"], "server", "{name}");
         assert_eq!(dash["ready_timeout_s"], 10, "{name}");
-        assert_eq!(dash["command"][0], "rascal", "{name}");
+        assert_eq!(
+            dash["command"],
+            serde_json::json!([
+                "rascal",
+                "dash",
+                "{run.dir}",
+                "--serve",
+                "--port",
+                "0",
+                "--frame-ancestor",
+                "{frame_ancestor}"
+            ]),
+            "{name}"
+        );
+        let page = renders.iter().find(|r| r["name"] == "page").unwrap();
+        assert_eq!(page["kind"], "document", "{name}");
+        assert!(page.get("ready_timeout_s").is_none(), "{name}");
+        assert_eq!(
+            page["command"],
+            serde_json::json!(["rascal", "dash", "{run.dir}", "--document"]),
+            "{name}"
+        );
+        for render in renders {
+            assert_eq!(render["command"][0], doc["tool"]["name"], "{name}");
+        }
     }
 }
 

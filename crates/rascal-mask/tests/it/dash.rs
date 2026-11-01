@@ -3,6 +3,11 @@
 //! before and after `workspace repair`; every artifact the journal names is embedded as a
 //! `data:` URI that decodes; `RASCAL_LOG` prints one span per op and never a pixel; `--serve`
 //! binds loopback only.
+//!
+//! Task 12.8: the renders a host runs (table-manners 3.2). The server prints only its URL,
+//! sends the frame-ancestors policy for the one origin it was given, and exits 0 when its stdin
+//! closes or on SIGTERM; the document is one self-contained file outside the run directory;
+//! neither changes a byte of the run directory.
 #![allow(clippy::unwrap_used)]
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -377,6 +382,7 @@ fn serve_binds_loopback_only_and_rebuilds_on_each_request() {
     let ws = busy_workspace(&dir);
     let mut child = Command::new(env!("CARGO_BIN_EXE_rascal"))
         .args(["dash", s(&ws), "--serve"])
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -726,5 +732,402 @@ fn a_measure_line_shows_its_series_and_summaries() {
     let at = html.find(&open).unwrap();
     let fan_section = &html[at..html[at..].find("</section>").unwrap() + at];
     assert!(!fan_section.contains("<strong>measures</strong>"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A run directory made by `rascal run`, with its `run.json`.
+fn run_dir(dir: &Path) -> PathBuf {
+    let floor = repo_root().join("fixtures/images/floor.png");
+    let run = dir.join("run");
+    let out = rascal(&[
+        "run",
+        "rect",
+        s(&floor),
+        "--bbox",
+        "0.2,0.2,0.6,0.6",
+        "--out",
+        s(&run),
+    ]);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(run.join("run.json").is_file(), "the run wrote run.json");
+    run
+}
+
+/// Every file and directory under `root`, with each file's bytes: two equal snapshots mean
+/// nothing was added, removed or changed.
+fn snapshot(root: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
+    let mut entries = BTreeMap::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            let rel = path.strip_prefix(root).unwrap().to_path_buf();
+            if path.is_dir() {
+                entries.insert(rel, None);
+                stack.push(path);
+            } else {
+                entries.insert(rel, Some(std::fs::read(&path).unwrap()));
+            }
+        }
+    }
+    entries
+}
+
+/// A server render started as a host starts it: stdin, stdout and stderr piped.
+struct Server {
+    child: std::process::Child,
+    stdout: BufReader<std::process::ChildStdout>,
+    port: u16,
+}
+
+/// Spawns `rascal dash <run> --serve --port 0 [extra]` and reads its one URL line within the
+/// description's `ready_timeout_s`.
+fn start_server(run: &Path, extra: &[&str]) -> Server {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rascal"))
+        .args(["dash", s(run), "--serve", "--port", "0"])
+        .args(extra)
+        .env_remove("RASCAL_LOG")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        let mut line = String::new();
+        let _ = reader.read_line(&mut line);
+        let _ = tx.send((line, reader));
+    });
+    let (line, stdout) = rx
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("the URL line within ready_timeout_s");
+    let url = line
+        .strip_suffix('\n')
+        .unwrap_or_else(|| panic!("one whole line: {line:?}"));
+    let port: u16 = url
+        .strip_prefix("http://127.0.0.1:")
+        .and_then(|rest| rest.strip_suffix('/'))
+        .unwrap_or_else(|| panic!("the line is the URL: {url:?}"))
+        .parse()
+        .unwrap();
+    Server {
+        child,
+        stdout,
+        port,
+    }
+}
+
+/// The response head and body of `GET /`.
+fn get_page(port: u16) -> (String, String) {
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    stream
+        .write_all(b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+        .unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    let (head, body) = response.split_once("\r\n\r\n").unwrap();
+    (head.to_string(), body.to_string())
+}
+
+/// The value of one header in a response head (names compared without case).
+fn header(head: &str, name: &str) -> Vec<String> {
+    head.lines()
+        .skip(1)
+        .filter_map(|l| l.split_once(':'))
+        .filter(|(n, _)| n.trim().eq_ignore_ascii_case(name))
+        .map(|(_, v)| v.trim().to_string())
+        .collect()
+}
+
+/// Waits for the server to exit (bounded) and returns its exit code and whatever else it
+/// printed on stdout after the URL line.
+fn wait_exit(mut server: Server) -> (Option<i32>, String) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let status = loop {
+        if let Some(status) = server.child.try_wait().unwrap() {
+            break status;
+        }
+        if std::time::Instant::now() > deadline {
+            server.child.kill().unwrap();
+            panic!("the server did not exit");
+        }
+        std::thread::yield_now();
+    };
+    let mut rest = String::new();
+    server.stdout.read_to_string(&mut rest).unwrap();
+    (status.code(), rest)
+}
+
+#[test]
+fn the_server_render_prints_its_url_only_frames_for_one_origin_and_ends_with_stdin() {
+    let dir = scratch("server-stdin");
+    let run = run_dir(&dir);
+    let before = snapshot(&run);
+    let mut server = start_server(&run, &["--frame-ancestor", "http://127.0.0.1:4801"]);
+    let (head, body) = get_page(server.port);
+    assert!(head.starts_with("HTTP/1.1 200 OK"), "{head}");
+    assert_eq!(
+        header(&head, "content-security-policy"),
+        vec!["frame-ancestors http://127.0.0.1:4801".to_string()]
+    );
+    assert_page_matches_journal(&body, &journal(&run));
+    drop(server.child.stdin.take());
+    let (code, rest) = wait_exit(server);
+    assert_eq!(code, Some(0), "stdin's end is a clean exit (3.2)");
+    assert_eq!(rest, "", "nothing on stdout but the URL line");
+    assert_eq!(
+        snapshot(&run),
+        before,
+        "the render changed the run directory"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_server_render_ends_cleanly_on_sigterm_and_frames_for_nobody_without_an_origin() {
+    let dir = scratch("server-term");
+    let run = run_dir(&dir);
+    let before = snapshot(&run);
+    let server = start_server(&run, &[]);
+    let (head, _) = get_page(server.port);
+    assert_eq!(
+        header(&head, "content-security-policy"),
+        vec!["frame-ancestors 'none'".to_string()]
+    );
+    let killed = Command::new("kill")
+        .args(["-TERM", &server.child.id().to_string()])
+        .status()
+        .unwrap();
+    assert!(killed.success());
+    let (code, rest) = wait_exit(server);
+    assert_eq!(code, Some(0), "SIGTERM is a clean exit (3.2)");
+    assert_eq!(rest, "", "nothing on stdout but the URL line");
+    assert_eq!(
+        snapshot(&run),
+        before,
+        "the render changed the run directory"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_bad_frame_ancestor_exits_64_before_listening() {
+    let dir = scratch("server-origin");
+    let run = run_dir(&dir);
+    for origin in [
+        "",
+        "127.0.0.1:4801",
+        "ftp://127.0.0.1",
+        "http://",
+        "http://127.0.0.1:4801/",
+        "http://127.0.0.1:4801/page",
+        "http://127.0.0.1:4801?q",
+        "http://127.0.0.1:4801#f",
+        "http://user@127.0.0.1",
+        "http://127.0.0.1:",
+        "http://127.0.0.1:port",
+        "http://127.0.0.1:99999",
+        "http://a b",
+        "http://127.0.0.1:4801; script-src *",
+        "http://127.0.0.1\r\nX-Injected: 1",
+        "'none'",
+        "*",
+    ] {
+        let out = Command::new(env!("CARGO_BIN_EXE_rascal"))
+            .args(["dash", s(&run), "--serve", "--frame-ancestor", origin])
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(64), "{origin:?}");
+        assert!(out.stdout.is_empty(), "{origin:?}: printed a URL");
+    }
+    // Accepted: a scheme, a host and an optional port. With stdin already at its end the
+    // server prints its URL and exits 0 at once.
+    for origin in [
+        "http://127.0.0.1:4801",
+        "https://host.example",
+        "http://localhost",
+    ] {
+        let out = Command::new(env!("CARGO_BIN_EXE_rascal"))
+            .args(["dash", s(&run), "--serve", "--frame-ancestor", origin])
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{origin}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let stdout = String::from_utf8(out.stdout).unwrap();
+        assert_eq!(stdout.lines().count(), 1, "{stdout}");
+        assert!(stdout.starts_with("http://127.0.0.1:"), "{stdout}");
+    }
+    // The origin belongs to the server render only.
+    let out = rascal(&[
+        "dash",
+        s(&run),
+        "--document",
+        "--frame-ancestor",
+        "http://h",
+    ]);
+    assert_eq!(out.status.code(), Some(64));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Every `src`, `href` and `url(` in the page, quoted or not: what a browser would fetch.
+fn references(html: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    for key in ["src=", "href="] {
+        for (i, _) in html.match_indices(key) {
+            let rest = &html[i + key.len()..];
+            let value = match rest.chars().next() {
+                Some(q @ ('"' | '\'')) => rest[1..].split(q).next().unwrap_or(""),
+                _ => rest
+                    .split(|c: char| c.is_whitespace() || c == '>')
+                    .next()
+                    .unwrap_or(""),
+            };
+            found.push(value.to_string());
+        }
+    }
+    for (i, _) in html.match_indices("url(") {
+        let rest = &html[i + 4..];
+        let value = rest.split(')').next().unwrap_or("");
+        found.push(value.trim_matches(|c| c == '"' || c == '\'').to_string());
+    }
+    found
+}
+
+#[test]
+fn the_document_render_is_one_self_contained_file_outside_the_run_directory() {
+    let dir = scratch("document");
+    let run = run_dir(&dir);
+    let before = snapshot(&run);
+    let cache = dir.join("cache");
+    let out = rascal_env(
+        &["dash", s(&run), "--document"],
+        &[("XDG_CACHE_HOME", s(&cache))],
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let path = PathBuf::from(
+        stdout
+            .strip_suffix('\n')
+            .unwrap_or_else(|| panic!("one line: {stdout:?}")),
+    );
+    assert!(
+        !path.to_str().unwrap().contains('\n'),
+        "one line: {stdout:?}"
+    );
+    assert!(path.is_absolute(), "{}", path.display());
+    assert!(path.is_file(), "{}", path.display());
+    let run_json: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(run.join("run.json")).unwrap()).unwrap();
+    let id = run_json["run"]["id"].as_str().unwrap();
+    assert_eq!(
+        path.canonicalize().unwrap(),
+        cache
+            .canonicalize()
+            .unwrap()
+            .join(format!("rascal/dash/{id}.html"))
+    );
+    assert!(
+        !path
+            .canonicalize()
+            .unwrap()
+            .starts_with(run.canonicalize().unwrap())
+    );
+    assert_eq!(
+        snapshot(&run),
+        before,
+        "the render changed the run directory"
+    );
+
+    // Self-contained: everything the page shows is in it.
+    let html = std::fs::read_to_string(&path).unwrap();
+    let lines = journal(&run);
+    assert_page_matches_journal(&html, &lines);
+    assert_every_artifact_embedded(&html, &lines);
+    for reference in references(&html) {
+        assert!(
+            reference.starts_with("data:") || reference.starts_with('#'),
+            "the page names something outside itself: {reference:?}"
+        );
+    }
+    assert!(!html.contains("<link"), "no linked resource");
+    assert!(!html.contains("@import"), "no imported style");
+
+    // Without XDG_CACHE_HOME, the cache is `~/.cache`; rendering again replaces the file.
+    let home = dir.join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
+    command
+        .args(["dash", s(&run), "--document"])
+        .env_remove("XDG_CACHE_HOME")
+        .env("HOME", &home);
+    for _ in 0..2 {
+        let out = command.output().unwrap();
+        assert_eq!(out.status.code(), Some(0));
+        assert_eq!(
+            PathBuf::from(String::from_utf8(out.stdout).unwrap().trim_end())
+                .canonicalize()
+                .unwrap(),
+            home.canonicalize()
+                .unwrap()
+                .join(format!(".cache/rascal/dash/{id}.html"))
+        );
+    }
+    assert_eq!(
+        std::fs::read_dir(home.join(".cache/rascal/dash"))
+            .unwrap()
+            .count(),
+        1,
+        "one file, no temporary left beside it"
+    );
+    assert_eq!(
+        snapshot(&run),
+        before,
+        "the render changed the run directory"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_render_refuses_a_cache_inside_the_run_directory_and_a_missing_run() {
+    let dir = scratch("document-inside");
+    let run = run_dir(&dir);
+    let before = snapshot(&run);
+    let out = rascal_env(
+        &["dash", s(&run), "--document"],
+        &[("XDG_CACHE_HOME", s(&run.join("cache")))],
+    );
+    assert_eq!(out.status.code(), Some(64));
+    assert!(out.stdout.is_empty());
+    assert_eq!(
+        snapshot(&run),
+        before,
+        "the render changed the run directory"
+    );
+    let missing = dir.join("no-such-run");
+    let out = rascal_env(
+        &["dash", s(&missing), "--document"],
+        &[("XDG_CACHE_HOME", s(&dir.join("cache")))],
+    );
+    assert_ne!(out.status.code(), Some(0));
+    assert!(out.stdout.is_empty());
+    assert!(!missing.exists(), "a render creates no run directory");
     let _ = std::fs::remove_dir_all(&dir);
 }
