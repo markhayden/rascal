@@ -995,9 +995,13 @@ whether or not anyone looks. The diagnostic surface reads the journal (and, afte
 rebuilt journal from the records) and nothing else, so it is optional and costs nothing when
 unused. Two forms:
 
-- **The run page.** `rascal dash <run directory or workspace> [--out page.html | --serve]`
-  writes a static page (images embedded, from a template authored here) or serves it on
-  loopback: a timing waterfall with one bar per step in journal order and the filler and pack
+- **The run page.** `rascal dash <run directory or workspace> [--out page.html | --document |
+  --serve [--frame-ancestor <origin>]]` writes a static page (images embedded, from a template
+  authored here), writes it as the contract's document render (one self-contained file under
+  `$XDG_CACHE_HOME/rascal/dash/`, its path the only stdout line), or serves it on loopback as the
+  contract's server render (the URL the only stdout line; framing allowed only to the one origin
+  given; exit 0 when stdin ends or on SIGTERM). A render reads the run and never changes it. The
+  page shows a timing waterfall with one bar per step in journal order and the filler and pack
   calls marked; every artifact as a thumbnail that opens at full size; for a band mask the
   rulers' per-row charts beside the strip they measured; the measures with their series; the
   envelope of every step; the resolved parameters and constant set versions. The page names every journal line (steps, repeated steps, `not_applicable` and failed
@@ -1091,7 +1095,7 @@ rascal measure --before a.png --after b.png --mask run/artifacts/<id> --json
 rascal inspect run/artifacts/<id> --out inspect/ [--replay] [--json]   # --json: the record, zone statistics, identity
 rascal ops list [--json]                                   # every op's manifest as a client sees it
 rascal ops describe fan --json
-rascal dash run/ --out run/dash.html                        # the run page (Diagnostics); --serve for loopback
+rascal dash run/ --out run/dash.html                        # the run page (Diagnostics); --document, --serve
 rascal export --compat run/journal.jsonl --step fan --out fan-envelope.json
 rascal serve --workspace ws/ --config rascal.toml
 rascal workspace list ws/ [--type Mask]

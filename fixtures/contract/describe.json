@@ -87,11 +87,23 @@
             "{run.dir}",
             "--serve",
             "--port",
-            "0"
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
           ],
           "kind": "server",
           "name": "dash",
           "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
         }
       ],
       "title": "Mask a rectangle"
@@ -175,11 +187,23 @@
             "{run.dir}",
             "--serve",
             "--port",
-            "0"
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
           ],
           "kind": "server",
           "name": "dash",
           "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
         }
       ],
       "title": "Heal a seam"
@@ -277,11 +301,23 @@
             "{run.dir}",
             "--serve",
             "--port",
-            "0"
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
           ],
           "kind": "server",
           "name": "dash",
           "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
         }
       ],
       "title": "Remove an object"
@@ -391,11 +427,23 @@
             "{run.dir}",
             "--serve",
             "--port",
-            "0"
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
           ],
           "kind": "server",
           "name": "dash",
           "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
         }
       ],
       "title": "Remove what a prompt names"
@@ -487,11 +535,23 @@
             "{run.dir}",
             "--serve",
             "--port",
-            "0"
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
           ],
           "kind": "server",
           "name": "dash",
           "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
         }
       ],
       "title": "Repair a scratch"
@@ -584,11 +644,23 @@
             "{run.dir}",
             "--serve",
             "--port",
-            "0"
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
           ],
           "kind": "server",
           "name": "dash",
           "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
         }
       ],
       "title": "Repair a stain"
@@ -678,11 +750,23 @@
             "{run.dir}",
             "--serve",
             "--port",
-            "0"
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
           ],
           "kind": "server",
           "name": "dash",
           "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
         }
       ],
       "title": "Protect an earlier edit"

@@ -94,7 +94,7 @@ rascal export --compat run/journal.jsonl --step rasterize --out e.json
 rascal workspace export-mask run/ mask-6 --out seam.mask.tar   # a Mask as one hash-checked file (ADR 0022)
 rascal workspace import-mask ws/ seam.mask.tar                 # into another workspace, same identity; a PNG is refused
 rascal workspace import-location ws/ finding.json --image img-1   # a location as JSON, checked against the image
-rascal dash run/ --out run/dash.html                     # the run page: timings, envelopes, every artifact; --serve for loopback
+rascal dash run/ --out run/dash.html                     # the run page: timings, envelopes, every artifact; --document, --serve
 rascal describe --json                                    # what rascal can run, in the shared contract's words
 rascal playground                                         # open Wafflery, the shared program (separate)
 rascal serve --workspace ws/                              # every op as an MCP tool over stdio, plus import/list/describe/read/dash,

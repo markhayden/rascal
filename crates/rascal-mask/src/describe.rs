@@ -27,6 +27,39 @@ pub const PROGRESS_INTERVAL_S: u32 = 10;
 /// The longest a host waits for the dash render's URL line, in seconds (3.2).
 pub const DASH_READY_TIMEOUT_S: u32 = 10;
 
+/// Every action's renders (3.2), each running `rascal` itself (`tool.name`): `dash`, the page
+/// served on loopback for the host's origin to frame, and `page`, the same page as one
+/// self-contained file. `{run.dir}` and `{frame_ancestor}` are whole arguments.
+fn renders() -> Vec<Render> {
+    vec![
+        Render {
+            name: "dash".to_string(),
+            kind: RenderKind::Server,
+            ready_timeout_s: Some(DASH_READY_TIMEOUT_S),
+            command: [
+                "rascal",
+                "dash",
+                "{run.dir}",
+                "--serve",
+                "--port",
+                "0",
+                "--frame-ancestor",
+                "{frame_ancestor}",
+            ]
+            .map(str::to_string)
+            .to_vec(),
+        },
+        Render {
+            name: "page".to_string(),
+            kind: RenderKind::Document,
+            ready_timeout_s: None,
+            command: ["rascal", "dash", "{run.dir}", "--document"]
+                .map(str::to_string)
+                .to_vec(),
+        },
+    ]
+}
+
 /// What the segmenter's detection score is, in a location's `score_kind` (9.2).
 pub const SEGMENT_SCORE_KIND: &str = "owlv2-detection";
 
@@ -225,14 +258,7 @@ pub fn description(setup: &Setup<'_>) -> Result<Description> {
                 typical_s: if found { 20.0 } else { 5.0 },
                 max_s,
             },
-            renders: vec![Render {
-                name: "dash".to_string(),
-                kind: RenderKind::Server,
-                ready_timeout_s: Some(DASH_READY_TIMEOUT_S),
-                command: ["rascal", "dash", "{run.dir}", "--serve", "--port", "0"]
-                    .map(str::to_string)
-                    .to_vec(),
-            }],
+            renders: renders(),
         });
     }
     Ok(Description {

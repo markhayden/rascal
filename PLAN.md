@@ -2126,13 +2126,13 @@ renders become `{name: "dash", kind: "server", ready_timeout_s: 10, command: ["r
 "page", kind: "document", command: ["rascal", "dash", "{run.dir}", "--document"]}`.
 
 **Acceptance.**
-- [ ] Spawned with piped stdin, the server prints one URL line within the timeout and no other
+- [x] Spawned with piped stdin, the server prints one URL line within the timeout and no other
       stdout; a request gets the CSP header with the given origin; closing stdin ends it with exit
       0; SIGTERM ends it with exit 0; a bad origin exits 64 before listening.
-- [ ] `--document` prints one absolute path, and nothing else, to a file that exists outside the
+- [x] `--document` prints one absolute path, and nothing else, to a file that exists outside the
       run directory and leaves the run directory's listing unchanged; the file is self-contained
       (no `src`, `href` or `url(` names anything but a `data:` URI or an in-page anchor).
-- [ ] The description's renders validate (server with `ready_timeout_s`, document without), and
+- [x] The description's renders validate (server with `ready_timeout_s`, document without), and
       each render's `command[0]` is the description's `tool.name`.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- dash::

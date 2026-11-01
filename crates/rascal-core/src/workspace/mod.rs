@@ -141,15 +141,40 @@ impl Workspace {
             fs,
         };
         ws.sweep_staging();
-        if let Some(n) = ws.read_current()? {
-            let generation = ws.read_generation(n)?;
+        ws.refuse_missing_payloads()?;
+        Ok(ws)
+    }
+
+    /// Opens an existing directory for reading only: no layout is created and no staging is
+    /// swept, so a reader (the run page and its renders) never changes a byte of it. A
+    /// generation naming a missing artifact is refused as [`Workspace::open`] refuses it.
+    pub fn open_read_only(root: &Path) -> Result<Workspace> {
+        let meta = std::fs::metadata(root).map_err(|e| Error::io(root, e))?;
+        if !meta.is_dir() {
+            return Err(Error::usage(format!(
+                "{}: not a run directory or workspace",
+                root.display()
+            )));
+        }
+        let ws = Workspace {
+            root: root.to_path_buf(),
+            fs: Arc::new(RealFs),
+        };
+        ws.refuse_missing_payloads()?;
+        Ok(ws)
+    }
+
+    /// Refuses the workspace when its current generation names an artifact missing on disk.
+    fn refuse_missing_payloads(&self) -> Result<()> {
+        if let Some(n) = self.read_current()? {
+            let generation = self.read_generation(n)?;
             for entry in &generation.artifacts {
-                if !ws.root.join(&entry.path).exists() {
+                if !self.root.join(&entry.path).exists() {
                     return Err(Error::Op {
                         op: "workspace".to_string(),
                         message: format!(
                             "{}: generation {n} names {} ({}) but {} is missing; run `rascal workspace repair`",
-                            ws.root.display(),
+                            self.root.display(),
                             entry.id,
                             entry.identity,
                             entry.path
@@ -158,7 +183,7 @@ impl Workspace {
                 }
             }
         }
-        Ok(ws)
+        Ok(())
     }
 
     /// Removes staging directories nobody owns.
