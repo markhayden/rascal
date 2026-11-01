@@ -991,8 +991,8 @@ behind the tool.
 
 ## External interface (table-manners)
 
-rascal conforms to **table-manners** v0.1.0 (https://github.com/markhayden/table-manners; ADR
-0020, decision 13), the shared contract of the owner's tools: what an agent, a script or the
+rascal conforms to **table-manners** v0.1.0 and moves to v0.2.0 in milestone M11
+(https://github.com/markhayden/table-manners; ADR 0020, decisions 13 and 14), the shared contract of the owner's tools: what an agent, a script or the
 playground sees from outside is the same for squint, rascal and the tools after them, so they
 chain in one pipeline without glue code. The contract's text is the specification of that
 surface; this section is rascal's mapping onto it, built in milestone M8 (PLAN.md;
@@ -1005,7 +1005,8 @@ surface; this section is rascal's mapping onto it, built in milestone M8 (PLAN.m
 | images in: `path` or `inline`, optional `expect`; images out: role, reference, one locator | an implicit, journaled import; `images.out` with `source`, `mask`, `result` |
 | the result header and `run.json` | every `run` and `heal` writes it atomically and last; the body holds the envelope statuses, the outputs by role and the heal report |
 | `describe --json`, the `describe` tool | one action per shipped recipe, plus `estimate` |
-| `serve`: action tools, `isError` results, progress heartbeat, cancellation, run resources, the runs list, caps and budget | beside the op tools of ADR 0015, which keep their envelopes in v0.1 |
+| `serve`: action tools, `isError` results, progress heartbeat, cancellation, run resources, the runs list, caps and budget | beside the op tools of ADR 0015, which keep their envelopes |
+| v0.2: the run's reference in `run.json`, the runs list and progress `_meta`; correlation ids and the `client_run_id_reused` refusal; reserve and settle; not sent, known and unresolved spend; `rascal://runs{?cursor}`; `rascal://session` | M11: the ids persisted at allocation, claimed when a call is accepted; the session a UUID per `serve` |
 | exit codes 0, 3, 64, 130, 143; 1 under `--strict` | as before, plus the signals |
 | `playground` | hands off to Wafflehouse, the shared program (its launcher agreement, H1); no UI in rascal |
 

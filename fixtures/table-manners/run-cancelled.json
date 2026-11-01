@@ -1,0 +1,69 @@
+{
+  "action": "seam",
+  "body": {
+    "recipe": "seam",
+    "stopped_before": "paste"
+  },
+  "cache": "off",
+  "contract": "0.2.0",
+  "duration_ms": 0,
+  "error": null,
+  "finished": "2026-01-01T00:00:00.000Z",
+  "images": {
+    "in": [
+      {
+        "image": {
+          "file_sha256": "6b2cc035c6a965b3acc1b302f368c5976fe2073d0dc5edb651f3e8f56993d3c4",
+          "height": 400,
+          "pixel_sha256": "894b4c9db72b3252f86d31c4c5c5539b2e62db427b1465940b749bfddc26b66b",
+          "projection": "equirectangular",
+          "topology": "wrap",
+          "width": 800
+        },
+        "role": "source",
+        "slot": "image"
+      }
+    ],
+    "out": [
+      {
+        "image": {
+          "file_sha256": "b5dfa6acb21fbf4a6ed2b7961ec840f20495e0e2c6a225fb2e95dbaed14d9013",
+          "height": 400,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 112
+        },
+        "path": "/runs/run-1767225600003-1/seam-grey.png",
+        "role": "mask"
+      }
+    ]
+  },
+  "input_identity": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "locations": {
+    "found": [],
+    "used": []
+  },
+  "notes": [
+    "filler call started: {\"filler\":\"slow\",\"spend_usd\":0.04}",
+    "filler call: {\"filler\":\"slow\",\"target\":\"/rascal/target/debug/rascal fake-filler slow {image} {mask} {out}\",\"request_width\":112,\"request_height\":400,\"request_bytes\":34089,\"response_bytes\":38363,\"duration_ms\":0,\"status\":0,\"outcome\":\"ok\",\"charge\":\"known\"}",
+    "fill stored: {\"request\":\"sha256:bea027a9d987529c3493afc03c99979900a192483d236377292bd568fc457973\",\"fill\":\"sha256:8ea650419700c8457757321c4e7761027c13b36e320df95f0e9ede5a92eb9031\",\"filler\":\"slow\",\"revision\":\"slow\"}"
+  ],
+  "run": {
+    "client_run_id": "fixture.cancelled",
+    "dir": "/runs/run-1767225600003-1",
+    "id": "run-1767225600003-1",
+    "resource": "rascal://run/run-1767225600003-1/run.json",
+    "session_id": "00000000-0000-4000-8000-000000000001"
+  },
+  "spend": {
+    "basis": "estimated",
+    "unresolved_usd": 0.0,
+    "usd": 0.04
+  },
+  "started": "2026-01-01T00:00:00.000Z",
+  "status": "cancelled",
+  "tool": {
+    "name": "rascal",
+    "version": "0.1.0"
+  }
+}

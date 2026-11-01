@@ -23,6 +23,15 @@ else bad "contract check did not warn on a newer release: $out"; fi
 out="$(CONTRACT_LATEST=0.0.1 scripts/check-contract.sh 2>&1)"
 if grep -q 'is the newest' <<< "$out"; then ok
 else bad "contract check warned on an older release: $out"; fi
+manifest="$(mktemp)"
+printf 'table-manners = { path = "../table-manners", version = "=0.2.0" }\n' > "$manifest"
+out="$(CONTRACT_MANIFEST="$manifest" CONTRACT_LATEST=0.2.0 scripts/check-contract.sh 2>&1)"
+if grep -q 'table-manners 0.2.0 is the newest' <<< "$out"; then ok
+else bad "contract check did not read a path pin's version: $out"; fi
+printf 'table-manners = { path = "../table-manners" }\n' > "$manifest"
+if CONTRACT_MANIFEST="$manifest" CONTRACT_LATEST=0.2.0 scripts/check-contract.sh > /dev/null 2>&1; then
+  bad "contract check accepted a path pin without an exact version"; else ok; fi
+rm -f "$manifest"
 
 # --- packaging --------------------------------------------------------------------------------
 probe="$(mktemp -d)"; mkdir -p "$probe/crate/src" "$probe/crate/assets"

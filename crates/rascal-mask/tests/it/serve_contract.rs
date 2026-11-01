@@ -1,6 +1,6 @@
 //! Task 8.5 (ADR 0020): `rascal serve` under table-manners, driven by the independent client:
 //! `describe`; a `seam` action healed through the fake filler with progress strictly increasing
-//! and the first notification naming the run; the run as resources (the list, run.json, an
+//! and every notification naming the run in `_meta`; the run as resources (the list, run.json, an
 //! image); an image that does not match its `expect` is an `invalid` result; a relative path is
 //! refused; a cancelled call gets no result and its run says `cancelled`.
 #![cfg(feature = "testkit")]
@@ -9,6 +9,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use rascal_core::contract::table_manners;
 use rascal_testkit::mcp_client::{Client, Failure, base64_decode};
 
 fn repo_root() -> PathBuf {
@@ -28,7 +29,7 @@ fn config(dir: &Path) -> PathBuf {
     std::fs::write(
         &path,
         format!(
-            "config_version = 1\n[fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"fake\"\n\n[fillers.slow]\ncommand = [{bin:?}, \"fake-filler\", \"slow\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"slow\"\nspend_usd_per_call = 0.04\n"
+            "config_version = 1\n[fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"fake\"\n\n[fillers.slow]\ncommand = [{bin:?}, \"fake-filler\", \"slow\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"slow\"\nspend_usd_per_call = 0.04\n\n[fillers.failing]\ncommand = [{bin:?}, \"fake-filler\", \"failing\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"failing\"\nspend_usd_per_call = 0.04\n"
         ),
     )
     .unwrap();
@@ -49,6 +50,51 @@ fn start(dir: &Path) -> Client {
         ])
         .env_remove("RASCAL_LOG");
     Client::start(&mut command).unwrap()
+}
+
+struct Embedded;
+
+impl jsonschema::Retrieve for Embedded {
+    fn retrieve(
+        &self,
+        uri: &jsonschema::Uri<String>,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        let text = table_manners::SCHEMAS
+            .iter()
+            .find(|(id, _)| *id == uri.as_str())
+            .map(|(_, text)| *text)
+            .ok_or_else(|| format!("no embedded schema {uri}"))?;
+        Ok(serde_json::from_str(text)?)
+    }
+}
+
+/// Asserts `value` is valid against the contract's schema `id`.
+fn valid(id: &str, value: &serde_json::Value) {
+    let (_, text) = table_manners::SCHEMAS
+        .iter()
+        .find(|(i, _)| *i == id)
+        .unwrap();
+    let schema: serde_json::Value = serde_json::from_str(text).unwrap();
+    let validator = jsonschema::options()
+        .with_retriever(Embedded)
+        .build(&schema)
+        .unwrap();
+    let errors: Vec<String> = validator
+        .iter_errors(value)
+        .map(|e| e.to_string())
+        .collect();
+    assert!(errors.is_empty(), "{id}: {errors:?}\n{value:#}");
+}
+
+/// `rascal://session`, valid against the contract's session schema.
+fn session(client: &mut Client) -> serde_json::Value {
+    let text = read_resource(client, "rascal://session")["text"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+    valid("urn:table-manners:core:session", &value);
+    value
 }
 
 fn read_resource(client: &mut Client, uri: &str) -> serde_json::Value {
@@ -109,14 +155,24 @@ fn an_action_runs_with_progress_and_its_run_is_a_resource() {
         .collect();
     assert!(values.windows(2).all(|w| w[1] > w[0]), "{values:?}");
     let run_id = structured["run"]["id"].as_str().unwrap().to_string();
-    assert!(
-        progress[0]["params"]["message"]
-            .as_str()
-            .unwrap()
-            .contains(&format!("rascal://run/{run_id}/run.json")),
-        "{:#}",
-        progress[0]
-    );
+    // Every notification names the run in `_meta`, as the result's reference without `dir`;
+    // the words are for people and never carry it (table-manners 4.1).
+    let mut reference = structured["run"].clone();
+    reference.as_object_mut().unwrap().remove("dir");
+    for n in &progress {
+        assert_eq!(
+            n["params"]["_meta"]["table-manners/run"], reference,
+            "{n:#}"
+        );
+        assert!(
+            !n["params"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("rascal://"),
+            "{n:#}"
+        );
+    }
+    valid("urn:table-manners:core:run-ref", &reference);
     assert!(
         progress
             .iter()
@@ -240,8 +296,10 @@ fn a_cancelled_call_gets_no_result_and_its_run_says_cancelled() {
             break message;
         }
     };
-    let text = first["params"]["message"].as_str().unwrap().to_string();
-    let run_id = text.split_whitespace().nth(1).unwrap().to_string();
+    let run_id = first["params"]["_meta"]["table-manners/run"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
     // Let the run reach the slow fill before cancelling: the call is journaled as started.
     let reached = std::time::Instant::now();
     // The journal is a resource once the run has written its first line.
@@ -304,7 +362,7 @@ fn a_cancelled_call_gets_no_result_and_its_run_says_cancelled() {
     // The run stops before its next step; a filler call already in flight runs to its end, and
     // its price stays spent: cancelling does not erase the cost (task 9.1).
     assert_eq!(stored["spend"]["usd"], 0.04, "{stored:#}");
-    assert!(stored["body"].get("spend_unresolved_usd").is_none());
+    assert_eq!(stored["spend"]["unresolved_usd"], 0.0);
     // The run stops before its next step; a filler call already in flight runs to its end.
     assert!(
         stored["body"]["stopped_before"]
@@ -478,9 +536,11 @@ fn concurrent_calls_reserve_the_budget_atomically() {
             .unwrap()
     };
     let after = estimate(&mut client);
-    assert_eq!(after["session_spent_usd"], 0.04, "{after:#}");
-    assert_eq!(after["session_reserved_usd"], 0.0);
-    assert_eq!(after["allowed"], false);
+    assert_eq!(after["allowed"], false, "{after:#}");
+    let ledger = session(&mut client);
+    assert_eq!(ledger["spent_usd"], 0.04, "{ledger:#}");
+    assert_eq!(ledger["reserved_usd"], 0.0);
+    assert_eq!(ledger["remaining_usd"], 0.01);
     client.close().unwrap();
 
     // A run under way holds its worst case: with a budget for two, a second call is allowed
@@ -518,13 +578,13 @@ fn concurrent_calls_reserve_the_budget_atomically() {
         }
     }
     let held = estimate(&mut client);
-    assert_eq!(held["session_reserved_usd"], 0.04, "{held:#}");
-    assert_eq!(held["allowed"], true);
+    assert_eq!(held["allowed"], true, "{held:#}");
+    assert_eq!(session(&mut client)["reserved_usd"], 0.04);
     let got = responses(&mut client, &[a]);
     assert_eq!(got[&a]["result"]["structuredContent"]["spend"]["usd"], 0.04);
-    let settled = estimate(&mut client);
-    assert_eq!(settled["session_reserved_usd"], 0.0, "{settled:#}");
-    assert_eq!(settled["session_spent_usd"], 0.04);
+    let settled = session(&mut client);
+    assert_eq!(settled["reserved_usd"], 0.0, "{settled:#}");
+    assert_eq!(settled["spent_usd"], 0.04);
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -553,8 +613,10 @@ fn reads_answer_while_a_run_holds_the_permit_and_the_run_is_listed() {
             break message;
         }
     };
-    let text = first["params"]["message"].as_str().unwrap().to_string();
-    let run_id = text.split_whitespace().nth(1).unwrap().to_string();
+    let run_id = first["params"]["_meta"]["table-manners/run"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
     // Listed, running, from its first notification.
     let runs = client
         .request(
@@ -599,6 +661,379 @@ fn reads_answer_while_a_run_holds_the_permit_and_the_run_is_listed() {
         }
     }
     assert_eq!(order.last(), Some(&run), "the reads waited for the run");
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 11.2 (table-manners 4.6): `rascal://session` is one atomic observation of the server's
+/// ledger under a random UUID per process. Uncapped, the budget and what remains are both null;
+/// it answers while a run holds the permit and shows the run's reservation; a run carries its
+/// server's session id; an unresolved charge is counted in `unresolved_usd` and in `spent_usd`.
+#[test]
+fn the_session_is_one_observation_of_the_servers_ledger() {
+    let dir = scratch("session");
+    let mut client = start(&dir);
+    let resources = client
+        .request("resources/list", serde_json::json!({}))
+        .unwrap();
+    assert!(
+        resources["resources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r["uri"] == "rascal://session"),
+        "{resources:#}"
+    );
+    let described = client
+        .call("describe", serde_json::json!({}))
+        .unwrap()
+        .structured
+        .unwrap();
+    assert!(
+        described["resources"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("rascal://session"))
+    );
+    let first = session(&mut client);
+    let id = first["id"].as_str().unwrap().to_string();
+    assert_eq!(first["budget_usd"], serde_json::Value::Null);
+    assert_eq!(first["remaining_usd"], serde_json::Value::Null);
+    assert_eq!(first["spent_usd"], 0.0);
+
+    // While a run holds the permit, the session answers and shows its reservation.
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let run = client
+        .begin(
+            "tools/call",
+            serde_json::json!({
+                "name": "seam",
+                "arguments": { "image": { "path": pano.to_str().unwrap() }, "filler": "slow" },
+                "_meta": { "progressToken": "session" }
+            }),
+        )
+        .unwrap();
+    loop {
+        let message = client.next_message().unwrap();
+        if message["method"] == "notifications/progress" {
+            break;
+        }
+    }
+    let held = session(&mut client);
+    assert_eq!(held["reserved_usd"], 0.04, "{held:#}");
+    assert_eq!(held["id"], id.as_str());
+    let got = responses(&mut client, &[run]);
+    let result = &got[&run]["result"]["structuredContent"];
+    assert_eq!(result["run"]["session_id"], id.as_str(), "{result:#}");
+    let settled = session(&mut client);
+    assert_eq!(settled["spent_usd"], 0.04, "{settled:#}");
+    assert_eq!(settled["reserved_usd"], 0.0);
+    assert_eq!(settled["unresolved_usd"], 0.0);
+
+    // A filler that fails after the request was sent leaves its charge unresolved.
+    let failed = client
+        .call(
+            "seam",
+            serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "failing" }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    assert_eq!(failed["spend"]["unresolved_usd"], 0.04, "{failed:#}");
+    let after = session(&mut client);
+    assert_eq!(after["unresolved_usd"], 0.04, "{after:#}");
+    assert_eq!(after["spent_usd"], 0.08);
+    client.close().unwrap();
+
+    // Another server is another session.
+    let mut other = start(&dir);
+    assert_ne!(session(&mut other)["id"], id.as_str());
+    other.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A `seam` call through the slow filler with a progress token and, when given, a correlation id.
+fn seam_call(token: &str, client_run_id: Option<&str>) -> serde_json::Value {
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let mut meta = serde_json::json!({ "progressToken": token });
+    if let Some(id) = client_run_id {
+        meta["table-manners/client_run_id"] = serde_json::json!(id);
+    }
+    serde_json::json!({
+        "name": "seam",
+        "arguments": { "image": { "path": pano.to_str().unwrap() }, "filler": "slow" },
+        "_meta": meta
+    })
+}
+
+/// The runs list, valid against the contract.
+fn runs(client: &mut Client) -> serde_json::Value {
+    let text = read_resource(client, "rascal://runs")["text"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+    valid("urn:table-manners:core:runs", &value);
+    value
+}
+
+/// A JSON-RPC error that refuses a reused correlation id: `-32602` with valid refusal data.
+fn refusal(message: &serde_json::Value) -> serde_json::Value {
+    assert_eq!(message["error"]["code"], -32602, "{message:#}");
+    let data = message["error"]["data"].clone();
+    valid("urn:table-manners:core:refusal", &data);
+    assert_eq!(data["reason"], "client_run_id_reused");
+    data
+}
+
+/// Task 11.3 (table-manners 4.4): a correlation id is claimed when the call is accepted. Two
+/// calls with one id give one run and one refusal; the run is listed `running` with its ids from
+/// allocation; a reuse after it ended names it; a malformed id is refused before any run; a call
+/// without one has `client_run_id: null`.
+#[test]
+fn a_correlation_id_runs_at_most_once_and_a_reuse_names_the_earlier_run() {
+    let dir = scratch("correlation");
+    let mut client = start(&dir);
+    let first = client
+        .begin("tools/call", seam_call("one", Some("host-7f3a.attempt:1")))
+        .unwrap();
+    let named = loop {
+        let message = client.next_message().unwrap();
+        if message["method"] == "notifications/progress" {
+            break message["params"]["_meta"]["table-manners/run"].clone();
+        }
+    };
+    let second = client
+        .begin("tools/call", seam_call("two", Some("host-7f3a.attempt:1")))
+        .unwrap();
+    // The duplicate is refused at once, while the first is still under way, with its run.
+    let got = responses(&mut client, &[second]);
+    assert_eq!(refusal(&got[&second])["run"], named);
+    let listed = runs(&mut client);
+    let running: Vec<&serde_json::Value> = listed["runs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["client_run_id"] == "host-7f3a.attempt:1")
+        .collect();
+    assert_eq!(running.len(), 1, "{listed:#}");
+    assert_eq!(running[0]["status"], "running");
+    let got = responses(&mut client, &[first]);
+    let result = got[&first]["result"]["structuredContent"].clone();
+    assert_eq!(result["status"], "completed", "{result:#}");
+    assert_eq!(result["run"]["client_run_id"], "host-7f3a.attempt:1");
+    let mut reference = result["run"].clone();
+    reference.as_object_mut().unwrap().remove("dir");
+    assert_eq!(named, reference);
+    // A reuse after the run ended names it.
+    let third = client
+        .begin(
+            "tools/call",
+            seam_call("three", Some("host-7f3a.attempt:1")),
+        )
+        .unwrap();
+    let got = responses(&mut client, &[third]);
+    assert_eq!(refusal(&got[&third])["run"], reference);
+    // A malformed id is refused before any run.
+    let bad = client
+        .begin("tools/call", seam_call("four", Some("not valid")))
+        .unwrap();
+    let got = responses(&mut client, &[bad]);
+    assert_eq!(got[&bad]["error"]["code"], -32602, "{:#}", got[&bad]);
+    // One run in all, and a call without an id has `client_run_id: null`.
+    assert_eq!(runs(&mut client)["runs"].as_array().unwrap().len(), 1);
+    let plain = client.begin("tools/call", seam_call("five", None)).unwrap();
+    let got = responses(&mut client, &[plain]);
+    let plain = &got[&plain]["result"]["structuredContent"];
+    assert_eq!(
+        plain["run"]["client_run_id"],
+        serde_json::Value::Null,
+        "{plain:#}"
+    );
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Tasks 11.3 and 11.4 (table-manners 4.1, 4.2, 4.4): a call queued behind the permit sends no
+/// notification naming a run; cancelled there, it leaves no run, and its correlation id stays
+/// claimed, so a retry under the same id is refused with `run: null`.
+#[test]
+fn a_call_cancelled_while_queued_leaves_no_run_and_keeps_its_id_claimed() {
+    let dir = scratch("queued");
+    let mut client = start(&dir);
+    let holder = client
+        .begin("tools/call", seam_call("holder", None))
+        .unwrap();
+    loop {
+        let message = client.next_message().unwrap();
+        if message["method"] == "notifications/progress" {
+            break;
+        }
+    }
+    let queued = client
+        .begin("tools/call", seam_call("queued", Some("retry-me")))
+        .unwrap();
+    client
+        .notify(
+            "notifications/cancelled",
+            serde_json::json!({ "requestId": queued, "reason": "test" }),
+        )
+        .unwrap();
+    // Everything up to the holder's answer: nothing for the queued call names a run.
+    let mut seen = Vec::new();
+    loop {
+        let message = client.next_message().unwrap();
+        if message.get("id").and_then(|v| v.as_u64()) == Some(holder) {
+            break;
+        }
+        seen.push(message);
+    }
+    assert!(
+        seen.iter()
+            .filter(|m| m["params"]["progressToken"] == "queued")
+            .all(|m| m["params"]["_meta"].get("table-manners/run").is_none()),
+        "{seen:#?}"
+    );
+    assert!(
+        !seen
+            .iter()
+            .any(|m| m.get("id").and_then(|v| v.as_u64()) == Some(queued)
+                && m.get("result").is_some()),
+        "the cancelled call got a result"
+    );
+    let listed = runs(&mut client);
+    assert_eq!(listed["runs"].as_array().unwrap().len(), 1, "{listed:#}");
+    assert!(
+        listed["runs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["client_run_id"].is_null())
+    );
+    let retry = client
+        .begin("tools/call", seam_call("retry", Some("retry-me")))
+        .unwrap();
+    let got = responses(&mut client, &[retry]);
+    assert_eq!(refusal(&got[&retry])["run"], serde_json::Value::Null);
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A run directory as `serve` allocates one, with its association, for a listing test.
+fn allocated(runs: &Path, ms: u128) -> String {
+    let id = format!("run-{ms}-4242");
+    std::fs::create_dir_all(runs.join(&id)).unwrap();
+    std::fs::create_dir_all(runs.join(format!("{id}.in"))).unwrap();
+    std::fs::write(
+        runs.join(format!("{id}.in/association.json")),
+        r#"{"action":"seam","session_id":null,"client_run_id":null}"#,
+    )
+    .unwrap();
+    id
+}
+
+/// One page of the runs list, valid against the contract.
+fn page(client: &mut Client, uri: &str) -> serde_json::Value {
+    let text = read_resource(client, uri)["text"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+    valid("urn:table-manners:core:runs", &value);
+    value
+}
+
+/// Task 11.5 (table-manners 4.3): `rascal://runs{?cursor}` pages newest first, 50 a page, with
+/// no gap or repeat and a null `next_cursor` on the last; a run started after page one was read
+/// is on a fresh page one, not on a later page; a cursor that is not a run id is a resource error.
+#[test]
+fn the_runs_list_pages_by_cursor() {
+    let dir = scratch("pages");
+    let runs_root = dir.join("runs");
+    let mut made: Vec<String> = (0..120)
+        .map(|i| allocated(&runs_root, 1_793_000_000_000 + i))
+        .collect();
+    made.reverse();
+    let mut client = start(&dir);
+    let described = client
+        .call("describe", serde_json::json!({}))
+        .unwrap()
+        .structured
+        .unwrap();
+    assert!(
+        described["resources"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("rascal://runs{?cursor}"))
+    );
+    let first = page(&mut client, "rascal://runs");
+    let mut seen: Vec<String> = Vec::new();
+    let mut current = first.clone();
+    let mut pages = 0;
+    loop {
+        pages += 1;
+        let entries = current["runs"].as_array().unwrap();
+        assert!(entries.len() <= 50);
+        seen.extend(
+            entries
+                .iter()
+                .map(|r| r["id"].as_str().unwrap().to_string()),
+        );
+        match current["next_cursor"].as_str() {
+            Some(cursor) => {
+                assert!(
+                    cursor
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b"._~-".contains(&b))
+                );
+                current = page(&mut client, &format!("rascal://runs?cursor={cursor}"));
+            }
+            None => break,
+        }
+    }
+    assert_eq!(pages, 3);
+    assert_eq!(seen, made, "a gap, a repeat or the wrong order");
+
+    // A run started after page one was read: not on page two, but on a fresh page one.
+    let late = allocated(&runs_root, 1_793_000_000_500);
+    let cursor = first["next_cursor"].as_str().unwrap().to_string();
+    let second = page(&mut client, &format!("rascal://runs?cursor={cursor}"));
+    assert!(
+        !second["runs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r["id"] == late.as_str())
+    );
+    let fresh = page(&mut client, "rascal://runs");
+    assert_eq!(fresh["runs"][0]["id"], late.as_str());
+
+    // A cursor that is not a run id is an error, not an empty page.
+    let bad = client.request(
+        "resources/read",
+        serde_json::json!({ "uri": "rascal://runs?cursor=nonsense" }),
+    );
+    assert!(bad.is_err(), "{bad:?}");
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Every tool's input schema compiles on its own as a JSON Schema (2020-12, MCP's default), so a
+/// strict client can discover rascal: no reference that points outside the schema it sits in.
+#[test]
+fn every_tool_input_schema_stands_alone() {
+    let dir = scratch("schemas");
+    let mut client = start(&dir);
+    // The check catches the failure it is for: a reference to a definition that is not there.
+    let dangling = serde_json::json!({ "properties": { "kind": { "$ref": "#/$defs/Kind" } } });
+    assert!(jsonschema::options().build(&dangling).is_err());
+    let tools = client.list_tools().unwrap();
+    assert!(tools.len() > 10, "{}", tools.len());
+    for tool in &tools {
+        if let Err(error) = jsonschema::options().build(&tool.input_schema) {
+            panic!("{}: {error}\n{:#}", tool.name, tool.input_schema);
+        }
+    }
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }

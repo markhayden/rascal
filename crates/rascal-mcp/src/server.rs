@@ -61,18 +61,21 @@ pub trait Actions: Send + Sync {
     fn tools(&self) -> Vec<Tool>;
     /// Whether a tool name is one of them.
     fn handles(&self, name: &str) -> bool;
-    /// Whether a call holds the call permit while it works: a run does; a read (`describe`,
-    /// `estimate`) does not, so it answers while a run is under way.
+    /// Whether a call is a run: it holds the call permit while it works and may carry a
+    /// correlation id; a read (`describe`, `estimate`) does neither, so it answers while a run is
+    /// under way.
     fn exclusive(&self, name: &str) -> bool;
-    /// Runs one. `progress` takes a line about each step; `cancel` is set when the client
-    /// cancels. `Err` is a failure before a run exists (a JSON-RPC error); a run's own outcome,
-    /// `invalid` and `error` included, is an `ActionResult`. A cancelled run returns `Err`, and
-    /// the server sends no result for it.
+    /// Runs one. `client_run_id` is the caller's correlation id, already claimed (table-manners
+    /// 4.4); `progress` takes the run's reference at allocation, then a line about each step;
+    /// `cancel` is set when the client cancels. `Err` is a failure before a run exists (a
+    /// JSON-RPC error); a run's own outcome, `invalid` and `error` included, is an
+    /// `ActionResult`. A cancelled run returns `Err`, and the server sends no result for it.
     fn call(
         &self,
         name: &str,
         args: &serde_json::Map<String, serde_json::Value>,
-        progress: &(dyn Fn(String) + Send + Sync),
+        client_run_id: Option<&str>,
+        progress: &(dyn Fn(Progress) + Send + Sync),
         cancel: Arc<rascal_core::workspace::Cancel>,
     ) -> std::result::Result<ActionResult, String>;
     /// Fixed resources (`rascal://runs`).
@@ -81,6 +84,30 @@ pub trait Actions: Send + Sync {
     fn templates(&self) -> Vec<ResourceTemplate>;
     /// A resource by URI, when there is one.
     fn read(&self, uri: &str) -> Option<ResourceBody>;
+}
+
+/// What an action tells the server while it works.
+#[derive(Debug, Clone)]
+pub enum Progress {
+    /// The run is allocated: its reference (table-manners 4.3), which every later progress
+    /// notification carries in `_meta` and a reused correlation id is answered with.
+    Run(serde_json::Value),
+    /// A line about a step, for people.
+    Line(String),
+}
+
+/// The request `_meta` key a caller's correlation id comes under (table-manners 4.4).
+pub const CLIENT_RUN_ID: &str = "table-manners/client_run_id";
+
+/// The notification `_meta` key the run's reference goes under (table-manners 4.1).
+pub const RUN_META: &str = "table-manners/run";
+
+/// A correlation id's form: 1 to 128 of `[A-Za-z0-9._:-]` (table-manners 4.4).
+fn valid_client_run_id(id: &str) -> bool {
+    (1..=128).contains(&id.len())
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'-'))
 }
 
 /// The workspace tools, with their descriptions.
@@ -130,6 +157,9 @@ struct Inner {
     dash: Option<DashWriter>,
     /// The contract's action tools and run resources, supplied by the binary.
     actions: Option<Arc<dyn Actions>>,
+    /// The correlation ids claimed in this session, each with its run's reference once the run
+    /// is allocated (table-manners 4.4). A claim is never released.
+    claims: std::sync::Mutex<BTreeMap<String, Option<serde_json::Value>>>,
 }
 
 impl Server {
@@ -158,6 +188,7 @@ impl Server {
                 max_image_bytes: 64 << 20,
                 dash,
                 actions: None,
+                claims: std::sync::Mutex::default(),
             }),
         })
     }
@@ -817,49 +848,102 @@ impl Server {
         args: serde_json::Map<String, serde_json::Value>,
         context: RequestContext<RoleServer>,
     ) -> std::result::Result<CallToolResponse, ErrorData> {
-        let permit = if actions.exclusive(&name) {
-            Some(tokio::select! {
+        let exclusive = actions.exclusive(&name);
+        // A run's correlation id is claimed before the permit wait, so duplicates queued
+        // together execute at most once; a claim outlives its request (table-manners 4.4).
+        let client_run_id = match context.meta.get(CLIENT_RUN_ID) {
+            _ if !exclusive => None,
+            None | Some(serde_json::Value::Null) => None,
+            Some(serde_json::Value::String(id)) if valid_client_run_id(id) => Some(id.clone()),
+            Some(other) => {
+                return Err(ErrorData::invalid_params(
+                    format!("{CLIENT_RUN_ID} must be 1 to 128 of [A-Za-z0-9._:-]; got {other}"),
+                    None,
+                ));
+            }
+        };
+        if let Some(id) = &client_run_id {
+            let mut claims = self.inner.claims.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(earlier) = claims.get(id) {
+                return Err(ErrorData::invalid_params(
+                    format!("{CLIENT_RUN_ID} {id} was already used in this session"),
+                    Some(serde_json::json!({
+                        "reason": "client_run_id_reused",
+                        "run": earlier.clone().unwrap_or(serde_json::Value::Null),
+                    })),
+                ));
+            }
+            claims.insert(id.clone(), None);
+        }
+        let permit = if exclusive {
+            let permit = tokio::select! {
                 p = self.inner.permits.clone().acquire_owned() => p.map_err(|e| ErrorData::internal_error(e.to_string(), None))?,
                 () = context.ct.cancelled() => return Err(cancelled_error()),
-            })
+            };
+            // Checked again once the permit is held: a cancel before allocation leaves no run.
+            if context.ct.is_cancelled() {
+                return Err(cancelled_error());
+            }
+            Some(permit)
         } else {
             None
         };
         let token = context.meta.get_progress_token();
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Progress>();
         let cancel = Arc::new(rascal_core::workspace::Cancel::new(false));
         let flag = cancel.clone();
+        let claimed = client_run_id.clone();
         let mut task = tokio::task::spawn_blocking(move || {
             let _permit = permit;
-            let send = move |line: String| {
-                let _ = tx.send(line);
+            let send = move |progress: Progress| {
+                let _ = tx.send(progress);
             };
-            actions.call(&name, &args, &send, flag)
+            actions.call(&name, &args, claimed.as_deref(), &send, flag)
         });
         let started = std::time::Instant::now();
         let mut sent = 0.0_f64;
         let mut heartbeat = tokio::time::interval(HEARTBEAT);
         heartbeat.tick().await;
         let mut last_line = String::from("started");
+        // The run's reference, once allocated: in every later notification's `_meta`.
+        let mut run: Option<serde_json::Value> = None;
+        let notification = |sent: f64, message: String, run: &Option<serde_json::Value>| {
+            token.clone().map(|token| {
+                let mut param = ProgressNotificationParam::new(token, sent).with_message(message);
+                if let Some(run) = run {
+                    let mut meta = serde_json::Map::new();
+                    meta.insert(RUN_META.to_string(), run.clone());
+                    param.meta = Some(rmcp::model::NotificationMetaObject(
+                        rmcp::model::MetaObject(meta),
+                    ));
+                }
+                param
+            })
+        };
         let outcome = loop {
             tokio::select! {
                 r = &mut task => break r,
-                Some(line) = rx.recv() => {
-                    last_line = line.clone();
-                    if let Some(token) = &token {
-                        sent += 1.0;
-                        let _ = context.peer.notify_progress(
-                            ProgressNotificationParam::new(token.clone(), sent).with_message(line),
-                        ).await;
+                Some(progress) = rx.recv() => match progress {
+                    Progress::Run(reference) => {
+                        if let Some(id) = &client_run_id {
+                            self.inner.claims.lock().unwrap_or_else(|e| e.into_inner())
+                                .insert(id.clone(), Some(reference.clone()));
+                        }
+                        run = Some(reference);
                     }
-                }
-                _ = heartbeat.tick() => {
-                    if let Some(token) = &token {
+                    Progress::Line(line) => {
+                        last_line = line.clone();
                         sent += 1.0;
-                        let message = format!("{last_line}; {} s", started.elapsed().as_secs());
-                        let _ = context.peer.notify_progress(
-                            ProgressNotificationParam::new(token.clone(), sent).with_message(message),
-                        ).await;
+                        if let Some(param) = notification(sent, line, &run) {
+                            let _ = context.peer.notify_progress(param).await;
+                        }
+                    }
+                },
+                _ = heartbeat.tick() => {
+                    sent += 1.0;
+                    let message = format!("{last_line}; {} s", started.elapsed().as_secs());
+                    if let Some(param) = notification(sent, message, &run) {
+                        let _ = context.peer.notify_progress(param).await;
                     }
                 }
                 () = context.ct.cancelled() => {

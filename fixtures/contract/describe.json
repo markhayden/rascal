@@ -653,7 +653,7 @@
       "title": "Estimate a call"
     }
   ],
-  "contract": "0.1.0",
+  "contract": "0.2.0",
   "limits": {
     "inline_bytes": 67108864
   },
@@ -662,9 +662,10 @@
   ],
   "progress_interval_s": 10,
   "resources": [
-    "rascal://runs",
+    "rascal://runs{?cursor}",
     "rascal://run/{id}/run.json",
-    "rascal://run/{id}/journal"
+    "rascal://run/{id}/journal",
+    "rascal://session"
   ],
   "tool": {
     "name": "rascal",

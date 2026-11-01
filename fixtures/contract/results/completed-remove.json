@@ -6,7 +6,7 @@
     "recipe": "remove"
   },
   "cache": "off",
-  "contract": "0.1.0",
+  "contract": "0.2.0",
   "duration_ms": 0,
   "error": null,
   "finished": "<time>",
@@ -69,12 +69,15 @@
   },
   "notes": [],
   "run": {
+    "client_run_id": null,
     "dir": "<path>/completed-remove",
     "id": "<id>",
-    "resource": "rascal://run/<id>/run.json"
+    "resource": "rascal://run/<id>/run.json",
+    "session_id": null
   },
   "spend": {
     "basis": "estimated",
+    "unresolved_usd": 0.0,
     "usd": 0.0
   },
   "started": "<time>",

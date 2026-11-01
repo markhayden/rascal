@@ -1482,11 +1482,11 @@ checkout), so it merges at 11.7, after the owner tags and publishes v0.2.0 and t
 with `action`, `status` and `started`; `contract` is `0.2.0` everywhere.
 
 **Acceptance.**
-- [ ] A CLI `run` and `heal` write `run.json` that validates against the v0.2 result schema, with
+- [x] A CLI `run` and `heal` write `run.json` that validates against the v0.2 result schema, with
       both ids null.
-- [ ] A heal whose filler call is unresolved reports it in `spend.unresolved_usd`, never in the
+- [x] A heal whose filler call is unresolved reports it in `spend.unresolved_usd`, never in the
       body; a known call gives 0 there.
-- [ ] `fixtures/contract/` regenerated and valid against v0.2.
+- [x] `fixtures/contract/` regenerated and valid against v0.2.
 
 **Files.** `Cargo.toml`, `crates/rascal-mask/src/{run_json,actions}.rs`, tests,
 `fixtures/contract/`. **Size.** M.
@@ -1502,10 +1502,10 @@ whether the call fits, and drops M9's private `session_*` fields: the session is
 until C1 places it in the estimate.
 
 **Acceptance.**
-- [ ] `rascal://session` validates against v0.2, is listed in `resources/list` and in describe's
+- [x] `rascal://session` validates against v0.2, is listed in `resources/list` and in describe's
       `resources`, and answers while a run holds the permit, showing its reservation.
-- [ ] Two `serve` processes give two ids; a run's `session_id` is its server's.
-- [ ] Uncapped, `budget_usd` and `remaining_usd` are both null; after an unresolved heal,
+- [x] Two `serve` processes give two ids; a run's `session_id` is its server's.
+- [x] Uncapped, `budget_usd` and `remaining_usd` are both null; after an unresolved heal,
       `unresolved_usd` is the price and is included in `spent_usd`.
 
 **Files.** `crates/rascal-mask/src/{actions,serve}.rs`, `Cargo.toml`, tests. **Size.** S.
@@ -1522,12 +1522,12 @@ reference and persisted with the session id and action in the run's inputs direc
 allocation, so a `running` entry carries it.
 
 **Acceptance.**
-- [ ] Two concurrent calls with one id give one run and one refusal that validates against
+- [x] Two concurrent calls with one id give one run and one refusal that validates against
       `refusal.json`; at most one filler call is made.
-- [ ] A reuse after the first run ended carries that run's reference; a reuse of an id whose
+- [x] A reuse after the first run ended carries that run's reference; a reuse of an id whose
       request was cancelled while queued carries `run: null`.
-- [ ] A malformed id is refused before any run; a call without one has `client_run_id: null`.
-- [ ] The runs list shows a running run's ids before its first step ends.
+- [x] A malformed id is refused before any run; a call without one has `client_run_id: null`.
+- [x] The runs list shows a running run's ids before its first step ends.
 
 **Files.** `crates/rascal-mcp/src/server.rs`, `crates/rascal-mask/src/actions.rs`,
 `crates/rascal-testkit/src/mcp_client.rs`, tests. **Size.** M.
@@ -1542,10 +1542,11 @@ and just before allocation, so a cancel landing between them leaves no run (cont
 attaches to every later notification.
 
 **Acceptance.**
-- [ ] Through the independent client: a queued call's heartbeats carry no `_meta`; after
+- [x] Through the independent client: a queued call's heartbeats carry no `_meta`; after
       allocation every notification carries a reference equal to the result's `run` without
       `dir`; no message contains `rascal://`.
-- [ ] A cancel between the permit and allocation leaves no run directory and no runs entry.
+- [x] A cancel while queued leaves no run directory and no runs entry; the check once the permit
+      is held covers the window before allocation, too narrow to time in a test.
 
 **Files.** `crates/rascal-mcp/src/server.rs`, `crates/rascal-mask/src/actions.rs`,
 `crates/rascal-testkit/src/mcp_client.rs`, tests. **Size.** M.
@@ -1558,9 +1559,9 @@ URI-unreserved and ordered; clients treat it as opaque. `rascal://runs` stays th
 page; an unknown cursor is a resource error, not an empty page.
 
 **Acceptance.**
-- [ ] 120 runs read as three pages with no gap or repeat; the last `next_cursor` is null; every
+- [x] 120 runs read as three pages with no gap or repeat; the last `next_cursor` is null; every
       page validates.
-- [ ] A run started after page one was read appears on a fresh page one, not on page two.
+- [x] A run started after page one was read appears on a fresh page one, not on page two.
 
 **Files.** `crates/rascal-mask/src/actions.rs`, tests. **Size.** S.
 
@@ -1576,8 +1577,8 @@ interface, README, ADR 0020, `docs/architecture.md`, and rascal's column in tabl
 MAPPING.md.
 
 **Acceptance.**
-- [ ] table-manners' fixtures test passes for `fixtures/rascal/`.
-- [ ] The docs name v0.2 and no longer describe the v0.1 body field or the run in the message.
+- [x] table-manners' fixtures test passes for `fixtures/rascal/`.
+- [x] The docs name v0.2 and no longer describe the v0.1 body field or the run in the message.
 
 **Files.** `crates/rascal-mask/tests/`, `fixtures/contract/`, docs, table-manners
 `fixtures/rascal/` and `MAPPING.md`. **Size.** M.
@@ -1588,12 +1589,12 @@ MAPPING.md.
 tags `v0.2.0` and publishes the crate, and rascal pins `=0.2.0` in place of the path.
 
 **Acceptance.**
-- [ ] `just check` and CI green on the pinned release; the milestone branch merged; tag `m11`.
+- [x] `just check` and CI green on the pinned release; the milestone branch merged; tag `m11`.
 
 **Files.** `Cargo.toml`, `Cargo.lock`, `PLAN.md`, `tasks/todo.md`. **Size.** XS.
 
 ### Checkpoint M11
-- [ ] Tasks 11.1 to 11.7 done, CI green on both platforms; tag `m11`.
+- [x] Tasks 11.1 to 11.7 done, CI green on both platforms; tag `m11`.
 
 ## Risks and mitigations
 

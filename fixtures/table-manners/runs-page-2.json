@@ -1,0 +1,55 @@
+{
+  "contract": "0.2.0",
+  "next_cursor": null,
+  "runs": [
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600004-1",
+      "resource": "rascal://run/run-1767225600004-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "completed"
+    },
+    {
+      "action": "seam",
+      "client_run_id": "fixture.cancelled",
+      "id": "run-1767225600003-1",
+      "resource": "rascal://run/run-1767225600003-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "cancelled"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600002-1",
+      "resource": "rascal://run/run-1767225600002-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600001-1",
+      "resource": "rascal://run/run-1767225600001-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "error"
+    },
+    {
+      "action": "seam",
+      "client_run_id": "fixture.completed",
+      "id": "run-1767225600000-1",
+      "resource": "rascal://run/run-1767225600000-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "completed"
+    }
+  ],
+  "tool": {
+    "name": "rascal",
+    "version": "0.1.0"
+  }
+}

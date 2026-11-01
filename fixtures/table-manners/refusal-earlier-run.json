@@ -1,0 +1,9 @@
+{
+  "reason": "client_run_id_reused",
+  "run": {
+    "client_run_id": "fixture.completed",
+    "id": "run-1767225600000-1",
+    "resource": "rascal://run/run-1767225600000-1/run.json",
+    "session_id": "00000000-0000-4000-8000-000000000001"
+  }
+}

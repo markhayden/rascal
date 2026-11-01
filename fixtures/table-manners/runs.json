@@ -1,0 +1,460 @@
+{
+  "contract": "0.2.0",
+  "next_cursor": "run-1767225600005-1",
+  "runs": [
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600054-1",
+      "resource": "rascal://run/run-1767225600054-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600053-1",
+      "resource": "rascal://run/run-1767225600053-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600052-1",
+      "resource": "rascal://run/run-1767225600052-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600051-1",
+      "resource": "rascal://run/run-1767225600051-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600050-1",
+      "resource": "rascal://run/run-1767225600050-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600049-1",
+      "resource": "rascal://run/run-1767225600049-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600048-1",
+      "resource": "rascal://run/run-1767225600048-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600047-1",
+      "resource": "rascal://run/run-1767225600047-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600046-1",
+      "resource": "rascal://run/run-1767225600046-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600045-1",
+      "resource": "rascal://run/run-1767225600045-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600044-1",
+      "resource": "rascal://run/run-1767225600044-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600043-1",
+      "resource": "rascal://run/run-1767225600043-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600042-1",
+      "resource": "rascal://run/run-1767225600042-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600041-1",
+      "resource": "rascal://run/run-1767225600041-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600040-1",
+      "resource": "rascal://run/run-1767225600040-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600039-1",
+      "resource": "rascal://run/run-1767225600039-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600038-1",
+      "resource": "rascal://run/run-1767225600038-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600037-1",
+      "resource": "rascal://run/run-1767225600037-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600036-1",
+      "resource": "rascal://run/run-1767225600036-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600035-1",
+      "resource": "rascal://run/run-1767225600035-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600034-1",
+      "resource": "rascal://run/run-1767225600034-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600033-1",
+      "resource": "rascal://run/run-1767225600033-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600032-1",
+      "resource": "rascal://run/run-1767225600032-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600031-1",
+      "resource": "rascal://run/run-1767225600031-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600030-1",
+      "resource": "rascal://run/run-1767225600030-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600029-1",
+      "resource": "rascal://run/run-1767225600029-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600028-1",
+      "resource": "rascal://run/run-1767225600028-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600027-1",
+      "resource": "rascal://run/run-1767225600027-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600026-1",
+      "resource": "rascal://run/run-1767225600026-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600025-1",
+      "resource": "rascal://run/run-1767225600025-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600024-1",
+      "resource": "rascal://run/run-1767225600024-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600023-1",
+      "resource": "rascal://run/run-1767225600023-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600022-1",
+      "resource": "rascal://run/run-1767225600022-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600021-1",
+      "resource": "rascal://run/run-1767225600021-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600020-1",
+      "resource": "rascal://run/run-1767225600020-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600019-1",
+      "resource": "rascal://run/run-1767225600019-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600018-1",
+      "resource": "rascal://run/run-1767225600018-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600017-1",
+      "resource": "rascal://run/run-1767225600017-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600016-1",
+      "resource": "rascal://run/run-1767225600016-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600015-1",
+      "resource": "rascal://run/run-1767225600015-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600014-1",
+      "resource": "rascal://run/run-1767225600014-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600013-1",
+      "resource": "rascal://run/run-1767225600013-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600012-1",
+      "resource": "rascal://run/run-1767225600012-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600011-1",
+      "resource": "rascal://run/run-1767225600011-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600010-1",
+      "resource": "rascal://run/run-1767225600010-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600009-1",
+      "resource": "rascal://run/run-1767225600009-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600008-1",
+      "resource": "rascal://run/run-1767225600008-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600007-1",
+      "resource": "rascal://run/run-1767225600007-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600006-1",
+      "resource": "rascal://run/run-1767225600006-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    },
+    {
+      "action": "seam",
+      "client_run_id": null,
+      "id": "run-1767225600005-1",
+      "resource": "rascal://run/run-1767225600005-1/run.json",
+      "session_id": "00000000-0000-4000-8000-000000000001",
+      "started": "2026-01-01T00:00:00.000Z",
+      "status": "invalid"
+    }
+  ],
+  "tool": {
+    "name": "rascal",
+    "version": "0.1.0"
+  }
+}

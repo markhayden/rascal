@@ -10,15 +10,17 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use rascal_core::Error;
 use rascal_core::config::Config;
 use rascal_core::contract::table_manners::images::{ImageReference, Locator};
-use rascal_core::contract::table_manners::{RunState, RunSummary, RunsList, Tool as TmTool};
+use rascal_core::contract::table_manners::{
+    RunState, RunSummary, RunsList, Session as TmSession, Tool as TmTool,
+};
 use rascal_core::workspace::Cancel;
 use rascal_mcp::server::{
     ActionResult, Actions, McpResource as Resource, McpResourceTemplate as ResourceTemplate,
-    McpTool as Tool, ResourceBody,
+    McpTool as Tool, Progress, ResourceBody,
 };
 use serde_json::{Map, Value, json};
 
-use crate::run_json::{self, Ended};
+use crate::run_json::{self, Ended, usd};
 use crate::{heal, run};
 use rascal_mask::describe::{self, INLINE_BYTES, recipe_of};
 use rascal_mask::filler::Spent;
@@ -30,6 +32,25 @@ pub struct ContractActions {
     pub runs: PathBuf,
     /// What this server process has spent and holds for calls under way (table-manners 4.5).
     pub ledger: std::sync::Mutex<Ledger>,
+    /// The serving session the ledger belongs to (table-manners 4.6).
+    pub session: Session,
+}
+
+/// A serving session: one process's ledger, named by a random UUID (v4) when `serve` starts.
+/// rascal reads its configuration once, so a session lasts the process.
+#[derive(Debug, Clone)]
+pub struct Session {
+    pub id: String,
+    pub started_ms: u128,
+}
+
+impl Session {
+    pub fn start() -> Session {
+        Session {
+            id: uuid::Uuid::new_v4().to_string(),
+            started_ms: run_json::now_ms(),
+        }
+    }
 }
 
 /// The session's spend: a call reserves its worst case when the limits pass, in the same step
@@ -91,6 +112,17 @@ pub fn default_runs_root() -> PathBuf {
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
         .unwrap_or_else(|| PathBuf::from("."))
         .join("rascal/runs")
+}
+
+/// How many runs a page of `rascal://runs` holds (table-manners 4.3).
+const RUNS_PAGE: usize = 50;
+
+/// A run's start in milliseconds, from its id (`run-<ms>-<pid>`).
+fn started_ms(id: &str) -> u128 {
+    id.split('-')
+        .nth(1)
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(0)
 }
 
 /// A run id as rascal makes them, and nothing else (a resource URI names one).
@@ -356,9 +388,14 @@ impl ContractActions {
         &self,
         recipe: &str,
         args: &Map<String, Value>,
-        progress: &(dyn Fn(String) + Send + Sync),
+        client_run_id: Option<&str>,
+        progress: &(dyn Fn(Progress) + Send + Sync),
         cancel: Arc<Cancel>,
     ) -> std::result::Result<ActionResult, String> {
+        // A cancel that lands before allocation leaves no run (table-manners 4.2).
+        if cancel.load(Ordering::SeqCst) {
+            return Err("cancelled".to_string());
+        }
         std::fs::create_dir_all(&self.runs).map_err(|e| e.to_string())?;
         let started_ms = run_json::allocate_ms();
         let id = run_json::new_id(started_ms);
@@ -369,11 +406,26 @@ impl ContractActions {
             .and_then(|v| v.as_str())
             .map(str::to_string);
         let _ = std::fs::create_dir_all(&inputs);
-        // The run's directory exists from allocation, before the first progress line and any
-        // paid work, so the runs list shows it `running` from that moment (task 9.4).
+        // The run's directory and its association exist from allocation, before the first
+        // progress line and any paid work, so the runs list shows it `running` with its ids from
+        // that moment (tasks 9.4 and 11.3).
         std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
-        let _ = std::fs::write(inputs.join("action"), describe::action_name(recipe));
-        progress(format!("run {id} started (rascal://run/{id}/run.json)"));
+        let association = Association {
+            action: describe::action_name(recipe),
+            session_id: Some(self.session.id.clone()),
+            client_run_id: client_run_id.map(str::to_string),
+        };
+        let _ = std::fs::write(
+            inputs.join(Association::FILE),
+            serde_json::to_string(&association).unwrap_or_default(),
+        );
+        progress(Progress::Run(json!({
+            "id": id,
+            "resource": format!("rascal://run/{id}/run.json"),
+            "session_id": association.session_id,
+            "client_run_id": association.client_run_id,
+        })));
+        progress(Progress::Line("run started".to_string()));
         let prepared = self
             .run_args(recipe, args, &out, &inputs, cancel)
             .and_then(|run_args| {
@@ -389,6 +441,8 @@ impl ContractActions {
                     workspace: out.clone(),
                     fresh: true,
                     started_ms,
+                    session_id: Some(self.session.id.clone()),
+                    client_run_id: client_run_id.map(str::to_string),
                     input_identity: format!(
                         "sha256:{}",
                         run_json::input_identity(&Value::Object(args.clone()))
@@ -402,6 +456,8 @@ impl ContractActions {
                 let mut pending = run_json::pending_for(&run_args, filler.as_deref());
                 pending.id = id.clone();
                 pending.started_ms = started_ms;
+                pending.session_id = Some(self.session.id.clone());
+                pending.client_run_id = client_run_id.map(str::to_string);
                 let done = AtomicBool::new(false);
                 let journal = out.join("journal.jsonl");
                 let ended = std::thread::scope(|scope| {
@@ -524,7 +580,41 @@ impl ContractActions {
         })
     }
 
-    fn runs_list(&self) -> RunsList {
+    /// The `rascal://session` observation: one copy of the ledger, taken under its lock.
+    fn session_view(&self) -> TmSession {
+        let ledger = self.ledger();
+        let budget = self
+            .config
+            .as_ref()
+            .and_then(|c| c.limits.as_ref())
+            .and_then(|l| l.session_budget_usd);
+        TmSession {
+            contract: rascal_core::contract::CONTRACT_VERSION.to_string(),
+            tool: TmTool {
+                name: "rascal".to_string(),
+                version: env!("CARGO_PKG_VERSION").to_string(),
+            },
+            id: self.session.id.clone(),
+            started: run_json::rfc3339(self.session.started_ms),
+            budget_usd: budget.map(usd),
+            spent_usd: usd(ledger.spent_usd),
+            unresolved_usd: usd(ledger.unresolved_usd),
+            reserved_usd: usd(ledger.reserved_usd),
+            remaining_usd: budget
+                .map(|b| usd((b - ledger.spent_usd - ledger.reserved_usd).max(0.0))),
+        }
+    }
+
+    /// One page of the runs (table-manners 4.3): newest first by (started, id), `RUNS_PAGE` a
+    /// page, starting after `cursor`. The cursor is the last entry's run id, which carries its
+    /// own position (`run-<ms>-<pid>`); clients treat it as opaque. A cursor that is not a run id
+    /// gives no page.
+    fn runs_list(&self, cursor: Option<&str>) -> Option<RunsList> {
+        let after = match cursor {
+            None => None,
+            Some(id) if valid_id(id) => Some((started_ms(id), id.to_string())),
+            Some(_) => return None,
+        };
         let mut runs: Vec<(u128, RunSummary)> = Vec::new();
         for entry in std::fs::read_dir(&self.runs)
             .into_iter()
@@ -535,21 +625,18 @@ impl ContractActions {
             if !valid_id(&name) {
                 continue;
             }
-            let ms: u128 = name
-                .split('-')
-                .nth(1)
-                .and_then(|p| p.parse().ok())
-                .unwrap_or(0);
+            let ms = started_ms(&name);
             let done: Option<Value> = std::fs::read_to_string(entry.path().join(run_json::FILE))
                 .ok()
                 .and_then(|t| serde_json::from_str(&t).ok());
-            let action = done
+            let association: Option<Association> = std::fs::read_to_string(
+                self.runs.join(format!("{name}.in")).join(Association::FILE),
+            )
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok());
+            let action = association
                 .as_ref()
-                .and_then(|d| d["action"].as_str().map(str::to_string))
-                .or_else(|| {
-                    std::fs::read_to_string(self.runs.join(format!("{name}.in")).join("action"))
-                        .ok()
-                })
+                .map(|a| a.action.clone())
                 .unwrap_or_else(|| "unknown".to_string());
             let status = match done.as_ref().and_then(|d| d["status"].as_str()) {
                 Some("completed") => RunState::Completed,
@@ -562,27 +649,55 @@ impl ContractActions {
                 ms,
                 RunSummary {
                     id: name.clone(),
+                    resource: format!("rascal://run/{name}/run.json"),
+                    session_id: association.as_ref().and_then(|a| a.session_id.clone()),
+                    client_run_id: association.and_then(|a| a.client_run_id),
                     action,
                     status,
                     started: run_json::rfc3339(ms),
-                    resource: format!("rascal://run/{name}/run.json"),
                 },
             ));
         }
         runs.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.id.cmp(&a.1.id)));
-        RunsList {
+        let mut rest: Vec<RunSummary> = runs
+            .into_iter()
+            .filter(|(ms, run)| {
+                after
+                    .as_ref()
+                    .is_none_or(|(at, id)| (*ms, &run.id) < (*at, id))
+            })
+            .map(|(_, run)| run)
+            .collect();
+        let more = rest.len() > RUNS_PAGE;
+        rest.truncate(RUNS_PAGE);
+        let next_cursor = more.then(|| rest.last().map(|r| r.id.clone())).flatten();
+        Some(RunsList {
             contract: rascal_core::contract::CONTRACT_VERSION.to_string(),
             tool: TmTool {
                 name: "rascal".to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
             },
-            runs: runs.into_iter().map(|(_, r)| r).collect(),
-        }
+            runs: rest,
+            next_cursor,
+        })
     }
 }
 
+/// What a run was asked as, written into its inputs directory when it is allocated, before any
+/// paid work (table-manners 4.3): the runs list reads it for a run still going.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Association {
+    action: String,
+    session_id: Option<String>,
+    client_run_id: Option<String>,
+}
+
+impl Association {
+    const FILE: &str = "association.json";
+}
+
 /// Sends a progress line for every op the run journals, until `done`.
-fn watch_journal(journal: &Path, done: &AtomicBool, progress: &(dyn Fn(String) + Send + Sync)) {
+fn watch_journal(journal: &Path, done: &AtomicBool, progress: &(dyn Fn(Progress) + Send + Sync)) {
     let mut seen = 0usize;
     loop {
         let finished = done.load(Ordering::SeqCst);
@@ -594,7 +709,7 @@ fn watch_journal(journal: &Path, done: &AtomicBool, progress: &(dyn Fn(String) +
                 };
                 if let (Some(step), Some(op)) = (value["step"].as_str(), value["op"].as_str()) {
                     let status = value["envelope"]["status"].as_str().unwrap_or("done");
-                    progress(format!("step {step} ({op}): {status}"));
+                    progress(Progress::Line(format!("step {step} ({op}): {status}")));
                 }
             }
         }
@@ -658,7 +773,8 @@ impl Actions for ContractActions {
         &self,
         name: &str,
         args: &Map<String, Value>,
-        progress: &(dyn Fn(String) + Send + Sync),
+        client_run_id: Option<&str>,
+        progress: &(dyn Fn(Progress) + Send + Sync),
         cancel: Arc<Cancel>,
     ) -> std::result::Result<ActionResult, String> {
         if name == "describe" {
@@ -683,13 +799,8 @@ impl Actions for ContractActions {
                 structured: json!({
                     "contract": rascal_core::contract::CONTRACT_VERSION,
                     "action": action,
-                    "worst_case_usd": limits.worst_case_usd,
-                    "call_cap_usd": limits.call_cap_usd,
-                    "session_budget_usd": limits.session_budget_usd,
-                    "session_spent_usd": ledger.spent_usd,
-                    "session_unresolved_usd": ledger.unresolved_usd,
-                    "session_reserved_usd": ledger.reserved_usd,
-                    "session_left_usd": limits.session_budget_usd.map(|b| (b - limits.session_held_usd).max(0.0)),
+                    "worst_case_usd": usd(limits.worst_case_usd),
+                    "call_cap_usd": limits.call_cap_usd.map(usd),
                     "allowed": limits.check().is_ok(),
                 }),
                 is_error: false,
@@ -697,18 +808,26 @@ impl Actions for ContractActions {
             });
         }
         let recipe = recipe_of(name).ok_or_else(|| format!("no action {name}"))?;
-        self.run_action(recipe, args, progress, cancel)
+        self.run_action(recipe, args, client_run_id, progress, cancel)
     }
 
     fn resources(&self) -> Vec<Resource> {
         let mut runs = Resource::new("rascal://runs", "runs");
-        runs.description = Some("Recent runs, newest first (table-manners 4.3).".into());
+        runs.description = Some(
+            "Runs, newest first, the first page; rascal://runs?cursor=<next_cursor> reads the next (table-manners 4.3)."
+                .into(),
+        );
         runs.mime_type = Some("application/json".into());
-        vec![runs]
+        let mut session = Resource::new("rascal://session", "session");
+        session.description =
+            Some("This server's spend ledger, one atomic observation (table-manners 4.6).".into());
+        session.mime_type = Some("application/json".into());
+        vec![runs, session]
     }
 
     fn templates(&self) -> Vec<ResourceTemplate> {
         [
+            ("rascal://runs{?cursor}", "runs", "application/json"),
             ("rascal://run/{id}/run.json", "run", "application/json"),
             (
                 "rascal://run/{id}/journal",
@@ -727,10 +846,20 @@ impl Actions for ContractActions {
     }
 
     fn read(&self, uri: &str) -> Option<ResourceBody> {
-        if uri == "rascal://runs" {
+        if uri == "rascal://session" {
             return Some(ResourceBody::Text {
                 mime: "application/json".into(),
-                text: serde_json::to_string_pretty(&self.runs_list()).ok()?,
+                text: serde_json::to_string_pretty(&self.session_view()).ok()?,
+            });
+        }
+        if uri == "rascal://runs" || uri.starts_with("rascal://runs?") {
+            let cursor = match uri.strip_prefix("rascal://runs?") {
+                None => None,
+                Some(query) => Some(query.strip_prefix("cursor=")?),
+            };
+            return Some(ResourceBody::Text {
+                mime: "application/json".into(),
+                text: serde_json::to_string_pretty(&self.runs_list(cursor)?).ok()?,
             });
         }
         let rest = uri.strip_prefix("rascal://run/")?;

@@ -32,6 +32,7 @@ mod render_cli;
 mod run_json;
 mod serve;
 mod serve_contract;
+mod table_manners_fixtures;
 mod tools_setup;
 mod walking_slice;
 mod workspace_cli;

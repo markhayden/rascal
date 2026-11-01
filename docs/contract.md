@@ -1,14 +1,14 @@
 # table-manners: rascal's side of the shared contract
 
-rascal conforms to [table-manners](https://github.com/markhayden/table-manners) v0.1.0, the shared
-contract of the owner's tools (ADR 0020, decision 13): what an agent, a script or the playground
-sees from outside is the same for squint, rascal and the tools after them. The contract's text is
-the specification; this page is what rascal does under it, task by task as milestone M8 lands
-(PLAN.md).
+rascal conforms to [table-manners](https://github.com/markhayden/table-manners) v0.2.0 (milestones
+M8 and M9 for v0.1.0, M11 for v0.2.0), the shared contract of the owner's tools (ADR 0020, decisions
+13 and 14): what an agent, a script or the playground sees from outside is the same for squint,
+rascal and the tools after them. The contract's text is the specification; this page is what
+rascal does under it (PLAN.md M8, M9 and M11).
 
 ## The pin
 
-`table-manners = "=0.1.0"` in the workspace `Cargo.toml`: the crate's serde types and embedded
+`table-manners = "=0.2.0"` in the workspace `Cargo.toml`: the crate's serde types and embedded
 schemas, no logic. `scripts/check-contract.sh` warns in CI when crates.io has a newer release;
 moving the pin is a deliberate commit that also refreshes `fixtures/contract/`.
 
@@ -109,20 +109,35 @@ are left for failures before a run exists (an unknown tool, malformed arguments)
 - **Locations in.** `location` and `stroke` take a table-manners location object (8.2).
 - **Progress.** With a progress token, every op the run journals is a notification
   (`step fan (fan): ok`), and a heartbeat goes at least every five seconds while it waits;
-  `progress` is a counter that only increases, the words are in `message`, and the first message
-  names the run's resource.
-- **Cancellation.** `notifications/cancelled` sets the run's flag: the run stops before its next
+  `progress` is a counter that only increases and the words are in `message`, for people. From
+  the run's allocation, every notification, heartbeats included, carries the run's reference
+  (`id`, `resource`, `session_id`, `client_run_id`) in `_meta["table-manners/run"]`; a call still
+  waiting for the permit sends none, and no message names the run (table-manners 4.1, task 11.4).
+- **Correlation ids.** A call may carry `_meta["table-manners/client_run_id"]` (1 to 128 of
+  `[A-Za-z0-9._:-]`; anything else is refused with `-32602` before a run). `serve` claims it when
+  it accepts the call, before the permit wait, so duplicates execute at most once; a claimed id
+  is refused with `-32602` and `data: {reason: "client_run_id_reused", run}`, `run` being the
+  earlier call's reference, or null while it has none. A claim lasts the session, a call
+  cancelled while queued included: a retry uses a new id (table-manners 4.4, task 11.3). `describe`
+  and `estimate` are not runs and take no id.
+- **Cancellation.** A call cancelled while it waits for the permit, or before its run is
+  allocated (checked again once the permit is held), leaves no run. After allocation,
+  `notifications/cancelled` sets the run's flag: the run stops before its next
   step (each op checks the flag before it commits, and `heal` before it calls the filler), writes
   `run.json` as `cancelled` with `stopped_before`, and the call gets no result. A filler call
   already in flight runs to its end (its timeout bounds it).
 - **Reads never wait on a run.** A run holds the call permit (serial by default,
   `--concurrency n` for more); `describe`, `estimate` and every resource read do not, so they
   answer while a run is under way (task 9.3).
-- **Resources.** `rascal://runs` (the contract's runs list, newest first, a run still going is
-  `running` from its allocation: its directory is made before the first progress line and any
-  paid work, task 9.4), `rascal://run/{id}/run.json`, `rascal://run/{id}/journal`,
-  `rascal://run/{id}/images/{role}`. An id is exactly `run-<ms>-<pid>`; nothing else under the
-  runs root, and nothing outside it, can be read.
+- **Resources.** `rascal://runs{?cursor}` (the contract's runs list, newest first by start and id,
+  50 a page; `next_cursor` is the last entry's run id, null on the last page, and
+  `rascal://runs?cursor=<it>` reads the next; a run started after page one was read is on a fresh
+  page one; task 11.5; a run still going is `running` from its allocation: its directory and its
+  association, the action and both ids in `<runs>/<id>.in/association.json`, are made before the
+  first progress line and any paid work, tasks 9.4 and 11.3), `rascal://session` (4.6),
+  `rascal://run/{id}/run.json`, `rascal://run/{id}/journal`, `rascal://run/{id}/images/{role}`. An
+  id is exactly `run-<ms>-<pid>`; nothing else under the runs root, and nothing outside it, can be
+  read.
 
 ## The fill cache, prices and limits (8.6)
 
@@ -137,8 +152,10 @@ before its request left rascal: no key, the connection refused, the command not 
 and 403), *known* (the filler answered: a 2xx, or exit 0) or *unresolved* (sent and not settled:
 a timeout, a failure status, a non-zero exit, or the run killed mid-call). Known and unresolved
 calls count at the price; `heal` journals `filler call started` before each call, so a run stopped
-mid-call counts it too. `spend.usd` is the total; the unresolved part is `body.spend_unresolved_usd`
-with a note, until table-manners v0.2 names a shared field.
+mid-call counts it too. `spend.usd` is the total and `spend.unresolved_usd` the part no answer
+settled, with a note (table-manners v0.2, 4.5). The contract files an authentication refusal as
+*known* at zero; rascal records it as `not_sent`, which also counts zero, so the spend is the
+same.
 `[limits]` holds `serve` to `call_cap_usd` (a call's `max_spend_usd` may lower it, never raise
 it) and `session_budget_usd` across the process's calls; a call whose price would pass either is
 refused before it runs, an `error` result with code `budget` (4.5). The check and a reservation of
@@ -146,8 +163,12 @@ the call's worst case are one step under the session ledger's lock (task 9.2), s
 (`--concurrency`) never both pass against the same spend; the run's end settles the reservation
 into what it spent (unresolved charges included), and a run that ends without settling counts its
 reservation as unresolved spend. The `estimate` action returns the worst case for an action and
-filler, the cap, the budget, the session's spent, unresolved and reserved amounts, what is left
-after both, and whether the call would be allowed. An action `may_spend` in the description when a
+filler, the effective per-call cap and whether the call would be allowed; the session is read
+from `rascal://session` (table-manners 4.6, task 11.2): one atomic observation of the ledger
+under a random UUID made when `serve` starts, with `budget_usd` and `remaining_usd` (both null
+when uncapped), `spent_usd` (unresolved included), `unresolved_usd` and `reserved_usd`, amounts at
+six decimals. rascal reads its configuration once, so a session lasts the process, and every run
+`serve` makes carries its id. An action `may_spend` in the description when a
 configured filler has a price. Each run's start time is strictly increasing within the process, so
 calls allocated in the same millisecond still get distinct ids and directories.
 
@@ -185,9 +206,12 @@ installation that fails, or leaves no program, exits 74 and runs nothing. Off a 
 ## Conformance (8.8)
 
 - **Fixtures.** `fixtures/contract/results/` holds one masked `run.json` per outcome from the
-  command line; `fixtures/contract/describe.json` the description; both are validated against
-  the contract's schemas and compared in the test suite. They are what the contract repository's
-  `fixtures/rascal/` takes.
+  command line and `fixtures/contract/describe.json` the description, both validated against the
+  contract's schemas and compared in the test suite. `fixtures/table-manners/` is what the
+  contract repository's `fixtures/rascal/` takes (task 11.6): from `rascal serve` through the
+  independent client, the description, a run per status (an error with an unresolved charge
+  among them), two runs pages, the session and both reuse refusals, with machine values replaced
+  by stand-ins that stay valid; `tests/it/table_manners_fixtures.rs` regenerates and compares them.
 - **The cross-tool acceptance test, rascal's half.** A squint-shaped finding (a table-manners
   location with squint's `source`, `disposition` and `confidence`) masks exactly what rascal's own
   location does, and a finding on another image is refused
