@@ -15,6 +15,10 @@ conforms to (ADR 0020), at the release pinned in the workspace `Cargo.toml`.
   the command line (`completed` for a heal and for a remove with a location used, `error` for a
   failing filler command, `invalid` for a finding on another image), with times, ids, the
   version and machine paths masked; `crates/rascal-mask/tests/run_json.rs` regenerates and
-  compares them. These are the files the contract repository's `fixtures/rascal/` takes.
+  compares them.
+
+`fixtures/table-manners/` holds what the contract repository's `fixtures/rascal/` takes: rascal's
+v0.2 fixtures from `rascal serve` through the independent client, with machine values replaced by
+valid stand-ins (`crates/rascal-mask/tests/table_manners_fixtures.rs`, task 11.6).
 
 Moving the pin to a newer release copies the contract's files again in the same commit.

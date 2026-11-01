@@ -208,9 +208,12 @@ installation that fails, or leaves no program, exits 74 and runs nothing. Off a 
 ## Conformance (8.8)
 
 - **Fixtures.** `fixtures/contract/results/` holds one masked `run.json` per outcome from the
-  command line; `fixtures/contract/describe.json` the description; both are validated against
-  the contract's schemas and compared in the test suite. They are what the contract repository's
-  `fixtures/rascal/` takes.
+  command line and `fixtures/contract/describe.json` the description, both validated against the
+  contract's schemas and compared in the test suite. `fixtures/table-manners/` is what the
+  contract repository's `fixtures/rascal/` takes (task 11.6): from `rascal serve` through the
+  independent client, the description, a run per status (an error with an unresolved charge
+  among them), two runs pages, the session and both reuse refusals, with machine values replaced
+  by stand-ins that stay valid; `tests/table_manners_fixtures.rs` regenerates and compares them.
 - **The cross-tool acceptance test, rascal's half.** A squint-shaped finding (a table-manners
   location with squint's `source`, `disposition` and `confidence`) masks exactly what rascal's own
   location does, and a finding on another image is refused
