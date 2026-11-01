@@ -127,6 +127,125 @@ impl Config {
         let text = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
         Config::parse(&text, &path.display().to_string())
     }
+
+    /// rascal's built-in defaults: the configuration in force when no file is given (nothing
+    /// configured: no filler, no pack, no cache, no limits).
+    pub fn builtin() -> Config {
+        Config {
+            config_version: 1,
+            ..Config::default()
+        }
+    }
+
+    /// The configuration's identity: the SHA-256 of its canonical serialization (ADR 0016),
+    /// so two files that configure the same thing have one identity, whatever their layout,
+    /// comments or spelled-out defaults.
+    pub fn identity(&self) -> String {
+        crate::canonical::identity_of("config", self)
+            .as_str()
+            .to_string()
+    }
+}
+
+/// What reading the configuration once gave (table-manners 3.1, 4.6): `rascal describe` and
+/// `rascal serve` start in every state and say per action what is missing. The only way to
+/// choose a configuration is `--config <path>`; there is no default lookup.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConfigState {
+    /// No `--config`, or a path that names no file.
+    Missing { path: Option<PathBuf> },
+    /// The file does not parse or check; the reason names a place, never a value.
+    Invalid { path: PathBuf, reason: String },
+    /// The file loaded.
+    Loaded {
+        path: PathBuf,
+        config: Box<Config>,
+        identity: String,
+    },
+}
+
+impl ConfigState {
+    /// Reads `path` once, never failing: a missing file is `Missing`, one that does not read,
+    /// parse or check is `Invalid`.
+    pub fn read(path: Option<&Path>) -> ConfigState {
+        let Some(path) = path else {
+            return ConfigState::Missing { path: None };
+        };
+        let text = match std::fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return ConfigState::Missing {
+                    path: Some(path.to_path_buf()),
+                };
+            }
+            Err(e) => {
+                return ConfigState::Invalid {
+                    path: path.to_path_buf(),
+                    reason: format!("{}: {e}", path.display()),
+                };
+            }
+        };
+        let origin = path.display().to_string();
+        match Config::parse(&text, &origin) {
+            Ok(config) => ConfigState::Loaded {
+                path: path.to_path_buf(),
+                identity: config.identity(),
+                config: Box::new(config),
+            },
+            Err(error) => ConfigState::Invalid {
+                path: path.to_path_buf(),
+                reason: reason_without_values(&error, &text, &origin),
+            },
+        }
+    }
+
+    /// The loaded configuration, when the file loaded.
+    pub fn config(&self) -> Option<&Config> {
+        match self {
+            ConfigState::Loaded { config, .. } => Some(config),
+            _ => None,
+        }
+    }
+
+    /// The file given with `--config`, whatever came of reading it.
+    pub fn path(&self) -> Option<&Path> {
+        match self {
+            ConfigState::Missing { path } => path.as_deref(),
+            ConfigState::Invalid { path, .. } | ConfigState::Loaded { path, .. } => Some(path),
+        }
+    }
+
+    /// The identity of the configuration in force: the loaded file's, or with no file the
+    /// built-in defaults' (they are a configuration too); none when the file given is missing
+    /// or invalid, since then no configuration is in force for a call that needs one.
+    pub fn identity(&self) -> Option<String> {
+        match self {
+            ConfigState::Loaded { identity, .. } => Some(identity.clone()),
+            ConfigState::Missing { path: None } => Some(Config::builtin().identity()),
+            _ => None,
+        }
+    }
+}
+
+/// A parse error as a place and a message: the TOML parser's own text quotes the offending
+/// line, which may hold a value, so only its message and the line and column are kept.
+fn reason_without_values(error: &Error, text: &str, origin: &str) -> String {
+    match error {
+        Error::Toml { source, .. } => {
+            let at = source.span().map(|span| {
+                let before = text.get(..span.start).unwrap_or(text);
+                let line = before.matches('\n').count() + 1;
+                let column = before.len() - before.rfind('\n').map_or(0, |i| i + 1) + 1;
+                format!(", line {line}, column {column}")
+            });
+            format!(
+                "{origin}{}: not valid TOML: {}",
+                at.unwrap_or_default(),
+                source.message().trim()
+            )
+        }
+        other => other.to_string(),
+    }
 }
 
 /// One filler entry under `[fillers.<name>]`: a command with placeholders or an HTTP endpoint,

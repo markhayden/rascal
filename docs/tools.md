@@ -104,7 +104,7 @@ through a configured pack like any pack tool.
 
 ## The server
 
-`rascal serve --workspace ws/ [--config rascal.toml] [--concurrency n] [--runs dir]` is an MCP
+`rascal serve [--workspace ws/] [--config rascal.toml] [--concurrency n] [--runs dir]` is an MCP
 server over stdio at protocol revision `2025-11-25` (ADR 0015). Beside the op tools below it
 serves the contract's action tools, one per shipped recipe, and `describe`, with run resources
 (table-manners, ADR 0020; `docs/contract.md`). It advertises one tool per op in the table
@@ -168,7 +168,11 @@ limit, and the whole answer, images as base64 plus the envelope, under 256 MiB, 
 one line the transport carries). A refusal names the tool and the reason; the pack is stopped.
 `startup_timeout_s` covers initialize and the listing together. The listing is journaled
 (`pack manifest:` notes), so a replay knows the tools without the pack; a restart after a
-failure must list the same tools with the same manifests, or it is refused.
+failure must list the same tools with the same manifests, or it is refused. A pack that does not
+start leaves its tools out rather than failing everything: `serve` says why on stderr and keeps
+serving (the segmenter's readiness requirement reads `invalid`, task 12.2), and a run notes it in
+its journal, so a recipe that needs none of its tools still runs and one whose op nothing serves
+fails with the pack's own error. `rascal tools list`, `tools call` and the lab still fail on it.
 
 **A call** carries the step's parameters by name, each `Image` port's workspace id, each
 `Location` port's location object, and `_harness` (`schemas/rascal/pack-context-v1.json`): the

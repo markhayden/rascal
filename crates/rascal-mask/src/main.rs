@@ -8,6 +8,7 @@ mod heal;
 mod inspect;
 mod lab_run;
 use rascal_mask::lab;
+use rascal_mask::readiness::{self, Setup};
 mod actions;
 mod measure;
 mod ops;
@@ -147,10 +148,12 @@ enum Command {
     },
     /// The MCP server over stdio: every op as a tool over a workspace (SPEC "The MCP server").
     Serve {
-        /// The workspace the tools read and write.
+        /// The workspace the op tools read and write; the configuration's `[workspace] dir`,
+        /// else `$XDG_DATA_HOME/rascal/workspace`, by default.
         #[arg(long)]
-        workspace: PathBuf,
-        /// The configuration file (rascal.toml); checked, and used by later milestones' tools.
+        workspace: Option<PathBuf>,
+        /// The configuration file (rascal.toml): its fillers and packs. Without one, or with
+        /// one that does not load, the server still starts and its actions say what is missing.
         #[arg(long)]
         config: Option<PathBuf>,
         /// Calls that may run at once; each still commits in turn.
@@ -193,7 +196,8 @@ enum Command {
         /// Print the document as JSON (the contract's form); without it, one line per action.
         #[arg(long)]
         json: bool,
-        /// The configuration file (rascal.toml): its fillers name the spend and the keys.
+        /// The configuration file (rascal.toml): its fillers name the spend and the keys. A
+        /// file that is missing or does not load is described as such; describe never fails on it.
         #[arg(long)]
         config: Option<PathBuf>,
     },
@@ -657,6 +661,12 @@ fn main() {
                 sets: set,
                 cancel: None,
             };
+            if args.replay.is_none()
+                && let Err(error) = ready_for(&args.recipe, args.config.as_deref(), None)
+            {
+                eprintln!("rascal run: {error}");
+                std::process::exit(exit::code_for(&error));
+            }
             let pending = run_json::begin(run_json::pending_for(&args, None));
             run_json::watch_signals();
             let result = run::run(&args);
@@ -753,6 +763,16 @@ fn main() {
                 replay,
                 cache: None,
             };
+            if args.replay.is_none()
+                && let Err(error) = ready_for(
+                    &args.run.recipe,
+                    args.run.config.as_deref(),
+                    Some(&args.filler),
+                )
+            {
+                eprintln!("rascal heal: {error}");
+                std::process::exit(exit::code_for(&error));
+            }
             let pending = run_json::begin(run_json::pending_for(&args.run, Some(&args.filler)));
             run_json::watch_signals();
             let result = heal::heal(&args);
@@ -1212,9 +1232,15 @@ fn main() {
 }
 
 /// `rascal describe`: the contract's description document, as JSON or one line per action.
+/// It never fails on the configuration (table-manners 3.1): each action's readiness says what is
+/// missing.
 fn describe_cmd(json: bool, config: Option<&std::path::Path>) -> rascal_core::error::Result<()> {
-    let config = config.map(rascal_core::config::Config::read).transpose()?;
-    let description = rascal_mask::describe::description(config.as_ref())?;
+    let state = rascal_core::config::ConfigState::read(config);
+    let description = rascal_mask::describe::description(&Setup {
+        config: &state,
+        answers: &Default::default(),
+        failed_packs: &Default::default(),
+    })?;
     if json {
         let text = serde_json::to_string_pretty(&description)
             .map_err(|e| rascal_core::Error::usage(format!("description: {e}")))?;
@@ -1226,7 +1252,60 @@ fn describe_cmd(json: bool, config: Option<&std::path::Path>) -> rascal_core::er
         description.tool.name, description.tool.version, description.contract
     );
     for action in &description.actions {
-        println!("{:<14} {}", action.name, action.title);
+        let ready = match action.readiness.state {
+            rascal_core::contract::table_manners::ReadinessState::Ready => String::new(),
+            _ => format!(
+                " (needs setup: {})",
+                readiness::summary(
+                    &action
+                        .readiness
+                        .requirements
+                        .iter()
+                        .filter(|r| readiness::unmet(r))
+                        .cloned()
+                        .collect::<Vec<_>>()
+                )
+            ),
+        };
+        println!("{:<14} {}{ready}", action.name, action.title);
     }
     Ok(())
+}
+
+/// The command line's readiness check for `run` and `heal` (table-manners 3.1): the same check
+/// `serve` makes, before the run directory exists. A call that needs a missing or invalid
+/// requirement is a usage error naming them. Under `--replay` the check is not made: a replay
+/// answers from a recorded run, so whether it needs the pack or the filler is known only as it
+/// runs.
+fn ready_for(
+    recipe: &str,
+    config: Option<&std::path::Path>,
+    filler: Option<&str>,
+) -> rascal_core::error::Result<()> {
+    let state = rascal_core::config::ConfigState::read(config);
+    let action = rascal_mask::describe::action_name(recipe);
+    let readiness = readiness::for_call(
+        &Setup {
+            config: &state,
+            answers: &Default::default(),
+            failed_packs: &Default::default(),
+        },
+        &action,
+        filler.map_or(readiness::Use::MaskOnly, readiness::Use::Filler),
+    );
+    let unmet: Vec<_> = readiness
+        .requirements
+        .iter()
+        .filter(|r| readiness::unmet(r))
+        .cloned()
+        .collect();
+    if unmet.is_empty() {
+        return Ok(());
+    }
+    let setups: Vec<String> = unmet.iter().filter_map(|r| r.setup.clone()).collect();
+    Err(rascal_core::Error::usage(format!(
+        "not ready: {}. {}",
+        readiness::summary(&unmet),
+        setups.join(" ")
+    )))
 }

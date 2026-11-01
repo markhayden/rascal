@@ -1795,9 +1795,13 @@ keeps having no default lookup: the only way to choose a configuration is `--con
 optional (the config's `[workspace] dir`, else `$XDG_DATA_HOME/rascal/workspace`, beside the
 runs root's default), so a host needs nothing but `serve` and, if it likes, `--config`. In
 `serve`, a pack that does not start no longer stops the server: its tools are absent, stderr says
-why, and its requirement says so.
+why, and its requirement says so; a run started with such a pack notes it in its journal and
+leaves its tools out, so a mask-only call still runs and a recipe that needs the pack fails
+with the pack's own error.
 
-Readiness is one function, `readiness::for_call(state, action, filler, answers)` in a new module,
+Readiness is one function, `readiness::for_call(setup, action, use)` in a new module (`setup`
+holds the config state, the session's answers and the packs `serve` could not start; `use` is
+the call's one filler, none, or the description's default use),
 used by `describe` and later by the estimate and the limits check (the call's one filler, 3.1: an
 estimate's readiness is the call's own). In `describe` an action's readiness describes its
 **default use** (3.1: the action as configured now, its requirements naming every variable that
@@ -1828,14 +1832,14 @@ pack, sends a request or writes anything. Requirements, by kind:
   artifact the install's `artifacts.toml` names (the detector, its tokenizer, the segmenter's
   encoder and decoder), looked up exactly where the pack looks (`RASCAL_TOOLS_MODELS`
   when the pack entry passes it, else the install's `models/`, else the pack's default cache),
-  `present` when the file exists with the size the install's `bundle.toml` records, else
+  `present` when the file exists and is not empty (`bundle.toml` records digests, not sizes), else
   `missing` with the setup naming the directory looked in and `rascal-tools fetch`. Digests are
   not hashed here (749 MB on every `describe`; 3.1 allows `present` for an unchecked file); the
   pack still verifies them before use, and rascal does not see that check, so it never reports a
   file `valid` in v0.3.
 - `env`, for the non-secret variables rascal or a pack reads (3.1): each name a configured pack
   entry passes through (`[packs.*] env`, such as `RASCAL_TOOLS_MODELS`), on the actions that use
-  the pack, and each variable a command filler's entry passes; `present` when set. When unset it
+  the pack (a filler entry passes no variables of its own); `present` when set. When unset it
   is `missing` only if the action needs it (for the models directory: the files are not found by
   the pack's fallbacks either); otherwise it is omitted, since nothing stands in the way.
   Credentials stay `credential`, never `env`.
@@ -1852,7 +1856,8 @@ pack, a model file or a needed `env`), the call is a JSON-RPC `-32602` with refu
 those requirements. It allocates nothing, writes no run, spends nothing and releases its
 `client_run_id` (12.7). To carry it, `Actions::call`'s error becomes structured (`CallError {
 message, data }`) in place of a string. On the command line, `rascal run` and `heal` make the same
-check before creating the run directory and exit 64 naming the requirements. A mask-only call
+check before creating the run directory and exit 64 naming the requirements (not under
+`--replay`, which answers from a recorded run). A mask-only call
 needs nothing and runs in every config state.
 
 **CLI scenario.** `rascal describe --json` with no flags prints a valid description with
@@ -1861,24 +1866,24 @@ prints `invalid` with the parse error and exits 0; `rascal serve` with no flags 
 `initialize`, `describe` and a mask-only `seam` call.
 
 **Acceptance.**
-- [ ] `describe` exits 0 and validates with no configuration, a missing file and an invalid file;
+- [x] `describe` exits 0 and validates with no configuration, a missing file and an invalid file;
       the requirement states are as above; no credential value appears in any output (a test sets
       a key to a sentinel and searches stdout, stderr, the document and the refusal for it).
-- [ ] `serve` starts with no flags but `--runs`, with an invalid configuration, and with a pack
+- [x] `serve` starts with no flags but `--runs`, with an invalid configuration, and with a pack
       whose launcher is missing; its `describe` agrees with the CLI's; a mask-only call completes;
       a call naming a filler without configuration is refused `not_ready` naming `rascal.toml`,
       validating against `refusal.json`, with no run directory, no runs entry and its
       `client_run_id` accepted on the next request; a call naming a filler whose key is unset is
       refused `not_ready` naming the `credential`, with no request to the filler.
-- [ ] `remove_prompt`'s readiness follows an install: missing launcher, launcher without model
+- [x] `remove_prompt`'s readiness follows an install: missing launcher, launcher without model
       files, launcher with every file (`needs_setup`, `needs_setup`, `ready`), against a fake
-      install tree; the model directory resolution matches the pack's (a pytest case prints the
-      pack's resolved directory for the same environment and the Rust test compares); a pack entry
+      install tree; the model directory resolution matches the pack's (the pack's resolution and
+      rascal's both check one table, `fixtures/readiness/models-dir.json`); a pack entry
       passing `RASCAL_TOOLS_MODELS` lists it as `env` (`present` when set; `missing` when unset
       and the fallbacks hold no model files; absent when they do).
-- [ ] With a priced HTTP filler configured, every action lists its `credential` and `model`; with
+- [x] With a priced HTTP filler configured, every action lists its `credential` and `model`; with
       none, only `remove_prompt` has requirements.
-- [ ] Neither `describe` nor readiness starts a pack or makes a request (the fake pack's start
+- [x] Neither `describe` nor readiness starts a pack or makes a request (the fake pack's start
       marker is absent; the fake HTTP filler saw nothing).
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- describe::

@@ -47,6 +47,40 @@ pub struct ActionResult {
     pub images: Vec<Vec<u8>>,
 }
 
+/// A failure before a run exists (table-manners 5): sent as a JSON-RPC invalid-params error,
+/// with `data` when it is a refusal the contract names (`schemas/core/refusal.json`, such as
+/// `not_ready`), else with the usage class. Either releases the request's correlation id.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CallError {
+    pub message: String,
+    pub data: Option<serde_json::Value>,
+}
+
+impl CallError {
+    /// A refusal the contract names, `data` being its refusal object.
+    pub fn refused(message: impl Into<String>, data: serde_json::Value) -> CallError {
+        CallError {
+            message: message.into(),
+            data: Some(data),
+        }
+    }
+}
+
+impl From<String> for CallError {
+    fn from(message: String) -> CallError {
+        CallError {
+            message,
+            data: None,
+        }
+    }
+}
+
+impl From<&str> for CallError {
+    fn from(message: &str) -> CallError {
+        CallError::from(message.to_string())
+    }
+}
+
 /// A resource's body: text with its media type, or bytes (sent as base64).
 pub enum ResourceBody {
     Text { mime: String, text: String },
@@ -68,9 +102,10 @@ pub trait Actions: Send + Sync {
     /// Runs one. `client_run_id` is the caller's correlation id, already claimed (table-manners
     /// 4.4); `progress` takes the run's reference at allocation, then a line about each step;
     /// `cancel` is set when the client cancels. `Err` is a failure before a run exists (a
-    /// JSON-RPC error, which releases the correlation id when no run was allocated); a run's own
-    /// outcome, `invalid` and `error` included, is an `ActionResult`. A cancelled run returns
-    /// `Err`, and the server sends no result for it.
+    /// JSON-RPC error, carrying the refusal data when it is one the contract names, which
+    /// releases the correlation id when no run was allocated); a run's own outcome, `invalid`
+    /// and `error` included, is an `ActionResult`. A cancelled run returns `Err`, and the
+    /// server sends no result for it.
     fn call(
         &self,
         name: &str,
@@ -78,7 +113,7 @@ pub trait Actions: Send + Sync {
         client_run_id: Option<&str>,
         progress: &(dyn Fn(Progress) + Send + Sync),
         cancel: Arc<rascal_core::workspace::Cancel>,
-    ) -> std::result::Result<ActionResult, String>;
+    ) -> std::result::Result<ActionResult, CallError>;
     /// Fixed resources (`rascal://runs`).
     fn resources(&self) -> Vec<Resource>;
     /// Resource templates (`rascal://run/{id}/run.json`, …).
@@ -974,9 +1009,12 @@ impl Server {
         }
         let result = match outcome {
             Ok(Ok(result)) => result,
-            Ok(Err(message)) => {
+            Ok(Err(error)) => {
                 self.release(client_run_id.as_deref());
-                return Err(invalid(message));
+                return Err(match error.data {
+                    Some(data) => ErrorData::invalid_params(error.message, Some(data)),
+                    None => invalid(error.message),
+                });
             }
             Err(panicked) => {
                 self.release(client_run_id.as_deref());

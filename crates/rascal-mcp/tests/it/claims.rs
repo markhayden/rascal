@@ -11,8 +11,8 @@ use std::sync::{Arc, Condvar, Mutex};
 use rascal_core::registry::OpRegistry;
 use rascal_core::workspace::{Cancel, Workspace};
 use rascal_mcp::server::{
-    ActionResult, Actions, McpResource, McpResourceTemplate, McpTool, Progress, ResourceBody,
-    Server,
+    ActionResult, Actions, CallError, McpResource, McpResourceTemplate, McpTool, Progress,
+    ResourceBody, Server,
 };
 use rascal_mcp::transport::rmcp;
 use rmcp::ServiceExt;
@@ -59,14 +59,14 @@ impl Actions for Double {
         client_run_id: Option<&str>,
         progress: &(dyn Fn(Progress) + Send + Sync),
         _cancel: Arc<Cancel>,
-    ) -> Result<ActionResult, String> {
+    ) -> Result<ActionResult, CallError> {
         match args
             .get("fail")
             .or(args.get("panic"))
             .and_then(|v| v.as_str())
         {
             Some("before") if args.contains_key("panic") => panic!("the double panics"),
-            Some("before") => return Err("the double refuses before a run".to_string()),
+            Some("before") => return Err("the double refuses before a run".into()),
             _ => {}
         }
         let n = self.allocated.fetch_add(1, Ordering::SeqCst) + 1;
@@ -79,7 +79,7 @@ impl Actions for Double {
         progress(Progress::Run(reference.clone()));
         progress(Progress::Line("allocated".to_string()));
         if args.get("fail").and_then(|v| v.as_str()) == Some("after") {
-            return Err("the double fails after its run was allocated".to_string());
+            return Err("the double fails after its run was allocated".into());
         }
         if args.get("hold") == Some(&json!(true)) {
             let (open, wake) = &*self.gate;

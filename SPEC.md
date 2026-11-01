@@ -799,8 +799,11 @@ identity.
 
 ### The MCP server and client
 
-**`rascal serve --workspace <dir>`** is an MCP server over stdio at protocol revision
-`2025-11-25`. It advertises one tool per op with the op's manifest and its input schema as the
+**`rascal serve [--workspace <dir>]`** is an MCP server over stdio at protocol revision
+`2025-11-25`. It starts in every configuration state (no `--config`, a missing file, one that
+does not load) and with a pack that does not start (its tools are absent and stderr says why);
+the workspace defaults to the configuration's `[workspace] dir`, else
+`$XDG_DATA_HOME/rascal/workspace`. It advertises one tool per op with the op's manifest and its input schema as the
 tool schema, with **ordinary arguments only**: artifact ids and parameters. No argument is
 injected; the server resolves ids against its own workspace. Workspace tools: `workspace_import`
 (a path or base64 image in; a canonical `Image` and its `raw:` frame out), `workspace_list`
@@ -1029,7 +1032,7 @@ surface; this section is rascal's mapping onto it, built in milestone M8 (PLAN.m
 | `describe --json`, the `describe` tool | one action per shipped recipe; `estimate` is a reserved tool beside `describe`, never an action (v0.3) |
 | `serve`: action tools, `isError` results, progress heartbeat, cancellation, run resources, the runs list, caps and budget | beside the op tools of ADR 0015, which keep their envelopes |
 | v0.2: the run's reference in `run.json`, the runs list and progress `_meta`; correlation ids and the `client_run_id_reused` refusal; reserve and settle; not sent, known and unresolved spend; `rascal://runs{?cursor}`; `rascal://session` | M11: the ids persisted at allocation, claimed when a call is accepted; the session a UUID per `serve` |
-| v0.3 (M12, under way): per-action `readiness`, `cost.needs_env` gone, `max_spend_usd` above zero on every action, render `kind`, claims released with no run | task 12.1: a configured filler's key is a `credential` requirement (`present` or `missing` by name); task 12.7: a call refused with no run releases its `client_run_id`; the rest as PLAN.md M12 lays out |
+| v0.3 (M12, under way): per-action `readiness`, `cost.needs_env` gone, `max_spend_usd` above zero on every action, render `kind`, claims released with no run | task 12.1: a configured filler's key is a `credential` requirement (`present` or `missing` by name); task 12.7: a call refused with no run releases its `client_run_id`; task 12.2: `describe` and `serve` in every configuration state, readiness by local inspection (config, fillers, credentials, programs, the segmenter pack, its model files, the models variable), the `not_ready` refusal before any run; the rest as PLAN.md M12 lays out |
 | exit codes 0, 3, 64, 130, 143; 1 under `--strict` | as before, plus the signals |
 | `playground` | hands off to Wafflery, the shared program (its launcher agreement, H1); no UI in rascal |
 

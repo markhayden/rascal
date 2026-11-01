@@ -35,13 +35,19 @@ fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
+/// The fake pack behind a fake segmenter install (the launcher runs it, the model files are
+/// there), so the call's readiness passes as it would for a real install (task 12.2).
 fn config(dir: &Path) -> PathBuf {
     let path = dir.join("rascal.toml");
     let bin = env!("CARGO_BIN_EXE_rascal");
+    let install =
+        rascal_testkit::fake_install::write(&dir.join("pack"), &[bin, "fake-pack", "exact"], true)
+            .unwrap();
     std::fs::write(
         &path,
         format!(
-            "config_version = 1\n[packs.fake]\ncommand = [{bin:?}, \"fake-pack\", \"exact\"]\nrevision = \"fake 1\"\n[fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\nrevision = \"fake exact\"\n"
+            "config_version = 1\n[packs.fake]\ncommand = {}\nrevision = \"fake 1\"\n[fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\nrevision = \"fake exact\"\n",
+            install.command_toml()
         ),
     )
     .unwrap();
@@ -145,7 +151,8 @@ fn the_prompt_is_required_by_remove_prompt_and_refused_by_remove() {
         "{}",
         text(&result.stderr)
     );
-    // Without a pack, segment is not an op the run knows; the error says what to configure.
+    // Without a configuration the call is not ready: refused before its run, naming what to
+    // set up (task 12.2).
     let result = rascal(&[
         "run",
         "remove-prompt",
@@ -155,13 +162,14 @@ fn the_prompt_is_required_by_remove_prompt_and_refused_by_remove() {
         "--out",
         dir.join("c").to_str().unwrap(),
     ]);
-    assert_ne!(result.status.code(), Some(0));
+    assert_eq!(result.status.code(), Some(64), "{}", text(&result.stderr));
     assert!(
-        text(&result.stderr).contains("unknown op segment")
-            && text(&result.stderr).contains("needs a configured pack"),
+        text(&result.stderr).contains("not ready: config rascal.toml missing")
+            && text(&result.stderr).contains("dependency packs.rascal-tools missing"),
         "{}",
         text(&result.stderr)
     );
+    assert!(!dir.join("c").exists(), "no run directory");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

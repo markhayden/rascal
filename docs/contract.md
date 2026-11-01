@@ -55,14 +55,57 @@ arguments (`filler`, `set`, `projection`, `strict`) as `params_schema`, the outp
 `result`; `remove_prompt` fills `locations.found`), the cost, the readiness, the duration and the
 `dash` render (`kind: "server"`, `ready_timeout_s: 10`). Every action's `params_schema` declares
 `max_spend_usd` as `{"type": "number", "exclusiveMinimum": 0}`, since every action takes a filler
-and so may be paid. With `--config`, the configured fillers are the `filler` enum, a configured
-filler with a price makes an action `may_spend`, and each filler's key is a `credential`
-requirement in every action's `readiness`, by its variable's name: `present` when the variable
-exists in rascal's environment, `missing` (the action `needs_setup`) when it does not; its value
-is never read or printed. The rest of readiness (the configuration, the fillers, the segmenter
-pack and its files) comes with task 12.2. `estimate` is a reserved tool, never an action.
-`fixtures/contract/describe.json` pins the document without a configuration. The `describe` MCP
-tool returns the same document (8.5).
+and so may be paid. With `--config`, the configured fillers are the `filler` enum and a
+configured filler with a price makes an action `may_spend`. `estimate` is a reserved tool, never
+an action. `fixtures/contract/describe.json` pins the document without a configuration. The
+`describe` MCP tool returns the same document (8.5).
+
+### Readiness (3.1, task 12.2)
+
+`describe` never fails on the configuration and always exits 0. The configuration is read once
+into a state: `missing` (no `--config`, or a path naming no file), `invalid` (it does not read,
+parse or check; the reason names the file, line and column, never the offending text) or
+`loaded`, with its identity, the SHA-256 of its canonical serialization (ADR 0016); with no file
+the identity is the built-in defaults' (no filler, no pack, no limits), which are a
+configuration too. There is no default lookup: `--config <path>` is the only way to choose one.
+
+Each action's readiness is its default use: unconfigured, the mask alone, which needs nothing
+(every action but `remove_prompt` is `ready` with no requirements); with fillers configured,
+healing with any of them, so every variable a configured filler reads is named. It is
+`needs_setup` when a requirement is `missing` or `invalid`, else `ready` (rascal never says
+`unavailable`). Requirements come from a local inspection (`rascal_mask::readiness::for_call`):
+it reads variable names, the configuration and the file system, never a credential's value, and
+never starts a pack, sends a request or writes anything.
+
+| kind | name | state |
+|---|---|---|
+| `config` | `rascal.toml` | `present`, `invalid` (with the reason in `setup`) or `missing`; listed on every action once a file is given, and on `remove_prompt` always |
+| `model` | `fillers.<name>` | `present` for each configured filler (configured, not checked) |
+| `credential` | a filler's `key_env` | `missing` when the variable does not exist, else `valid` or `invalid` from this session's provider answers (task 12.3), else `present` |
+| `dependency` | a command filler's `command[0]` | `present` when it is an executable file (by path, or found on `PATH`), else `missing` |
+| `dependency` | `packs.<name>` (`remove_prompt`) | the entry whose command is `<dir>/.venv/bin/rascal-tools`: `missing` with no such entry or no launcher there, `invalid` when `serve` could not start it, else `present` |
+| `file` | each model file the install's `artifacts.toml` names | `present` when it is in the directory the pack reads and not empty, else `missing` naming that directory; digests are not hashed here (the pack checks them before use), so a file is never `valid` |
+| `env` | each non-secret variable the segmenter entry passes (`[packs.*] env`) | `present` when set; unset, `RASCAL_TOOLS_MODELS` is `missing` only when the files are not where the pack falls back to, and anything else is omitted |
+
+The directory the pack reads its models from is resolved exactly as the pack does:
+`RASCAL_TOOLS_MODELS` when the entry passes it and it is set and not empty, else `models/` in the
+install directory when it exists, else `~/.cache/rascal-tools`. `fixtures/readiness/models-dir.json`
+is the table both the Rust and the Python suites check. The install's `artifacts.toml` is the one
+at its root (a bundle install) or under `src/rascal_tools/` (a checkout's `tools/python`). A
+command filler passes no variables of its own, so it adds no `env` requirement.
+
+A call is refused only for what it needs, before any run: its arguments are read for the
+filler, its own readiness is computed (`MaskOnly`, or the one filler it names), and when a
+requirement it needs is `missing` or `invalid` (no configuration or an invalid one for a filler
+call, a filler the configuration does not have, its key not set or already rejected, its program
+not found, `remove_prompt` without its pack, a model file or the models variable), `serve`
+answers JSON-RPC `-32602` with `data: {reason: "not_ready", run: null, requirements}` naming
+exactly those requirements (`refusal.json`). It allocates nothing, writes no run, spends nothing
+and releases its `client_run_id`. On the command line `rascal run` and `rascal heal` make the
+same check before the run directory exists and exit 64 naming the requirements (under
+`--replay` they do not: a replay answers from the record, so whether it needs the pack or the
+filler is known only as it runs). A mask-only call needs nothing and runs in every
+configuration state.
 
 ## `run.json` and the header (8.4)
 
@@ -98,15 +141,26 @@ identities. `spend` and `cache` come from the fill (8.6).
 ## `serve` (8.5)
 
 ```
-rascal serve --workspace ws/ [--config rascal.toml] [--concurrency n] [--runs dir]
+rascal serve [--workspace ws/] [--config rascal.toml] [--concurrency n] [--runs dir]
 ```
+
+`serve` starts in every configuration state (3.1, 5): with no `--config`, a file that does not
+exist or one that does not load (said once on stderr), its actions report what is missing and a
+call that needs it is refused `not_ready`. `--workspace` (the op tools' workspace) defaults to
+the configuration's `[workspace] dir`, relative to the file, else
+`$XDG_DATA_HOME/rascal/workspace` beside the runs root, so a host needs nothing but `serve` and,
+if it likes, `--config`. A pack that does not start no longer stops the server: its tools are
+absent, stderr says why, and its requirement reads `invalid`; a run started with such a pack
+notes it in its journal, and a recipe whose op nothing serves then fails with the pack's own
+error.
 
 Beside the op tools and the workspace tools (ADR 0015, unchanged), `serve` lists one MCP tool per
 action in the description, `describe` and `estimate`; an action never shadows an op's name. A call runs the
 recipe, through `heal` when `filler` is given, in its own run directory under `--runs`
 (`$XDG_DATA_HOME/rascal/runs`, else `~/.local/share/rascal/runs`), and its result is that run's
 `run.json` as `structuredContent`, with `isError` true for `invalid` and `error`. JSON-RPC errors
-are left for failures before a run exists (an unknown tool, malformed arguments).
+are left for failures before a run exists (an unknown tool, malformed arguments, a call that is
+not ready).
 
 - **Images in.** `image` is `{ "path": "/abs/…" }` or `{ "inline": { "media_type", "data" } }`,
   each with an optional `expect` reference checked against the file (digest and dimensions; a

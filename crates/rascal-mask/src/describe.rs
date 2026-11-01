@@ -5,18 +5,17 @@
 
 use std::collections::BTreeMap;
 
-use rascal_core::config::Config;
 use rascal_core::contract::table_manners::images::{
     ImageSlot, Limits, LocationKind, LocationOutput, LocationSlot, Outputs, Vocabulary,
 };
 use rascal_core::contract::table_manners::{
-    Action, Cost, DescribedTool, Description, Duration, Profile, Readiness, ReadinessState, Render,
-    RenderKind, Requirement, RequirementKind, RequirementState, SpendBasis,
+    Action, Cost, DescribedTool, Description, Duration, Profile, Render, RenderKind, SpendBasis,
 };
 use rascal_core::error::Result;
 use rascal_core::recipe::InputType;
 use serde_json::{Value, json};
 
+use crate::readiness::{self, Setup, Use};
 use crate::recipes::{SHIPPED, load_recipe};
 
 /// The largest inline image `serve` takes, in decoded bytes (11.2): 64 MiB.
@@ -98,56 +97,12 @@ pub fn max_spend_usd_schema() -> Value {
             "description": "Lower the per-call spend cap for this call (USD, above zero)." })
 }
 
-/// An action's readiness under `config` (3.1): each configured filler's key, by its variable's
-/// name, is a `credential` requirement, `present` when the variable exists in rascal's
-/// environment and `missing` when it does not; its value is never read. The configuration,
-/// the fillers, the segmenter pack and its files join these in task 12.2.
-pub fn readiness(config: Option<&Config>) -> Readiness {
-    let mut names: Vec<String> = config
-        .map(|c| {
-            c.fillers
-                .values()
-                .filter_map(|f| f.key_env.clone())
-                .collect()
-        })
-        .unwrap_or_default();
-    names.sort();
-    names.dedup();
-    let requirements: Vec<Requirement> = names
-        .into_iter()
-        .map(|name| Requirement {
-            kind: RequirementKind::Credential,
-            state: if std::env::var_os(&name).is_some() {
-                RequirementState::Present
-            } else {
-                RequirementState::Missing
-            },
-            setup: Some(format!(
-                "Set `{name}` in the environment rascal is started with."
-            )),
-            name,
-        })
-        .collect();
-    let unmet = requirements.iter().any(|r| {
-        matches!(
-            r.state,
-            RequirementState::Missing | RequirementState::Invalid
-        )
-    });
-    Readiness {
-        state: if unmet {
-            ReadinessState::NeedsSetup
-        } else {
-            ReadinessState::Ready
-        },
-        requirements,
-    }
-}
-
-/// The description for the shipped recipes under `config` (its fillers name the spend and the
-/// keys; without one no filler is configured and nothing spends). `estimate` is a reserved tool
-/// (3, 5), never one of the actions.
-pub fn description(config: Option<&Config>) -> Result<Description> {
+/// The description for the shipped recipes under the configuration `setup` holds (its fillers
+/// name the spend and the keys; without one no filler is configured and nothing spends), each
+/// action's readiness its default use (3.1, [`readiness::for_call`]). It never fails on the
+/// configuration. `estimate` is a reserved tool (3, 5), never one of the actions.
+pub fn description(setup: &Setup<'_>) -> Result<Description> {
+    let config = setup.config.config();
     let fillers: Vec<String> = config
         .map(|c| c.fillers.keys().cloned().collect())
         .unwrap_or_default();
@@ -158,7 +113,6 @@ pub fn description(config: Option<&Config>) -> Result<Description> {
             .values()
             .any(|f| f.spend_usd_per_call.is_some_and(|p| p > 0.0))
     });
-    let readiness = readiness(config);
     let max_s = config
         .and_then(|c| c.fillers.values().map(|f| f.timeout_s).max())
         .unwrap_or(0)
@@ -266,7 +220,7 @@ pub fn description(config: Option<&Config>) -> Result<Description> {
                 may_spend: remote,
                 basis: remote.then_some(SpendBasis::Estimated),
             },
-            readiness: readiness.clone(),
+            readiness: readiness::for_call(setup, &action_name(name), Use::Configured),
             duration: Duration {
                 typical_s: if found { 20.0 } else { 5.0 },
                 max_s,

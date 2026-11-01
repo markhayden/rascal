@@ -3,6 +3,9 @@
 //! Task 12.1: at v0.3, with no `estimate` among the actions, `readiness` on every action (a
 //! configured key a `credential` requirement, never its value), the dash render's `kind`, and
 //! `max_spend_usd` above zero on every action.
+//! Task 12.2: readiness without configuration. `describe` exits 0 with no file, a missing one
+//! and an invalid one; each action's readiness is its default use (the mask alone unconfigured,
+//! healing with the configured fillers otherwise).
 #![allow(clippy::unwrap_used)]
 
 use std::path::{Path, PathBuf};
@@ -105,12 +108,27 @@ fn describe_is_the_contracts_document_and_matches_its_fixture() {
     let errors = valid("urn:table-manners:core:description", &doc);
     assert!(errors.is_empty(), "{errors:?}");
     assert_v03_shapes(&doc);
-    // With no filler configured nothing reads a key: every action is ready as it stands.
+    // Unconfigured, an action's default use is the mask alone, which needs nothing; only
+    // `remove_prompt` needs its pack, configured in a file that was not given.
     for action in doc["actions"].as_array().unwrap() {
-        assert_eq!(
-            action["readiness"],
-            serde_json::json!({ "state": "ready", "requirements": [] })
-        );
+        if action["name"] == "remove_prompt" {
+            assert_eq!(
+                action["readiness"],
+                serde_json::json!({ "state": "needs_setup", "requirements": [
+                    { "kind": "config", "name": "rascal.toml", "state": "missing",
+                      "setup": "Start rascal with `--config <path>` naming the segmenter pack." },
+                    { "kind": "dependency", "name": "packs.rascal-tools", "state": "missing",
+                      "setup": "Run `rascal tools setup --bundle <bundle> --config <path>`." }
+                ] })
+            );
+        } else {
+            assert_eq!(
+                action["readiness"],
+                serde_json::json!({ "state": "ready", "requirements": [] }),
+                "{}",
+                action["name"]
+            );
+        }
     }
     let names: Vec<&str> = doc["actions"]
         .as_array()
@@ -184,11 +202,28 @@ fn the_m11_configuration_describes_at_v03() {
     let errors = valid("urn:table-manners:core:description", &doc);
     assert!(errors.is_empty(), "{errors:?}");
     assert_v03_shapes(&doc);
+    let bin = env!("CARGO_BIN_EXE_rascal");
     for action in doc["actions"].as_array().unwrap() {
         assert_eq!(action["cost"]["may_spend"], true);
-        // Command fillers read no key: nothing stands in the way yet (the rest of readiness
-        // comes with 12.2).
-        assert_eq!(action["readiness"]["state"], "ready");
+        // Command fillers read no key: the file, each filler and its program (one program for
+        // both, named once), all there.
+        let requirements = action["readiness"]["requirements"].as_array().unwrap();
+        assert_eq!(
+            requirements[..4],
+            [
+                serde_json::json!({ "kind": "config", "name": "rascal.toml", "state": "present" }),
+                serde_json::json!({ "kind": "model", "name": "fillers.fake", "state": "present" }),
+                serde_json::json!({ "kind": "dependency", "name": bin, "state": "present" }),
+                serde_json::json!({ "kind": "model", "name": "fillers.slow", "state": "present" }),
+            ],
+            "{action:#}"
+        );
+        if action["name"] == "remove_prompt" {
+            assert_eq!(action["readiness"]["state"], "needs_setup");
+        } else {
+            assert_eq!(requirements.len(), 4, "{action:#}");
+            assert_eq!(action["readiness"]["state"], "ready");
+        }
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -237,30 +272,105 @@ fn a_configured_filler_is_offered_and_may_spend_with_its_key_a_credential() {
     );
     assert_eq!(seam["cost"]["may_spend"], true);
     assert_eq!(seam["cost"]["basis"], "estimated");
-    // The key's variable is a credential requirement, missing while it is unset.
+    // The key's variable is a credential requirement, missing while it is unset, beside the
+    // file and the filler.
     assert_eq!(
         seam["readiness"],
         serde_json::json!({
             "state": "needs_setup",
-            "requirements": [{
-                "kind": "credential",
-                "name": "EXAMPLE_KEY",
-                "state": "missing",
-                "setup": "Set `EXAMPLE_KEY` in the environment rascal is started with."
-            }]
+            "requirements": [
+                { "kind": "config", "name": "rascal.toml", "state": "present" },
+                { "kind": "model", "name": "fillers.remote", "state": "present" },
+                { "kind": "credential", "name": "EXAMPLE_KEY", "state": "missing",
+                  "setup": "Set `EXAMPLE_KEY` in the environment rascal is started with." }
+            ]
         })
     );
+    // Every action lists the credential and the filler (each may heal with it).
+    for action in doc["actions"].as_array().unwrap() {
+        let requirements = action["readiness"]["requirements"].as_array().unwrap();
+        for (kind, name) in [("credential", "EXAMPLE_KEY"), ("model", "fillers.remote")] {
+            assert!(
+                requirements
+                    .iter()
+                    .any(|r| r["kind"] == kind && r["name"] == name),
+                "{action:#}"
+            );
+        }
+    }
     // Set, it is present (found, not checked), and its value is never printed.
     let sentinel = "zq-sentinel-key-value-zq";
     let (doc, out) = describe(&[("EXAMPLE_KEY", sentinel)]);
     for action in doc["actions"].as_array().unwrap() {
-        assert_eq!(action["readiness"]["state"], "ready", "{action:#}");
-        assert_eq!(
-            action["readiness"]["requirements"][0]["state"], "present",
-            "{action:#}"
-        );
+        if action["name"] != "remove_prompt" {
+            assert_eq!(action["readiness"]["state"], "ready", "{action:#}");
+        }
+        let credential = action["readiness"]["requirements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["kind"] == "credential")
+            .unwrap()
+            .clone();
+        assert_eq!(credential["state"], "present", "{action:#}");
     }
     assert!(!String::from_utf8_lossy(&out.stdout).contains(sentinel));
     assert!(!String::from_utf8_lossy(&out.stderr).contains(sentinel));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_configuration_file_that_is_missing_or_invalid_is_described_and_exits_0() {
+    let dir = scratch("states");
+    let absent = dir.join("absent.toml");
+    let bad = dir.join("bad.toml");
+    std::fs::write(
+        &bad,
+        "config_version = 1\n[fillers.f\nurl = \"zq-not-shown-zq\"\n",
+    )
+    .unwrap();
+    for (path, state) in [(&absent, "missing"), (&bad, "invalid")] {
+        let out = rascal(&["describe", "--json", "--config", path.to_str().unwrap()]);
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        let errors = valid("urn:table-manners:core:description", &doc);
+        assert!(errors.is_empty(), "{errors:?}");
+        assert_v03_shapes(&doc);
+        // A file was given, so every action's default use reads it; it stands in the way.
+        for action in doc["actions"].as_array().unwrap() {
+            let config = &action["readiness"]["requirements"][0];
+            assert_eq!(config["kind"], "config", "{action:#}");
+            assert_eq!(config["name"], "rascal.toml");
+            assert_eq!(config["state"], state, "{action:#}");
+            assert_eq!(action["readiness"]["state"], "needs_setup");
+        }
+        let setup = doc["actions"][0]["readiness"]["requirements"][0]["setup"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        if state == "invalid" {
+            // The parse error, by place, without the file's text.
+            assert!(
+                setup.contains("line 2") && setup.contains("not valid TOML"),
+                "{setup}"
+            );
+            assert!(!String::from_utf8_lossy(&out.stdout).contains("zq-not-shown-zq"));
+        } else {
+            assert!(setup.contains("does not exist"), "{setup}");
+        }
+        // The plain listing says the same and exits 0 too.
+        let out = rascal(&["describe", "--config", path.to_str().unwrap()]);
+        assert_eq!(out.status.code(), Some(0));
+        assert!(
+            String::from_utf8_lossy(&out.stdout).contains(&format!("config rascal.toml {state}")),
+            "{}",
+            String::from_utf8_lossy(&out.stdout)
+        );
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }

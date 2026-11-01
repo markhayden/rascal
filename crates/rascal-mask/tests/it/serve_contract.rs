@@ -1110,3 +1110,239 @@ fn a_cap_of_zero_is_an_invalid_run_that_spends_nothing() {
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// `rascal serve` with `args` and `env` (with `HOME` and `XDG_DATA_HOME` in `dir`, so nothing
+/// defaults into the real home).
+fn start_with(dir: &Path, args: &[&str], env: &[(&str, &str)]) -> Client {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
+    command
+        .arg("serve")
+        .args(args)
+        .env_remove("RASCAL_LOG")
+        .env_remove("RASCAL_TOOLS_MODELS")
+        .env("HOME", dir.join("home"))
+        .env("XDG_DATA_HOME", dir.join("data"));
+    for (name, value) in env {
+        command.env(name, value);
+    }
+    Client::start(&mut command).unwrap()
+}
+
+/// `rascal describe --json` under the same environment as [`start_with`].
+fn cli_describe(dir: &Path, config: Option<&Path>, env: &[(&str, &str)]) -> serde_json::Value {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
+    command
+        .args(["describe", "--json"])
+        .env_remove("RASCAL_LOG")
+        .env_remove("RASCAL_TOOLS_MODELS")
+        .env("HOME", dir.join("home"))
+        .env("XDG_DATA_HOME", dir.join("data"));
+    if let Some(config) = config {
+        command.args(["--config", config.to_str().unwrap()]);
+    }
+    for (name, value) in env {
+        command.env(name, value);
+    }
+    let out = command.output().unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    serde_json::from_slice(&out.stdout).unwrap()
+}
+
+fn readiness_of<'a>(description: &'a serde_json::Value, action: &str) -> &'a serde_json::Value {
+    &description["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["name"] == action)
+        .unwrap()["readiness"]
+}
+
+/// A `not_ready` refusal: `-32602` with refusal data valid against the contract.
+fn not_ready(failure: Failure) -> serde_json::Value {
+    let Failure::Rpc { code, data, .. } = failure else {
+        panic!("not a JSON-RPC error: {failure}");
+    };
+    assert_eq!(code, -32602);
+    let data = data.unwrap();
+    valid("urn:table-manners:core:refusal", &data);
+    assert_eq!(data["reason"], "not_ready", "{data:#}");
+    assert_eq!(data["run"], serde_json::Value::Null);
+    data
+}
+
+fn run_dirs(runs: &Path) -> Vec<String> {
+    std::fs::read_dir(runs)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .filter(|n| n.starts_with("run-"))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Task 12.2 (table-manners 3.1, 5): `serve` starts with nothing but `--runs`, with a
+/// configuration that does not load, and with a pack whose launcher is missing; its `describe`
+/// agrees with the command line's; a mask-only call completes in every state.
+#[test]
+fn serve_starts_in_every_configuration_state() {
+    let dir = scratch("states");
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let bad = dir.join("bad.toml");
+    std::fs::write(&bad, "config_version = 1\n[fillers\n").unwrap();
+    let no_launcher = dir.join("no-launcher.toml");
+    std::fs::write(
+        &no_launcher,
+        format!(
+            "config_version = 1\n[packs.segmenter]\ncommand = [{:?}, \"serve\"]\n",
+            dir.join("pack/.venv/bin/rascal-tools")
+                .display()
+                .to_string()
+        ),
+    )
+    .unwrap();
+    let runs = dir.join("runs");
+    for (config, remove_prompt) in [
+        (None, "missing"),
+        (Some(&bad), "invalid"),
+        (Some(&no_launcher), "missing"),
+    ] {
+        let mut args = vec!["--runs", runs.to_str().unwrap()];
+        if let Some(config) = config {
+            args.extend(["--config", config.to_str().unwrap()]);
+        }
+        let mut client = start_with(&dir, &args, &[]);
+        let described = client
+            .call("describe", serde_json::json!({}))
+            .unwrap()
+            .structured
+            .unwrap();
+        valid("urn:table-manners:core:description", &described);
+        assert_eq!(
+            described,
+            cli_describe(&dir, config.map(PathBuf::as_path), &[]),
+            "serve and the command line describe alike"
+        );
+        let readiness = readiness_of(&described, "remove_prompt");
+        assert_eq!(readiness["state"], "needs_setup");
+        let first = &readiness["requirements"][0];
+        if config == Some(&no_launcher) {
+            assert_eq!(first["state"], "present", "{readiness:#}");
+            assert_eq!(readiness["requirements"][1]["name"], "packs.segmenter");
+            assert_eq!(readiness["requirements"][1]["state"], remove_prompt);
+        } else {
+            assert_eq!(first["name"], "rascal.toml");
+            assert_eq!(first["state"], remove_prompt, "{readiness:#}");
+        }
+        let out = client
+            .call(
+                "seam",
+                serde_json::json!({ "image": { "path": pano.to_str().unwrap() } }),
+            )
+            .unwrap();
+        let s = out.structured.unwrap();
+        assert_eq!(s["status"], "completed", "{s:#}");
+        client.close().unwrap();
+    }
+    // Without --workspace the op tools' workspace is beside the default runs root.
+    assert!(dir.join("data/rascal/workspace").is_dir());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 12.2 (table-manners 3.1, 4.4): a call that needs what is missing is refused `not_ready`
+/// before any run, naming exactly that: no run directory, no runs entry, no request to the
+/// filler, and its correlation id free for the next request. No credential value appears in
+/// the description or the refusal.
+#[test]
+fn a_call_that_needs_what_is_missing_is_refused_not_ready() {
+    let dir = scratch("not-ready");
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let runs_dir = dir.join("runs");
+
+    // No configuration: a filler call needs it.
+    let mut client = start_with(&dir, &["--runs", runs_dir.to_str().unwrap()], &[]);
+    let call = |client: &mut Client, args: serde_json::Value, id: &str| {
+        client.request(
+            "tools/call",
+            serde_json::json!({ "name": "seam", "arguments": args,
+                                "_meta": { "table-manners/client_run_id": id } }),
+        )
+    };
+    let refused = not_ready(
+        call(
+            &mut client,
+            serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "fake" }),
+            "retry-1",
+        )
+        .unwrap_err(),
+    );
+    assert_eq!(
+        refused["requirements"],
+        serde_json::json!([{ "kind": "config", "name": "rascal.toml", "state": "missing",
+                             "setup": "Start rascal with `--config <path>` naming the filler." }])
+    );
+    assert!(run_dirs(&runs_dir).is_empty(), "no run directory");
+    assert!(runs(&mut client)["runs"].as_array().unwrap().is_empty());
+    // The id was released: the corrected call runs under it.
+    let done = call(
+        &mut client,
+        serde_json::json!({ "image": { "path": pano.to_str().unwrap() } }),
+        "retry-1",
+    )
+    .unwrap();
+    assert_eq!(done["structuredContent"]["status"], "completed");
+    assert_eq!(done["structuredContent"]["run"]["client_run_id"], "retry-1");
+    client.close().unwrap();
+
+    // A filler whose key is unset: refused naming the credential, and nothing is sent.
+    let (url, seen) =
+        rascal_testkit::fake_filler::spawn(rascal_testkit::fake_filler::Behaviour::Exact, None);
+    let config = dir.join("rascal.toml");
+    std::fs::write(
+        &config,
+        format!(
+            "config_version = 1\n[fillers.remote]\nurl = \"{url}\"\nprofile = \"grey\"\nkey_env = \"SERVE_UNSET_KEY\"\nspend_usd_per_call = 0.04\n[fillers.hosted]\nurl = \"{url}\"\nprofile = \"grey\"\nkey_env = \"SERVE_SET_KEY\"\n"
+        ),
+    )
+    .unwrap();
+    let sentinel = "zq-serve-sentinel-zq";
+    let runs_dir = dir.join("runs-2");
+    let mut client = start_with(
+        &dir,
+        &[
+            "--runs",
+            runs_dir.to_str().unwrap(),
+            "--config",
+            config.to_str().unwrap(),
+        ],
+        &[("SERVE_SET_KEY", sentinel)],
+    );
+    let described = client
+        .call("describe", serde_json::json!({}))
+        .unwrap()
+        .structured
+        .unwrap();
+    let refused = not_ready(
+        client
+            .call(
+                "seam",
+                serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "remote" }),
+            )
+            .unwrap_err(),
+    );
+    assert_eq!(
+        refused["requirements"],
+        serde_json::json!([{ "kind": "credential", "name": "SERVE_UNSET_KEY", "state": "missing",
+                             "setup": "Set `SERVE_UNSET_KEY` in the environment rascal is started with." }])
+    );
+    assert!(seen.lock().unwrap().is_empty(), "no request to the filler");
+    assert!(run_dirs(&runs_dir).is_empty());
+    assert!(!described.to_string().contains(sentinel));
+    assert!(!refused.to_string().contains(sentinel));
+    let ledger = session(&mut client);
+    assert_eq!(ledger["spent_usd"], 0.0);
+    assert_eq!(ledger["reserved_usd"], 0.0);
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}

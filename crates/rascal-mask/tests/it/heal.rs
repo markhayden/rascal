@@ -373,7 +373,8 @@ fn continuity_falls_replay_needs_no_filler_and_no_dash_skips_the_page() {
             .is_some_and(|n| n.starts_with("filler call: "))),
         "no call was made"
     );
-    // Without --replay the missing filler is an operational error.
+    // Without --replay the missing filler program is not ready: refused before the run
+    // (task 12.2).
     let third = dir.join("third");
     let out = rascal(&[
         "heal",
@@ -386,7 +387,14 @@ fn continuity_falls_replay_needs_no_filler_and_no_dash_skips_the_page() {
         "--out",
         third.to_str().unwrap(),
     ]);
-    assert_eq!(out.status.code(), Some(3));
+    assert_eq!(out.status.code(), Some(64));
+    assert!(
+        String::from_utf8_lossy(&out.stderr)
+            .contains("not ready: dependency /nonexistent/filler missing"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(!third.exists(), "no run directory");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

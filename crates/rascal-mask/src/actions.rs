@@ -9,15 +9,18 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use rascal_core::Error;
-use rascal_core::config::Config;
+use std::collections::BTreeMap;
+
+use rascal_core::config::{Config, ConfigState};
 use rascal_core::contract::table_manners::images::{ImageReference, Locator};
 use rascal_core::contract::table_manners::{
-    RunState, RunSummary, RunsList, Session as TmSession, Tool as TmTool,
+    Readiness, Refusal, RefusalReason, Requirement, RunState, RunSummary, RunsList,
+    Session as TmSession, Tool as TmTool,
 };
 use rascal_core::workspace::Cancel;
 use rascal_mcp::server::{
-    ActionResult, Actions, McpResource as Resource, McpResourceTemplate as ResourceTemplate,
-    McpTool as Tool, Progress, ResourceBody,
+    ActionResult, Actions, CallError, McpResource as Resource,
+    McpResourceTemplate as ResourceTemplate, McpTool as Tool, Progress, ResourceBody,
 };
 use serde_json::{Map, Value, json};
 
@@ -25,11 +28,18 @@ use crate::run_json::{self, Ended, usd};
 use crate::{heal, run};
 use rascal_mask::describe::{self, INLINE_BYTES, recipe_of};
 use rascal_mask::filler::Spent;
+use rascal_mask::readiness::{self, Answers, Setup, Use};
 
 /// The contract's actions over the shipped recipes, with runs under `runs`.
 pub struct ContractActions {
+    /// The configuration file, when it loaded (runs read it again by path).
     pub config_path: Option<PathBuf>,
+    /// The loaded configuration, `config_state`'s when the file loaded.
     pub config: Option<Config>,
+    /// The configuration as read once at start, in whatever state (table-manners 3.1, 4.6).
+    pub config_state: ConfigState,
+    /// The packs that did not start, with the reason: their requirement reads `invalid`.
+    pub failed_packs: BTreeMap<String, String>,
     pub runs: PathBuf,
     /// What this server process has spent and holds for calls under way (table-manners 4.5).
     pub ledger: std::sync::Mutex<Ledger>,
@@ -106,13 +116,17 @@ impl Drop for Reservation<'_> {
     }
 }
 
-/// The default runs root: `$XDG_DATA_HOME/rascal/runs`, else `~/.local/share/rascal/runs`.
-pub fn default_runs_root() -> PathBuf {
+/// The data home: `$XDG_DATA_HOME`, else `~/.local/share`.
+pub fn data_home() -> PathBuf {
     std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("rascal/runs")
+}
+
+/// The default runs root: `$XDG_DATA_HOME/rascal/runs`, else `~/.local/share/rascal/runs`.
+pub fn default_runs_root() -> PathBuf {
+    data_home().join("rascal/runs")
 }
 
 /// How many runs a page of `rascal://runs` holds (table-manners 4.3).
@@ -159,8 +173,28 @@ fn image_in_schema(description: &str) -> Value {
 
 impl ContractActions {
     fn description(&self) -> rascal_core::error::Result<Value> {
-        let d = describe::description(self.config.as_ref())?;
+        let d = describe::description(&self.setup())?;
         serde_json::to_value(&d).map_err(|e| Error::usage(format!("description: {e}")))
+    }
+
+    /// What readiness inspects in this session.
+    fn setup(&self) -> Setup<'_> {
+        Setup {
+            config: &self.config_state,
+            answers: &NO_ANSWERS,
+            failed_packs: &self.failed_packs,
+        }
+    }
+
+    /// Refuses a call that needs a requirement that is missing or invalid, before any run
+    /// (table-manners 3.1): the call's own readiness, for the filler its arguments name.
+    fn ready_for(&self, action: &str, args: &Map<String, Value>) -> Result<(), CallError> {
+        let filler = match args.get("filler").and_then(|v| v.as_str()) {
+            Some(name) => Use::Filler(name),
+            None => Use::MaskOnly,
+        };
+        let readiness = readiness::for_call(&self.setup(), action, filler);
+        not_ready(action, &readiness).map_or(Ok(()), Err)
     }
 
     fn input_schema(action: &Value) -> Map<String, Value> {
@@ -689,6 +723,34 @@ impl ContractActions {
     }
 }
 
+/// No provider has answered yet (task 12.3 keeps the session's answers).
+static NO_ANSWERS: Answers = Answers::new();
+
+/// The `not_ready` refusal for a call whose readiness is not `ready`: a JSON-RPC `-32602` with
+/// `{reason: "not_ready", run: null, requirements}` naming exactly the missing or invalid
+/// requirements (`refusal.json`). None when the call is ready.
+pub fn not_ready(action: &str, readiness: &Readiness) -> Option<CallError> {
+    let unmet: Vec<Requirement> = readiness
+        .requirements
+        .iter()
+        .filter(|r| readiness::unmet(r))
+        .cloned()
+        .collect();
+    if unmet.is_empty() {
+        return None;
+    }
+    let refusal = Refusal {
+        reason: RefusalReason::NotReady,
+        run: None,
+        requirements: Some(unmet.clone()),
+        error: None,
+    };
+    Some(CallError::refused(
+        format!("{action} is not ready: {}", readiness::summary(&unmet)),
+        serde_json::to_value(&refusal).unwrap_or(Value::Null),
+    ))
+}
+
 /// What a run was asked as, written into its inputs directory when it is allocated, before any
 /// paid work (table-manners 4.3): the runs list reads it for a run still going.
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -785,7 +847,7 @@ impl Actions for ContractActions {
         client_run_id: Option<&str>,
         progress: &(dyn Fn(Progress) + Send + Sync),
         cancel: Arc<Cancel>,
-    ) -> std::result::Result<ActionResult, String> {
+    ) -> std::result::Result<ActionResult, CallError> {
         if name == "describe" {
             return Ok(ActionResult {
                 structured: self.description().map_err(|e| e.to_string())?,
@@ -799,7 +861,7 @@ impl Actions for ContractActions {
                 .and_then(|v| v.as_str())
                 .unwrap_or_default();
             if recipe_of(action).is_none() {
-                return Err(format!("estimate: no action {action}"));
+                return Err(format!("estimate: no action {action}").into());
             }
             let filler = args.get("filler").and_then(|v| v.as_str());
             let ledger = self.ledger();
@@ -817,7 +879,9 @@ impl Actions for ContractActions {
             });
         }
         let recipe = recipe_of(name).ok_or_else(|| format!("no action {name}"))?;
+        self.ready_for(name, args)?;
         self.run_action(recipe, args, client_run_id, progress, cancel)
+            .map_err(CallError::from)
     }
 
     fn resources(&self) -> Vec<Resource> {

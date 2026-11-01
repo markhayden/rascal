@@ -144,7 +144,9 @@ pub fn run(args: &RunArgs) -> Result<RunReport> {
 
 /// Binds the inputs and runs the recipe; `heal` continues from the outcome. The registry is
 /// built here: the shipped ops plus every configured pack's tools, journaling into the run's
-/// workspace (so the run directory exists before the recipe is validated).
+/// workspace (so the run directory exists before the recipe is validated). A pack that does not
+/// start is noted and leaves its tools out, so a recipe that needs none of them still runs and
+/// one that does fails with the pack's own error.
 pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
     let config = args
         .config
@@ -202,8 +204,13 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
         None => Run::open(&out)?,
     }
     .with_cancel(args.cancel.clone());
-    let (registry, packs) =
-        crate::packs::registry_for(config.as_ref(), &run.workspace, args.replay.as_deref())?;
+    let (registry, packs, mut failed_packs) =
+        crate::packs::registry_tolerant(config.as_ref(), &run.workspace, args.replay.as_deref())?;
+    for (name, reason) in &failed_packs {
+        run.note(format!(
+            "packs.{name} did not start, so its tools are absent: {reason}"
+        ))?;
+    }
     for (key, value) in &args.overrides {
         let from = args.overrides_from.as_deref().unwrap_or("the caller");
         apply_override(&mut recipe, &registry, key, value)
@@ -235,6 +242,20 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
                 message: format!(
                     "{message}; it is not a shipped op, so it needs a configured pack (--config with a [packs.*] entry that serves it)"
                 ),
+            },
+            // An op nothing serves while a pack did not start: that pack's own error, as when a
+            // pack that does not start failed every run.
+            Error::Recipe {
+                recipe,
+                step,
+                message,
+            } if message.starts_with("unknown op ") => match failed_packs.pop_first() {
+                Some((_, error)) => error,
+                None => Error::Recipe {
+                    recipe,
+                    step,
+                    message,
+                },
             },
             other => other,
         }

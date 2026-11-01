@@ -82,7 +82,33 @@
       },
       "purpose": "A feathered rectangle as a mask.",
       "readiness": {
-        "requirements": [],
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.failing",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.slow",
+            "state": "present"
+          }
+        ],
         "state": "ready"
       },
       "renders": [
@@ -176,7 +202,33 @@
       },
       "purpose": "Masks the wrap edge of a panorama (or any vertical line) as a band, wide on smooth surfaces and thin on detail, with a tone ramp across it; with a filler, heals it.",
       "readiness": {
-        "requirements": [],
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.failing",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.slow",
+            "state": "present"
+          }
+        ],
         "state": "ready"
       },
       "renders": [
@@ -284,7 +336,33 @@
       },
       "purpose": "Masks an object at a location with its shadow, kept off protected regions and feathered; with a filler, removes it.",
       "readiness": {
-        "requirements": [],
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.failing",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.slow",
+            "state": "present"
+          }
+        ],
         "state": "ready"
       },
       "renders": [
@@ -391,8 +469,40 @@
       },
       "purpose": "Finds the objects a text prompt names with the segmenter pack and masks them as remove does; with a filler, removes them.",
       "readiness": {
-        "requirements": [],
-        "state": "ready"
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.failing",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.slow",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "packs.rascal-tools",
+            "setup": "Run `rascal tools setup --bundle <bundle> --config <path>`.",
+            "state": "missing"
+          }
+        ],
+        "state": "needs_setup"
       },
       "renders": [
         {
@@ -493,7 +603,33 @@
       },
       "purpose": "Tightens a stroke drawn along a scratch or tear to the defect's edges and feathers it; with a filler, repairs it.",
       "readiness": {
-        "requirements": [],
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.failing",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.slow",
+            "state": "present"
+          }
+        ],
         "state": "ready"
       },
       "renders": [
@@ -596,7 +732,33 @@
       },
       "purpose": "Masks a stain or spot as drawn, feathered; with a filler, repairs it.",
       "readiness": {
-        "requirements": [],
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.failing",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.slow",
+            "state": "present"
+          }
+        ],
         "state": "ready"
       },
       "renders": [
@@ -696,7 +858,33 @@
       },
       "purpose": "Inverts an earlier mask so a second pass may change everything else.",
       "readiness": {
-        "requirements": [],
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.failing",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.slow",
+            "state": "present"
+          }
+        ],
         "state": "ready"
       },
       "renders": [

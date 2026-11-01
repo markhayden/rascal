@@ -367,8 +367,21 @@
       },
       "purpose": "Finds the objects a text prompt names with the segmenter pack and masks them as remove does; with a filler, removes them.",
       "readiness": {
-        "requirements": [],
-        "state": "ready"
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "setup": "Start rascal with `--config <path>` naming the segmenter pack.",
+            "state": "missing"
+          },
+          {
+            "kind": "dependency",
+            "name": "packs.rascal-tools",
+            "setup": "Run `rascal tools setup --bundle <bundle> --config <path>`.",
+            "state": "missing"
+          }
+        ],
+        "state": "needs_setup"
       },
       "renders": [
         {
