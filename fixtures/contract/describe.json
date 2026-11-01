@@ -662,7 +662,7 @@
   ],
   "progress_interval_s": 10,
   "resources": [
-    "rascal://runs",
+    "rascal://runs{?cursor}",
     "rascal://run/{id}/run.json",
     "rascal://run/{id}/journal",
     "rascal://session"

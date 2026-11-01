@@ -280,7 +280,7 @@ pub fn description(config: Option<&Config>) -> Result<Description> {
         }),
         progress_interval_s: PROGRESS_INTERVAL_S,
         resources: vec![
-            "rascal://runs".to_string(),
+            "rascal://runs{?cursor}".to_string(),
             "rascal://run/{id}/run.json".to_string(),
             "rascal://run/{id}/journal".to_string(),
             "rascal://session".to_string(),

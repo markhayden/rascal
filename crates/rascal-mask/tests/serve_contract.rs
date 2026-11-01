@@ -918,3 +918,102 @@ fn a_call_cancelled_while_queued_leaves_no_run_and_keeps_its_id_claimed() {
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A run directory as `serve` allocates one, with its association, for a listing test.
+fn allocated(runs: &Path, ms: u128) -> String {
+    let id = format!("run-{ms}-4242");
+    std::fs::create_dir_all(runs.join(&id)).unwrap();
+    std::fs::create_dir_all(runs.join(format!("{id}.in"))).unwrap();
+    std::fs::write(
+        runs.join(format!("{id}.in/association.json")),
+        r#"{"action":"seam","session_id":null,"client_run_id":null}"#,
+    )
+    .unwrap();
+    id
+}
+
+/// One page of the runs list, valid against the contract.
+fn page(client: &mut Client, uri: &str) -> serde_json::Value {
+    let text = read_resource(client, uri)["text"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+    valid("urn:table-manners:core:runs", &value);
+    value
+}
+
+/// Task 11.5 (table-manners 4.3): `rascal://runs{?cursor}` pages newest first, 50 a page, with
+/// no gap or repeat and a null `next_cursor` on the last; a run started after page one was read
+/// is on a fresh page one, not on a later page; a cursor that is not a run id is a resource error.
+#[test]
+fn the_runs_list_pages_by_cursor() {
+    let dir = scratch("pages");
+    let runs_root = dir.join("runs");
+    let mut made: Vec<String> = (0..120)
+        .map(|i| allocated(&runs_root, 1_793_000_000_000 + i))
+        .collect();
+    made.reverse();
+    let mut client = start(&dir);
+    let described = client
+        .call("describe", serde_json::json!({}))
+        .unwrap()
+        .structured
+        .unwrap();
+    assert!(
+        described["resources"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("rascal://runs{?cursor}"))
+    );
+    let first = page(&mut client, "rascal://runs");
+    let mut seen: Vec<String> = Vec::new();
+    let mut current = first.clone();
+    let mut pages = 0;
+    loop {
+        pages += 1;
+        let entries = current["runs"].as_array().unwrap();
+        assert!(entries.len() <= 50);
+        seen.extend(
+            entries
+                .iter()
+                .map(|r| r["id"].as_str().unwrap().to_string()),
+        );
+        match current["next_cursor"].as_str() {
+            Some(cursor) => {
+                assert!(
+                    cursor
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b"._~-".contains(&b))
+                );
+                current = page(&mut client, &format!("rascal://runs?cursor={cursor}"));
+            }
+            None => break,
+        }
+    }
+    assert_eq!(pages, 3);
+    assert_eq!(seen, made, "a gap, a repeat or the wrong order");
+
+    // A run started after page one was read: not on page two, but on a fresh page one.
+    let late = allocated(&runs_root, 1_793_000_000_500);
+    let cursor = first["next_cursor"].as_str().unwrap().to_string();
+    let second = page(&mut client, &format!("rascal://runs?cursor={cursor}"));
+    assert!(
+        !second["runs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r["id"] == late.as_str())
+    );
+    let fresh = page(&mut client, "rascal://runs");
+    assert_eq!(fresh["runs"][0]["id"], late.as_str());
+
+    // A cursor that is not a run id is an error, not an empty page.
+    let bad = client.request(
+        "resources/read",
+        serde_json::json!({ "uri": "rascal://runs?cursor=nonsense" }),
+    );
+    assert!(bad.is_err(), "{bad:?}");
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}

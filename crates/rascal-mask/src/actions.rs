@@ -119,6 +119,17 @@ pub fn default_runs_root() -> PathBuf {
         .join("rascal/runs")
 }
 
+/// How many runs a page of `rascal://runs` holds (table-manners 4.3).
+const RUNS_PAGE: usize = 50;
+
+/// A run's start in milliseconds, from its id (`run-<ms>-<pid>`).
+fn started_ms(id: &str) -> u128 {
+    id.split('-')
+        .nth(1)
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(0)
+}
+
 /// A run id as rascal makes them, and nothing else (a resource URI names one).
 fn valid_id(id: &str) -> bool {
     let mut parts = id.splitn(3, '-');
@@ -599,7 +610,16 @@ impl ContractActions {
         }
     }
 
-    fn runs_list(&self) -> RunsList {
+    /// One page of the runs (table-manners 4.3): newest first by (started, id), `RUNS_PAGE` a
+    /// page, starting after `cursor`. The cursor is the last entry's run id, which carries its
+    /// own position (`run-<ms>-<pid>`); clients treat it as opaque. A cursor that is not a run id
+    /// gives no page.
+    fn runs_list(&self, cursor: Option<&str>) -> Option<RunsList> {
+        let after = match cursor {
+            None => None,
+            Some(id) if valid_id(id) => Some((started_ms(id), id.to_string())),
+            Some(_) => return None,
+        };
         let mut runs: Vec<(u128, RunSummary)> = Vec::new();
         for entry in std::fs::read_dir(&self.runs)
             .into_iter()
@@ -610,11 +630,7 @@ impl ContractActions {
             if !valid_id(&name) {
                 continue;
             }
-            let ms: u128 = name
-                .split('-')
-                .nth(1)
-                .and_then(|p| p.parse().ok())
-                .unwrap_or(0);
+            let ms = started_ms(&name);
             let done: Option<Value> = std::fs::read_to_string(entry.path().join(run_json::FILE))
                 .ok()
                 .and_then(|t| serde_json::from_str(&t).ok());
@@ -648,15 +664,27 @@ impl ContractActions {
             ));
         }
         runs.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.id.cmp(&a.1.id)));
-        RunsList {
+        let mut rest: Vec<RunSummary> = runs
+            .into_iter()
+            .filter(|(ms, run)| {
+                after
+                    .as_ref()
+                    .is_none_or(|(at, id)| (*ms, &run.id) < (*at, id))
+            })
+            .map(|(_, run)| run)
+            .collect();
+        let more = rest.len() > RUNS_PAGE;
+        rest.truncate(RUNS_PAGE);
+        let next_cursor = more.then(|| rest.last().map(|r| r.id.clone())).flatten();
+        Some(RunsList {
             contract: rascal_core::contract::CONTRACT_VERSION.to_string(),
             tool: TmTool {
                 name: "rascal".to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
             },
-            runs: runs.into_iter().map(|(_, r)| r).collect(),
-            next_cursor: None,
-        }
+            runs: rest,
+            next_cursor,
+        })
     }
 }
 
@@ -790,7 +818,10 @@ impl Actions for ContractActions {
 
     fn resources(&self) -> Vec<Resource> {
         let mut runs = Resource::new("rascal://runs", "runs");
-        runs.description = Some("Recent runs, newest first (table-manners 4.3).".into());
+        runs.description = Some(
+            "Runs, newest first, the first page; rascal://runs?cursor=<next_cursor> reads the next (table-manners 4.3)."
+                .into(),
+        );
         runs.mime_type = Some("application/json".into());
         let mut session = Resource::new("rascal://session", "session");
         session.description =
@@ -801,6 +832,7 @@ impl Actions for ContractActions {
 
     fn templates(&self) -> Vec<ResourceTemplate> {
         [
+            ("rascal://runs{?cursor}", "runs", "application/json"),
             ("rascal://run/{id}/run.json", "run", "application/json"),
             (
                 "rascal://run/{id}/journal",
@@ -825,10 +857,14 @@ impl Actions for ContractActions {
                 text: serde_json::to_string_pretty(&self.session_view()).ok()?,
             });
         }
-        if uri == "rascal://runs" {
+        if uri == "rascal://runs" || uri.starts_with("rascal://runs?") {
+            let cursor = match uri.strip_prefix("rascal://runs?") {
+                None => None,
+                Some(query) => Some(query.strip_prefix("cursor=")?),
+            };
             return Some(ResourceBody::Text {
                 mime: "application/json".into(),
-                text: serde_json::to_string_pretty(&self.runs_list()).ok()?,
+                text: serde_json::to_string_pretty(&self.runs_list(cursor)?).ok()?,
             });
         }
         let rest = uri.strip_prefix("rascal://run/")?;

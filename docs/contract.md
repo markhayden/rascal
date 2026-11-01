@@ -131,12 +131,15 @@ are left for failures before a run exists (an unknown tool, malformed arguments)
 - **Reads never wait on a run.** A run holds the call permit (serial by default,
   `--concurrency n` for more); `describe`, `estimate` and every resource read do not, so they
   answer while a run is under way (task 9.3).
-- **Resources.** `rascal://runs` (the contract's runs list, newest first, a run still going is
-  `running` from its allocation: its directory and its association, the action and both ids in
-  `<runs>/<id>.in/association.json`, are made before the first progress line and any paid work,
-  tasks 9.4 and 11.3), `rascal://session` (4.6), `rascal://run/{id}/run.json`, `rascal://run/{id}/journal`,
-  `rascal://run/{id}/images/{role}`. An id is exactly `run-<ms>-<pid>`; nothing else under the
-  runs root, and nothing outside it, can be read.
+- **Resources.** `rascal://runs{?cursor}` (the contract's runs list, newest first by start and id,
+  50 a page; `next_cursor` is the last entry's run id, null on the last page, and
+  `rascal://runs?cursor=<it>` reads the next; a run started after page one was read is on a fresh
+  page one; task 11.5; a run still going is `running` from its allocation: its directory and its
+  association, the action and both ids in `<runs>/<id>.in/association.json`, are made before the
+  first progress line and any paid work, tasks 9.4 and 11.3), `rascal://session` (4.6),
+  `rascal://run/{id}/run.json`, `rascal://run/{id}/journal`, `rascal://run/{id}/images/{role}`. An
+  id is exactly `run-<ms>-<pid>`; nothing else under the runs root, and nothing outside it, can be
+  read.
 
 ## The fill cache, prices and limits (8.6)
 
