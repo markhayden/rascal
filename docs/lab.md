@@ -61,7 +61,7 @@ whose input binds, through any chain of steps, to another finder's output is ref
 the binding (`finder b (detect) takes plane = a.plane, which derives from finder a`), because
 a cell's identity, finder invocation descriptors included, must be computable before any
 finder runs; such a recipe still runs under `rascal run`, just not in the lab. Every refusal
-names the thing that is wrong. `crates/rascal-mask/tests/lab_config.rs` has the cases.
+names the thing that is wrong. `crates/rascal-mask/tests/it/lab_config.rs` has the cases.
 
 ## Cells and attempts: `lab run`
 
@@ -107,7 +107,7 @@ refuses a directory holding another lab, or this lab under a changed protocol (a
 change after a run is a new lab name), and any other non-empty directory. A failed cell does
 not stop the others; the run ends with exit 3 and the attempt records say why. The example
 lab (`examples/lab/`, the fake filler, `--corpus-root fixtures/images`) runs eight cells
-offline in a few seconds; `crates/rascal-mask/tests/lab_run.rs` is the scenario.
+offline in a few seconds; `crates/rascal-mask/tests/it/lab_run.rs` is the scenario.
 
 ## Pairs and decode
 

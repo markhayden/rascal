@@ -191,7 +191,7 @@ installation that fails, or leaves no program, exits 74 and runs nothing. Off a 
 - **The cross-tool acceptance test, rascal's half.** A squint-shaped finding (a table-manners
   location with squint's `source`, `disposition` and `confidence`) masks exactly what rascal's own
   location does, and a finding on another image is refused
-  (`crates/rascal-mask/tests/contract_locations.rs`), in CI against the pinned contract. The other
+  (`crates/rascal-mask/tests/it/contract_locations.rs`), in CI against the pinned contract. The other
   half, rascal's mask back to squint as the region where change was allowed, lands with the mask
   handoff milestone.
 
