@@ -1,16 +1,20 @@
 # table-manners: rascal's side of the shared contract
 
 rascal conforms to [table-manners](https://github.com/markhayden/table-manners) v0.2.0 (milestones
-M8 and M9 for v0.1.0, M11 for v0.2.0), the shared contract of the owner's tools (ADR 0020, decisions
+M8 and M9 for v0.1.0, M11 for v0.2.0) and is moving to v0.3.0 in milestone M12, built against the
+v0.3 draft until it is published; the shared contract of the owner's tools (ADR 0020, decisions
 13 and 14): what an agent, a script or the playground sees from outside is the same for squint,
 rascal and the tools after them. The contract's text is the specification; this page is what
 rascal does under it (PLAN.md M8, M9 and M11).
 
 ## The pin
 
-`table-manners = "=0.2.0"` in the workspace `Cargo.toml`: the crate's serde types and embedded
-schemas, no logic. `scripts/check-contract.sh` warns in CI when crates.io has a newer release;
-moving the pin is a deliberate commit that also refreshes `fixtures/contract/`.
+`table-manners = "=0.2.0"` in the workspace `Cargo.toml` of `main`: the crate's serde types and
+embedded schemas, no logic. On the M12 branch the pin is
+`{ path = "../table-manners", version = "=0.3.0" }`, a sibling checkout of the contract's `v0.3`
+branch, until v0.3.0 is published (PLAN.md 12.10). `scripts/check-contract.sh` warns in CI when
+crates.io has a newer release, and when the pin is a path (a build against a draft); moving the
+pin is a deliberate commit that also refreshes `fixtures/contract/`.
 
 ## Image references (8.1)
 
@@ -48,9 +52,15 @@ The contract's description document: one action per shipped recipe (`seam`, `rem
 it does not take the `rect` op's name in `serve`), with the image slots (role
 `source`), the location slots and the kinds each takes, the text and mask inputs and the common
 arguments (`filler`, `set`, `projection`, `strict`) as `params_schema`, the outputs (`mask`,
-`result`; `remove_prompt` fills `locations.found`), the cost, the duration and the `dash` render.
-With `--config`, the configured fillers are the `filler` enum, and any configured filler makes an
-action `may_spend` with its key's variable named (never its value).
+`result`; `remove_prompt` fills `locations.found`), the cost, the readiness, the duration and the
+`dash` render (`kind: "server"`, `ready_timeout_s: 10`). Every action's `params_schema` declares
+`max_spend_usd` as `{"type": "number", "exclusiveMinimum": 0}`, since every action takes a filler
+and so may be paid. With `--config`, the configured fillers are the `filler` enum, a configured
+filler with a price makes an action `may_spend`, and each filler's key is a `credential`
+requirement in every action's `readiness`, by its variable's name: `present` when the variable
+exists in rascal's environment, `missing` (the action `needs_setup`) when it does not; its value
+is never read or printed. The rest of readiness (the configuration, the fillers, the segmenter
+pack and its files) comes with task 12.2. `estimate` is a reserved tool, never an action.
 `fixtures/contract/describe.json` pins the document without a configuration. The `describe` MCP
 tool returns the same document (8.5).
 
@@ -92,7 +102,7 @@ rascal serve --workspace ws/ [--config rascal.toml] [--concurrency n] [--runs di
 ```
 
 Beside the op tools and the workspace tools (ADR 0015, unchanged), `serve` lists one MCP tool per
-action in the description and `describe`; an action never shadows an op's name. A call runs the
+action in the description, `describe` and `estimate`; an action never shadows an op's name. A call runs the
 recipe, through `heal` when `filler` is given, in its own run directory under `--runs`
 (`$XDG_DATA_HOME/rascal/runs`, else `~/.local/share/rascal/runs`), and its result is that run's
 `run.json` as `structuredContent`, with `isError` true for `invalid` and `error`. JSON-RPC errors
@@ -159,12 +169,13 @@ settled, with a note (table-manners v0.2, 4.5). The contract files an authentica
 *known* at zero; rascal records it as `not_sent`, which also counts zero, so the spend is the
 same.
 `[limits]` holds `serve` to `call_cap_usd` (a call's `max_spend_usd` may lower it, never raise
-it) and `session_budget_usd` across the process's calls; a call whose price would pass either is
+it; it must be above zero, and 0 or less is an `invalid` run with code `usage`, since a cap of zero
+is not a cap) and `session_budget_usd` across the process's calls; a call whose price would pass either is
 refused before it runs, an `error` result with code `budget` (4.5). The check and a reservation of
 the call's worst case are one step under the session ledger's lock (task 9.2), so concurrent calls
 (`--concurrency`) never both pass against the same spend; the run's end settles the reservation
 into what it spent (unresolved charges included), and a run that ends without settling counts its
-reservation as unresolved spend. The `estimate` action returns the worst case for an action and
+reservation as unresolved spend. The `estimate` tool (still M9's input and output until task 12.5) returns the worst case for an action and
 filler, the effective per-call cap and whether the call would be allowed; the session is read
 from `rascal://session` (table-manners 4.6, task 11.2): one atomic observation of the ledger
 under a random UUID made when `serve` starts, with `budget_usd` and `remaining_usd` (both null

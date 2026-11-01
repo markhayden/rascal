@@ -1705,8 +1705,9 @@ one milestone branch, `m12-table-manners-v03`, cut from `main` after `m11`, with
 table-manners = { path = "../table-manners", version = "=0.3.0" }
 ```
 
-on a sibling checkout of table-manners at branch `v0.3`, at `a3e1507` or later (the commits that
-settled the questions this plan raised) (`scripts/check-contract.sh` already
+on a sibling checkout of table-manners at branch `v0.3`, at `e503a23` or later (the commits that
+settled the questions this plan raised, and Wafflery's three rulings folded in below at 12.5 and
+12.8) (`scripts/check-contract.sh` already
 reads the exact version of a path pin). Each task is a commit (or a short task branch
 `m12/<task>` merged into the milestone branch when tasks run in parallel) with `just check` green
 locally against that checkout; the commit message names the table-manners commit it was built
@@ -1762,14 +1763,14 @@ to `budget` until 12.4. `fixtures/table-manners/` and `fixtures/contract/describ
 regenerated at v0.3.
 
 **Acceptance.**
-- [ ] `rascal describe --json` with the M11 test configuration validates against the v0.3
+- [x] `rascal describe --json` with the M11 test configuration validates against the v0.3
       description schema: no `estimate` in `actions`, no `needs_env`, `readiness` on every action,
       the dash render with `kind` and `ready_timeout_s`, `max_spend_usd` with `exclusiveMinimum: 0`
       on every action; no action declares `many`.
-- [ ] `tools/list` still offers `estimate` and `describe`; each action tool's input schema has the
+- [x] `tools/list` still offers `estimate` and `describe`; each action tool's input schema has the
       same `max_spend_usd` as its `params_schema`.
-- [ ] A served call with `max_spend_usd: 0` ends `invalid`/`usage` with zero spend.
-- [ ] Every `run.json`, the runs pages, the session and the refusals validate against v0.3;
+- [x] A served call with `max_spend_usd: 0` ends `invalid`/`usage` with zero spend.
+- [x] Every `run.json`, the runs pages, the session and the refusals validate against v0.3;
       `UPDATE_FIXTURES=1` regenerates `fixtures/table-manners/` and the check passes after.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- describe::
@@ -1976,9 +1977,17 @@ function shared with the limits check so the two cannot disagree:
   filler that is not configured, or `remove_prompt` without its pack; `config_identity` is null
   there only when what is missing is the configuration itself (no file, or an invalid one).
 - `allowed` and `refused`: `readiness` when the call's readiness (12.2, for its filler) is not
-  `ready`, else `cap`, else `budget`, else allowed; an over-cap `max_spend_usd` or any other bad
-  argument is not an estimate but a JSON-RPC `-32602` naming the argument (an estimate is not a
-  run).
+  `ready`, else `cap`, else `budget`, else allowed. A call that is not ready is not an error: it
+  is an estimate refused for `readiness`. A wrong request is not an estimate (an estimate is not a
+  run), and is a JSON-RPC `-32602` in one of two forms (4.5, settled at table-manners `e503a23`):
+  arguments the `estimate` input schema rejects (no `action`, `arguments` not an object) are plain
+  invalid params with no refusal data (`action` is a string there, not an enum, so an unknown
+  action reaches rascal's own check); any other wrong request (an unknown action, an action's bad
+  argument, `max_spend_usd` above the configured cap or not above zero, an `expect` that does not
+  match its image) carries refusal data `{"reason": "invalid_arguments", "run": null, "error":
+  {"code": "usage" | "input", "retryable": false, "reason": …}}` (`refusal.json`), the code as
+  the run would have given it (`input` for an `expect` mismatch or an image rascal cannot take,
+  `usage` otherwise) and the reason naming the argument.
 - `readiness` (the call's own, 3.1), `session` (one atomic observation, the same function as
   `rascal://session`; null on the command line), `session_id` (null on the command line), and
   `expires`: one hour after the estimate (rascal's prices
@@ -2014,7 +2023,10 @@ image changed by a byte the binding changes.
       answers while a run holds the permit; it leaves the runs root, the workspace's generation and
       the session's `reserved_usd` unchanged.
 - [ ] An unknown action, an action's bad argument, or `max_spend_usd` over the configured cap is a
-      JSON-RPC `-32602` naming it.
+      JSON-RPC `-32602` with `invalid_arguments` refusal data (code `usage`) naming it, and an
+      `expect` mismatch the same with code `input`, each validating against `refusal.json`;
+      `estimate` called without `action` is a plain `-32602` with no refusal data; a call that is
+      not ready is an estimate with `refused: "readiness"`, not an error.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- estimate::
 serve_contract::`; `just check`.
@@ -2092,11 +2104,16 @@ a person at a terminal keeps it open as before, and the docs note that `< /dev/n
 once); `--frame-ancestor <origin>` sends `Content-Security-Policy: frame-ancestors <origin>` on
 every response, the origin checked as `http://` or `https://`, a host and an optional port, no
 path (otherwise 64), and without the flag the page sends `frame-ancestors 'none'`. A document
-render is added: `rascal dash <run dir> --document` writes the page to
-`$XDG_CACHE_HOME/rascal/dash/<run id>.html` (a run directory is never written after its
-`run.json`; 3.2: a render never modifies the run directory), prints that absolute path as its
-only stdout line and exits 0. `{run.dir}` and `{frame_ancestor}` appear only as whole arguments
-(3.2). The description's
+render is added: `rascal dash <run dir> --document` writes ONE self-contained file (3.2, settled at
+table-manners `e503a23`): the page with every image inline as a `data:` URI and its styles and
+script inline, nothing it needs beside it, so a host reads that one file and nothing next to it.
+rascal chooses the path, outside the run directory: `$XDG_CACHE_HOME/rascal/dash/<run id>.html`
+(a run directory is never written after its `run.json`; 3.2: a render never modifies the run
+directory). It prints only that absolute path, as its one stdout line, and exits 0 once the file
+exists. `{run.dir}` and `{frame_ancestor}` appear only as whole arguments (3.2). Every render's
+`command[0]` is the tool's own name, `rascal` (the description's `tool.name`), and the host runs
+the same executable it serves, never another program or another install found on `PATH` (3.2,
+settled at `e503a23`); the renders below already do this, and rascal adds nothing for it. The description's
 renders become `{name: "dash", kind: "server", ready_timeout_s: 10, command: ["rascal", "dash",
 "{run.dir}", "--serve", "--port", "0", "--frame-ancestor", "{frame_ancestor}"]}` and `{name:
 "page", kind: "document", command: ["rascal", "dash", "{run.dir}", "--document"]}`.
@@ -2105,9 +2122,11 @@ renders become `{name: "dash", kind: "server", ready_timeout_s: 10, command: ["r
 - [ ] Spawned with piped stdin, the server prints one URL line within the timeout and no other
       stdout; a request gets the CSP header with the given origin; closing stdin ends it with exit
       0; SIGTERM ends it with exit 0; a bad origin exits 64 before listening.
-- [ ] `--document` prints one absolute path that exists and leaves the run directory's listing
-      unchanged.
-- [ ] The description's renders validate (server with `ready_timeout_s`, document without).
+- [ ] `--document` prints one absolute path, and nothing else, to a file that exists outside the
+      run directory and leaves the run directory's listing unchanged; the file is self-contained
+      (no `src`, `href` or `url(` names anything but a `data:` URI or an in-page anchor).
+- [ ] The description's renders validate (server with `ready_timeout_s`, document without), and
+      each render's `command[0]` is the description's `tool.name`.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- dash::
 describe::`; `just check`.

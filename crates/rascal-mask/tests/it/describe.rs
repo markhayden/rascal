@@ -1,5 +1,8 @@
 //! Task 8.3 (ADR 0020): `rascal describe --json` is the contract's description document, one
 //! action per shipped recipe, valid against table-manners' schema, and stable (a fixture).
+//! Task 12.1: at v0.3, with no `estimate` among the actions, `readiness` on every action (a
+//! configured key a `credential` requirement, never its value), the dash render's `kind`, and
+//! `max_spend_usd` above zero on every action.
 #![allow(clippy::unwrap_used)]
 
 use std::path::{Path, PathBuf};
@@ -13,6 +16,44 @@ fn rascal(args: &[&str]) -> Output {
         .env_remove("RASCAL_LOG")
         .output()
         .unwrap()
+}
+
+/// The v0.3 shapes every description has, whatever the configuration.
+fn assert_v03_shapes(doc: &serde_json::Value) {
+    assert_eq!(doc["contract"], "0.3.0");
+    let actions = doc["actions"].as_array().unwrap();
+    for action in actions {
+        let name = action["name"].as_str().unwrap();
+        // `estimate` is reserved: an MCP tool, never an action (table-manners 3, 5).
+        assert_ne!(name, "estimate");
+        assert!(action["cost"].get("needs_env").is_none(), "{name}");
+        let state = action["readiness"]["state"].as_str().unwrap();
+        assert!(["ready", "needs_setup"].contains(&state), "{name}: {state}");
+        // Every action takes a filler, so every action may be paid: it declares the cap.
+        assert_eq!(
+            action["params_schema"]["properties"]["max_spend_usd"]["type"], "number",
+            "{name}"
+        );
+        assert_eq!(
+            action["params_schema"]["properties"]["max_spend_usd"]["exclusiveMinimum"], 0,
+            "{name}"
+        );
+        assert!(
+            action["params_schema"]["properties"]["max_spend_usd"]
+                .get("minimum")
+                .is_none(),
+            "{name}"
+        );
+        // No shipped recipe takes a list of images, so no slot is `many` (PLAN.md M12).
+        for slot in action["images"].as_array().unwrap() {
+            assert!(slot.get("many").is_none(), "{name}: {slot}");
+        }
+        let renders = action["renders"].as_array().unwrap();
+        let dash = renders.iter().find(|r| r["name"] == "dash").unwrap();
+        assert_eq!(dash["kind"], "server", "{name}");
+        assert_eq!(dash["ready_timeout_s"], 10, "{name}");
+        assert_eq!(dash["command"][0], "rascal", "{name}");
+    }
 }
 
 fn repo_root() -> PathBuf {
@@ -63,6 +104,14 @@ fn describe_is_the_contracts_document_and_matches_its_fixture() {
     let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     let errors = valid("urn:table-manners:core:description", &doc);
     assert!(errors.is_empty(), "{errors:?}");
+    assert_v03_shapes(&doc);
+    // With no filler configured nothing reads a key: every action is ready as it stands.
+    for action in doc["actions"].as_array().unwrap() {
+        assert_eq!(
+            action["readiness"],
+            serde_json::json!({ "state": "ready", "requirements": [] })
+        );
+    }
     let names: Vec<&str> = doc["actions"]
         .as_array()
         .unwrap()
@@ -99,17 +148,31 @@ fn describe_is_the_contracts_document_and_matches_its_fixture() {
     );
 }
 
-#[test]
-fn a_configured_filler_is_offered_and_may_spend_with_its_key_named() {
-    let dir = std::env::temp_dir().join(format!("rascal-describe-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let config = dir.join("rascal.toml");
+/// The configuration the serve tests use since M11: command fillers, two of them priced.
+fn command_fillers(dir: &Path) -> PathBuf {
+    let bin = env!("CARGO_BIN_EXE_rascal");
+    let config = dir.join("m11.toml");
     std::fs::write(
         &config,
-        "config_version = 1\n\n[fillers.remote]\nurl = \"https://example.invalid/fill\"\nprofile = \"grey\"\nkey_env = \"EXAMPLE_KEY\"\nspend_usd_per_call = 0.04\n",
+        format!(
+            "config_version = 1\n[limits]\nsession_budget_usd = 1.0\n[fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"fake\"\n\n[fillers.slow]\ncommand = [{bin:?}, \"fake-filler\", \"slow\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"slow\"\nspend_usd_per_call = 0.04\n"
+        ),
     )
     .unwrap();
+    config
+}
+
+fn scratch(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("rascal-describe-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+#[test]
+fn the_m11_configuration_describes_at_v03() {
+    let dir = scratch("m11");
+    let config = command_fillers(&dir);
     let out = rascal(&["describe", "--json", "--config", config.to_str().unwrap()]);
     assert_eq!(
         out.status.code(),
@@ -118,7 +181,50 @@ fn a_configured_filler_is_offered_and_may_spend_with_its_key_named() {
         String::from_utf8_lossy(&out.stderr)
     );
     let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert!(valid("urn:table-manners:core:description", &doc).is_empty());
+    let errors = valid("urn:table-manners:core:description", &doc);
+    assert!(errors.is_empty(), "{errors:?}");
+    assert_v03_shapes(&doc);
+    for action in doc["actions"].as_array().unwrap() {
+        assert_eq!(action["cost"]["may_spend"], true);
+        // Command fillers read no key: nothing stands in the way yet (the rest of readiness
+        // comes with 12.2).
+        assert_eq!(action["readiness"]["state"], "ready");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_configured_filler_is_offered_and_may_spend_with_its_key_a_credential() {
+    let dir = scratch("key");
+    let config = dir.join("rascal.toml");
+    std::fs::write(
+        &config,
+        "config_version = 1\n\n[fillers.remote]\nurl = \"https://example.invalid/fill\"\nprofile = \"grey\"\nkey_env = \"EXAMPLE_KEY\"\nspend_usd_per_call = 0.04\n",
+    )
+    .unwrap();
+    let describe = |env: &[(&str, &str)]| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
+        command
+            .args(["describe", "--json", "--config", config.to_str().unwrap()])
+            .env_remove("RASCAL_LOG")
+            .env_remove("EXAMPLE_KEY");
+        for (name, value) in env {
+            command.env(name, value);
+        }
+        let out = command.output().unwrap();
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        let errors = valid("urn:table-manners:core:description", &doc);
+        assert!(errors.is_empty(), "{errors:?}");
+        assert_v03_shapes(&doc);
+        (doc, out)
+    };
+    let (doc, _) = describe(&[]);
     let seam = doc["actions"]
         .as_array()
         .unwrap()
@@ -131,10 +237,30 @@ fn a_configured_filler_is_offered_and_may_spend_with_its_key_named() {
     );
     assert_eq!(seam["cost"]["may_spend"], true);
     assert_eq!(seam["cost"]["basis"], "estimated");
+    // The key's variable is a credential requirement, missing while it is unset.
     assert_eq!(
-        seam["cost"]["needs_env"],
-        serde_json::json!(["EXAMPLE_KEY"])
+        seam["readiness"],
+        serde_json::json!({
+            "state": "needs_setup",
+            "requirements": [{
+                "kind": "credential",
+                "name": "EXAMPLE_KEY",
+                "state": "missing",
+                "setup": "Set `EXAMPLE_KEY` in the environment rascal is started with."
+            }]
+        })
     );
-    // The value of a key is never printed, only its name.
+    // Set, it is present (found, not checked), and its value is never printed.
+    let sentinel = "zq-sentinel-key-value-zq";
+    let (doc, out) = describe(&[("EXAMPLE_KEY", sentinel)]);
+    for action in doc["actions"].as_array().unwrap() {
+        assert_eq!(action["readiness"]["state"], "ready", "{action:#}");
+        assert_eq!(
+            action["readiness"]["requirements"][0]["state"], "present",
+            "{action:#}"
+        );
+    }
+    assert!(!String::from_utf8_lossy(&out.stdout).contains(sentinel));
+    assert!(!String::from_utf8_lossy(&out.stderr).contains(sentinel));
     let _ = std::fs::remove_dir_all(&dir);
 }

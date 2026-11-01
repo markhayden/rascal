@@ -1,5 +1,6 @@
 //! The contract's action tools and run resources for `rascal serve` (table-manners 4, 5 and
-//! 10; ADR 0020): one tool per shipped recipe plus `describe`, each a `run` (or a `heal` when a
+//! 10; ADR 0020): one tool per shipped recipe plus the reserved `describe` and `estimate`, each
+//! action a `run` (or a `heal` when a
 //! filler is named) in its own run directory under the runs root, its images in by path or
 //! inline, its result the run's `run.json`; and the runs as resources.
 
@@ -205,10 +206,6 @@ impl ContractActions {
             "image_blocks".into(),
             json!({ "type": "boolean", "description": "Also send each returned image as an MCP image block." }),
         );
-        properties.insert(
-            "max_spend_usd".into(),
-            json!({ "type": "number", "minimum": 0, "description": "Lower the per-call spend cap for this call." }),
-        );
         schema.insert("properties".into(), Value::Object(properties));
         schema.insert("required".into(), Value::Array(required));
         schema
@@ -279,6 +276,15 @@ impl ContractActions {
         inputs: &Path,
         cancel: Arc<Cancel>,
     ) -> rascal_core::error::Result<run::RunArgs> {
+        // A cap of zero is not a cap (table-manners 4.5): the description declares
+        // `max_spend_usd` above zero, and anything else is a bad argument.
+        if let Some(asked) = args.get("max_spend_usd")
+            && !asked.as_f64().is_some_and(|a| a > 0.0)
+        {
+            return Err(Error::usage(format!(
+                "max_spend_usd: {asked} is not a number above zero; a call that must not spend names no filler"
+            )));
+        }
         let image = self.image_file(
             args.get("image")
                 .ok_or_else(|| Error::usage("image: required"))?,
@@ -733,24 +739,27 @@ impl Actions for ContractActions {
             );
             tools.push(Tool::new(name, text, Arc::new(Self::input_schema(action))));
         }
-        // `estimate` is in the description with its own schema.
-        if let Some(estimate) = description["actions"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .find(|a| a["name"] == "estimate")
-            && let Some(position) = tools.iter().position(|t| t.name == "estimate")
-        {
-            let schema = estimate["params_schema"]
-                .as_object()
-                .cloned()
-                .unwrap_or_default();
-            tools[position] = Tool::new(
-                "estimate",
-                estimate["purpose"].as_str().unwrap_or_default().to_string(),
-                Arc::new(schema),
-            );
-        }
+        // `estimate` is reserved (table-manners 3, 5): a tool, never an action. Its input and
+        // output stay M9's until it becomes the contract's estimate (PLAN.md 12.5).
+        let names: Vec<Value> = tools
+            .iter()
+            .map(|t| Value::String(t.name.to_string()))
+            .collect();
+        let estimate = json!({
+            "type": "object",
+            "properties": {
+                "action": { "type": "string", "enum": names },
+                "filler": { "type": "string" },
+                "max_spend_usd": { "type": "number", "minimum": 0 }
+            },
+            "required": ["action"],
+            "additionalProperties": false,
+        });
+        tools.push(Tool::new(
+            "estimate",
+            "The worst case a call to an action would spend with a filler, the per-call cap and the session budget left; runs nothing.",
+            Arc::new(estimate.as_object().cloned().unwrap_or_default()),
+        ));
         let mut empty = Map::new();
         empty.insert("type".into(), Value::String("object".into()));
         tools.push(Tool::new(

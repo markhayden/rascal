@@ -1013,7 +1013,7 @@ behind the tool.
 
 ## External interface (table-manners)
 
-rascal conforms to **table-manners** v0.1.0 and moves to v0.2.0 in milestone M11
+rascal conforms to **table-manners** v0.2.0 (milestone M11) and moves to v0.3.0 in milestone M12
 (https://github.com/markhayden/table-manners; ADR 0020, decisions 13 and 14), the shared contract of the owner's tools: what an agent, a script or the
 playground sees from outside is the same for squint, rascal and the tools after them, so they
 chain in one pipeline without glue code. The contract's text is the specification of that
@@ -1026,9 +1026,10 @@ surface; this section is rascal's mapping onto it, built in milestone M8 (PLAN.m
 | location: `parts`, `straddles_wrap`, kinds `bbox`, `polygon` (256), `line`, `stroke`, `mask`, `whole_image`, `absent` (`reason`), `view` (input only) | converted to and from `Location` (the seam rule's `group` ↔ `parts`); a mask rendering crosses as the `mask` kind; `score`/`score_kind` from the segmenter |
 | images in: `path` or `inline`, optional `expect`; images out: role, reference, one locator | an implicit, journaled import; `images.out` with `source`, `mask`, `result` |
 | the result header and `run.json` | every `run` and `heal` writes it atomically and last; the body holds the envelope statuses, the outputs by role and the heal report |
-| `describe --json`, the `describe` tool | one action per shipped recipe, plus `estimate` |
+| `describe --json`, the `describe` tool | one action per shipped recipe; `estimate` is a reserved tool beside `describe`, never an action (v0.3) |
 | `serve`: action tools, `isError` results, progress heartbeat, cancellation, run resources, the runs list, caps and budget | beside the op tools of ADR 0015, which keep their envelopes |
 | v0.2: the run's reference in `run.json`, the runs list and progress `_meta`; correlation ids and the `client_run_id_reused` refusal; reserve and settle; not sent, known and unresolved spend; `rascal://runs{?cursor}`; `rascal://session` | M11: the ids persisted at allocation, claimed when a call is accepted; the session a UUID per `serve` |
+| v0.3 (M12, under way): per-action `readiness`, `cost.needs_env` gone, `max_spend_usd` above zero on every action, render `kind` | task 12.1: a configured filler's key is a `credential` requirement (`present` or `missing` by name); the rest as PLAN.md M12 lays out |
 | exit codes 0, 3, 64, 130, 143; 1 under `--strict` | as before, plus the signals |
 | `playground` | hands off to Wafflery, the shared program (its launcher agreement, H1); no UI in rascal |
 

@@ -18,7 +18,8 @@ conforms to (ADR 0020), at the release pinned in the workspace `Cargo.toml`.
   compares them.
 
 `fixtures/table-manners/` holds what the contract repository's `fixtures/rascal/` takes: rascal's
-v0.2 fixtures from `rascal serve` through the independent client, with machine values replaced by
+fixtures at the pinned version (M11's set, regenerated at v0.3 in task 12.1) from `rascal serve`
+through the independent client, with machine values replaced by
 valid stand-ins (`crates/rascal-mask/tests/it/table_manners_fixtures.rs`, task 11.6).
 
 Moving the pin to a newer release copies the contract's files again in the same commit.

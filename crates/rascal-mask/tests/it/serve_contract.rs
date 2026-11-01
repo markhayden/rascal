@@ -1037,3 +1037,76 @@ fn every_tool_input_schema_stands_alone() {
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Task 12.1 (table-manners v0.3, 3 and 5): `estimate` is a reserved tool, listed beside
+/// `describe` but never an action; each action tool's input schema declares the same
+/// `max_spend_usd` as its `params_schema` in the description.
+#[test]
+fn estimate_is_a_reserved_tool_and_each_cap_agrees_with_the_description() {
+    let dir = scratch("reserved");
+    let mut client = start(&dir);
+    let tools = client.list_tools().unwrap();
+    for name in ["estimate", "describe"] {
+        assert!(tools.iter().any(|t| t.name == name), "{name}");
+    }
+    let described = client
+        .call("describe", serde_json::json!({}))
+        .unwrap()
+        .structured
+        .unwrap();
+    valid("urn:table-manners:core:description", &described);
+    let actions = described["actions"].as_array().unwrap();
+    assert!(!actions.iter().any(|a| a["name"] == "estimate"));
+    for action in actions {
+        let name = action["name"].as_str().unwrap();
+        let tool = tools.iter().find(|t| t.name == name).unwrap();
+        let declared = &action["params_schema"]["properties"]["max_spend_usd"];
+        assert_eq!(
+            declared,
+            &serde_json::json!({ "type": "number", "exclusiveMinimum": 0,
+                                 "description": "Lower the per-call spend cap for this call (USD, above zero)." })
+        );
+        assert_eq!(
+            &tool.input_schema["properties"]["max_spend_usd"], declared,
+            "{name}"
+        );
+    }
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 12.1 (table-manners 4.5): a cap of zero is not a cap; `max_spend_usd: 0` is a bad
+/// argument, refused in the run as `invalid`/`usage` with nothing spent.
+#[test]
+fn a_cap_of_zero_is_an_invalid_run_that_spends_nothing() {
+    let dir = scratch("zero-cap");
+    let mut client = start(&dir);
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    for asked in [serde_json::json!(0), serde_json::json!(-0.5)] {
+        let out = client
+            .call(
+                "seam",
+                serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "slow",
+                                    "max_spend_usd": asked }),
+            )
+            .unwrap();
+        assert!(out.is_error);
+        let s = out.structured.unwrap();
+        valid("urn:table-manners:core:result", &s);
+        assert_eq!(s["status"], "invalid", "{s:#}");
+        assert_eq!(s["error"]["code"], "usage");
+        assert!(
+            s["error"]["reason"]
+                .as_str()
+                .unwrap()
+                .contains("max_spend_usd"),
+            "{s:#}"
+        );
+        assert_eq!(s["spend"]["usd"], 0.0);
+    }
+    let ledger = session(&mut client);
+    assert_eq!(ledger["spent_usd"], 0.0, "{ledger:#}");
+    assert_eq!(ledger["reserved_usd"], 0.0);
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
