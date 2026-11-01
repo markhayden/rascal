@@ -1112,6 +1112,30 @@ impl Workspace {
         })
     }
 
+    /// Imports a location from a JSON file (rascal's own location or a table-manners one),
+    /// validated against an image of the workspace, and registers it. The file is read within
+    /// [`crate::contract::MAX_LOCATION_BYTES`].
+    pub fn import_location(&self, path: &Path, image: &str) -> Result<(String, Artifact)> {
+        let generation = self.snapshot()?;
+        let entry = generation
+            .artifact(image)
+            .filter(|e| e.artifact_type == ArtifactType::Image)
+            .ok_or_else(|| {
+                Error::usage(format!("{image}: no such image in {}", self.root.display()))
+            })?;
+        let frame = generation.frame(&entry.frame).cloned().ok_or_else(|| {
+            Error::usage(format!("frame {} is not in the workspace", entry.frame))
+        })?;
+        let given = crate::contract::image_reference(self, image)?;
+        let value = crate::contract::read_location_json(path)?;
+        let location =
+            crate::contract::location_from_json(value, &frame, &given).map_err(|e| match e {
+                Error::Usage { message } => Error::usage(format!("{}: {message}", path.display())),
+                other => other,
+            })?;
+        self.add_location(location)
+    }
+
     /// Lists the snapshot: `(kind, id, identity, frame)` for every frame, location and artifact.
     pub fn list(&self) -> Result<Vec<(String, String, String, String)>> {
         let generation = self.snapshot()?;

@@ -312,55 +312,21 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
     })
 }
 
-/// A location from a JSON file, validated against the schema and the image's frame. The file
-/// is either rascal's own location, which may name the frame by its id or leave `frame` out
-/// (the image's frame is used), or a table-manners location (it has `image`), which must be on
-/// the file the run was given (ADR 0020).
+/// A location from a JSON file, rascal's own or a table-manners one, validated against the
+/// image's frame (`rascal_core::contract::location_from_json`, shared with
+/// `workspace import-location`).
 fn location_from_file(
     path: &Path,
     frame: &rascal_core::frame::Frame,
     given: &rascal_core::contract::table_manners::images::ImageReference,
     kind: Option<&str>,
 ) -> Result<Location> {
-    let text = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
-    let mut value: serde_json::Value =
-        serde_json::from_str(&text).map_err(|source| Error::Json {
-            path: path.to_path_buf(),
-            source,
+    let value = rascal_core::contract::read_location_json(path)?;
+    let location =
+        rascal_core::contract::location_from_json(value, frame, given).map_err(|e| match e {
+            Error::Usage { message } => Error::usage(format!("{}: {message}", path.display())),
+            other => other,
         })?;
-    if value.get("image").is_some() {
-        let contract: rascal_core::contract::table_manners::images::Location =
-            serde_json::from_value(value).map_err(|e| {
-                Error::usage(format!(
-                    "{}: not a table-manners location: {e}",
-                    path.display()
-                ))
-            })?;
-        let location = rascal_core::contract::location_in(&contract, given, frame)
-            .map_err(|e| Error::usage(format!("{}: {e}", path.display())))?;
-        return check_kind(path, location, kind);
-    }
-    if let Some(object) = value.as_object_mut() {
-        match object.get("frame").and_then(|f| f.as_str()) {
-            None => {
-                object.insert(
-                    "frame".to_string(),
-                    serde_json::Value::String(frame.id.clone()),
-                );
-            }
-            Some(named) if named != frame.id => {
-                return Err(Error::usage(format!(
-                    "{}: names frame {named} but the image is in {}",
-                    path.display(),
-                    frame.id
-                )));
-            }
-            Some(_) => {}
-        }
-    }
-    let location: Location = serde_json::from_value(value)
-        .map_err(|e| Error::usage(format!("{}: not a location: {e}", path.display())))?;
-    location.validate(frame)?;
     check_kind(path, location, kind)
 }
 

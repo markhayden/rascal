@@ -178,3 +178,150 @@ fn a_png_or_a_damaged_bundle_is_refused_with_64_and_nothing_imported() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A contract location on `image` (the shape `--location` takes, 8.2).
+fn contract_box(image: &Path, file_sha256: &str, bbox: [f64; 4]) -> String {
+    let (w, h) = image::image_dimensions(image).unwrap();
+    serde_json::json!({
+        "image": { "file_sha256": file_sha256, "width": w, "height": h,
+                   "projection": "flat", "topology": "bounded" },
+        "kind": "bbox",
+        "parts": [{ "bbox": bbox }],
+        "straddles_wrap": false
+    })
+    .to_string()
+}
+
+#[test]
+fn a_location_imports_from_json_against_a_named_image() {
+    let dir = scratch("location");
+    let ws = dir.join("ws");
+    let floor = repo_root().join("fixtures/images/floor.png");
+    let printed = ok(&["workspace", "import", s(&ws), s(&floor)]);
+    let digest = printed
+        .trim()
+        .rsplit_once("file_sha256:")
+        .unwrap()
+        .1
+        .to_string();
+    let chairs = repo_root().join("fixtures/locations/chairs.json");
+
+    // rascal's own location: registered in the image's frame; the same file twice, one id.
+    let one = ok(&[
+        "workspace",
+        "import-location",
+        s(&ws),
+        s(&chairs),
+        "--image",
+        "img-1",
+    ]);
+    let (id, rest) = one.trim().split_once(' ').unwrap();
+    assert!(
+        id.starts_with("loc-") && rest.contains("raw:320x200:flat"),
+        "{one}"
+    );
+    let two = ok(&[
+        "workspace",
+        "import-location",
+        s(&ws),
+        s(&chairs),
+        "--image",
+        "img-1",
+    ]);
+    assert_eq!(one, two);
+
+    // A table-manners location on the same file registers too.
+    let tm = dir.join("tm.json");
+    std::fs::write(&tm, contract_box(&floor, &digest, [0.1, 0.1, 0.4, 0.5])).unwrap();
+    let three = ok(&[
+        "workspace",
+        "import-location",
+        s(&ws),
+        s(&tm),
+        "--image",
+        "img-1",
+    ]);
+    assert!(three.starts_with("loc-") && three != one, "{three}");
+
+    let before = std::fs::read_to_string(ws.join("CURRENT")).unwrap();
+    let refuse = |file: &Path, says: &str| {
+        let out = rascal(&[
+            "workspace",
+            "import-location",
+            s(&ws),
+            s(file),
+            "--image",
+            "img-1",
+        ]);
+        assert_eq!(out.status.code(), Some(64), "{says}");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(err.contains(says), "{err}\nshould say: {says}");
+    };
+    // On another file.
+    let other = dir.join("other.json");
+    std::fs::write(
+        &other,
+        contract_box(&floor, &"0".repeat(64), [0.1, 0.1, 0.4, 0.5]),
+    )
+    .unwrap();
+    refuse(&other, "on another image");
+    // Naming another frame.
+    let framed = dir.join("framed.json");
+    std::fs::write(
+        &framed,
+        r#"{ "kind": "bbox", "frame": "raw:9x9:flat", "bbox": [0.1, 0.1, 0.2, 0.2] }"#,
+    )
+    .unwrap();
+    refuse(&framed, "names frame raw:9x9:flat");
+    // Bad geometry.
+    let inverted = dir.join("inverted.json");
+    std::fs::write(
+        &inverted,
+        r#"{ "kind": "bbox", "bbox": [0.5, 0.1, 0.2, 0.2] }"#,
+    )
+    .unwrap();
+    refuse(&inverted, "need x0 < x1");
+    assert_eq!(
+        std::fs::read_to_string(ws.join("CURRENT")).unwrap(),
+        before,
+        "nothing published by a refusal"
+    );
+    // Straddling the wrap edge of a panorama (the seam rule).
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let pano_id = ok(&["workspace", "import", s(&ws), s(&pano)])
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .to_string();
+    let before = std::fs::read_to_string(ws.join("CURRENT")).unwrap();
+    let straddling = dir.join("straddling.json");
+    std::fs::write(
+        &straddling,
+        r#"{ "kind": "bbox", "bbox": [-0.1, 0.1, 0.1, 0.2] }"#,
+    )
+    .unwrap();
+    let out = rascal(&[
+        "workspace",
+        "import-location",
+        s(&ws),
+        s(&straddling),
+        "--image",
+        &pano_id,
+    ]);
+    assert_eq!(out.status.code(), Some(64));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("seam rule"));
+    // A PNG is not a location.
+    refuse(&floor, "not valid JSON");
+    // An id that is not an image.
+    let out = rascal(&[
+        "workspace",
+        "import-location",
+        s(&ws),
+        s(&chairs),
+        "--image",
+        id,
+    ]);
+    assert_eq!(out.status.code(), Some(64));
+    assert_eq!(std::fs::read_to_string(ws.join("CURRENT")).unwrap(), before);
+    let _ = std::fs::remove_dir_all(&dir);
+}

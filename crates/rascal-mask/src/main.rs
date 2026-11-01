@@ -172,7 +172,7 @@ enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
-    /// A workspace: list what it holds, import an image, export or import a mask bundle.
+    /// A workspace: list what it holds, import an image or a location, export or import a mask bundle.
     Workspace {
         #[command(subcommand)]
         command: WorkspaceCommand,
@@ -385,6 +385,15 @@ enum WorkspaceCommand {
         /// The bundle's expected sha256 (as export-mask printed it).
         #[arg(long)]
         sha256: Option<String>,
+    },
+    /// Import a location from a JSON file (rascal's own or a table-manners one), validated
+    /// against an image of the workspace; prints its id and frame.
+    ImportLocation {
+        dir: PathBuf,
+        location: PathBuf,
+        /// The image (id or identity) the location is on.
+        #[arg(long)]
+        image: String,
     },
 }
 
@@ -929,6 +938,11 @@ fn main() {
                     bundle,
                     sha256,
                 } => workspace_cmd::import_mask(&dir, &bundle, sha256.as_deref()),
+                WorkspaceCommand::ImportLocation {
+                    dir,
+                    location,
+                    image,
+                } => workspace_cmd::import_location(&dir, &location, &image),
             };
             match result {
                 Ok(()) => exit::OK,

@@ -1502,31 +1502,31 @@ b/ a/seam-grey.png` exits 64 naming a PNG; `rascal workspace import-location b/ 
 --image img-1` prints a location id.
 
 **Acceptance.**
-- [ ] Export, then import into a fresh workspace, yields the same mask identity, the same frame
+- [x] Export, then import into a fresh workspace, yields the same mask identity, the same frame
       identities for the whole chain (raw, cut, crop), and identical planes, profile and
       prescriptions; exporting the imported mask gives a byte-identical bundle.
-- [ ] The same mask exported twice gives the same bytes and the same bundle digest.
-- [ ] A tampered bundle is refused with an error naming the fault and nothing is committed (the
+- [x] The same mask exported twice gives the same bytes and the same bundle digest.
+- [x] A tampered bundle is refused with an error naming the fault and nothing is committed (the
       generation number unchanged, no new file under `artifacts/`): any byte of any member
       flipped, a member missing, an extra member, a member renamed, a truncated archive, bytes
       after the end, a frame chain that is wrong (a frame's identity, a broken parent link, a
       chain that does not end at a raw frame, a mask frame other than the chain's last), a
       manifest identity other than the record's, a `--sha256` that does not match.
-- [ ] A PNG, a JPEG, a directory, an empty file, a text file and a tar that is not a mask bundle
+- [x] A PNG, a JPEG, a directory, an empty file, a text file and a tar that is not a mask bundle
       are each refused as not a mask bundle, exit 64, with nothing committed; `workspace export-mask`
       of an `Image` or a `Location` is refused naming its type.
-- [ ] Hostile input is bounded: a file over 256 MiB is refused before it is read, a header
+- [x] Hostile input is bounded: a file over 256 MiB is refused before it is read, a header
       claiming more bytes than remain is refused before any allocation of that size, a
       `bundle.json` over 1 MiB, more than 16 members and a member name that is not plain are refused.
-- [ ] Importing a bundle whose identity the workspace already holds publishes nothing (no new
+- [x] Importing a bundle whose identity the workspace already holds publishes nothing (no new
       generation) and prints the existing id; importing into a workspace holding a different
       `crop:<n>` registers the crop under a free number with the identity unchanged.
-- [ ] A commit naming a frame id the generation binds to another identity is refused.
-- [ ] `import-location` takes rascal's location and a table-manners location (8.2's shapes),
+- [x] A commit naming a frame id the generation binds to another identity is refused.
+- [x] `import-location` takes rascal's location and a table-manners location (8.2's shapes),
       validates it against the named image (a location on another file, a frame other than the
       image's, a seam-straddling bbox: refused, 64) and registers it; the same file twice gives
       the same id.
-- [ ] `schemas/rascal/mask-bundle-v1.json` through the drift harness; `docs/workspace.md`, SPEC
+- [x] `schemas/rascal/mask-bundle-v1.json` through the drift harness; `docs/workspace.md`, SPEC
       "Workspace" and "Commands", README.
 
 **Verification.** `cargo nextest run -p rascal-core --test it -- mask_bundle:: frames_identity::

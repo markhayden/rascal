@@ -1,5 +1,5 @@
-//! `rascal workspace list <dir>`, `import <dir> <image>`, `export-mask` and `import-mask` (mask
-//! bundles, ADR 0022), and the per-op
+//! `rascal workspace list <dir>`, `import <dir> <image>`, `export-mask`, `import-mask` (mask
+//! bundles, ADR 0022) and `import-location`, and the per-op
 //! subcommands every op gets from its manifest: `rascal <op> --workspace <dir> --<port> <id>
 //! [--<param> <value>] [--constants <set>]`.
 
@@ -79,6 +79,14 @@ pub fn import_mask(dir: &Path, bundle: &Path, sha256: Option<&str>) -> Result<()
             ""
         }
     );
+    Ok(())
+}
+
+/// Imports a location file against an image of the workspace and prints its id and frame.
+pub fn import_location(dir: &Path, location: &Path, image: &str) -> Result<()> {
+    let ws = Workspace::open(dir)?;
+    let (id, artifact) = ws.import_location(location, image)?;
+    println!("{id} {} {}", artifact.frame(), artifact.identity().as_str());
     Ok(())
 }
 

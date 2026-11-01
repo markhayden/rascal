@@ -235,6 +235,71 @@ pub fn location_in(
     Ok(out)
 }
 
+/// The largest location file read, in bytes.
+pub const MAX_LOCATION_BYTES: u64 = 1 << 20;
+
+/// Reads a location file as JSON within [`MAX_LOCATION_BYTES`]; a larger file is refused from
+/// its size, and a file that is not JSON is a usage error.
+pub fn read_location_json(path: &std::path::Path) -> crate::error::Result<serde_json::Value> {
+    use crate::error::Error;
+    use std::io::Read;
+    let meta = std::fs::metadata(path).map_err(|e| Error::io(path, e))?;
+    if meta.len() > MAX_LOCATION_BYTES {
+        return Err(Error::usage(format!(
+            "{}: {} bytes, over the limit of {MAX_LOCATION_BYTES} for a location",
+            path.display(),
+            meta.len()
+        )));
+    }
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)
+        .map_err(|e| Error::io(path, e))?
+        .take(MAX_LOCATION_BYTES)
+        .read_to_end(&mut bytes)
+        .map_err(|e| Error::io(path, e))?;
+    // The caller's file is input, so a file that is not JSON is a usage error (64).
+    serde_json::from_slice(&bytes)
+        .map_err(|e| Error::usage(format!("{}: not valid JSON: {e}", path.display())))
+}
+
+/// A location from JSON in `frame`, validated against the frame: either rascal's own location,
+/// which may name the frame by its id or leave `frame` out (the frame given is used), or a
+/// table-manners location (it has `image`), which must be on the image `given` references
+/// ([`location_in`]). `run --location` and `workspace import-location` both come through here.
+pub fn location_from_json(
+    mut value: serde_json::Value,
+    frame: &Frame,
+    given: &ImageReference,
+) -> crate::error::Result<crate::location::Location> {
+    use crate::error::Error;
+    if value.get("image").is_some() {
+        let contract: table_manners::images::Location = serde_json::from_value(value)
+            .map_err(|e| Error::usage(format!("not a table-manners location: {e}")))?;
+        return location_in(&contract, given, frame);
+    }
+    if let Some(object) = value.as_object_mut() {
+        match object.get("frame").and_then(|f| f.as_str()) {
+            None => {
+                object.insert(
+                    "frame".to_string(),
+                    serde_json::Value::String(frame.id.clone()),
+                );
+            }
+            Some(named) if named != frame.id => {
+                return Err(Error::usage(format!(
+                    "names frame {named} but the image is in {}",
+                    frame.id
+                )));
+            }
+            Some(_) => {}
+        }
+    }
+    let location: crate::location::Location =
+        serde_json::from_value(value).map_err(|e| Error::usage(format!("not a location: {e}")))?;
+    location.validate(frame)?;
+    Ok(location)
+}
+
 /// What else a location leaving rascal carries besides its shape.
 #[derive(Debug, Clone, Default)]
 pub struct LocationMeta {

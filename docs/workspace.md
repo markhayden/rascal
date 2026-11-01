@@ -118,6 +118,13 @@ existing id with `(already present)`. A PNG, a JPEG, a directory, a gzip file or
 is refused naming what it is: a rendering of a mask is an `Image`, and an image goes in with
 `workspace import`. Images are not bundled; a mask's frame is coordinates, not pixels.
 
+A **location** travels as JSON: `rascal workspace import-location ws/ finding.json --image img-1`
+takes rascal's own location (which may leave out `frame` or must name the image's) or a
+table-manners location (its `image` reference must name the same file, ADR 0020), the two shapes
+`run --location` takes and through the same function. It is validated against the image's frame
+(the kind's rules, the seam rule) and registered like any location; the same file twice gives the
+same id. The file is read within 1 MiB; one that is not JSON, or not a location, is refused (64).
+
 ## Commands
 
 ```
@@ -126,6 +133,7 @@ rascal workspace list ws/ [--type Mask] [--json]
 rascal workspace repair ws/ [--json]
 rascal workspace export-mask ws/ mask-3 --out seam.mask.tar    # prints the identity and sha256:<the bundle's digest>
 rascal workspace import-mask ws2/ seam.mask.tar [--sha256 <digest>]   # prints the id, the frame and the identity
+rascal workspace import-location ws/ finding.json --image img-1  # prints the id, the frame and the identity
 rascal <op> --workspace ws/ --<port> <id> [--<param> <value>] [--constants <set>] [--strict]
 rascal run <recipe> <image> --out run/ [--workspace ws/]
 ```
