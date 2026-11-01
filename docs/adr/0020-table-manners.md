@@ -72,8 +72,8 @@ workspace and its ids stay as rascal's own convenience.
 ## Amendment (M11): table-manners v0.2
 
 v0.2 adds run association and the session ledger (the contract's 2.3 and 4.1 to 4.6), agreed
-between squint and rascal from Wafflehouse's C4. rascal builds against the draft by path in
-milestone M11 and pins `=0.2.0` once it is tagged and published: the run's reference
+between squint and rascal from Wafflehouse's C4. rascal built against the draft by path in
+milestone M11 and pins `=0.2.0`, tagged and published 2026-11-01: the run's reference
 (`session_id`, `client_run_id`) in `run.json`, the runs list and progress `_meta`; correlation
 ids claimed when a call is accepted, with the `client_run_id_reused` refusal; `spend.unresolved_usd`;
 the paged `rascal://runs{?cursor}`; `rascal://session` under a UUID per `serve`; and fixtures for

@@ -1589,12 +1589,12 @@ MAPPING.md.
 tags `v0.2.0` and publishes the crate, and rascal pins `=0.2.0` in place of the path.
 
 **Acceptance.**
-- [ ] `just check` and CI green on the pinned release; the milestone branch merged; tag `m11`.
+- [x] `just check` and CI green on the pinned release; the milestone branch merged; tag `m11`.
 
 **Files.** `Cargo.toml`, `Cargo.lock`, `PLAN.md`, `tasks/todo.md`. **Size.** XS.
 
 ### Checkpoint M11
-- [ ] Tasks 11.1 to 11.7 done, CI green on both platforms; tag `m11`.
+- [x] Tasks 11.1 to 11.7 done, CI green on both platforms; tag `m11`.
 
 ## Risks and mitigations
 

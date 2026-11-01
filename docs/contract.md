@@ -1,17 +1,15 @@
 # table-manners: rascal's side of the shared contract
 
-rascal conforms to [table-manners](https://github.com/markhayden/table-manners) v0.1.0 and is
-moving to v0.2.0 in milestone M11, the shared contract of the owner's tools (ADR 0020, decisions
+rascal conforms to [table-manners](https://github.com/markhayden/table-manners) v0.2.0 (milestones
+M8 and M9 for v0.1.0, M11 for v0.2.0), the shared contract of the owner's tools (ADR 0020, decisions
 13 and 14): what an agent, a script or the playground sees from outside is the same for squint,
 rascal and the tools after them. The contract's text is the specification; this page is what
 rascal does under it (PLAN.md M8, M9 and M11).
 
 ## The pin
 
-`table-manners = "=0.1.0"` in the workspace `Cargo.toml` on main: the crate's serde types and
-embedded schemas, no logic. M11's branch builds against the v0.2.0 draft by path
-(`../table-manners`, its `v0.2-contract` branch) until v0.2.0 is tagged and published (task
-11.7). `scripts/check-contract.sh` warns in CI when crates.io has a newer release;
+`table-manners = "=0.2.0"` in the workspace `Cargo.toml`: the crate's serde types and embedded
+schemas, no logic. `scripts/check-contract.sh` warns in CI when crates.io has a newer release;
 moving the pin is a deliberate commit that also refreshes `fixtures/contract/`.
 
 ## Image references (8.1)
