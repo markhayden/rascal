@@ -197,11 +197,11 @@ enum Command {
         #[arg(long)]
         config: Option<PathBuf>,
     },
-    /// Open Wafflehouse, the shared program over the waffle tools (separate; rascal carries no
-    /// UI): runs `wafflehouse --tool rascal` and keeps its exit code; 69 when it is not
+    /// Open Wafflery, the shared program over the waffle tools (separate; rascal carries no
+    /// UI): runs `wafflery --tool rascal` and keeps its exit code; 69 when it is not
     /// installed.
     Playground {
-        /// The testkit's installer, offered when Wafflehouse is missing (test builds only).
+        /// The testkit's installer, offered when Wafflery is missing (test builds only).
         #[cfg(feature = "testkit")]
         #[arg(long, hide = true)]
         installer: Option<PathBuf>,

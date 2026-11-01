@@ -1030,7 +1030,7 @@ surface; this section is rascal's mapping onto it, built in milestone M8 (PLAN.m
 | `serve`: action tools, `isError` results, progress heartbeat, cancellation, run resources, the runs list, caps and budget | beside the op tools of ADR 0015, which keep their envelopes |
 | v0.2: the run's reference in `run.json`, the runs list and progress `_meta`; correlation ids and the `client_run_id_reused` refusal; reserve and settle; not sent, known and unresolved spend; `rascal://runs{?cursor}`; `rascal://session` | M11: the ids persisted at allocation, claimed when a call is accepted; the session a UUID per `serve` |
 | exit codes 0, 3, 64, 130, 143; 1 under `--strict` | as before, plus the signals |
-| `playground` | hands off to Wafflehouse, the shared program (its launcher agreement, H1); no UI in rascal |
+| `playground` | hands off to Wafflery, the shared program (its launcher agreement, H1); no UI in rascal |
 
 The copied `manifest-v1` and `envelope-v1` schemas (ADR 0009) remain the pack-facing shapes
 inside rascal; the contract's result carries the envelope as its body.
@@ -1074,7 +1074,7 @@ uv run --frozen --offline --no-sync ruff check . && uv run --frozen --offline --
 # the binary
 rascal run seam pano.jpg --out run/
 rascal describe --json                         # the contract's description document (table-manners, M8)
-rascal playground                              # run `wafflehouse --tool rascal`; 69 when not installed
+rascal playground                              # run `wafflery --tool rascal`; 69 when not installed
 rascal run remove room.jpg --location chairs.json --out run/   # chairs.json: rascal's location or a table-manners one
 rascal run remove-prompt room.jpg --prompt "chair" --config rascal.toml --out run/   # segment through the pack
 rascal run repair print.jpg --stroke scratch.json --out run/
@@ -1107,8 +1107,8 @@ rascal corpus verify corpus.toml
 Exit codes: 0 ok; 1 the op reported `not_applicable` or `measured_nothing` under `--strict`; 3
 operational error (a filler failed, a pack died, IO, non-convergence, a preservation check, a
 result that failed validation); 64 usage error; 130 and 143 a `run` or `heal` cancelled by
-SIGINT or SIGTERM (table-manners 6, ADR 0020). `playground` returns Wafflehouse's own exit
-code, 69 when it is not installed or `WAFFLEHOUSE_BIN` is wrong, and 74 when an offered
+SIGINT or SIGTERM (table-manners 6, ADR 0020). `playground` returns Wafflery's own exit
+code, 69 when it is not installed or `WAFFLERY_BIN` is wrong, and 74 when an offered
 installation fails (`docs/contract.md`). A bad parameter (`invalid_args`) is a usage
 error, 64, with or without `--strict`. Every `run` and `heal` whose run directory was new or
 empty writes `run.json` there, last and atomically, whatever the outcome (`docs/contract.md`). Three kinds of `--out`: a **run directory** (`run`,
