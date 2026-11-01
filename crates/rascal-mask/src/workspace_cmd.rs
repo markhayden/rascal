@@ -54,13 +54,37 @@ pub fn import(dir: &Path, image: &Path, projection: Option<Projection>) -> Resul
 }
 
 /// Exports a mask as a bundle to `out` (written over, as `cp` would) and prints its identity
-/// and the bundle's SHA-256 (ADR 0022).
+/// and the bundle's SHA-256 (ADR 0022). The bundle is built and checked in memory first, so a
+/// refusal writes nothing; it is then written beside `out` and renamed over it, so `out` is
+/// never a partial bundle.
 pub fn export_mask(dir: &Path, mask: &str, out: &Path) -> Result<()> {
     let ws = Workspace::open(dir)?;
     let exported = ws.export_mask(mask)?;
-    std::fs::write(out, &exported.bytes).map_err(|e| Error::io(out, e))?;
+    let out = rascal_core::outdir::prepare(out, rascal_core::outdir::OutKind::File)?;
+    write_whole(&out, &exported.bytes)?;
     println!("{} {}", exported.identity, exported.sha256);
     Ok(())
+}
+
+/// Writes `bytes` to a temporary file beside `path`, syncs it and renames it over `path`; on
+/// any failure the temporary is removed and `path` is as it was.
+fn write_whole(path: &Path, bytes: &[u8]) -> Result<()> {
+    use std::io::Write;
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let partial = path.with_file_name(format!(".{name}.{}.partial", std::process::id()));
+    let written = std::fs::File::create(&partial)
+        .and_then(|mut file| {
+            file.write_all(bytes)?;
+            file.sync_all()
+        })
+        .and_then(|()| std::fs::rename(&partial, path));
+    written.map_err(|e| {
+        let _ = std::fs::remove_file(&partial);
+        Error::io(path, e)
+    })
 }
 
 /// Imports a mask bundle and prints the id, the frame and the identity; `already present` when
@@ -234,6 +258,45 @@ fn run_op_inner(registry: &OpRegistry, name: &str, matches: &ArgMatches) -> Resu
         .get_one::<PathBuf>("workspace")
         .ok_or_else(|| Error::usage("--workspace is required"))?;
     let ws = Workspace::open(dir)?;
+    // Masks given by id: when one came in a bundle without its image, a usage error says which
+    // image to import (ADR 0022).
+    let masks: Vec<String> = manifest
+        .inputs
+        .iter()
+        .filter(|port| port.artifact_type == ArtifactType::Mask)
+        .flat_map(|port| {
+            matches
+                .get_many::<String>(&format!("port:{}", port.name))
+                .map(|v| v.cloned().collect::<Vec<_>>())
+                .unwrap_or_default()
+        })
+        .filter(|id| !Path::new(id).join("mask.toml").is_file())
+        .collect();
+    run_op_in(&ws, registry, name, matches).map_err(|error| match error {
+        Error::Usage { message } => {
+            let hints: Vec<String> = masks
+                .iter()
+                .filter_map(|mask| ws.missing_mask_image(mask).ok().flatten())
+                .collect();
+            if hints.is_empty() {
+                Error::Usage { message }
+            } else {
+                Error::Usage {
+                    message: format!("{message}; {}", hints.join("; ")),
+                }
+            }
+        }
+        other => other,
+    })
+}
+
+fn run_op_in(
+    ws: &Workspace,
+    registry: &OpRegistry,
+    name: &str,
+    matches: &ArgMatches,
+) -> Result<i32> {
+    let manifest = registry.require(name)?.manifest();
     let mut inputs: Inputs = BTreeMap::new();
     for port in &manifest.inputs {
         let given: Vec<String> = if port.many {

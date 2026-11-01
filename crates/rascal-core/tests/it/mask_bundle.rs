@@ -298,6 +298,12 @@ fn any_flipped_byte_of_any_member_is_refused() {
     let (a, seam, _) = seam_workspace(&dir.join("a"));
     let b = Workspace::open(&dir.join("b")).unwrap();
     let bytes = export(&a, &seam);
+    // The manifest's `image` is advice nothing in the bundle can vouch for (the target has no
+    // pixels) and it gates nothing; a flip inside it may pass, and only that.
+    let manifest_start = members(&bytes)[0].1 as usize;
+    let text = String::from_utf8(unpack(&bytes)[0].1.clone()).unwrap();
+    let image_from = text.find("\"image\"").unwrap();
+    let image_to = image_from + text[image_from..].find('}').unwrap();
     for (path, start, size) in members(&bytes) {
         // Every byte of a small member; a spread of offsets in a large one.
         let step = (size / 64).max(1);
@@ -307,9 +313,16 @@ fn any_flipped_byte_of_any_member_is_refused() {
             tampered[(start + offset) as usize] ^= 0x01;
             let file = write(&dir, "t.mask.tar", &tampered);
             let generation = b.read_current().unwrap();
-            let e = b.import_mask(&file, None);
-            assert!(e.is_err(), "{path} byte {offset} flipped was accepted");
-            assert_eq!(b.read_current().unwrap(), generation);
+            let at = (start + offset) as usize - manifest_start;
+            let in_image = path == "bundle.json" && (image_from..image_to).contains(&at);
+            match b.import_mask(&file, None) {
+                Err(_) => assert_eq!(b.read_current().unwrap(), generation),
+                Ok(imported) => {
+                    assert!(in_image, "{path} byte {offset} flipped was accepted");
+                    // Every check ran before the import; the mask is the one exported.
+                    assert_eq!(imported.identity, mask_of(&a, &seam).record.identity);
+                }
+            }
             offset += step;
         }
     }
@@ -453,10 +466,6 @@ fn a_wrong_frame_chain_or_identity_is_refused() {
         (
             "bundle.json names identity",
             with_manifest(&bytes, |m| m.identity = m.frames[0].identity.clone()),
-        ),
-        (
-            "mask_bundle_version 2",
-            with_manifest(&bytes, |m| m.mask_bundle_version = 2),
         ),
     ];
     for (says, tampered) in cases {
@@ -671,5 +680,279 @@ fn a_digest_given_must_match() {
     // The bare hex is accepted as well as the prefixed form.
     let bare = exported.sha256.trim_start_matches("sha256:").to_string();
     b.import_mask(&path, Some(&bare)).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The chain of a mask's frame, root first, as `export_mask` hands it to the writer.
+fn chain_of(ws: &Workspace, mask: &rascal_core::mask::Mask) -> Vec<Frame> {
+    let mut chain: Vec<Frame> = ws
+        .frames()
+        .unwrap()
+        .chain(&mask.record.frame)
+        .unwrap()
+        .into_iter()
+        .cloned()
+        .collect();
+    chain.reverse();
+    chain
+}
+
+/// The writer refuses, naming `says`, and says nothing was written.
+fn not_written(result: Result<Vec<u8>, rascal_core::Error>, says: &[&str]) {
+    let e = result.unwrap_err();
+    assert!(
+        matches!(e, rascal_core::Error::Usage { .. }),
+        "a refusal is a usage error: {e:?}"
+    );
+    let text = e.to_string();
+    for s in says {
+        assert!(text.contains(s), "{text}\nshould say: {s}");
+    }
+    assert!(text.contains("nothing was written"), "{text}");
+}
+
+#[test]
+fn export_never_writes_a_bundle_import_would_refuse() {
+    let dir = scratch("writelimits");
+    let (a, _, windowed) = seam_workspace(&dir.join("a"));
+    let mask = mask_of(&a, &windowed);
+    let chain = chain_of(&a, &mask);
+    let full = bundle::write(&mask, &chain, None).unwrap();
+    assert_eq!(
+        bundle::Limits::READ,
+        bundle::Limits {
+            bundle_bytes: bundle::MAX_BUNDLE_BYTES,
+            members: bundle::MAX_MEMBERS,
+            manifest_bytes: bundle::MAX_MANIFEST_BYTES,
+            name_bytes: bundle::MAX_NAME_BYTES,
+            frames: bundle::MAX_FRAMES,
+        },
+        "the writer's limits are the reader's"
+    );
+    let size = full.len() as u64;
+    // At the limit the bundle is written, byte for byte the same.
+    let at = bundle::Limits {
+        bundle_bytes: size,
+        ..bundle::Limits::READ
+    };
+    assert_eq!(
+        bundle::write_within(&mask, &chain, None, &at).unwrap(),
+        full
+    );
+    // A byte over: refused, naming the size and the limit.
+    let under = bundle::Limits {
+        bundle_bytes: size - 1,
+        ..bundle::Limits::READ
+    };
+    not_written(
+        bundle::write_within(&mask, &chain, None, &under),
+        &[
+            &format!("the bundle would be {size} bytes"),
+            &format!("over the limit of {} bytes", size - 1),
+        ],
+    );
+    let layout = members(&full);
+    not_written(
+        bundle::write_within(
+            &mask,
+            &chain,
+            None,
+            &bundle::Limits {
+                members: layout.len() - 1,
+                ..bundle::Limits::READ
+            },
+        ),
+        &[
+            &format!("{} members", layout.len()),
+            &format!("limit of {}", layout.len() - 1),
+        ],
+    );
+    let manifest = layout[0].2;
+    not_written(
+        bundle::write_within(
+            &mask,
+            &chain,
+            None,
+            &bundle::Limits {
+                manifest_bytes: manifest - 1,
+                ..bundle::Limits::READ
+            },
+        ),
+        &[
+            &format!("bundle.json would be {manifest} bytes"),
+            &format!("limit of {}", manifest - 1),
+        ],
+    );
+    not_written(
+        bundle::write_within(
+            &mask,
+            &chain,
+            None,
+            &bundle::Limits {
+                name_bytes: 8,
+                ..bundle::Limits::READ
+            },
+        ),
+        &["member mask/", "over the limit of 8"],
+    );
+    not_written(
+        bundle::write_within(
+            &mask,
+            &chain,
+            None,
+            &bundle::Limits {
+                frames: chain.len() - 1,
+                ..bundle::Limits::READ
+            },
+        ),
+        &[
+            &format!("{} frames", chain.len()),
+            &format!("limit of {}", chain.len() - 1),
+        ],
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The manifest as JSON edited and the bundle rebuilt around it (a newer manifest may carry
+/// fields this build does not know).
+fn with_manifest_json(bytes: &[u8], edit: impl FnOnce(&mut serde_json::Value)) -> Vec<u8> {
+    let mut members = unpack(bytes);
+    let mut value: serde_json::Value = serde_json::from_slice(&members[0].1).unwrap();
+    edit(&mut value);
+    let mut json = serde_json::to_vec_pretty(&value).unwrap();
+    json.push(b'\n');
+    members[0].1 = json;
+    repack(&members)
+}
+
+/// `mask/mask.toml` edited as text, its manifest entry's size and digest made to match.
+fn with_mask_toml(bytes: &[u8], edit: impl FnOnce(String) -> String) -> Vec<u8> {
+    let mut members = unpack(bytes);
+    let at = members
+        .iter()
+        .position(|(p, _)| p == "mask/mask.toml")
+        .unwrap();
+    let text = edit(String::from_utf8(members[at].1.clone()).unwrap());
+    members[at].1 = text.into_bytes();
+    let (size, digest) = (members[at].1.len() as u64, bundle::sha256(&members[at].1));
+    let mut manifest: bundle::MaskBundleManifest = serde_json::from_slice(&members[0].1).unwrap();
+    let entry = manifest
+        .members
+        .iter_mut()
+        .find(|m| m.path == "mask/mask.toml")
+        .unwrap();
+    entry.size = size;
+    entry.sha256 = digest;
+    let mut json = serde_json::to_vec_pretty(&manifest).unwrap();
+    json.push(b'\n');
+    members[0].1 = json;
+    repack(&members)
+}
+
+#[test]
+fn a_version_mismatch_says_what_to_do() {
+    let dir = scratch("versions");
+    let (a, seam, _) = seam_workspace(&dir.join("a"));
+    let b = Workspace::open(&dir.join("b")).unwrap();
+    let bytes = export(&a, &seam);
+    // A newer bundle, with a field this build has never seen: the version is read first.
+    let newer = with_manifest_json(&bytes, |m| {
+        m["mask_bundle_version"] = 2.into();
+        m["thumbnail"] = "mask/thumb.png".into();
+    });
+    refused(
+        &b,
+        &write(&dir, "t.tar", &newer),
+        "bundle.json: made by a newer rascal (bundle version 2); this rascal reads version 1: upgrade rascal",
+    );
+    let older = with_manifest_json(&bytes, |m| m["mask_bundle_version"] = 0.into());
+    refused(
+        &b,
+        &write(&dir, "t.tar", &older),
+        "bundle.json: made by an older rascal (bundle version 0) that this rascal no longer reads",
+    );
+    // The mask record inside: the same two answers.
+    let newer = with_mask_toml(&bytes, |t| {
+        format!(
+            "{}\nhalo = 3\n",
+            t.replacen("version = 1", "version = 2", 1)
+        )
+    });
+    refused(
+        &b,
+        &write(&dir, "t.tar", &newer),
+        "mask/mask.toml: made by a newer rascal (mask record version 2); this rascal reads version 1: upgrade rascal",
+    );
+    let older = with_mask_toml(&bytes, |t| t.replacen("version = 1", "version = 0", 1));
+    refused(
+        &b,
+        &write(&dir, "t.tar", &older),
+        "mask/mask.toml: made by an older rascal (mask record version 0) that this rascal no longer reads",
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_bundle_names_its_image_and_the_target_asks_for_it_until_it_is_there() {
+    let dir = scratch("image");
+    let (a, seam, windowed) = seam_workspace(&dir.join("a"));
+    let snapshot = a.snapshot().unwrap();
+    let pano = snapshot
+        .artifacts
+        .iter()
+        .find(|e| e.frame.starts_with("raw:"))
+        .unwrap()
+        .clone();
+    let reference = rascal_core::contract::image_reference(&a, &pano.id).unwrap();
+    let expected = bundle::MaskBundleImage {
+        file_sha256: reference.file_sha256.clone(),
+        identity: pano.identity.clone(),
+    };
+    // Both masks, the cut one and its window, trace back to the panorama.
+    for id in [&seam, &windowed] {
+        let bytes = export(&a, id);
+        let manifest: bundle::MaskBundleManifest =
+            serde_json::from_slice(&unpack(&bytes)[0].1).unwrap();
+        assert_eq!(manifest.image.as_ref(), Some(&expected), "{id}");
+    }
+    let bytes = export(&a, &windowed);
+    let b = Workspace::open(&dir.join("b")).unwrap();
+    let imported = b
+        .import_mask(&write(&dir, "w.mask.tar", &bytes), None)
+        .unwrap();
+    let hint = b.missing_mask_image(&imported.id).unwrap().unwrap();
+    assert!(
+        hint.contains(&format!("sha256 {}", expected.file_sha256))
+            && hint.contains(&format!(
+                "rascal workspace import {} <path>",
+                b.root.display()
+            ))
+            && !hint.contains("--projection"),
+        "{hint}"
+    );
+    // The import record keeps the image, so the copy exports the same bytes.
+    assert_eq!(b.export_mask(&imported.id).unwrap().bytes, bytes);
+    // Its own workspace holds the image: no hint.
+    assert_eq!(a.missing_mask_image(&windowed).unwrap(), None);
+    // Once the image is in, the hint is gone and the same mask id applies.
+    let Artifact::Image(image) = a.load(&pano.id).unwrap() else {
+        panic!("not an image")
+    };
+    let raw = a.frames().unwrap().get(&pano.frame).unwrap().clone();
+    let (img, _) = b.add_canonical((*image).clone(), &raw, "pano").unwrap();
+    assert_eq!(b.missing_mask_image(&imported.id).unwrap(), None);
+    let cut = b.load(&img).unwrap();
+    assert_eq!(cut.identity().as_str(), pano.identity);
+
+    // A manifest whose image digests are not digests is refused.
+    let b2 = Workspace::open(&dir.join("b2")).unwrap();
+    let bad = with_manifest(&bytes, |m| {
+        m.image.as_mut().unwrap().file_sha256 = "see README".to_string()
+    });
+    refused(&b2, &write(&dir, "t.tar", &bad), "image.file_sha256 is not");
+    let bad = with_manifest(&bytes, |m| {
+        m.image.as_mut().unwrap().identity = "0".repeat(64)
+    });
+    refused(&b2, &write(&dir, "t.tar", &bad), "image.identity is not");
     let _ = std::fs::remove_dir_all(&dir);
 }

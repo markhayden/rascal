@@ -82,5 +82,9 @@
       "size": 147,
       "sha256": "sha256:6fd721689e21a4b833e91133887fc72e7148a1158b1e232daee5e5766915f98b"
     }
-  ]
+  ],
+  "image": {
+    "file_sha256": "6b2cc035c6a965b3acc1b302f368c5976fe2073d0dc5edb651f3e8f56993d3c4",
+    "identity": "sha256:21849d848b3cf3e147699d10c349d43a4b61446a30bd4a61c908187dc0260596"
+  }
 }

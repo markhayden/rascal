@@ -325,3 +325,158 @@ fn a_location_imports_from_json_against_a_named_image() {
     assert_eq!(std::fs::read_to_string(ws.join("CURRENT")).unwrap(), before);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_refused_export_leaves_no_file_behind() {
+    let dir = scratch("noout");
+    let run = dir.join("run");
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    ok(&["run", "seam", s(&pano), "--out", s(&run)]);
+    let mask = last_mask(&run);
+    let out_dir = dir.join("out");
+    std::fs::create_dir_all(&out_dir).unwrap();
+    // Not a Mask: 64, and no --out appears.
+    let bundle = out_dir.join("x.mask.tar");
+    let out = rascal(&[
+        "workspace",
+        "export-mask",
+        s(&run),
+        "img-1",
+        "--out",
+        s(&bundle),
+    ]);
+    assert_eq!(out.status.code(), Some(64));
+    assert!(!bundle.exists(), "nothing written for a refused export");
+    // An --out that is a directory: 64, the directory as it was, no partial file beside it.
+    let occupied = out_dir.join("occupied");
+    std::fs::create_dir_all(&occupied).unwrap();
+    let out = rascal(&[
+        "workspace",
+        "export-mask",
+        s(&run),
+        &mask,
+        "--out",
+        s(&occupied),
+    ]);
+    assert_eq!(out.status.code(), Some(64));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("is a directory"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(std::fs::read_dir(&occupied).unwrap().count(), 0);
+    let names: Vec<String> = std::fs::read_dir(&out_dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(names, ["occupied"], "nothing left beside it");
+    // A written bundle replaces the file whole; no temporary is left beside it.
+    ok(&[
+        "workspace",
+        "export-mask",
+        s(&run),
+        &mask,
+        "--out",
+        s(&bundle),
+    ]);
+    let mut names: Vec<String> = std::fs::read_dir(&out_dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    assert_eq!(names, ["occupied", "x.mask.tar"]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_mask_whose_image_is_missing_names_it_and_works_once_it_is_imported() {
+    let dir = scratch("noimage");
+    let run = dir.join("run");
+    let floor = repo_root().join("fixtures/images/floor.png");
+    ok(&[
+        "run",
+        "rect",
+        s(&floor),
+        "--bbox",
+        "0.2,0.2,0.5,0.6",
+        "--out",
+        s(&run),
+    ]);
+    let mask = last_mask(&run);
+    let bundle = dir.join("box.mask.tar");
+    ok(&[
+        "workspace",
+        "export-mask",
+        s(&run),
+        &mask,
+        "--out",
+        s(&bundle),
+    ]);
+    // The file digest `workspace import` prints for this image, from a throwaway workspace.
+    let printed = ok(&["workspace", "import", s(&dir.join("probe")), s(&floor)]);
+    let digest = printed
+        .trim()
+        .rsplit_once("file_sha256:")
+        .unwrap()
+        .1
+        .to_string();
+
+    // A fresh workspace gets the mask and nothing else.
+    let fresh = dir.join("fresh");
+    let imported = ok(&["workspace", "import-mask", s(&fresh), s(&bundle)]);
+    let id = imported.split_whitespace().next().unwrap().to_string();
+    let before = std::fs::read_to_string(fresh.join("CURRENT")).unwrap();
+
+    // An op that needs the pixels: refused, naming the image by its file digest and the remedy.
+    let out = rascal(&[
+        "window",
+        "--workspace",
+        s(&fresh),
+        "--image",
+        "img-1",
+        "--mask",
+        &id,
+    ]);
+    assert_eq!(out.status.code(), Some(64));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains(&format!("sha256 {digest}")), "{err}");
+    assert!(
+        err.contains(&format!("rascal workspace import {} <path>", s(&fresh))),
+        "{err}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(fresh.join("CURRENT")).unwrap(),
+        before,
+        "nothing published by the refusal"
+    );
+
+    // The image goes in by its own path; the mask's raw frame is the one it lands in.
+    let printed = ok(&["workspace", "import", s(&fresh), s(&floor)]);
+    let fields: Vec<&str> = printed.split_whitespace().collect();
+    let (image, frame) = (fields[0].to_string(), fields[1].to_string());
+    assert_eq!(
+        frame,
+        imported.split_whitespace().nth(1).unwrap(),
+        "{printed}"
+    );
+    let listed = ok(&["workspace", "list", s(&fresh), "--type", "Frame", "--json"]);
+    let frames: Vec<serde_json::Value> = serde_json::from_str(&listed).unwrap();
+    assert_eq!(frames.len(), 1, "one raw frame, the mask's: {listed}");
+
+    // The same mask id now applies, with no second import of the mask.
+    let done = ok(&[
+        "window",
+        "--workspace",
+        s(&fresh),
+        "--image",
+        &image,
+        "--mask",
+        &id,
+    ]);
+    assert!(done.contains("committed"), "{done}");
+    let masks = ok(&["workspace", "list", s(&fresh), "--type", "Mask", "--json"]);
+    let masks: Vec<serde_json::Value> = serde_json::from_str(&masks).unwrap();
+    assert_eq!(masks.len(), 2, "the imported mask and window's");
+    assert_eq!(masks[0]["id"], id.as_str());
+    let _ = std::fs::remove_dir_all(&dir);
+}

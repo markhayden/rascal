@@ -312,6 +312,7 @@ pub fn inventory() -> Vec<BoundaryType> {
 /// so a type cannot hide here.
 pub const COMPONENTS: &[&str] = &[
     "MaskBundleMember",
+    "MaskBundleImage",
     "Projection",
     "Topology",
     "FrameKind",
