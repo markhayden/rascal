@@ -1017,3 +1017,23 @@ fn the_runs_list_pages_by_cursor() {
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Every tool's input schema compiles on its own as a JSON Schema (2020-12, MCP's default), so a
+/// strict client can discover rascal: no reference that points outside the schema it sits in.
+#[test]
+fn every_tool_input_schema_stands_alone() {
+    let dir = scratch("schemas");
+    let mut client = start(&dir);
+    // The check catches the failure it is for: a reference to a definition that is not there.
+    let dangling = serde_json::json!({ "properties": { "kind": { "$ref": "#/$defs/Kind" } } });
+    assert!(jsonschema::options().build(&dangling).is_err());
+    let tools = client.list_tools().unwrap();
+    assert!(tools.len() > 10, "{}", tools.len());
+    for tool in &tools {
+        if let Err(error) = jsonschema::options().build(&tool.input_schema) {
+            panic!("{}: {error}\n{:#}", tool.name, tool.input_schema);
+        }
+    }
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
