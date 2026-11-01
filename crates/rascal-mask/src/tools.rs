@@ -199,10 +199,20 @@ fn sha256_hex(bytes: &[u8]) -> String {
     )
 }
 
-/// Downloads the archive at `url` (https or http, no redirects off the host's scheme), with
-/// a size ceiling and a timeout; the bytes are checked against `expected` by the caller.
-fn download(url: &str) -> Result<Vec<u8>> {
-    const MAX_BYTES: usize = 4 << 30;
+/// The largest archive a URL may deliver.
+const MAX_DOWNLOAD: u64 = 4 << 30;
+
+/// Downloads the archive at `url` (https or http; redirects followed, as a release asset
+/// redirects to its storage host, since the digest and not the host is what is trusted), with
+/// a timeout and a ceiling of `max` bytes held while the body streams, so a server that sends
+/// no length, or a false one, cannot fill memory; the caller checks the bytes' digest.
+fn download(url: &str, max: u64) -> Result<Vec<u8>> {
+    let over = |got: String| {
+        Error::op(
+            "setup",
+            format!("{url}: {got} is over the {max} byte ceiling; nothing was unpacked"),
+        )
+    };
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| Error::op("setup", format!("no runtime for the download: {e}")))?;
     // The TLS provider is process-wide; installing it twice is not an error here.
@@ -212,7 +222,7 @@ fn download(url: &str) -> Result<Vec<u8>> {
             .timeout(std::time::Duration::from_secs(3600))
             .build()
             .map_err(|e| Error::op("setup", format!("client: {e}")))?;
-        let response = client
+        let mut response = client
             .get(url)
             .send()
             .await
@@ -222,24 +232,22 @@ fn download(url: &str) -> Result<Vec<u8>> {
             return Err(Error::op("setup", format!("{url}: HTTP {status}")));
         }
         if let Some(length) = response.content_length()
-            && length as usize > MAX_BYTES
+            && length > max
         {
-            return Err(Error::op(
-                "setup",
-                format!("{url}: {length} bytes is over the {MAX_BYTES} byte ceiling"),
-            ));
+            return Err(over(format!("a declared {length} bytes")));
         }
-        let bytes = response
-            .bytes()
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
             .await
-            .map_err(|e| Error::op("setup", format!("{url}: {e}")))?;
-        if bytes.len() > MAX_BYTES {
-            return Err(Error::op(
-                "setup",
-                format!("{url}: over the {MAX_BYTES} byte ceiling"),
-            ));
+            .map_err(|e| Error::op("setup", format!("{url}: {e}")))?
+        {
+            if (bytes.len() + chunk.len()) as u64 > max {
+                return Err(over("the body".to_string()));
+            }
+            bytes.extend_from_slice(&chunk);
         }
-        Ok(bytes.to_vec())
+        Ok(bytes)
     })
 }
 
@@ -338,7 +346,7 @@ impl BundleSource {
                 ));
             };
             println!("bundle: downloading {bundle}");
-            let bytes = download(bundle)?;
+            let bytes = download(bundle, MAX_DOWNLOAD)?;
             let got = sha256_hex(&bytes);
             if got != expected {
                 return Err(Error::usage(format!(
@@ -648,5 +656,43 @@ mod tests {
         assert!(err.contains("1000 byte ceiling"), "{err}");
         assert!(dir.path().join("b/one").exists());
         assert!(!dir.path().join("b/two").exists());
+    }
+
+    /// Serves `body` once on the loopback, with a `Content-Length` header or, without one,
+    /// to the end of the connection, as a server that streams would.
+    fn serve(body: Vec<u8>, with_length: bool) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/b.tar.gz", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            if let Some(Ok(mut stream)) = listener.incoming().next() {
+                let mut buffer = [0u8; 4096];
+                let _ = stream.read(&mut buffer);
+                let length = if with_length {
+                    format!("Content-Length: {}\r\n", body.len())
+                } else {
+                    String::new()
+                };
+                let head = format!("HTTP/1.1 200 OK\r\n{length}Connection: close\r\n\r\n");
+                let _ = stream.write_all(head.as_bytes());
+                for chunk in body.chunks(256) {
+                    let _ = stream.write_all(chunk);
+                }
+            }
+        });
+        url
+    }
+
+    #[test]
+    fn a_download_past_the_ceiling_is_refused_with_or_without_a_length() {
+        let body = vec![1u8; 4000];
+        for with_length in [true, false] {
+            let err = download(&serve(body.clone(), with_length), 1000)
+                .map(|b| b.len())
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("1000 byte ceiling"), "{with_length}: {err}");
+        }
+        assert_eq!(download(&serve(body.clone(), false), 4000).unwrap(), body);
     }
 }
