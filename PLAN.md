@@ -1425,7 +1425,7 @@ release build exits 69 with no offer; the installer is a testkit-only seam (`--i
 `docs/contract.md`, `SPEC.md`, `README.md`. **Size.** S.
 
 ### Checkpoint M9
-- [ ] Tasks 9.1 to 9.5 merged, `just check` green, CI green on both platforms; tag `m9`.
+- [x] Tasks 9.1 to 9.5 merged, `just check` green, CI green on both platforms; tag `m9` (2026-10-31, `a461801`).
 
 ### After table-manners v0.2 (not yet a task)
 The pin moves to v0.2; `client_run_id` claimed atomically (a reuse is `client_run_id_reused` with
