@@ -1173,9 +1173,10 @@ directory; `rascal run seam` from the unpacked release archive runs on the fixtu
 
 ### Checkpoint M7
 
-- [ ] All seven success criteria met with their proving command and outcome in
-      `docs/architecture.md`, or a dated scope change recorded for any exception.
-- [ ] Review and test passes applied; `docs/reviews/m7-checkpoint.md`.
+- [x] All seven success criteria met with their proving command and outcome in
+      `docs/architecture.md`, or a dated scope change recorded for any exception (checked
+      against `41e09c2` at the checkpoint, 2026-11-01; no exception).
+- [x] Review and test passes applied; `docs/reviews/m7-checkpoint.md` (2026-11-01).
 - [ ] Owner review → merge to `main` → push → CI green → tag `m7` → tag `v0.1.0` → the owner
       publishes. (`v0.1.0` released 2026-11-01 on the owner's word; `m7` follows the review
       record above.)
