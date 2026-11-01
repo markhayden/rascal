@@ -1,7 +1,8 @@
 //! A filler entry's `fill_max_side` (docs/fillers.md, owner decision 10): the request goes to
 //! the filler downscaled to that longest side and the fill comes back scaled to the support;
 //! the journal says so, the result is the panorama's size, and a replay reproduces the call.
-//! Without it, or when the support already fits, nothing is scaled.
+//! Without it, or when the support already fits, nothing is scaled. Through the fill cache the
+//! scaled fill is kept at the request's size, and a cached fill of another size is refused.
 #![cfg(feature = "testkit")]
 #![allow(clippy::unwrap_used)]
 
@@ -150,6 +151,83 @@ fn a_scaled_window_sends_a_small_request_and_scales_the_fill_back() {
         std::fs::read(replayed.join("result.png")).unwrap(),
         std::fs::read(dir.join("run-100/result.png")).unwrap(),
         "the replayed result is byte-identical"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A scaled window through the fill cache: the scaled fill is stored, a second heal is answered
+/// from it with the same result, and a cached fill of another size than the request is refused
+/// rather than resized to the support.
+#[test]
+fn a_scaled_window_is_cached_at_the_request_size_and_a_wrong_sized_cached_fill_is_refused() {
+    let dir = scratch("cached");
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let cache = dir.join("cache");
+    let cfg = config(&dir, Some(100));
+    let text_cfg = std::fs::read_to_string(&cfg).unwrap();
+    std::fs::write(
+        &cfg,
+        text_cfg.replacen(
+            "config_version = 1\n",
+            &format!(
+                "config_version = 1\n[cache]\ndir = {:?}\n",
+                cache.display().to_string()
+            ),
+            1,
+        ),
+    )
+    .unwrap();
+    let heal = |name: &str| {
+        let out = dir.join(name);
+        let result = rascal(&[
+            "heal",
+            "seam",
+            pano.to_str().unwrap(),
+            "--filler",
+            "fake",
+            "--config",
+            cfg.to_str().unwrap(),
+            "--out",
+            out.to_str().unwrap(),
+            "--no-dash",
+        ]);
+        (out, result)
+    };
+    let (first, result) = heal("first");
+    assert_eq!(result.status.code(), Some(0), "{}", text(&result.stderr));
+    let cached: Vec<PathBuf> = std::fs::read_dir(&cache)
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "png"))
+        .collect();
+    assert_eq!(cached.len(), 1, "{cached:?}");
+    let stored = image::open(&cached[0]).unwrap();
+    assert_eq!(
+        (u64::from(stored.width()), u64::from(stored.height())),
+        call_dimensions(&notes(&first)),
+        "the cache keeps the fill at the request's size"
+    );
+    let (second, result) = heal("second");
+    assert_eq!(result.status.code(), Some(0), "{}", text(&result.stderr));
+    assert!(
+        notes(&second)
+            .iter()
+            .any(|n| n.starts_with("fill from the cache")),
+        "{:?}",
+        notes(&second)
+    );
+    assert_eq!(
+        std::fs::read(second.join("result.png")).unwrap(),
+        std::fs::read(first.join("result.png")).unwrap()
+    );
+    image::RgbImage::new(10, 10).save(&cached[0]).unwrap();
+    let (_, result) = heal("third");
+    assert_eq!(result.status.code(), Some(3), "{}", text(&result.stderr));
+    let stderr = text(&result.stderr);
+    assert!(
+        stderr.contains("the cached fill is 10x10 but the request is"),
+        "{stderr}"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

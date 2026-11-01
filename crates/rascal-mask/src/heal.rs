@@ -295,6 +295,20 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
             .flatten()
         {
             Some((pixels, key)) => {
+                // A cached fill is the request's size: anything else is refused, not resized
+                // to the support under a scaled window or handed to paste to refuse.
+                if (pixels.width(), pixels.height()) != (request.width, request.height) {
+                    return Err(Error::op(
+                        "heal",
+                        format!(
+                            "the cached fill is {}x{} but the request is {}x{} ({key} in the fill cache)",
+                            pixels.width(),
+                            pixels.height(),
+                            request.width,
+                            request.height
+                        ),
+                    ));
+                }
                 cache_use = Some(true);
                 origin["cached"] = serde_json::json!(key);
                 run.note(format!(

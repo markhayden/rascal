@@ -144,7 +144,9 @@ are left for failures before a run exists (an unknown tool, malformed arguments)
 A filler entry's `spend_usd_per_call` is the run's price; `[cache] dir` keeps every fill by its
 request, filler and revision, so an identical request (a retry, a second arm with the same mask)
 is answered without calling the filler: `run.json` says `cache: hit` and spend 0, a call says
-`miss` with the price (table-manners 4.4). The lab always caches, in `fills/` under its directory.
+`miss` with the price (table-manners 4.4). A fill is kept at the size of the request it
+answered (the scaled size under `fill_max_side`), and a cached fill of any other size is refused
+with exit 3 rather than resized. The lab always caches, in `fills/` under its directory.
 
 A run's spend is its journal's, whatever its status (task 9.1): a call that may have been charged
 is never reported as zero, and cancelling does not erase a cost. Each call is *not sent* (refused
