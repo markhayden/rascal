@@ -1,7 +1,7 @@
-//! `rascal playground`: hands off to Wafflehouse, the shared local program over the owner's
-//! tools, by its launcher agreement (Wafflehouse H1; ADR 0020; decision 14). rascal carries no UI
-//! and no server for it: the command finds `wafflehouse` (`WAFFLEHOUSE_BIN`, else `PATH`, else
-//! `~/.local/bin`), runs it with exactly `--tool rascal`, and keeps its exit code. Wafflehouse
+//! `rascal playground`: hands off to Wafflery, the shared local program over the owner's
+//! tools, by its launcher agreement (Wafflery H1; ADR 0020; decision 14). rascal carries no UI
+//! and no server for it: the command finds `wafflery` (`WAFFLERY_BIN`, else `PATH`, else
+//! `~/.local/bin`), runs it with exactly `--tool rascal`, and keeps its exit code. Wafflery
 //! owns everything after that: the host, the browser, the library.
 //!
 //! When it is missing, a release build says where to get it and exits 69: the installer waits
@@ -13,10 +13,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// The program's name.
-const PROGRAM: &str = "wafflehouse";
+const PROGRAM: &str = "wafflery";
 
 /// The variable that names the program explicitly.
-const OVERRIDE: &str = "WAFFLEHOUSE_BIN";
+const OVERRIDE: &str = "WAFFLERY_BIN";
 
 /// The program or its release is unavailable.
 const UNAVAILABLE: i32 = 69;
@@ -26,7 +26,7 @@ const IO_ERROR: i32 = 74;
 /// The testkit's seam: an installer to offer, and whether to treat stdin as a terminal.
 #[derive(Debug, Clone, Default)]
 pub struct Seam {
-    /// A program run as `<installer> --prefix <~/.local/bin>` that leaves `wafflehouse` there.
+    /// A program run as `<installer> --prefix <~/.local/bin>` that leaves `wafflery` there.
     pub installer: Option<PathBuf>,
     /// Take the answer from stdin as if it were a terminal.
     pub terminal: bool,
@@ -44,7 +44,7 @@ fn executable(path: &Path) -> bool {
         .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
 }
 
-/// Where the program is: `Ok(None)` when it is not installed; `Err` when `WAFFLEHOUSE_BIN` is set
+/// Where the program is: `Ok(None)` when it is not installed; `Err` when `WAFFLERY_BIN` is set
 /// but wrong, which never falls through to another program.
 pub fn find() -> Result<Option<PathBuf>, String> {
     if let Some(explicit) = std::env::var_os(OVERRIDE) {
@@ -91,11 +91,11 @@ fn launch(program: &Path) -> i32 {
 
 fn instructions() -> String {
     format!(
-        "rascal playground: Wafflehouse is not installed. It is a separate program shared by the waffle tools; install it so `{PROGRAM}` is on PATH or in ~/.local/bin, or set {OVERRIDE} to its absolute path."
+        "rascal playground: Wafflery is not installed. It is a separate program shared by the waffle tools; install it so `{PROGRAM}` is on PATH or in ~/.local/bin, or set {OVERRIDE} to its absolute path."
     )
 }
 
-/// Hands off to Wafflehouse and returns the exit code: its own; 69 when it is unavailable; with
+/// Hands off to Wafflery and returns the exit code: its own; 69 when it is unavailable; with
 /// the testkit's installer, the offer on a terminal (no: 0; an installation that fails: 74).
 pub fn run(seam: &Seam) -> i32 {
     match find() {
@@ -127,7 +127,7 @@ fn offer(installer: &Path) -> i32 {
         return IO_ERROR;
     };
     eprint!(
-        "Wafflehouse is a separate program shared by the waffle tools, and it is not installed.\nInstall it into {}? [y/N] ",
+        "Wafflery is a separate program shared by the waffle tools, and it is not installed.\nInstall it into {}? [y/N] ",
         prefix.display()
     );
     let _ = std::io::stderr().flush();

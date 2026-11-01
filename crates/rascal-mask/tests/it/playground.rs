@@ -1,5 +1,5 @@
-//! Task 9.5 (Wafflehouse H1; ADR 0020): `rascal playground` finds `wafflehouse`
-//! (`WAFFLEHOUSE_BIN`, `PATH`, `~/.local/bin`), runs it with exactly `--tool rascal` without a
+//! Task 9.5 (Wafflery H1; ADR 0020): `rascal playground` finds `wafflery`
+//! (`WAFFLERY_BIN`, `PATH`, `~/.local/bin`), runs it with exactly `--tool rascal` without a
 //! shell, and keeps its exit code (128 + N for a signal). A wrong override is 69 and never falls
 //! through; missing, a release build says where to get it (69); the testkit's installer seam
 //! drives the offer: no is 0 and changes nothing, yes installs and runs, a failed install is 74
@@ -24,7 +24,7 @@ fn script(path: &Path, body: &str) {
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
 }
 
-/// A fake `wafflehouse` that writes its arguments to `seen` and exits `code`.
+/// A fake `wafflery` that writes its arguments to `seen` and exits `code`.
 fn fake(path: &Path, seen: &Path, code: i32) {
     script(
         path,
@@ -44,7 +44,7 @@ fn playground(args: &[&str], path: &str, home: &Path, explicit: Option<&Path>) -
         .env("HOME", home)
         .stdin(Stdio::null());
     if let Some(explicit) = explicit {
-        command.env("WAFFLEHOUSE_BIN", explicit);
+        command.env("WAFFLERY_BIN", explicit);
     }
     command.output().unwrap()
 }
@@ -59,7 +59,7 @@ fn the_program_gets_exactly_the_tool_and_its_exit_code_is_kept() {
     let seen = dir.join("seen.txt");
     let home = dir.join("home");
     let bin = dir.join("bin");
-    fake(&bin.join("wafflehouse"), &seen, 7);
+    fake(&bin.join("wafflery"), &seen, 7);
     let out = playground(&[], bin.to_str().unwrap(), &home, None);
     assert_eq!(out.status.code(), Some(7), "{}", stderr(&out));
     assert_eq!(std::fs::read_to_string(&seen).unwrap(), "--tool\nrascal\n");
@@ -69,7 +69,7 @@ fn the_program_gets_exactly_the_tool_and_its_exit_code_is_kept() {
     assert_eq!(out.status.code(), Some(64));
     assert!(!seen.exists());
     // A signal is 128 + N.
-    script(&bin.join("wafflehouse"), "kill -TERM $$");
+    script(&bin.join("wafflery"), "kill -TERM $$");
     let out = playground(&[], bin.to_str().unwrap(), &home, None);
     assert_eq!(out.status.code(), Some(143), "{}", stderr(&out));
     let _ = std::fs::remove_dir_all(&dir);
@@ -81,7 +81,7 @@ fn the_override_comes_first_and_a_wrong_one_never_falls_through() {
     let home = dir.join("home");
     let on_path = dir.join("bin");
     let path_seen = dir.join("path.txt");
-    fake(&on_path.join("wafflehouse"), &path_seen, 0);
+    fake(&on_path.join("wafflery"), &path_seen, 0);
     // An absolute path with spaces, run without a shell.
     let spaced = dir.join("with space/the program");
     let spaced_seen = dir.join("spaced.txt");
@@ -101,14 +101,10 @@ fn the_override_comes_first_and_a_wrong_one_never_falls_through() {
     // Relative, missing or not executable: 69, naming the variable, and PATH's is not run.
     let plain = dir.join("plain");
     std::fs::write(&plain, "not a program").unwrap();
-    for wrong in [
-        Path::new("relative/wafflehouse"),
-        &dir.join("absent"),
-        &plain,
-    ] {
+    for wrong in [Path::new("relative/wafflery"), &dir.join("absent"), &plain] {
         let out = playground(&[], on_path.to_str().unwrap(), &home, Some(wrong));
         assert_eq!(out.status.code(), Some(69), "{}", wrong.display());
-        assert!(stderr(&out).contains("WAFFLEHOUSE_BIN"), "{}", stderr(&out));
+        assert!(stderr(&out).contains("WAFFLERY_BIN"), "{}", stderr(&out));
         assert!(!path_seen.exists(), "fell through for {}", wrong.display());
     }
     let _ = std::fs::remove_dir_all(&dir);
@@ -119,10 +115,10 @@ fn path_comes_before_local_bin_and_missing_is_69_with_instructions() {
     let dir = scratch("lookup");
     let home = dir.join("home");
     let local_seen = dir.join("local.txt");
-    fake(&home.join(".local/bin/wafflehouse"), &local_seen, 5);
+    fake(&home.join(".local/bin/wafflery"), &local_seen, 5);
     let path_seen = dir.join("path.txt");
     let bin = dir.join("bin");
-    fake(&bin.join("wafflehouse"), &path_seen, 4);
+    fake(&bin.join("wafflery"), &path_seen, 4);
     let out = playground(&[], bin.to_str().unwrap(), &home, None);
     assert_eq!(out.status.code(), Some(4));
     assert!(!local_seen.exists());
@@ -159,7 +155,7 @@ fn the_offer_installs_only_on_yes_and_a_failed_install_runs_nothing() {
     script(
         &installer,
         &format!(
-            "[ \"$1\" = --prefix ] || exit 9\n/bin/cp '{}' \"$2/wafflehouse\"",
+            "[ \"$1\" = --prefix ] || exit 9\n/bin/cp '{}' \"$2/wafflery\"",
             payload.display()
         ),
     );
@@ -196,7 +192,7 @@ fn the_offer_installs_only_on_yes_and_a_failed_install_runs_nothing() {
         let out = offer(&home, &installer, Some(answer));
         assert_eq!(out.status.code(), Some(0), "{answer:?}: {}", stderr(&out));
         assert!(stderr(&out).contains("[y/N]"));
-        assert!(!home.join(".local/bin/wafflehouse").exists());
+        assert!(!home.join(".local/bin/wafflery").exists());
         assert!(!seen.exists());
     }
     // Off a terminal: 69 with instructions, no prompt.
@@ -204,7 +200,7 @@ fn the_offer_installs_only_on_yes_and_a_failed_install_runs_nothing() {
     let out = offer(&home, &installer, None);
     assert_eq!(out.status.code(), Some(69));
     assert!(!stderr(&out).contains("[y/N]"));
-    assert!(!home.join(".local/bin/wafflehouse").exists());
+    assert!(!home.join(".local/bin/wafflery").exists());
     // A failed installation: 74, and nothing is run.
     let home = dir.join("home-fail");
     let out = offer(&home, &failing, Some("y\n"));
@@ -214,7 +210,7 @@ fn the_offer_installs_only_on_yes_and_a_failed_install_runs_nothing() {
     let home = dir.join("home-yes");
     let out = offer(&home, &installer, Some("y\n"));
     assert_eq!(out.status.code(), Some(9), "{}", stderr(&out));
-    assert!(home.join(".local/bin/wafflehouse").exists());
+    assert!(home.join(".local/bin/wafflery").exists());
     assert_eq!(std::fs::read_to_string(&seen).unwrap(), "--tool\nrascal\n");
     let _ = std::fs::remove_dir_all(&dir);
 }

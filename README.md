@@ -96,7 +96,7 @@ rascal workspace import-mask ws/ seam.mask.tar                 # into another wo
 rascal workspace import-location ws/ finding.json --image img-1   # a location as JSON, checked against the image
 rascal dash run/ --out run/dash.html                     # the run page: timings, envelopes, every artifact; --serve for loopback
 rascal describe --json                                    # what rascal can run, in the shared contract's words
-rascal playground                                         # open Wafflehouse, the shared program (separate)
+rascal playground                                         # open Wafflery, the shared program (separate)
 rascal serve --workspace ws/                              # every op as an MCP tool over stdio, plus import/list/describe/read/dash,
                                                           # and the table-manners actions (one per recipe) with run resources
 rascal tools call rascal-tools segment --config rascal.toml --workspace ws/ --image photo.png --prompt "the chair"   # a pack's tool from the shell
