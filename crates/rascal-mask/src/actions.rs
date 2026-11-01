@@ -389,6 +389,8 @@ impl ContractActions {
                     workspace: out.clone(),
                     fresh: true,
                     started_ms,
+                    session_id: None,
+                    client_run_id: None,
                     input_identity: format!(
                         "sha256:{}",
                         run_json::input_identity(&Value::Object(args.clone()))
@@ -562,10 +564,16 @@ impl ContractActions {
                 ms,
                 RunSummary {
                     id: name.clone(),
+                    resource: format!("rascal://run/{name}/run.json"),
+                    session_id: done
+                        .as_ref()
+                        .and_then(|d| d["run"]["session_id"].as_str().map(str::to_string)),
+                    client_run_id: done
+                        .as_ref()
+                        .and_then(|d| d["run"]["client_run_id"].as_str().map(str::to_string)),
                     action,
                     status,
                     started: run_json::rfc3339(ms),
-                    resource: format!("rascal://run/{name}/run.json"),
                 },
             ));
         }
@@ -577,6 +585,7 @@ impl ContractActions {
                 version: env!("CARGO_PKG_VERSION").to_string(),
             },
             runs: runs.into_iter().map(|(_, r)| r).collect(),
+            next_cursor: None,
         }
     }
 }

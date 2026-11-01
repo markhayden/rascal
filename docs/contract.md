@@ -1,15 +1,17 @@
 # table-manners: rascal's side of the shared contract
 
-rascal conforms to [table-manners](https://github.com/markhayden/table-manners) v0.1.0, the shared
-contract of the owner's tools (ADR 0020, decision 13): what an agent, a script or the playground
-sees from outside is the same for squint, rascal and the tools after them. The contract's text is
-the specification; this page is what rascal does under it, task by task as milestone M8 lands
-(PLAN.md).
+rascal conforms to [table-manners](https://github.com/markhayden/table-manners) v0.1.0 and is
+moving to v0.2.0 in milestone M11, the shared contract of the owner's tools (ADR 0020, decisions
+13 and 14): what an agent, a script or the playground sees from outside is the same for squint,
+rascal and the tools after them. The contract's text is the specification; this page is what
+rascal does under it (PLAN.md M8, M9 and M11).
 
 ## The pin
 
-`table-manners = "=0.1.0"` in the workspace `Cargo.toml`: the crate's serde types and embedded
-schemas, no logic. `scripts/check-contract.sh` warns in CI when crates.io has a newer release;
+`table-manners = "=0.1.0"` in the workspace `Cargo.toml` on main: the crate's serde types and
+embedded schemas, no logic. M11's branch builds against the v0.2.0 draft by path
+(`../table-manners`, its `v0.2-contract` branch) until v0.2.0 is tagged and published (task
+11.7). `scripts/check-contract.sh` warns in CI when crates.io has a newer release;
 moving the pin is a deliberate commit that also refreshes `fixtures/contract/`.
 
 ## Image references (8.1)
@@ -137,8 +139,10 @@ before its request left rascal: no key, the connection refused, the command not 
 and 403), *known* (the filler answered: a 2xx, or exit 0) or *unresolved* (sent and not settled:
 a timeout, a failure status, a non-zero exit, or the run killed mid-call). Known and unresolved
 calls count at the price; `heal` journals `filler call started` before each call, so a run stopped
-mid-call counts it too. `spend.usd` is the total; the unresolved part is `body.spend_unresolved_usd`
-with a note, until table-manners v0.2 names a shared field.
+mid-call counts it too. `spend.usd` is the total and `spend.unresolved_usd` the part no answer
+settled, with a note (table-manners v0.2, 4.5). The contract files an authentication refusal as
+*known* at zero; rascal records it as `not_sent`, which also counts zero, so the spend is the
+same.
 `[limits]` holds `serve` to `call_cap_usd` (a call's `max_spend_usd` may lower it, never raise
 it) and `session_budget_usd` across the process's calls; a call whose price would pass either is
 refused before it runs, an `error` result with code `budget` (4.5). The check and a reservation of

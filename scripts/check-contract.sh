@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Warns when crates.io has a newer table-manners than the one pinned in Cargo.toml (ADR 0020).
 # Never fails: moving the pin is a deliberate commit. Needs the network, so it runs in CI, not in
-# `just check`; offline it says so and exits 0. CONTRACT_LATEST overrides the lookup (self-test).
+# `just check`; offline it says so and exits 0. CONTRACT_LATEST overrides the lookup and
+# CONTRACT_MANIFEST the manifest read (self-test).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-pinned="$(sed -n 's/^table-manners = "=\([0-9.]*\)"$/\1/p' Cargo.toml)"
+# The pin is `table-manners = "=X"`, or `{ path = …, version = "=X" }` while a draft is built by path.
+pinned="$(sed -n -e 's/^table-manners = "=\([0-9.]*\)"$/\1/p' \
+  -e 's/^table-manners = {.*version = "=\([0-9.]*\)".*}$/\1/p' "${CONTRACT_MANIFEST:-Cargo.toml}")"
 if [ -z "$pinned" ]; then
   echo "check-contract: no exact table-manners pin in Cargo.toml" >&2
   exit 1

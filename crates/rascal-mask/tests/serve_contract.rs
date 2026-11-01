@@ -304,7 +304,7 @@ fn a_cancelled_call_gets_no_result_and_its_run_says_cancelled() {
     // The run stops before its next step; a filler call already in flight runs to its end, and
     // its price stays spent: cancelling does not erase the cost (task 9.1).
     assert_eq!(stored["spend"]["usd"], 0.04, "{stored:#}");
-    assert!(stored["body"].get("spend_unresolved_usd").is_none());
+    assert_eq!(stored["spend"]["unresolved_usd"], 0.0);
     // The run stops before its next step; a filler call already in flight runs to its end.
     assert!(
         stored["body"]["stopped_before"]

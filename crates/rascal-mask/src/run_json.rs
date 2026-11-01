@@ -77,6 +77,10 @@ pub struct Pending {
     /// Whether the run directory is the caller's to write into ([`fresh`]).
     pub fresh: bool,
     pub started_ms: u128,
+    /// The serving session (4.6); none for a run made outside `serve`.
+    pub session_id: Option<String>,
+    /// The caller's correlation id (4.4); none when the call sent none.
+    pub client_run_id: Option<String>,
     pub input_identity: String,
     pub images_in: Vec<ImageTaken>,
     pub locations_used: Vec<TmLocation>,
@@ -303,14 +307,10 @@ pub fn finish(
     let finished = now_ms();
     let (input, used, found, mut notes) = from_workspace(workspace_dir);
     // The spend is the journal's, whatever the status (2.1, 4.5): a call that may have been
-    // charged is never reported as zero; the part no answer settled is said in the body.
+    // charged is never reported as zero; the part no answer settled is `spend.unresolved_usd`.
     let spent = filler::spent(&notes);
-    let mut body = ended.body;
+    let body = ended.body;
     if spent.unresolved_usd > 0.0 {
-        body.insert(
-            "spend_unresolved_usd".into(),
-            serde_json::json!(spent.unresolved_usd),
-        );
         notes.push(format!(
             "{:.4} USD of the spend is unresolved: a filler call was sent and no answer settles whether it was charged; it is counted at its price",
             spent.unresolved_usd
@@ -357,6 +357,8 @@ pub fn finish(
         run: Run {
             id: pending.id.clone(),
             resource: format!("rascal://run/{}/run.json", pending.id),
+            session_id: pending.session_id.clone(),
+            client_run_id: pending.client_run_id.clone(),
             dir: Some(absolute(&pending.dir)),
         },
         status: ended.status,
@@ -367,6 +369,7 @@ pub fn finish(
         input_identity: pending.input_identity.clone(),
         spend: Spend {
             usd: spent.usd,
+            unresolved_usd: spent.unresolved_usd,
             basis: SpendBasis::Estimated,
         },
         cache: match ended.cache {
@@ -435,6 +438,8 @@ pub fn pending_for(args: &crate::run::RunArgs, filler: Option<&str>) -> Pending 
         workspace: args.workspace.clone().unwrap_or_else(|| args.out.clone()),
         fresh: fresh(&args.out),
         started_ms,
+        session_id: None,
+        client_run_id: None,
         input_identity: format!("sha256:{}", input_identity(&parts)),
         images_in: Vec::new(),
         locations_used: Vec::new(),

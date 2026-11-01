@@ -171,7 +171,7 @@ fn a_failed_call_keeps_its_spend_unresolved_and_an_unsent_one_is_free() {
     let r = run_json(&dir.join("failing"));
     assert_eq!(r["status"], "error");
     assert_eq!(r["spend"]["usd"], 0.04, "{r:#}");
-    assert_eq!(r["body"]["spend_unresolved_usd"], 0.04);
+    assert_eq!(r["spend"]["unresolved_usd"], 0.04);
     assert!(
         r["notes"]
             .as_array()
@@ -187,13 +187,13 @@ fn a_failed_call_keeps_its_spend_unresolved_and_an_unsent_one_is_free() {
     assert_eq!(out.status.code(), Some(3));
     let r = run_json(&dir.join("unsent"));
     assert_eq!(r["spend"]["usd"], 0.0, "{r:#}");
-    assert!(r["body"].get("spend_unresolved_usd").is_none());
+    assert_eq!(r["spend"]["unresolved_usd"], 0.0);
     // A call that answered is known: the price, nothing unresolved.
     let out = heal_with(&priced(&dir, "exact", None), &dir.join("known"));
     assert_eq!(out.status.code(), Some(0));
     let r = run_json(&dir.join("known"));
     assert_eq!(r["spend"]["usd"], 0.04);
-    assert!(r["body"].get("spend_unresolved_usd").is_none());
+    assert_eq!(r["spend"]["unresolved_usd"], 0.0);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -363,7 +363,7 @@ fn a_signal_cancels_the_run_and_says_so() {
         assert_eq!(r["body"]["signal"], format!("SIG{signal}"));
         // Stopped mid-call: the charge is unresolved, counted at the price (task 9.1).
         assert_eq!(r["spend"]["usd"], 0.04, "SIG{signal}: {r:#}");
-        assert_eq!(r["body"]["spend_unresolved_usd"], 0.04);
+        assert_eq!(r["spend"]["unresolved_usd"], 0.04);
         assert_eq!(r["images"]["in"].as_array().unwrap().len(), 1);
     }
     let _ = std::fs::remove_dir_all(&dir);
