@@ -451,19 +451,24 @@ fn assert_refused(
 fn the_cap_and_the_budget_fail_with_their_own_codes() {
     let dir = scratch("budget");
     let (mut client, seen) = limits_server(&dir, "call_cap_usd = 0.10\nsession_budget_usd = 0.05");
+    let pano = repo_root().join("fixtures/images/step-pano.png");
     let estimate = |client: &mut Client, extra: serde_json::Value| {
-        let mut args = serde_json::json!({ "action": "seam", "filler": "hosted" });
+        let mut args = serde_json::json!({ "image": { "path": pano.to_str().unwrap() },
+                                           "filler": "hosted" });
         args.as_object_mut()
             .unwrap()
             .extend(extra.as_object().unwrap().clone());
-        client.call("estimate", args)
+        client.call(
+            "estimate",
+            serde_json::json!({ "action": "seam", "arguments": args }),
+        )
     };
     let before = estimate(&mut client, serde_json::json!({}))
         .unwrap()
         .structured
         .unwrap();
     assert_eq!(before["worst_case_usd"], 0.04);
-    assert_eq!(before["call_cap_usd"], 0.10);
+    assert_eq!(before["cap_usd"], 0.10);
     assert_eq!(before["allowed"], true);
 
     // Above the configured cap: refused as an argument, naming both amounts.
@@ -523,6 +528,21 @@ fn uncapped_the_callers_max_spend_is_the_cap() {
     assert_eq!(seen.lock().unwrap().len(), 1);
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Reads messages until a run's first step line: the journal is watched only once the limits
+/// check has passed, so its worst case is reserved by then ("run started" comes before it).
+fn wait_reserved(client: &mut Client) {
+    loop {
+        let message = client.next_message().unwrap();
+        if message["method"] == "notifications/progress"
+            && message["params"]["message"]
+                .as_str()
+                .is_some_and(|m| m.starts_with("step "))
+        {
+            return;
+        }
+    }
 }
 
 /// Reads messages until every id in `ids` has its response; returns them by id.
@@ -606,7 +626,7 @@ fn concurrent_calls_reserve_the_budget_atomically() {
         client
             .call(
                 "estimate",
-                serde_json::json!({ "action": "seam", "filler": "slow" }),
+                serde_json::json!({ "action": "seam", "arguments": call["arguments"] }),
             )
             .unwrap()
             .structured
@@ -647,13 +667,7 @@ fn concurrent_calls_reserve_the_budget_atomically() {
     let mut with_token = call.clone();
     with_token["_meta"] = serde_json::json!({ "progressToken": "r-1" });
     let a = client.begin("tools/call", with_token).unwrap();
-    // The run is under way once its first progress names it.
-    loop {
-        let message = client.next_message().unwrap();
-        if message["method"] == "notifications/progress" {
-            break;
-        }
-    }
+    wait_reserved(&mut client);
     let held = estimate(&mut client);
     assert_eq!(held["allowed"], true, "{held:#}");
     assert_eq!(session(&mut client)["reserved_usd"], 0.04);
@@ -719,7 +733,8 @@ fn reads_answer_while_a_run_holds_the_permit_and_the_run_is_listed() {
     let estimate = client
         .begin(
             "tools/call",
-            serde_json::json!({ "name": "estimate", "arguments": { "action": "seam", "filler": "slow" } }),
+            serde_json::json!({ "name": "estimate", "arguments": { "action": "seam",
+                "arguments": { "image": { "path": pano.to_str().unwrap() }, "filler": "slow" } } }),
         )
         .unwrap();
     let describe = client
@@ -790,12 +805,7 @@ fn the_session_is_one_observation_of_the_servers_ledger() {
             }),
         )
         .unwrap();
-    loop {
-        let message = client.next_message().unwrap();
-        if message["method"] == "notifications/progress" {
-            break;
-        }
-    }
+    wait_reserved(&mut client);
     let held = session(&mut client);
     assert_eq!(held["reserved_usd"], 0.04, "{held:#}");
     assert_eq!(held["id"], id.as_str());

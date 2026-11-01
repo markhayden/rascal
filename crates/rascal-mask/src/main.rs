@@ -10,6 +10,7 @@ mod lab_run;
 use rascal_mask::lab;
 use rascal_mask::readiness::{self, Setup};
 mod actions;
+mod estimate;
 mod measure;
 mod ops;
 mod packs;
@@ -200,6 +201,20 @@ enum Command {
         /// file that is missing or does not load is described as such; describe never fails on it.
         #[arg(long)]
         config: Option<PathBuf>,
+    },
+    /// The estimate of one call (table-manners 4.5): what it would reserve, the per-call cap,
+    /// whether the cap and readiness allow it and its binding, with no session (so no server
+    /// accepts the binding). Runs nothing; exit 0, or 64 on a bad request.
+    Estimate {
+        /// Print the estimate as JSON (the contract's form); without it, one line.
+        #[arg(long)]
+        json: bool,
+        /// The configuration file (rascal.toml) the call would run under.
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// The request, `{"action": <name>, "arguments": {…}}` with exactly the call's
+        /// arguments, as a JSON file, or `-` for stdin.
+        request: PathBuf,
     },
     /// Open Wafflery, the shared program over the waffle tools (separate; rascal carries no
     /// UI): runs `wafflery --tool rascal` and keeps its exit code; 69 when it is not
@@ -999,6 +1014,18 @@ fn main() {
                 exit::code_for(&error)
             }
         },
+        Command::Estimate {
+            json,
+            config,
+            request,
+        } => match estimate_cmd(json, config.as_deref(), &request) {
+            Ok(()) => exit::OK,
+            Err(error) => {
+                eprintln!("rascal estimate: {error}");
+                // Every failure is the request's: an estimate reads nothing else that can fail.
+                exit::USAGE
+            }
+        },
         Command::Inspect {
             mask,
             json,
@@ -1290,6 +1317,53 @@ fn describe_cmd(json: bool, config: Option<&std::path::Path>) -> rascal_core::er
         };
         println!("{:<14} {}{ready}", action.name, action.title);
     }
+    Ok(())
+}
+
+/// `rascal estimate [--json] [--config <path>] <request.json | ->` (table-manners 4.5): the
+/// estimate with no session.
+fn estimate_cmd(
+    json: bool,
+    config: Option<&std::path::Path>,
+    request: &std::path::Path,
+) -> rascal_core::error::Result<()> {
+    let text = if request == std::path::Path::new("-") {
+        let mut text = String::new();
+        std::io::Read::read_to_string(&mut std::io::stdin(), &mut text)
+            .map_err(|e| Error::io("<stdin>", e))?;
+        text
+    } else {
+        std::fs::read_to_string(request).map_err(|e| Error::io(request, e))?
+    };
+    let request: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| Error::usage(format!("the request is not JSON: {e}")))?;
+    let state = rascal_core::config::ConfigState::read(config);
+    let estimate = estimate::without_session(&state, &request)?;
+    if json {
+        let text = serde_json::to_string_pretty(&estimate)
+            .map_err(|e| Error::usage(format!("estimate: {e}")))?;
+        println!("{text}");
+        return Ok(());
+    }
+    let amount = |usd: Option<f64>| usd.map_or("none".to_string(), |u| format!("{u:.4} USD"));
+    let verdict = match estimate.refused {
+        None => "allowed".to_string(),
+        Some(refused) => format!(
+            "refused ({})",
+            serde_json::to_value(refused)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_string))
+                .unwrap_or_default()
+        ),
+    };
+    println!(
+        "{}: {verdict}, worst case {}, cap {}, binding {} (no session; expires {})",
+        estimate.action,
+        amount(estimate.worst_case_usd),
+        amount(estimate.cap_usd),
+        estimate.binding,
+        estimate.expires
+    );
     Ok(())
 }
 

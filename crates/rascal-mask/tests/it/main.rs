@@ -7,6 +7,7 @@ mod contract_locations;
 mod corpus_cli;
 mod dash;
 mod describe;
+mod estimate;
 mod fillers;
 mod heal;
 mod heal_overrides;

@@ -2013,21 +2013,21 @@ prints an allowed estimate with `worst_case_usd` 0.04, a binding and `session: n
 image changed by a byte the binding changes.
 
 **Acceptance.**
-- [ ] Every estimate validates against `urn:table-manners:core:estimate`: allowed; refused for
+- [x] Every estimate validates against `urn:table-manners:core:estimate`: allowed; refused for
       `cap`, `budget` and `readiness`; a mask-only call with a configuration (`model` null, worst
       case 0, allowed), and the same with no file (`config_identity` the defaults' digest);
       `remove_prompt` with no file (`refused: "readiness"`, `worst_case_usd` and
       `config_identity` null).
-- [ ] The binding is stable for the same call (path or the same bytes inline give one binding,
+- [x] The binding is stable for the same call (path or the same bytes inline give one binding,
       and so do calls differing only in `return_images` or `image_blocks`), and changes with the
       image's bytes, any other argument, the configuration, the session and the version (the
       version through a unit test of the recipe).
 - [ ] `rascal estimate --json` prints an estimate with `session_id` and `session` null that
       validates; a served call carrying its binding fails `stale_estimate` (12.6).
-- [ ] `estimate` is in `tools/list` with the `{action, arguments}` schema, never in `actions`; it
+- [x] `estimate` is in `tools/list` with the `{action, arguments}` schema, never in `actions`; it
       answers while a run holds the permit; it leaves the runs root, the workspace's generation and
       the session's `reserved_usd` unchanged.
-- [ ] An unknown action, an action's bad argument, or `max_spend_usd` over the configured cap is a
+- [x] An unknown action, an action's bad argument, or `max_spend_usd` over the configured cap is a
       JSON-RPC `-32602` with `invalid_arguments` refusal data (code `usage`) naming it, and an
       `expect` mismatch the same with code `input`, each validating against `refusal.json`;
       `estimate` called without `action` is a plain `-32602` with no refusal data; a call that is

@@ -59,7 +59,7 @@ dash {run.dir} --document`), described in `docs/diagnostics.md`. Every action's 
 `max_spend_usd` as `{"type": "number", "exclusiveMinimum": 0}`, since every action takes a filler
 and so may be paid. With `--config`, the configured fillers are the `filler` enum and a
 configured filler with a price makes an action `may_spend`. `estimate` is a reserved tool, never
-an action. `fixtures/contract/describe.json` pins the document without a configuration. The
+an action (see "Estimates" below). `fixtures/contract/describe.json` pins the document without a configuration. The
 `describe` MCP tool returns the same document (8.5).
 
 ### Readiness (3.1, task 12.2)
@@ -255,9 +255,8 @@ allocation, with no run. The budget check and the reservation are one step under
 lock (task 9.2), so concurrent calls
 (`--concurrency`) never both pass against the same spend; the run's end settles the reservation
 into what it spent (unresolved charges included), and a run that ends without settling counts its
-reservation as unresolved spend. The `estimate` tool (still M9's input and output until task 12.5) returns the worst case for an action and
-filler, the effective per-call cap and whether the call would be allowed (a bad `max_spend_usd` is
-a JSON-RPC error there); the session is read
+reservation as unresolved spend. The `estimate` tool (below) prices a call with the same function
+as the limits check; the session is read
 from `rascal://session` (table-manners 4.6, task 11.2): one atomic observation of the ledger
 under a random UUID made when `serve` starts, with `budget_usd` and `remaining_usd` (both null
 when uncapped), `spent_usd` (unresolved included), `unresolved_usd` and `reserved_usd`, amounts at
@@ -275,6 +274,61 @@ session_budget_usd = 5.00
 [fillers.hosted]
 spend_usd_per_call = 0.04
 ```
+
+## Estimates (4.5, task 12.5)
+
+```
+estimate                                  # the reserved MCP tool: {"action": …, "arguments": {…}}
+rascal estimate [--json] [--config rascal.toml] <request.json | ->
+```
+
+`estimate` takes the action's name and exactly the arguments the paid `tools/call` would send
+(images, locations, `filler`, `set`, `max_spend_usd`, `return_images`, …) and answers with the
+contract's `estimate.json` as `structuredContent`. It is never a run: it never waits for the
+permit, never allocates, imports, writes a run or touches the workspace, never starts a pack and
+never calls a filler; it reads the call's images only to hash them. It checks the arguments as
+the run does and prices the call with the function the limits check uses (`estimate::price` in
+`crates/rascal-mask/src/estimate.rs`), so the two cannot disagree:
+
+- `worst_case_usd`: the filler's `spend_usd_per_call` for the one call a heal makes, 0 for a
+  mask-only call (or an unpriced filler). A call that cannot be priced (it needs a
+  configuration that is missing or invalid, names a filler that is not configured, or is
+  `remove_prompt` without its pack) has `worst_case_usd` null and is refused for `readiness`,
+  never priced at a made-up zero.
+- `cap_usd`: the effective per-call cap (the configured `call_cap_usd` lowered by
+  `max_spend_usd`), null when uncapped.
+- `allowed` and `refused`: `readiness` when the call's own readiness (its filler, 3.1) is not
+  `ready`, else `cap`, else `budget`, else allowed. A call that is not ready is an estimate
+  refused for `readiness`, not an error.
+- `effective`: `model` is `fillers.<name>` for a configured filler, null for a mask-only call;
+  `config_identity` is the loaded file's identity, or the built-in defaults' when the call reads
+  no configuration (with no file, or with one that is missing or invalid), null only when the
+  call needs the configuration that is missing or invalid; `x-rascal` is `{"filler": {name,
+  kind: "http" | "command", revision, paste, fill_max_side}}` or `{"filler": null}`.
+- `readiness` (the call's own), `session` (one observation of the ledger, the document
+  `rascal://session` returns, taken once with the budget check) and `session_id`, and `expires`,
+  one hour after the estimate (prices are configuration, fixed for the session).
+- `binding`: the record identity (ADR 0016, kind `estimate`) of `{action, arguments,
+  tool_version, config_identity, session_id}`, where `arguments` leaves out `return_images` and
+  `image_blocks` (they only choose delivery), each image slot's value is `{"file_sha256": …}`
+  (a path read, inline bytes decoded; an `expect` verified, then dropped), each stored-mask input
+  (`mask`, `protect`) is `{"mask": <its identity>}`, and every other argument, `max_spend_usd`
+  included, enters as sent. One call by path or by the same bytes inline binds once; any other
+  argument, a byte of an image, the configuration, the session or the version binds anew.
+
+A wrong request is never an estimate. What the input schema rejects (no `action`, `arguments`
+not an object, another key) is a plain JSON-RPC `-32602`. Anything else (an unknown action, an
+argument the action does not take or a malformed one, a missing required input, `max_spend_usd`
+not above zero or above the configured cap, an `expect` that does not match its image) is
+`-32602` with refusal data `{"reason": "invalid_arguments", "run": null, "error": {"code",
+"retryable": false, "reason"}}`, the code as the run would give it (`input` for an image rascal
+cannot take, `usage` otherwise) and the reason naming the argument. A run checks its arguments
+the same way first, so an argument an action does not take is now an `invalid` run too.
+
+`rascal estimate --json` prints the same document with no session: `session_id` and `session`
+are null and the binding is made over a null session id, so no server accepts it; the budget is
+never the refusal (there is no ledger), the cap and readiness still are. It exits 0, or 64 on a
+bad request with the reason on stderr; without `--json` it prints one line.
 
 ## `rascal playground` (8.7, 9.5)
 
