@@ -121,6 +121,25 @@
         }
       ]
     },
+    "MaskBundleImage": {
+      "additionalProperties": false,
+      "description": "The image a bundled mask was made on.",
+      "properties": {
+        "file_sha256": {
+          "description": "SHA-256 of the image file, lowercase hex: the `file_sha256` `rascal workspace import`\nprints (ADR 0020).",
+          "type": "string"
+        },
+        "identity": {
+          "description": "The image's identity.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file_sha256",
+        "identity"
+      ],
+      "type": "object"
+    },
     "MaskBundleMember": {
       "additionalProperties": false,
       "description": "One member of a bundle.",
@@ -272,6 +291,17 @@
     "identity": {
       "description": "The mask's identity.",
       "type": "string"
+    },
+    "image": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MaskBundleImage"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The image the mask was made on, when the exporting workspace could tell. Images are not\nbundled; the target imports it by its own path to apply the mask, and is told this one."
     },
     "mask_bundle_version": {
       "description": "The bundle format's version.",

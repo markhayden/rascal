@@ -1,6 +1,6 @@
 # 0022: A Mask travels as a canonical tar bundle, checked whole before it is imported
 
-Date: 2026-11-01. Status: proposed (task 10.5); accepted when the owner merges it.
+Date: 2026-11-01. Status: accepted (2026-11-01).
 
 ## Context
 
@@ -23,7 +23,8 @@ lose the zones, the profile and the prescriptions and invent an identity (ADR 00
   are PNGs already, so compression would buy little and cost a second decoder on hostile input.
 - **`bundle.json` is the manifest**: `mask_bundle_version`, the artifact type, the mask's
   identity, the frame chain from the root raw frame to the mask's frame (each frame record as
-  `frames.json` holds it), and each other member's path, size and SHA-256. It is a boundary type
+  `frames.json` holds it), each other member's path, size and SHA-256, and, when the exporting
+  workspace can tell, the image the mask was made on (its `file_sha256` and identity). It is a boundary type
   (`schemas/rascal/mask-bundle-v1.json`).
 - **Import checks everything, then commits once.** Bounded reads (256 MiB a file, 16 members, a
   1 MiB manifest, member names at most 64 bytes and plain, a member's declared size checked
@@ -77,4 +78,14 @@ lose the zones, the profile and the prescriptions and invent an identity (ADR 00
 - The MCP tools for export and import wait for the operations profile (M10, 10.1 to 10.4); the
   bundle does not presume its artifact reference.
 - Images are not bundled: a mask's frame is coordinates, not pixels, so the target needs the
-  image only to apply the mask, and it imports the image by its own path.
+  image only to apply the mask, and it imports the image by its own path. The manifest names that
+  image (the nearest image in the root frame among the mask's inputs, through the records; none
+  when there are several), and an op given an imported mask whose image the workspace lacks
+  fails naming it by file digest with the exact `rascal workspace import <ws> <path>` remedy;
+  once imported the image lands in the mask's raw frame and the same mask id applies. The image
+  is advice: nothing in the bundle can vouch for it and it gates nothing, so a flipped byte inside
+  it is the one change import cannot see; `--sha256` covers it with the rest.
+- Accepted 2026-11-01 after review, with three fixes made before merge: export holds itself to
+  every limit import reads within (above), so no rascal writes a bundle a rascal refuses; a version
+  mismatch tells the person what to do (upgrade, or the format is gone); and a missing image is
+  named with its remedy (above).

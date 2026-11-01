@@ -3,12 +3,13 @@
 //!
 //! A bundle is an uncompressed ustar archive. Its members, in this order: `bundle.json` (the
 //! [`MaskBundleManifest`]: the mask's identity, its frame chain from the root raw frame to the mask's
-//! frame, and every other member's path, size and SHA-256), then `mask/mask.toml` and each file
-//! it names, sorted by name. Every header is fixed (a regular file, mode 0644, uid and gid 0,
+//! frame, every other member's path, size and SHA-256, and the image it was made on when known),
+//! then `mask/mask.toml` and each file it names, sorted by name. Every header is fixed (a regular file, mode 0644, uid and gid 0,
 //! mtime 0, no user or group name) and the archive ends with its two zero blocks, so the same
 //! mask gives the same bytes and the bundle's SHA-256 names it.
 //!
-//! [`read`] trusts nothing: it is bounded ([`MAX_BUNDLE_BYTES`], [`MAX_MEMBERS`],
+//! [`read`] trusts nothing (the manifest's `image` is advice it cannot vouch for and that gates
+//! nothing): it is bounded ([`MAX_BUNDLE_BYTES`], [`MAX_MEMBERS`],
 //! [`MAX_MANIFEST_BYTES`], [`MAX_NAME_BYTES`]), checks the manifest against the members both
 //! ways, the archive against the canonical bytes rebuilt from them, every frame of the chain
 //! against what its fields and parent make, and the mask's invariants and identity. Any fault
@@ -89,6 +90,21 @@ pub struct MaskBundleManifest {
     pub frames: Vec<Frame>,
     /// Every member but this manifest, in archive order.
     pub members: Vec<MaskBundleMember>,
+    /// The image the mask was made on, when the exporting workspace could tell. Images are not
+    /// bundled; the target imports it by its own path to apply the mask, and is told this one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<MaskBundleImage>,
+}
+
+/// The image a bundled mask was made on.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MaskBundleImage {
+    /// SHA-256 of the image file, lowercase hex: the `file_sha256` `rascal workspace import`
+    /// prints (ADR 0020).
+    pub file_sha256: String,
+    /// The image's identity.
+    pub identity: String,
 }
 
 /// One member of a bundle.
@@ -124,14 +140,20 @@ pub fn sha256(bytes: &[u8]) -> String {
     )
 }
 
-/// The bundle of a mask whose frame chain, root first, is `frames`, within [`Limits::READ`].
-pub fn write(mask: &Mask, frames: &[Frame]) -> Result<Vec<u8>> {
-    write_within(mask, frames, &Limits::READ)
+/// The bundle of a mask whose frame chain, root first, is `frames`, and which was made on
+/// `image` when that is known, within [`Limits::READ`].
+pub fn write(mask: &Mask, frames: &[Frame], image: Option<&MaskBundleImage>) -> Result<Vec<u8>> {
+    write_within(mask, frames, image, &Limits::READ)
 }
 
 /// The bundle of a mask whose frame chain, root first, is `frames`, refused (a usage error
 /// naming the size and the limit) when it would fall outside `limits`.
-pub fn write_within(mask: &Mask, frames: &[Frame], limits: &Limits) -> Result<Vec<u8>> {
+pub fn write_within(
+    mask: &Mask,
+    frames: &[Frame],
+    image: Option<&MaskBundleImage>,
+    limits: &Limits,
+) -> Result<Vec<u8>> {
     if frames.len() > limits.frames {
         return Err(not_written(format!(
             "the frame chain has {} frames, over the limit of {}",
@@ -159,7 +181,11 @@ pub fn write_within(mask: &Mask, frames: &[Frame], limits: &Limits) -> Result<Ve
                 sha256: sha256(bytes),
             })
             .collect(),
+        image: image.cloned(),
     };
+    if let Some(image) = &manifest.image {
+        check_image(image)?;
+    }
     if members.len() + 1 > limits.members {
         return Err(not_written(format!(
             "it would hold {} members, over the limit of {}",
@@ -358,6 +384,9 @@ pub fn read(bytes: &[u8]) -> Result<Bundle> {
     if manifest_bytes(&manifest)? != manifest_raw {
         return Err(refused(format!("{MANIFEST} is not in its canonical form")));
     }
+    if let Some(image) = &manifest.image {
+        check_image(image).map_err(refused)?;
+    }
     check_members(&manifest, &members)?;
     let ordered: Vec<(String, Vec<u8>)> = manifest
         .members
@@ -401,6 +430,27 @@ pub fn read(bytes: &[u8]) -> Result<Bundle> {
         mask,
         sha256: sha256(bytes),
     })
+}
+
+/// The image's digests are what they claim to be: 64 lowercase hex digits, the identity with
+/// its `sha256:` prefix. They reach an error message, so nothing else gets through.
+fn check_image(image: &MaskBundleImage) -> Result<()> {
+    let hex = |s: &str| {
+        s.len() == 64
+            && s.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    };
+    if !hex(&image.file_sha256) {
+        return Err(Error::usage(format!(
+            "{MANIFEST}: image.file_sha256 is not 64 lowercase hex digits"
+        )));
+    }
+    if !image.identity.strip_prefix("sha256:").is_some_and(hex) {
+        return Err(Error::usage(format!(
+            "{MANIFEST}: image.identity is not sha256:<64 lowercase hex digits>"
+        )));
+    }
+    Ok(())
 }
 
 /// A version read from a bundle against the one this build reads: a newer one says to upgrade,

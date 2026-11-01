@@ -86,7 +86,8 @@ A Mask leaves a workspace as a **mask bundle** and enters another with the same 
 
 ```
 bundle.json          mask_bundle_version, the mask's identity, its frame chain from the root
-                     raw frame to the mask's frame, every other member's path, size and SHA-256
+                     raw frame to the mask's frame, every other member's path, size and SHA-256,
+                     and the image the mask was made on when known
 mask/blend.png       the files mask.toml names, sorted by name
 mask/core.png
 mask/mask.toml
@@ -131,7 +132,25 @@ another frame holds moves to the next free number; the record's `frame` follows,
 identity. A mask whose identity is already present publishes nothing and the command prints the
 existing id with `(already present)`. A PNG, a JPEG, a directory, a gzip file or any other archive
 is refused naming what it is: a rendering of a mask is an `Image`, and an image goes in with
-`workspace import`. Images are not bundled; a mask's frame is coordinates, not pixels.
+`workspace import`.
+
+Images are not bundled; a mask's frame is coordinates, not pixels. `bundle.json` names the image
+the mask was made on, when the exporting workspace can tell (the nearest image in the root frame
+among the mask's inputs, followed back through the records): `image.file_sha256`, the digest
+`workspace import` prints, and its identity. It is advice: nothing in the bundle can vouch for it,
+it gates nothing, and the import record keeps it so the copy exports the same bytes. An op that
+needs the pixels of an imported mask whose image the workspace does not hold fails (64) naming it:
+
+```
+$ rascal window --workspace ws2/ --image img-1 --mask mask-1
+rascal window: img-1: no such artifact in ws2/; mask-1 was made on an image ws2/ does not hold, the
+file with sha256 40ec72…7a50 (320x200, flat): import it with `rascal workspace import ws2/ <path>`
+and give the id it prints; mask-1 needs no new import
+```
+
+(with `--projection` added when the image is 2:1 and flat, or equirectangular and not 2:1). Import
+that file; it lands in the mask's raw frame (a raw frame's identity is its size and projection),
+and the same mask id then works: `rascal window --workspace ws2/ --image img-2 --mask mask-1`.
 
 A **location** travels as JSON: `rascal workspace import-location ws/ finding.json --image img-1`
 takes rascal's own location (which may leave out `frame` or must name the image's) or a

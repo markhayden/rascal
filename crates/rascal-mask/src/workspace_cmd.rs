@@ -258,6 +258,45 @@ fn run_op_inner(registry: &OpRegistry, name: &str, matches: &ArgMatches) -> Resu
         .get_one::<PathBuf>("workspace")
         .ok_or_else(|| Error::usage("--workspace is required"))?;
     let ws = Workspace::open(dir)?;
+    // Masks given by id: when one came in a bundle without its image, a usage error says which
+    // image to import (ADR 0022).
+    let masks: Vec<String> = manifest
+        .inputs
+        .iter()
+        .filter(|port| port.artifact_type == ArtifactType::Mask)
+        .flat_map(|port| {
+            matches
+                .get_many::<String>(&format!("port:{}", port.name))
+                .map(|v| v.cloned().collect::<Vec<_>>())
+                .unwrap_or_default()
+        })
+        .filter(|id| !Path::new(id).join("mask.toml").is_file())
+        .collect();
+    run_op_in(&ws, registry, name, matches).map_err(|error| match error {
+        Error::Usage { message } => {
+            let hints: Vec<String> = masks
+                .iter()
+                .filter_map(|mask| ws.missing_mask_image(mask).ok().flatten())
+                .collect();
+            if hints.is_empty() {
+                Error::Usage { message }
+            } else {
+                Error::Usage {
+                    message: format!("{message}; {}", hints.join("; ")),
+                }
+            }
+        }
+        other => other,
+    })
+}
+
+fn run_op_in(
+    ws: &Workspace,
+    registry: &OpRegistry,
+    name: &str,
+    matches: &ArgMatches,
+) -> Result<i32> {
+    let manifest = registry.require(name)?.manifest();
     let mut inputs: Inputs = BTreeMap::new();
     for port in &manifest.inputs {
         let given: Vec<String> = if port.many {

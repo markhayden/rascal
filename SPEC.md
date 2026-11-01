@@ -777,8 +777,9 @@ workspace under `--out`.
 
 **Portable masks** (task 10.5, ADR 0022). A Mask leaves a workspace as a **mask bundle**: an
 uncompressed ustar archive whose first member is `bundle.json` (`mask_bundle_version`, the
-mask's identity, its frame chain from the root raw frame to the mask's frame, and each other
-member's path, size and SHA-256; `schemas/rascal/mask-bundle-v1.json`), followed by
+mask's identity, its frame chain from the root raw frame to the mask's frame, each other
+member's path, size and SHA-256, and the image the mask was made on when known, by `file_sha256`
+and identity; `schemas/rascal/mask-bundle-v1.json`), followed by
 `mask/mask.toml` and every file it names, sorted, all with fixed headers, so the same stored mask
 gives the same bytes. Import into any workspace checks everything before it commits and commits
 once: the bounds (256 MiB, 16 members, a 1 MiB manifest, plain member names), each member
@@ -788,7 +789,11 @@ pixels. Any fault refuses the whole bundle, naming it, and nothing is published.
 mask has the same identity; a frame the workspace already has keeps the workspace's id, and a
 `crop:` id taken by another frame moves to the next free number (ids are not identity). A mask
 already present publishes nothing and answers with its id. A PNG, or any file that is not a mask
-bundle, is never taken as a Mask. A location imports from a JSON file, rascal's own or a
+bundle, is never taken as a Mask. Export refuses a bundle import would refuse (any bound),
+naming the size and the limit, and writes nothing. A version mismatch says what to do: upgrade
+rascal for a newer bundle, or that an older one is no longer read. An op given an imported mask
+whose image the workspace does not hold fails naming the image by file digest and the
+`rascal workspace import <ws> <path>` that fixes it; the same mask id applies once it is in. A location imports from a JSON file, rascal's own or a
 table-manners one, validated against a named image. A commit never rebinds a frame id to another
 identity.
 

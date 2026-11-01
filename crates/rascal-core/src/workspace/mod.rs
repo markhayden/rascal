@@ -102,6 +102,9 @@ pub struct ImportedMask {
 /// A cancellation request, checked once before the writer lock is taken.
 pub type Cancel = std::sync::atomic::AtomicBool;
 
+/// The `import_mask` parameter that carries the bundle's image.
+const IMAGE_PARAM: &str = "image";
+
 const DIRS: [&str; 5] = ["images", "artifacts", "ops", "registry", "staging"];
 
 impl Workspace {
@@ -1005,7 +1008,9 @@ impl Workspace {
             .cloned()
             .collect();
         chain.reverse();
-        let bytes = crate::bundle::write(&mask, &chain)?;
+        let root = chain.first().map(|f| f.id.clone()).unwrap_or_default();
+        let image = self.mask_image(&mask.record.identity, &root)?;
+        let bytes = crate::bundle::write(&mask, &chain, image.as_ref())?;
         Ok(ExportedMask {
             identity: mask.record.identity.clone(),
             frame: mask.record.frame.clone(),
@@ -1091,10 +1096,13 @@ impl Workspace {
         }
         let frame = mask.record.frame.clone();
         let identity = mask.record.identity.clone();
-        let params = serde_json::json!({
+        let mut params = serde_json::json!({
             "source": path.file_name().and_then(|n| n.to_str()).unwrap_or_default(),
             "bundle_sha256": digest,
         });
+        if let Some(image) = &read.manifest.image {
+            params[IMAGE_PARAM] = serde_json::json!(image);
+        }
         let (id, _) = self.add_built(
             "mask",
             Artifact::Mask(Arc::new(mask)),
@@ -1110,6 +1118,131 @@ impl Workspace {
             bundle_sha256: digest,
             already_present: false,
         })
+    }
+
+    /// The image a mask was made on, by its file digest and identity: the nearest images in the
+    /// mask's root frame `root` among its inputs, followed back through the records (an
+    /// `import_mask` record carries the bundle's), when they are one image. `None` when no image
+    /// is found or several are.
+    pub fn mask_image(
+        &self,
+        mask_identity: &str,
+        root: &str,
+    ) -> Result<Option<crate::bundle::MaskBundleImage>> {
+        let generation = self.snapshot()?;
+        let records = self.records()?;
+        let producer = |identity: &str| {
+            records.iter().rev().find(|r| {
+                r.outputs.values().any(|o| o == identity)
+                    || r.envelope
+                        .artifacts
+                        .values()
+                        .any(|a| a.identity == identity)
+            })
+        };
+        let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        let mut frontier = vec![mask_identity.to_string()];
+        while !frontier.is_empty() {
+            let mut found: std::collections::BTreeSet<crate::bundle::MaskBundleImage> =
+                std::collections::BTreeSet::new();
+            let mut next = Vec::new();
+            for identity in frontier {
+                if !seen.insert(identity.clone()) {
+                    continue;
+                }
+                if let Some(entry) = generation.artifact(&identity)
+                    && entry.artifact_type == ArtifactType::Image
+                    && entry.frame == root
+                {
+                    let reference = crate::contract::image_reference(self, &entry.id)?;
+                    found.insert(crate::bundle::MaskBundleImage {
+                        file_sha256: reference.file_sha256,
+                        identity: entry.identity.clone(),
+                    });
+                    continue;
+                }
+                let Some(record) = producer(&identity) else {
+                    continue;
+                };
+                if record.op == "import_mask" {
+                    if let Some(image) = record
+                        .params
+                        .get(IMAGE_PARAM)
+                        .and_then(|v| serde_json::from_value(v.clone()).ok())
+                    {
+                        found.insert(image);
+                    }
+                    continue;
+                }
+                next.extend(record.inputs.values().cloned());
+            }
+            if !found.is_empty() {
+                let mut found = found.into_iter();
+                return Ok(match (found.next(), found.next()) {
+                    (Some(one), None) => Some(one),
+                    _ => None,
+                });
+            }
+            frontier = next;
+        }
+        Ok(None)
+    }
+
+    /// For a mask whose image this workspace does not hold (one that came in a bundle), what to
+    /// do: the image named by its file digest and the exact import command. `None` when the
+    /// image is here, unknown, or `mask` is not a Mask of the workspace.
+    pub fn missing_mask_image(&self, mask: &str) -> Result<Option<String>> {
+        let generation = self.snapshot()?;
+        let Some(entry) = generation
+            .artifact(mask)
+            .filter(|e| e.artifact_type == ArtifactType::Mask)
+        else {
+            return Ok(None);
+        };
+        let table = FrameTable {
+            frames: generation.frames.clone(),
+        };
+        let Some(root) = table.chain(&entry.frame)?.last().map(|f| (*f).clone()) else {
+            return Ok(None);
+        };
+        let Some(image) = self.mask_image(&entry.identity, &root.id)? else {
+            return Ok(None);
+        };
+        let held = generation.artifact(&image.identity).is_some()
+            || self.records()?.iter().any(|r| {
+                r.op == "import"
+                    && r.params
+                        .get(crate::contract::FILE_SHA256)
+                        .and_then(|v| v.as_str())
+                        == Some(image.file_sha256.as_str())
+                    && r.envelope
+                        .artifacts
+                        .values()
+                        .any(|a| generation.artifact(&a.identity).is_some())
+            });
+        if held {
+            return Ok(None);
+        }
+        let assumed = if root.width == 2 * root.height {
+            crate::frame::Projection::Equirectangular
+        } else {
+            crate::frame::Projection::Flat
+        };
+        let flag = if root.projection == assumed {
+            String::new()
+        } else {
+            format!(" --projection {}", root.projection.name())
+        };
+        Ok(Some(format!(
+            "{mask} was made on an image {dir} does not hold, the file with sha256 {} ({}x{}, {}): \
+             import it with `rascal workspace import {dir} <path>{flag}` and give the id it prints; \
+             {mask} needs no new import",
+            image.file_sha256,
+            root.width,
+            root.height,
+            root.projection.name(),
+            dir = self.root.display(),
+        )))
     }
 
     /// Imports a location from a JSON file (rascal's own location or a table-manners one),

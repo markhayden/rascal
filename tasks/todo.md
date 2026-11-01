@@ -114,6 +114,7 @@ with green CI on both platforms, and then the tag.
   - [x] The mask bundle read: bounded, every member and the frame chain checked, refused whole on any fault, a PNG or any non-bundle never taken as a Mask, idempotent on a known identity
   - [x] `rascal workspace export-mask` and `import-mask` (`--sha256`), docs and SPEC
   - [x] `rascal workspace import-location`: rascal's or a table-manners location, validated against the named image
+  - [x] Review follow-up (ADR 0022 accepted 2026-11-01): export refuses a bundle import would refuse; a version mismatch says to upgrade or that the format is gone; the bundle names its image, and an op on an imported mask whose image is missing names it by file digest with the `workspace import` remedy
 
 ## M11 Table manners v0.2 (contract C4; PLAN.md M11; pinned `=0.2.0`)
 - [x] 11.1 The pin and the shapes: run ids in `run`, `spend.unresolved_usd`, runs entries as run references (done: `fc819f7`; `check-contract.sh` reads a path pin)

@@ -298,6 +298,12 @@ fn any_flipped_byte_of_any_member_is_refused() {
     let (a, seam, _) = seam_workspace(&dir.join("a"));
     let b = Workspace::open(&dir.join("b")).unwrap();
     let bytes = export(&a, &seam);
+    // The manifest's `image` is advice nothing in the bundle can vouch for (the target has no
+    // pixels) and it gates nothing; a flip inside it may pass, and only that.
+    let manifest_start = members(&bytes)[0].1 as usize;
+    let text = String::from_utf8(unpack(&bytes)[0].1.clone()).unwrap();
+    let image_from = text.find("\"image\"").unwrap();
+    let image_to = image_from + text[image_from..].find('}').unwrap();
     for (path, start, size) in members(&bytes) {
         // Every byte of a small member; a spread of offsets in a large one.
         let step = (size / 64).max(1);
@@ -307,9 +313,16 @@ fn any_flipped_byte_of_any_member_is_refused() {
             tampered[(start + offset) as usize] ^= 0x01;
             let file = write(&dir, "t.mask.tar", &tampered);
             let generation = b.read_current().unwrap();
-            let e = b.import_mask(&file, None);
-            assert!(e.is_err(), "{path} byte {offset} flipped was accepted");
-            assert_eq!(b.read_current().unwrap(), generation);
+            let at = (start + offset) as usize - manifest_start;
+            let in_image = path == "bundle.json" && (image_from..image_to).contains(&at);
+            match b.import_mask(&file, None) {
+                Err(_) => assert_eq!(b.read_current().unwrap(), generation),
+                Ok(imported) => {
+                    assert!(in_image, "{path} byte {offset} flipped was accepted");
+                    // Every check ran before the import; the mask is the one exported.
+                    assert_eq!(imported.identity, mask_of(&a, &seam).record.identity);
+                }
+            }
             offset += step;
         }
     }
@@ -704,7 +717,7 @@ fn export_never_writes_a_bundle_import_would_refuse() {
     let (a, _, windowed) = seam_workspace(&dir.join("a"));
     let mask = mask_of(&a, &windowed);
     let chain = chain_of(&a, &mask);
-    let full = bundle::write(&mask, &chain).unwrap();
+    let full = bundle::write(&mask, &chain, None).unwrap();
     assert_eq!(
         bundle::Limits::READ,
         bundle::Limits {
@@ -722,14 +735,17 @@ fn export_never_writes_a_bundle_import_would_refuse() {
         bundle_bytes: size,
         ..bundle::Limits::READ
     };
-    assert_eq!(bundle::write_within(&mask, &chain, &at).unwrap(), full);
+    assert_eq!(
+        bundle::write_within(&mask, &chain, None, &at).unwrap(),
+        full
+    );
     // A byte over: refused, naming the size and the limit.
     let under = bundle::Limits {
         bundle_bytes: size - 1,
         ..bundle::Limits::READ
     };
     not_written(
-        bundle::write_within(&mask, &chain, &under),
+        bundle::write_within(&mask, &chain, None, &under),
         &[
             &format!("the bundle would be {size} bytes"),
             &format!("over the limit of {} bytes", size - 1),
@@ -740,6 +756,7 @@ fn export_never_writes_a_bundle_import_would_refuse() {
         bundle::write_within(
             &mask,
             &chain,
+            None,
             &bundle::Limits {
                 members: layout.len() - 1,
                 ..bundle::Limits::READ
@@ -755,6 +772,7 @@ fn export_never_writes_a_bundle_import_would_refuse() {
         bundle::write_within(
             &mask,
             &chain,
+            None,
             &bundle::Limits {
                 manifest_bytes: manifest - 1,
                 ..bundle::Limits::READ
@@ -769,6 +787,7 @@ fn export_never_writes_a_bundle_import_would_refuse() {
         bundle::write_within(
             &mask,
             &chain,
+            None,
             &bundle::Limits {
                 name_bytes: 8,
                 ..bundle::Limits::READ
@@ -780,6 +799,7 @@ fn export_never_writes_a_bundle_import_would_refuse() {
         bundle::write_within(
             &mask,
             &chain,
+            None,
             &bundle::Limits {
                 frames: chain.len() - 1,
                 ..bundle::Limits::READ
@@ -869,5 +889,70 @@ fn a_version_mismatch_says_what_to_do() {
         &write(&dir, "t.tar", &older),
         "mask/mask.toml: made by an older rascal (mask record version 0) that this rascal no longer reads",
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_bundle_names_its_image_and_the_target_asks_for_it_until_it_is_there() {
+    let dir = scratch("image");
+    let (a, seam, windowed) = seam_workspace(&dir.join("a"));
+    let snapshot = a.snapshot().unwrap();
+    let pano = snapshot
+        .artifacts
+        .iter()
+        .find(|e| e.frame.starts_with("raw:"))
+        .unwrap()
+        .clone();
+    let reference = rascal_core::contract::image_reference(&a, &pano.id).unwrap();
+    let expected = bundle::MaskBundleImage {
+        file_sha256: reference.file_sha256.clone(),
+        identity: pano.identity.clone(),
+    };
+    // Both masks, the cut one and its window, trace back to the panorama.
+    for id in [&seam, &windowed] {
+        let bytes = export(&a, id);
+        let manifest: bundle::MaskBundleManifest =
+            serde_json::from_slice(&unpack(&bytes)[0].1).unwrap();
+        assert_eq!(manifest.image.as_ref(), Some(&expected), "{id}");
+    }
+    let bytes = export(&a, &windowed);
+    let b = Workspace::open(&dir.join("b")).unwrap();
+    let imported = b
+        .import_mask(&write(&dir, "w.mask.tar", &bytes), None)
+        .unwrap();
+    let hint = b.missing_mask_image(&imported.id).unwrap().unwrap();
+    assert!(
+        hint.contains(&format!("sha256 {}", expected.file_sha256))
+            && hint.contains(&format!(
+                "rascal workspace import {} <path>",
+                b.root.display()
+            ))
+            && !hint.contains("--projection"),
+        "{hint}"
+    );
+    // The import record keeps the image, so the copy exports the same bytes.
+    assert_eq!(b.export_mask(&imported.id).unwrap().bytes, bytes);
+    // Its own workspace holds the image: no hint.
+    assert_eq!(a.missing_mask_image(&windowed).unwrap(), None);
+    // Once the image is in, the hint is gone and the same mask id applies.
+    let Artifact::Image(image) = a.load(&pano.id).unwrap() else {
+        panic!("not an image")
+    };
+    let raw = a.frames().unwrap().get(&pano.frame).unwrap().clone();
+    let (img, _) = b.add_canonical((*image).clone(), &raw, "pano").unwrap();
+    assert_eq!(b.missing_mask_image(&imported.id).unwrap(), None);
+    let cut = b.load(&img).unwrap();
+    assert_eq!(cut.identity().as_str(), pano.identity);
+
+    // A manifest whose image digests are not digests is refused.
+    let b2 = Workspace::open(&dir.join("b2")).unwrap();
+    let bad = with_manifest(&bytes, |m| {
+        m.image.as_mut().unwrap().file_sha256 = "see README".to_string()
+    });
+    refused(&b2, &write(&dir, "t.tar", &bad), "image.file_sha256 is not");
+    let bad = with_manifest(&bytes, |m| {
+        m.image.as_mut().unwrap().identity = "0".repeat(64)
+    });
+    refused(&b2, &write(&dir, "t.tar", &bad), "image.identity is not");
     let _ = std::fs::remove_dir_all(&dir);
 }
