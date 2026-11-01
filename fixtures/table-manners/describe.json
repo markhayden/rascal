@@ -712,7 +712,7 @@
   "tool": {
     "name": "rascal",
     "purpose": "Finds, masks and composites regions of an image.",
-    "version": "0.1.0"
+    "version": "0.1.1"
   },
   "vocabulary": {
     "confidence": [],

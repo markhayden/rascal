@@ -158,20 +158,23 @@ if grep -q "'aurora' is in .* no such panel is registered" <<< "$out"; then ok; 
 rm -rf "$fake"
 
 # --- smoke ------------------------------------------------------------------------------------
-# A binary with the wrong version fails; one that exits 2 on no arguments fails.
+# A binary with the wrong version fails; one that exits 2 on no arguments fails. The stub names
+# itself with the workspace version, read as smoke.sh reads it, so a version bump needs no edit here.
+version="$(cargo metadata --format-version 1 --no-deps \
+  | python3 -I -c 'import json, sys; m = json.load(sys.stdin); print(next(p["version"] for p in m["packages"] if p["name"] == "rascal-mask"))')"
 probe="$(mktemp -d)"
 cat > "$probe/rascal" <<'STUB'
 #!/usr/bin/env bash
 case "${1:-}" in
-  --version) echo "rascal ${STUB_VERSION-0.1.0}" ;;
+  --version) echo "rascal ${STUB_VERSION:?}" ;;
   "") echo "Usage: rascal <COMMAND>" >&2; exit "${STUB_EXIT-64}" ;;
 esac
 STUB
 chmod +x "$probe/rascal"
-if scripts/smoke.sh "$probe/rascal" >/dev/null 2>&1; then ok; else bad "smoke rejected a conforming stub"; fi
+if STUB_VERSION="$version" scripts/smoke.sh "$probe/rascal" >/dev/null 2>&1; then ok; else bad "smoke rejected a conforming stub"; fi
 out="$(STUB_VERSION=9.9.9 scripts/smoke.sh "$probe/rascal" 2>&1 || true)"
-if grep -q "expected 'rascal 0.1.0'" <<< "$out"; then ok; else bad "smoke accepted a wrong version: $out"; fi
-out="$(STUB_EXIT=2 scripts/smoke.sh "$probe/rascal" 2>&1 || true)"
+if grep -q "expected 'rascal $version'" <<< "$out"; then ok; else bad "smoke accepted a wrong version: $out"; fi
+out="$(STUB_VERSION="$version" STUB_EXIT=2 scripts/smoke.sh "$probe/rascal" 2>&1 || true)"
 if grep -q 'expected exit 64' <<< "$out"; then ok; else bad "smoke accepted exit 2 on no arguments: $out"; fi
 rm -rf "$probe"
 

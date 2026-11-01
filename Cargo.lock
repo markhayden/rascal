@@ -1350,7 +1350,7 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "rascal-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "image",
  "jsonschema",
@@ -1369,7 +1369,7 @@ dependencies = [
 
 [[package]]
 name = "rascal-mask"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "flate2",
@@ -1394,7 +1394,7 @@ dependencies = [
 
 [[package]]
 name = "rascal-mcp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "image",
  "nix",
@@ -1412,7 +1412,7 @@ dependencies = [
 
 [[package]]
 name = "rascal-ops"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "image",
  "rascal-core",
@@ -1423,7 +1423,7 @@ dependencies = [
 
 [[package]]
 name = "rascal-testkit"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "image",
  "rascal-core",
