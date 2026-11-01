@@ -126,3 +126,16 @@ with green CI on both platforms, and then the tag.
 - [x] 11.6 Fixtures for table-manners `fixtures/rascal/`, and docs (done: `fixtures/table-manners/`, committed to the table-manners branch as `0aa506c`)
 - [x] 11.7 The pin to v0.2.0, tagged and published 2026-11-01 → merged → tag `m11`
 - [x] Checkpoint M11 → tag `m11` (2026-11-01)
+
+## M12 Table manners v0.3 (readiness, bound estimates, renders; PLAN.md M12; built by path against table-manners branch `v0.3`, then `=0.3.0`)
+- [ ] 12.1 The pin and the shapes: v0.3 by path, `estimate` out of `actions`, `needs_env` → credential requirements, the dash render's `kind`, `max_spend_usd` `exclusiveMinimum: 0` on every action, fixtures regenerated (← M11) → tag `m12.1`
+- [ ] 12.2 Readiness without configuration: the config state and identity, `describe` and `serve` in every state, `--workspace` optional, requirements by local inspection (config, credentials by name, fillers, the segmenter pack and its model files) (← 12.1)
+- [ ] 12.3 `credential`: a missing key and 401/403, never retryable; the session's answers make a credential `valid` or `invalid` (← 12.2)
+- [ ] 12.4 The cap and the budget apart; `max_spend_usd` over the configured cap is `invalid` (← 12.1; parallel with 12.2, 12.3) → tag `m12.2` after 12.2 to 12.4
+- [ ] 12.5 The estimate tool: `{action, arguments}` in, `estimate.json` out, the binding, `effective`, `expires`, the call's readiness; `rascal estimate --json`; never a run (← 12.2, 12.3, 12.4)
+- [ ] 12.6 A call bound to its estimate: `_meta["table-manners/estimate"]` at the limits check, `stale_estimate` (← 12.5) → tag `m12.3`
+- [ ] 12.7 A claim released when the request gets no run; kept when cancelled before allocation (← 12.1; parallel)
+- [ ] 12.8 Renders a host can embed: `dash --serve` URL-only, stdin EOF and SIGTERM, `--frame-ancestor`; `dash --document` (← 12.1; parallel) → tag `m12.4` once 12.7 and 12.8 are in
+- [ ] 12.9 Fixtures for table-manners `fixtures/rascal/` at v0.3, the no-provider-call proof, docs and the ADR 0020 amendment (← 12.2 to 12.8)
+- [ ] 12.10 The pin to v0.3.0 (owner: squint's fixtures pass, tag and publish) → merged → tag `m12` (← 12.9)
+- [ ] Checkpoint M12 → tag `m12`
