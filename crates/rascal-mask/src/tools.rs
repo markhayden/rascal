@@ -243,19 +243,65 @@ fn download(url: &str) -> Result<Vec<u8>> {
     })
 }
 
+/// The most an archive's files may hold together once unpacked: a full bundle is under a
+/// gigabyte, so the ceiling stops a decompression bomb, not a bundle.
+const MAX_UNPACKED: u64 = 16 << 30;
+
 /// Unpacks a `.tar.gz` of a bundle into `scratch` and returns the directory holding
-/// `bundle.toml`: the archive's single top-level directory, or the scratch root.
-fn unpack(bytes: &[u8], scratch: &Path, what: &str) -> Result<PathBuf> {
-    let decoder = flate2::read::GzDecoder::new(bytes);
-    let mut archive = tar::Archive::new(decoder);
-    archive.set_overwrite(false);
-    archive.set_preserve_permissions(false);
-    archive.unpack(scratch).map_err(|e| {
+/// `bundle.toml`: the archive's single top-level directory, or the scratch root. A bundle
+/// holds files and directories only, so a link (which `verify` and the copy would follow out
+/// of the archive), a device or a fifo is refused, as is a path that is absolute or climbs
+/// out with `..` (which the unpacker would otherwise skip in silence), and files that
+/// together exceed `max` bytes; each refusal names the entry.
+fn unpack(bytes: &[u8], scratch: &Path, what: &str, max: u64) -> Result<PathBuf> {
+    use std::path::Component;
+    let unreadable = |e: std::io::Error| {
         Error::op(
             "setup",
             format!("{what}: not a bundle archive I can unpack: {e}"),
         )
-    })?;
+    };
+    let refuse = |entry: &Path, why: &str| {
+        Error::usage(format!(
+            "{what}: {}: {why}; nothing was installed",
+            entry.display()
+        ))
+    };
+    let decoder = flate2::read::GzDecoder::new(bytes);
+    let mut archive = tar::Archive::new(decoder);
+    archive.set_overwrite(false);
+    archive.set_preserve_permissions(false);
+    let mut total = 0u64;
+    for entry in archive.entries().map_err(unreadable)? {
+        let mut entry = entry.map_err(unreadable)?;
+        let kind = entry.header().entry_type();
+        if kind.is_pax_global_extensions() || kind.is_pax_local_extensions() {
+            continue;
+        }
+        let path = entry.path().map_err(unreadable)?.into_owned();
+        if !(kind.is_file() || kind.is_dir()) {
+            return Err(refuse(
+                &path,
+                "not a file or a directory (a bundle archive holds no links or special files)",
+            ));
+        }
+        if !path
+            .components()
+            .all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
+        {
+            return Err(refuse(&path, "a path outside the archive"));
+        }
+        total = total.saturating_add(entry.header().size().map_err(unreadable)?);
+        if total > max {
+            return Err(refuse(
+                &path,
+                &format!("the files pass the {max} byte ceiling for an unpacked bundle"),
+            ));
+        }
+        if !entry.unpack_in(scratch).map_err(unreadable)? {
+            return Err(refuse(&path, "a path outside the archive"));
+        }
+    }
     if scratch.join("bundle.toml").is_file() {
         return Ok(scratch.to_path_buf());
     }
@@ -301,7 +347,7 @@ impl BundleSource {
             }
             let scratch =
                 tempdir::Scratch::new("url").map_err(|e| Error::io(Path::new("<temp>"), e))?;
-            let root = unpack(&bytes, scratch.path(), bundle)?;
+            let root = unpack(&bytes, scratch.path(), bundle, MAX_UNPACKED)?;
             println!(
                 "bundle: {} bytes downloaded, digest {got}, unpacked",
                 bytes.len()
@@ -325,7 +371,12 @@ impl BundleSource {
             }
             let scratch =
                 tempdir::Scratch::new("archive").map_err(|e| Error::io(Path::new("<temp>"), e))?;
-            let root = unpack(&bytes, scratch.path(), &path.display().to_string())?;
+            let root = unpack(
+                &bytes,
+                scratch.path(),
+                &path.display().to_string(),
+                MAX_UNPACKED,
+            )?;
             println!("bundle: {} unpacked, digest {got}", path.display());
             return Ok(BundleSource {
                 root,
@@ -453,4 +504,149 @@ pub fn setup(
         None => println!("[packs.{}]: {command}", bundle.manifest.pack),
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+
+    /// One raw tar entry: the name's bytes as written (no validation), the type, the data and
+    /// a link target.
+    struct Raw<'a> {
+        name: &'a [u8],
+        kind: tar::EntryType,
+        data: &'a [u8],
+        link: Option<&'a str>,
+    }
+
+    fn file<'a>(name: &'a str, data: &'a [u8]) -> Raw<'a> {
+        Raw {
+            name: name.as_bytes(),
+            kind: tar::EntryType::Regular,
+            data,
+            link: None,
+        }
+    }
+
+    /// A `.tar.gz` of the raw entries, the names written into the header unchecked, as a
+    /// hostile archive would carry them.
+    fn archive(entries: &[Raw<'_>]) -> Vec<u8> {
+        let gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        let mut builder = tar::Builder::new(gz);
+        for entry in entries {
+            let mut header = tar::Header::new_gnu();
+            header.as_old_mut().name[..entry.name.len()].copy_from_slice(entry.name);
+            header.set_entry_type(entry.kind);
+            header.set_size(entry.data.len() as u64);
+            header.set_mode(if entry.kind.is_dir() { 0o755 } else { 0o644 });
+            if let Some(link) = entry.link {
+                header.set_link_name(link).unwrap();
+            }
+            header.set_cksum();
+            builder.append(&header, entry.data).unwrap();
+        }
+        builder.into_inner().unwrap().finish().unwrap()
+    }
+
+    fn scratch(name: &str) -> tempdir::Scratch {
+        tempdir::Scratch::new(&format!("unit-{name}")).unwrap()
+    }
+
+    #[test]
+    fn a_sound_archive_unpacks_to_its_top_level_directory() {
+        let dir = scratch("sound");
+        let bytes = archive(&[
+            Raw {
+                name: b"b/",
+                kind: tar::EntryType::Directory,
+                data: b"",
+                link: None,
+            },
+            file("b/bundle.toml", b"bundle_version = 1\n"),
+            file("b/wheel/x.whl", b"123"),
+        ]);
+        let root = unpack(&bytes, dir.path(), "t", 1 << 20).unwrap();
+        assert_eq!(root, dir.path().join("b"));
+        assert_eq!(std::fs::read(root.join("wheel/x.whl")).unwrap(), b"123");
+    }
+
+    #[test]
+    fn a_link_a_special_entry_or_a_path_out_of_the_archive_is_refused_by_name() {
+        let cases: Vec<(&str, Vec<Raw<'_>>, &str)> = vec![
+            (
+                "symlink",
+                vec![
+                    file("b/bundle.toml", b"x"),
+                    Raw {
+                        name: b"b/uv.lock",
+                        kind: tar::EntryType::Symlink,
+                        data: b"",
+                        link: Some("/etc/hosts"),
+                    },
+                ],
+                "b/uv.lock",
+            ),
+            (
+                "hardlink",
+                vec![
+                    file("b/bundle.toml", b"x"),
+                    Raw {
+                        name: b"b/uv.lock",
+                        kind: tar::EntryType::Link,
+                        data: b"",
+                        link: Some("b/bundle.toml"),
+                    },
+                ],
+                "b/uv.lock",
+            ),
+            (
+                "fifo",
+                vec![Raw {
+                    name: b"b/pipe",
+                    kind: tar::EntryType::Fifo,
+                    data: b"",
+                    link: None,
+                }],
+                "b/pipe",
+            ),
+            (
+                "parent",
+                vec![file("b/bundle.toml", b"x"), file("b/../../escaped", b"x")],
+                "b/../../escaped",
+            ),
+            (
+                "absolute",
+                vec![file("/tmp/rascal-escaped", b"x")],
+                "/tmp/rascal-escaped",
+            ),
+        ];
+        for (name, entries, named) in cases {
+            let dir = scratch(name);
+            let err = unpack(&archive(&entries), dir.path(), "t", 1 << 20)
+                .map(|p| p.display().to_string())
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains(named), "{name}: {err}");
+            assert!(err.contains("nothing was installed"), "{name}: {err}");
+        }
+        assert!(!Path::new("/tmp/rascal-escaped").exists());
+    }
+
+    #[test]
+    fn an_archive_whose_files_exceed_the_ceiling_is_refused_before_the_overflowing_entry() {
+        let dir = scratch("ceiling");
+        let big = vec![7u8; 600];
+        let bytes = archive(&[
+            file("b/bundle.toml", b"x"),
+            file("b/one", &big),
+            file("b/two", &big),
+        ]);
+        let err = unpack(&bytes, dir.path(), "t", 1000)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("1000 byte ceiling"), "{err}");
+        assert!(dir.path().join("b/one").exists());
+        assert!(!dir.path().join("b/two").exists());
+    }
 }

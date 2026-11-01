@@ -268,7 +268,9 @@ takes the bundle as a directory, as the `.tar.gz` `scripts/build-bundle.sh --arc
 `rascal-tools-bundle-<platform>.tar.gz`: the download is the one network step, `--sha256`
 (the `.sha256` file beside the archive) is required for a URL and checked for a local archive
 before anything is unpacked, and the archive is unpacked under a scratch directory for the
-install. It then checks the platform, verifies every digest (a mismatch or a missing file is refused with exit 3 naming the
+install: an entry that is a link, a device or a fifo, a path that is absolute or climbs out
+with `..`, or files passing 16 GiB together are refused naming the entry, since a bundle holds
+plain files and directories only. It then checks the platform, verifies every digest (a mismatch or a missing file is refused with exit 3 naming the
 file, before anything is written), copies exactly the listed files, runs `uv sync --frozen
 --no-dev --offline --no-index --find-links wheelhouse --no-cache` with interpreter downloads
 forbidden, smokes the launcher's `--version`, and prints the `command` line for the pack
