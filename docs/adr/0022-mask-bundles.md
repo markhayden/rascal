@@ -33,6 +33,18 @@ lose the zones, the profile and the prescriptions and invent an identity (ADR 00
   ending at a raw frame and the record's frame its last; the mask's invariants; the identity
   recomputed from the pixels against the record and the manifest. Any fault refuses the bundle
   whole, naming the fault, and publishes nothing.
+- **Export holds itself to the reader's limits.** The writer checks every bound import enforces
+  (the size, the members, the manifest, the names, the frame chain) and refuses a bundle outside
+  them, naming its size and the limit, before a byte is written; an export never makes a file
+  import refuses. The CLI writes beside `--out` and renames over it, so `--out` is never partial.
+  How close a mask comes: the planes are 8-bit grey PNGs, a byte a pixel before compression, so
+  no mask up to about 9,400 px square can reach 256 MiB (three incompressible planes of that size
+  are 253 MiB). At the 32,768 px side rascal accepts (`image::MAX_SIDE`) a plane is 1 GiB raw;
+  smooth zones (a box, a band, a feathered blend) deflate to roughly 1 to 8 MiB a plane, a bundle
+  of a few to about 25 MiB, while a plane of per-pixel detail (a ragged instance union, noise)
+  stays near its raw size. The cap is hit only by a large mask whose planes average more than
+  about 0.7 bits a pixel after compression; a band's profile and series (a value a row) add at
+  most a few MiB.
 - **Ids are not identity.** A frame the target already has, by identity, keeps the target's id;
   a `crop:<n>` id taken there by another frame takes the next free number; the record's `frame`
   follows. The commit refuses to bind a frame id to a second identity, which also closes two

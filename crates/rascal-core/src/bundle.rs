@@ -13,6 +13,10 @@
 //! ways, the archive against the canonical bytes rebuilt from them, every frame of the chain
 //! against what its fields and parent make, and the mask's invariants and identity. Any fault
 //! is an error naming it; nothing here writes anywhere.
+//!
+//! [`write`] holds itself to the same [`Limits`]: a mask whose bundle import would refuse (a
+//! large mask with detailed planes can pass 256 MiB) is refused at export, naming the size and
+//! the limit, before a byte is written.
 
 use std::collections::BTreeMap;
 use std::io::Read;
@@ -37,6 +41,33 @@ pub const MAX_MANIFEST_BYTES: u64 = 1 << 20;
 pub const MAX_NAME_BYTES: usize = 64;
 /// The longest frame chain.
 pub const MAX_FRAMES: usize = 64;
+/// The bounds a bundle is read within. [`write`] refuses a bundle outside them, so an export
+/// never makes a file import refuses; [`write_within`] takes others, for tests.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Limits {
+    /// The largest bundle, in bytes.
+    pub bundle_bytes: u64,
+    /// The most members, the manifest included.
+    pub members: usize,
+    /// The largest `bundle.json`, in bytes.
+    pub manifest_bytes: u64,
+    /// The longest member file name under `mask/`, in bytes.
+    pub name_bytes: usize,
+    /// The longest frame chain.
+    pub frames: usize,
+}
+
+impl Limits {
+    /// The limits [`read`] enforces.
+    pub const READ: Limits = Limits {
+        bundle_bytes: MAX_BUNDLE_BYTES,
+        members: MAX_MEMBERS,
+        manifest_bytes: MAX_MANIFEST_BYTES,
+        name_bytes: MAX_NAME_BYTES,
+        frames: MAX_FRAMES,
+    };
+}
+
 /// The manifest's member name.
 pub const MANIFEST: &str = "bundle.json";
 /// The directory the mask's files sit under.
@@ -93,8 +124,21 @@ pub fn sha256(bytes: &[u8]) -> String {
     )
 }
 
-/// The bundle of a mask whose frame chain, root first, is `frames`.
+/// The bundle of a mask whose frame chain, root first, is `frames`, within [`Limits::READ`].
 pub fn write(mask: &Mask, frames: &[Frame]) -> Result<Vec<u8>> {
+    write_within(mask, frames, &Limits::READ)
+}
+
+/// The bundle of a mask whose frame chain, root first, is `frames`, refused (a usage error
+/// naming the size and the limit) when it would fall outside `limits`.
+pub fn write_within(mask: &Mask, frames: &[Frame], limits: &Limits) -> Result<Vec<u8>> {
+    if frames.len() > limits.frames {
+        return Err(not_written(format!(
+            "the frame chain has {} frames, over the limit of {}",
+            frames.len(),
+            limits.frames
+        )));
+    }
     verify_chain(frames)?;
     check_leaf(frames, mask)?;
     let members: Vec<(String, Vec<u8>)> = mask
@@ -116,7 +160,68 @@ pub fn write(mask: &Mask, frames: &[Frame]) -> Result<Vec<u8>> {
             })
             .collect(),
     };
-    pack(&manifest_bytes(&manifest)?, &members)
+    if members.len() + 1 > limits.members {
+        return Err(not_written(format!(
+            "it would hold {} members, over the limit of {}",
+            members.len() + 1,
+            limits.members
+        )));
+    }
+    for (path, _) in &members {
+        let name = path.strip_prefix(MASK_DIR).unwrap_or(path);
+        if name.len() > limits.name_bytes {
+            return Err(not_written(format!(
+                "member {path}'s name is {} bytes, over the limit of {}",
+                name.len(),
+                limits.name_bytes
+            )));
+        }
+        if !plain(path, limits.name_bytes) {
+            return Err(not_written(format!(
+                "member {path} is not {MASK_DIR}<a plain name>"
+            )));
+        }
+    }
+    let manifest = manifest_bytes(&manifest)?;
+    if manifest.len() as u64 > limits.manifest_bytes {
+        return Err(not_written(format!(
+            "{MANIFEST} would be {} bytes, over the limit of {} bytes",
+            manifest.len(),
+            limits.manifest_bytes
+        )));
+    }
+    // Known before a byte is packed: a 512-byte header per member, its bytes padded to 512,
+    // and the two zero blocks that end the archive.
+    let padded = |n: usize| 512 + (n as u64).div_ceil(512) * 512;
+    let size =
+        padded(manifest.len()) + members.iter().map(|(_, b)| padded(b.len())).sum::<u64>() + 1024;
+    if size > limits.bundle_bytes {
+        return Err(not_written(format!(
+            "the bundle would be {size} bytes ({}), over the limit of {} bytes ({}) that import reads",
+            mib(size),
+            limits.bundle_bytes,
+            mib(limits.bundle_bytes)
+        )));
+    }
+    let bytes = pack(&manifest, &members)?;
+    if bytes.len() as u64 != size {
+        return Err(Error::usage(format!(
+            "bundle: packed {} bytes, expected {size}; nothing was written",
+            bytes.len()
+        )));
+    }
+    Ok(bytes)
+}
+
+/// Bytes in MiB, one decimal, for a person.
+fn mib(bytes: u64) -> String {
+    format!("{:.1} MiB", bytes as f64 / f64::from(1u32 << 20))
+}
+
+fn not_written(what: impl std::fmt::Display) -> Error {
+    Error::usage(format!(
+        "mask bundle not written: {what}; import refuses such a bundle, so nothing was written"
+    ))
 }
 
 /// The manifest's canonical bytes: pretty JSON and a newline.
@@ -359,19 +464,23 @@ fn entries(bytes: &[u8]) -> Result<(Vec<u8>, Members)> {
 
 /// A member other than the manifest is `mask/<plain name>`.
 fn check_member_path(path: &str) -> Result<()> {
-    let plain = path.strip_prefix(MASK_DIR).is_some_and(|name| {
-        !name.is_empty()
-            && name.len() <= MAX_NAME_BYTES
-            && !name.starts_with('.')
-            && !name.contains(['/', '\\'])
-    });
-    if plain {
+    if plain(path, MAX_NAME_BYTES) {
         Ok(())
     } else {
         Err(refused(format!(
             "member {path} is not {MASK_DIR}<a plain name of at most {MAX_NAME_BYTES} bytes>"
         )))
     }
+}
+
+/// `mask/<name>`, the name non-empty, at most `name_bytes`, not hidden and without a separator.
+fn plain(path: &str, name_bytes: usize) -> bool {
+    path.strip_prefix(MASK_DIR).is_some_and(|name| {
+        !name.is_empty()
+            && name.len() <= name_bytes
+            && !name.starts_with('.')
+            && !name.contains(['/', '\\'])
+    })
 }
 
 /// The manifest's members against the archive's, both ways, by size and digest.

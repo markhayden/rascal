@@ -54,13 +54,37 @@ pub fn import(dir: &Path, image: &Path, projection: Option<Projection>) -> Resul
 }
 
 /// Exports a mask as a bundle to `out` (written over, as `cp` would) and prints its identity
-/// and the bundle's SHA-256 (ADR 0022).
+/// and the bundle's SHA-256 (ADR 0022). The bundle is built and checked in memory first, so a
+/// refusal writes nothing; it is then written beside `out` and renamed over it, so `out` is
+/// never a partial bundle.
 pub fn export_mask(dir: &Path, mask: &str, out: &Path) -> Result<()> {
     let ws = Workspace::open(dir)?;
     let exported = ws.export_mask(mask)?;
-    std::fs::write(out, &exported.bytes).map_err(|e| Error::io(out, e))?;
+    let out = rascal_core::outdir::prepare(out, rascal_core::outdir::OutKind::File)?;
+    write_whole(&out, &exported.bytes)?;
     println!("{} {}", exported.identity, exported.sha256);
     Ok(())
+}
+
+/// Writes `bytes` to a temporary file beside `path`, syncs it and renames it over `path`; on
+/// any failure the temporary is removed and `path` is as it was.
+fn write_whole(path: &Path, bytes: &[u8]) -> Result<()> {
+    use std::io::Write;
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let partial = path.with_file_name(format!(".{name}.{}.partial", std::process::id()));
+    let written = std::fs::File::create(&partial)
+        .and_then(|mut file| {
+            file.write_all(bytes)?;
+            file.sync_all()
+        })
+        .and_then(|()| std::fs::rename(&partial, path));
+    written.map_err(|e| {
+        let _ = std::fs::remove_file(&partial);
+        Error::io(path, e)
+    })
 }
 
 /// Imports a mask bundle and prints the id, the frame and the identity; `already present` when

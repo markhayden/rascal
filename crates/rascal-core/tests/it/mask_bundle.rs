@@ -673,3 +673,126 @@ fn a_digest_given_must_match() {
     b.import_mask(&path, Some(&bare)).unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The chain of a mask's frame, root first, as `export_mask` hands it to the writer.
+fn chain_of(ws: &Workspace, mask: &rascal_core::mask::Mask) -> Vec<Frame> {
+    let mut chain: Vec<Frame> = ws
+        .frames()
+        .unwrap()
+        .chain(&mask.record.frame)
+        .unwrap()
+        .into_iter()
+        .cloned()
+        .collect();
+    chain.reverse();
+    chain
+}
+
+/// The writer refuses, naming `says`, and says nothing was written.
+fn not_written(result: Result<Vec<u8>, rascal_core::Error>, says: &[&str]) {
+    let e = result.unwrap_err();
+    assert!(
+        matches!(e, rascal_core::Error::Usage { .. }),
+        "a refusal is a usage error: {e:?}"
+    );
+    let text = e.to_string();
+    for s in says {
+        assert!(text.contains(s), "{text}\nshould say: {s}");
+    }
+    assert!(text.contains("nothing was written"), "{text}");
+}
+
+#[test]
+fn export_never_writes_a_bundle_import_would_refuse() {
+    let dir = scratch("writelimits");
+    let (a, _, windowed) = seam_workspace(&dir.join("a"));
+    let mask = mask_of(&a, &windowed);
+    let chain = chain_of(&a, &mask);
+    let full = bundle::write(&mask, &chain).unwrap();
+    assert_eq!(
+        bundle::Limits::READ,
+        bundle::Limits {
+            bundle_bytes: bundle::MAX_BUNDLE_BYTES,
+            members: bundle::MAX_MEMBERS,
+            manifest_bytes: bundle::MAX_MANIFEST_BYTES,
+            name_bytes: bundle::MAX_NAME_BYTES,
+            frames: bundle::MAX_FRAMES,
+        },
+        "the writer's limits are the reader's"
+    );
+    let size = full.len() as u64;
+    // At the limit the bundle is written, byte for byte the same.
+    let at = bundle::Limits {
+        bundle_bytes: size,
+        ..bundle::Limits::READ
+    };
+    assert_eq!(bundle::write_within(&mask, &chain, &at).unwrap(), full);
+    // A byte over: refused, naming the size and the limit.
+    let under = bundle::Limits {
+        bundle_bytes: size - 1,
+        ..bundle::Limits::READ
+    };
+    not_written(
+        bundle::write_within(&mask, &chain, &under),
+        &[
+            &format!("the bundle would be {size} bytes"),
+            &format!("over the limit of {} bytes", size - 1),
+        ],
+    );
+    let layout = members(&full);
+    not_written(
+        bundle::write_within(
+            &mask,
+            &chain,
+            &bundle::Limits {
+                members: layout.len() - 1,
+                ..bundle::Limits::READ
+            },
+        ),
+        &[
+            &format!("{} members", layout.len()),
+            &format!("limit of {}", layout.len() - 1),
+        ],
+    );
+    let manifest = layout[0].2;
+    not_written(
+        bundle::write_within(
+            &mask,
+            &chain,
+            &bundle::Limits {
+                manifest_bytes: manifest - 1,
+                ..bundle::Limits::READ
+            },
+        ),
+        &[
+            &format!("bundle.json would be {manifest} bytes"),
+            &format!("limit of {}", manifest - 1),
+        ],
+    );
+    not_written(
+        bundle::write_within(
+            &mask,
+            &chain,
+            &bundle::Limits {
+                name_bytes: 8,
+                ..bundle::Limits::READ
+            },
+        ),
+        &["member mask/", "over the limit of 8"],
+    );
+    not_written(
+        bundle::write_within(
+            &mask,
+            &chain,
+            &bundle::Limits {
+                frames: chain.len() - 1,
+                ..bundle::Limits::READ
+            },
+        ),
+        &[
+            &format!("{} frames", chain.len()),
+            &format!("limit of {}", chain.len() - 1),
+        ],
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -325,3 +325,65 @@ fn a_location_imports_from_json_against_a_named_image() {
     assert_eq!(std::fs::read_to_string(ws.join("CURRENT")).unwrap(), before);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_refused_export_leaves_no_file_behind() {
+    let dir = scratch("noout");
+    let run = dir.join("run");
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    ok(&["run", "seam", s(&pano), "--out", s(&run)]);
+    let mask = last_mask(&run);
+    let out_dir = dir.join("out");
+    std::fs::create_dir_all(&out_dir).unwrap();
+    // Not a Mask: 64, and no --out appears.
+    let bundle = out_dir.join("x.mask.tar");
+    let out = rascal(&[
+        "workspace",
+        "export-mask",
+        s(&run),
+        "img-1",
+        "--out",
+        s(&bundle),
+    ]);
+    assert_eq!(out.status.code(), Some(64));
+    assert!(!bundle.exists(), "nothing written for a refused export");
+    // An --out that is a directory: 64, the directory as it was, no partial file beside it.
+    let occupied = out_dir.join("occupied");
+    std::fs::create_dir_all(&occupied).unwrap();
+    let out = rascal(&[
+        "workspace",
+        "export-mask",
+        s(&run),
+        &mask,
+        "--out",
+        s(&occupied),
+    ]);
+    assert_eq!(out.status.code(), Some(64));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("is a directory"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(std::fs::read_dir(&occupied).unwrap().count(), 0);
+    let names: Vec<String> = std::fs::read_dir(&out_dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(names, ["occupied"], "nothing left beside it");
+    // A written bundle replaces the file whole; no temporary is left beside it.
+    ok(&[
+        "workspace",
+        "export-mask",
+        s(&run),
+        &mask,
+        "--out",
+        s(&bundle),
+    ]);
+    let mut names: Vec<String> = std::fs::read_dir(&out_dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    assert_eq!(names, ["occupied", "x.mask.tar"]);
+    let _ = std::fs::remove_dir_all(&dir);
+}

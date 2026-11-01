@@ -98,6 +98,14 @@ Every header is fixed (mode 0644, uid and gid 0, mtime 0), so the same stored ma
 the same bytes, and exporting an imported mask gives the bundle it came from. `export-mask` prints
 the bundle's SHA-256; `import-mask --sha256` checks it before anything else.
 
+Export holds itself to the limits import reads within (below): a mask whose bundle would pass
+one is refused with exit 64, naming the size and the limit, and nothing is written. The bundle is
+built and checked in memory, then written beside `--out` and renamed over it, so `--out` is never
+a partial bundle. The planes are 8-bit grey PNGs, so a mask up to about 9,400 px square can never
+reach 256 MiB. At the largest image rascal takes (32,768 px a side) a plane is 1 GiB raw: smooth
+zones (a box, a band, a feathered blend) make a bundle of a few to about 25 MiB, but planes of
+per-pixel detail (a ragged instance union across the frame) do not compress and can pass the cap.
+
 Import trusts nothing in the file. It reads at most 256 MiB (a larger file is refused from its
 size), at most 16 members, a `bundle.json` of at most 1 MiB, member names `mask/<plain name>` of
 at most 64 bytes, and checks each member's declared size against what remains before reading it.
