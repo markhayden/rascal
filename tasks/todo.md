@@ -108,6 +108,12 @@ with green CI on both platforms, and then the tag.
 
 ## M10 Operations (R3; decision 14; PLAN.md M10)
 - [ ] 10.1 to 10.7 as in PLAN.md; 10.5 (portable native artifacts) first, 10.2 to 10.4 after the operations profile is agreed
+- [ ] 10.5 Native artifacts portable (PLAN.md Task 10.5, ADR 0022)
+  - [ ] Frames verified from their fields and parent; a commit never rebinds a frame id
+  - [ ] The mask bundle written: canonical ustar, `bundle.json` with the frame chain and member digests, the same mask giving the same bytes
+  - [ ] The mask bundle read: bounded, every member and the frame chain checked, refused whole on any fault, a PNG or any non-bundle never taken as a Mask, idempotent on a known identity
+  - [ ] `rascal workspace export-mask` and `import-mask` (`--sha256`), docs and SPEC
+  - [ ] `rascal workspace import-location`: rascal's or a table-manners location, validated against the named image
 
 ## M11 Table manners v0.2 (contract C4; PLAN.md M11; pinned `=0.2.0`)
 - [x] 11.1 The pin and the shapes: run ids in `run`, `spend.unresolved_usd`, runs entries as run references (done: `fc819f7`; `check-contract.sh` reads a path pin)

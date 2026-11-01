@@ -775,6 +775,23 @@ refuses the workspace until `rascal workspace repair` has run.
 The CLI takes `--workspace <dir>` on every op; without it an op uses a private throwaway
 workspace under `--out`.
 
+**Portable masks** (task 10.5, ADR 0022). A Mask leaves a workspace as a **mask bundle**: an
+uncompressed ustar archive whose first member is `bundle.json` (`mask_bundle_version`, the
+mask's identity, its frame chain from the root raw frame to the mask's frame, and each other
+member's path, size and SHA-256; `schemas/rascal/mask-bundle-v1.json`), followed by
+`mask/mask.toml` and every file it names, sorted, all with fixed headers, so the same stored mask
+gives the same bytes. Import into any workspace checks everything before it commits and commits
+once: the bounds (256 MiB, 16 members, a 1 MiB manifest, plain member names), each member
+against the manifest, the archive against the canonical bytes, each frame's identity recomputed
+from its fields and its parent, the mask's invariants and its identity recomputed from the
+pixels. Any fault refuses the whole bundle, naming it, and nothing is published. The imported
+mask has the same identity; a frame the workspace already has keeps the workspace's id, and a
+`crop:` id taken by another frame moves to the next free number (ids are not identity). A mask
+already present publishes nothing and answers with its id. A PNG, or any file that is not a mask
+bundle, is never taken as a Mask. A location imports from a JSON file, rascal's own or a
+table-manners one, validated against a named image. A commit never rebinds a frame id to another
+identity.
+
 ### The MCP server and client
 
 **`rascal serve --workspace <dir>`** is an MCP server over stdio at protocol revision
@@ -1021,8 +1038,8 @@ inside rascal; the contract's result carries the envelope as its body.
   locks), `tokio` (binary only: process and HTTP), `reqwest` with
   `rustls` (binary only, HTTP fillers), the `rmcp` MCP crate pinned by ADR 0015 (the
   in-house alternative was declined there) with `tokio-util` (its cancellation token) and
-  `nix` (SIGTERM in the pack shutdown escalation; ADR 0019). Anything beyond this list needs
-  an ADR.
+  `nix` (SIGTERM in the pack shutdown escalation; ADR 0019), `tar` (the mask bundle, ADR 0022;
+  and the pack bundle's archive). Anything beyond this list needs an ADR.
 - Python 3.12, `uv`, `pytest`, `ruff`, the MCP Python SDK, `onnxruntime`, `numpy`, `pillow`.
   Supported in v1: macOS arm64 and Linux x86_64.
 - GitHub Actions; `cargo-dist` for release archives; `cargo-deny` for licences and sources.
@@ -1070,6 +1087,9 @@ rascal export --compat run/journal.jsonl --step fan --out fan-envelope.json
 rascal serve --workspace ws/ --config rascal.toml
 rascal workspace list ws/ [--type Mask]
 rascal workspace repair ws/
+rascal workspace export-mask ws/ mask-3 --out seam.mask.tar       # prints the identity and sha256:<the bundle's digest>
+rascal workspace import-mask ws2/ seam.mask.tar [--sha256 <digest>]   # prints the id, the frame and the identity
+rascal workspace import-location ws/ finding.json --image img-1   # rascal's or a table-manners location
 rascal tools list --config rascal.toml
 rascal tools call rascal-tools segment --image img-3 --prompt "chair"   # one pack tool from the shell
 rascal tools setup --config rascal.toml [--bundle <dir>]   # network unless --bundle and artifacts are local
@@ -1088,7 +1108,7 @@ installation fails (`docs/contract.md`). A bad parameter (`invalid_args`) is a u
 error, 64, with or without `--strict`. Every `run` and `heal` whose run directory was new or
 empty writes `run.json` there, last and atomically, whatever the outcome (`docs/contract.md`). Three kinds of `--out`: a **run directory** (`run`,
 `heal`, `inspect --out`, `dash --out <dir>`) must be new or empty, else usage error 64; a
-**file destination** (`render`, `put`, `paste`, `export`, `dash --out <file>`) is written over an
+**file destination** (`render`, `put`, `paste`, `export`, `workspace export-mask`, `dash --out <file>`) is written over an
 existing file, as `cp` would; a **lab directory** (`lab run --out`) is resumable: it must be new
 or hold a lab of the same matrix name, and anything else is usage error 64.
 
