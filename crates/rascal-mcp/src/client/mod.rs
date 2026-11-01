@@ -747,6 +747,15 @@ impl Pack {
                     ),
                 ))
             }
+            // Another failer shut the pack down first: its transport closing is what this
+            // call saw, so the call was failed, not the pack's death.
+            Err(_) if live.epoch.is_cancelled() => {
+                call.status = "cancelled".to_string();
+                Err(Error::op(
+                    name,
+                    format!("{tool}: failed because another call on the pack failed"),
+                ))
+            }
             Err(e) => {
                 call.status = "died".to_string();
                 self.fail(&live, "the connection failed").await;
