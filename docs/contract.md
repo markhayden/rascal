@@ -111,9 +111,20 @@ are left for failures before a run exists (an unknown tool, malformed arguments)
 - **Locations in.** `location` and `stroke` take a table-manners location object (8.2).
 - **Progress.** With a progress token, every op the run journals is a notification
   (`step fan (fan): ok`), and a heartbeat goes at least every five seconds while it waits;
-  `progress` is a counter that only increases, the words are in `message`, and the first message
-  names the run's resource.
-- **Cancellation.** `notifications/cancelled` sets the run's flag: the run stops before its next
+  `progress` is a counter that only increases and the words are in `message`, for people. From
+  the run's allocation, every notification, heartbeats included, carries the run's reference
+  (`id`, `resource`, `session_id`, `client_run_id`) in `_meta["table-manners/run"]`; a call still
+  waiting for the permit sends none, and no message names the run (table-manners 4.1, task 11.4).
+- **Correlation ids.** A call may carry `_meta["table-manners/client_run_id"]` (1 to 128 of
+  `[A-Za-z0-9._:-]`; anything else is refused with `-32602` before a run). `serve` claims it when
+  it accepts the call, before the permit wait, so duplicates execute at most once; a claimed id
+  is refused with `-32602` and `data: {reason: "client_run_id_reused", run}`, `run` being the
+  earlier call's reference, or null while it has none. A claim lasts the session, a call
+  cancelled while queued included: a retry uses a new id (table-manners 4.4, task 11.3). `describe`
+  and `estimate` are not runs and take no id.
+- **Cancellation.** A call cancelled while it waits for the permit, or before its run is
+  allocated (checked again once the permit is held), leaves no run. After allocation,
+  `notifications/cancelled` sets the run's flag: the run stops before its next
   step (each op checks the flag before it commits, and `heal` before it calls the filler), writes
   `run.json` as `cancelled` with `stopped_before`, and the call gets no result. A filler call
   already in flight runs to its end (its timeout bounds it).
@@ -121,8 +132,9 @@ are left for failures before a run exists (an unknown tool, malformed arguments)
   `--concurrency n` for more); `describe`, `estimate` and every resource read do not, so they
   answer while a run is under way (task 9.3).
 - **Resources.** `rascal://runs` (the contract's runs list, newest first, a run still going is
-  `running` from its allocation: its directory is made before the first progress line and any
-  paid work, task 9.4), `rascal://run/{id}/run.json`, `rascal://run/{id}/journal`,
+  `running` from its allocation: its directory and its association, the action and both ids in
+  `<runs>/<id>.in/association.json`, are made before the first progress line and any paid work,
+  tasks 9.4 and 11.3), `rascal://session` (4.6), `rascal://run/{id}/run.json`, `rascal://run/{id}/journal`,
   `rascal://run/{id}/images/{role}`. An id is exactly `run-<ms>-<pid>`; nothing else under the
   runs root, and nothing outside it, can be read.
 

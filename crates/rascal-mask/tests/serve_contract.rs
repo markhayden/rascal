@@ -1,6 +1,6 @@
 //! Task 8.5 (ADR 0020): `rascal serve` under table-manners, driven by the independent client:
 //! `describe`; a `seam` action healed through the fake filler with progress strictly increasing
-//! and the first notification naming the run; the run as resources (the list, run.json, an
+//! and every notification naming the run in `_meta`; the run as resources (the list, run.json, an
 //! image); an image that does not match its `expect` is an `invalid` result; a relative path is
 //! refused; a cancelled call gets no result and its run says `cancelled`.
 #![cfg(feature = "testkit")]
@@ -155,14 +155,24 @@ fn an_action_runs_with_progress_and_its_run_is_a_resource() {
         .collect();
     assert!(values.windows(2).all(|w| w[1] > w[0]), "{values:?}");
     let run_id = structured["run"]["id"].as_str().unwrap().to_string();
-    assert!(
-        progress[0]["params"]["message"]
-            .as_str()
-            .unwrap()
-            .contains(&format!("rascal://run/{run_id}/run.json")),
-        "{:#}",
-        progress[0]
-    );
+    // Every notification names the run in `_meta`, as the result's reference without `dir`;
+    // the words are for people and never carry it (table-manners 4.1).
+    let mut reference = structured["run"].clone();
+    reference.as_object_mut().unwrap().remove("dir");
+    for n in &progress {
+        assert_eq!(
+            n["params"]["_meta"]["table-manners/run"], reference,
+            "{n:#}"
+        );
+        assert!(
+            !n["params"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("rascal://"),
+            "{n:#}"
+        );
+    }
+    valid("urn:table-manners:core:run-ref", &reference);
     assert!(
         progress
             .iter()
@@ -286,8 +296,10 @@ fn a_cancelled_call_gets_no_result_and_its_run_says_cancelled() {
             break message;
         }
     };
-    let text = first["params"]["message"].as_str().unwrap().to_string();
-    let run_id = text.split_whitespace().nth(1).unwrap().to_string();
+    let run_id = first["params"]["_meta"]["table-manners/run"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
     // Let the run reach the slow fill before cancelling: the call is journaled as started.
     let reached = std::time::Instant::now();
     // The journal is a resource once the run has written its first line.
@@ -601,8 +613,10 @@ fn reads_answer_while_a_run_holds_the_permit_and_the_run_is_listed() {
             break message;
         }
     };
-    let text = first["params"]["message"].as_str().unwrap().to_string();
-    let run_id = text.split_whitespace().nth(1).unwrap().to_string();
+    let run_id = first["params"]["_meta"]["table-manners/run"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
     // Listed, running, from its first notification.
     let runs = client
         .request(
@@ -735,5 +749,172 @@ fn the_session_is_one_observation_of_the_servers_ledger() {
     let mut other = start(&dir);
     assert_ne!(session(&mut other)["id"], id.as_str());
     other.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A `seam` call through the slow filler with a progress token and, when given, a correlation id.
+fn seam_call(token: &str, client_run_id: Option<&str>) -> serde_json::Value {
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let mut meta = serde_json::json!({ "progressToken": token });
+    if let Some(id) = client_run_id {
+        meta["table-manners/client_run_id"] = serde_json::json!(id);
+    }
+    serde_json::json!({
+        "name": "seam",
+        "arguments": { "image": { "path": pano.to_str().unwrap() }, "filler": "slow" },
+        "_meta": meta
+    })
+}
+
+/// The runs list, valid against the contract.
+fn runs(client: &mut Client) -> serde_json::Value {
+    let text = read_resource(client, "rascal://runs")["text"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+    valid("urn:table-manners:core:runs", &value);
+    value
+}
+
+/// A JSON-RPC error that refuses a reused correlation id: `-32602` with valid refusal data.
+fn refusal(message: &serde_json::Value) -> serde_json::Value {
+    assert_eq!(message["error"]["code"], -32602, "{message:#}");
+    let data = message["error"]["data"].clone();
+    valid("urn:table-manners:core:refusal", &data);
+    assert_eq!(data["reason"], "client_run_id_reused");
+    data
+}
+
+/// Task 11.3 (table-manners 4.4): a correlation id is claimed when the call is accepted. Two
+/// calls with one id give one run and one refusal; the run is listed `running` with its ids from
+/// allocation; a reuse after it ended names it; a malformed id is refused before any run; a call
+/// without one has `client_run_id: null`.
+#[test]
+fn a_correlation_id_runs_at_most_once_and_a_reuse_names_the_earlier_run() {
+    let dir = scratch("correlation");
+    let mut client = start(&dir);
+    let first = client
+        .begin("tools/call", seam_call("one", Some("host-7f3a.attempt:1")))
+        .unwrap();
+    let named = loop {
+        let message = client.next_message().unwrap();
+        if message["method"] == "notifications/progress" {
+            break message["params"]["_meta"]["table-manners/run"].clone();
+        }
+    };
+    let second = client
+        .begin("tools/call", seam_call("two", Some("host-7f3a.attempt:1")))
+        .unwrap();
+    // The duplicate is refused at once, while the first is still under way, with its run.
+    let got = responses(&mut client, &[second]);
+    assert_eq!(refusal(&got[&second])["run"], named);
+    let listed = runs(&mut client);
+    let running: Vec<&serde_json::Value> = listed["runs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["client_run_id"] == "host-7f3a.attempt:1")
+        .collect();
+    assert_eq!(running.len(), 1, "{listed:#}");
+    assert_eq!(running[0]["status"], "running");
+    let got = responses(&mut client, &[first]);
+    let result = got[&first]["result"]["structuredContent"].clone();
+    assert_eq!(result["status"], "completed", "{result:#}");
+    assert_eq!(result["run"]["client_run_id"], "host-7f3a.attempt:1");
+    let mut reference = result["run"].clone();
+    reference.as_object_mut().unwrap().remove("dir");
+    assert_eq!(named, reference);
+    // A reuse after the run ended names it.
+    let third = client
+        .begin(
+            "tools/call",
+            seam_call("three", Some("host-7f3a.attempt:1")),
+        )
+        .unwrap();
+    let got = responses(&mut client, &[third]);
+    assert_eq!(refusal(&got[&third])["run"], reference);
+    // A malformed id is refused before any run.
+    let bad = client
+        .begin("tools/call", seam_call("four", Some("not valid")))
+        .unwrap();
+    let got = responses(&mut client, &[bad]);
+    assert_eq!(got[&bad]["error"]["code"], -32602, "{:#}", got[&bad]);
+    // One run in all, and a call without an id has `client_run_id: null`.
+    assert_eq!(runs(&mut client)["runs"].as_array().unwrap().len(), 1);
+    let plain = client.begin("tools/call", seam_call("five", None)).unwrap();
+    let got = responses(&mut client, &[plain]);
+    let plain = &got[&plain]["result"]["structuredContent"];
+    assert_eq!(
+        plain["run"]["client_run_id"],
+        serde_json::Value::Null,
+        "{plain:#}"
+    );
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Tasks 11.3 and 11.4 (table-manners 4.1, 4.2, 4.4): a call queued behind the permit sends no
+/// notification naming a run; cancelled there, it leaves no run, and its correlation id stays
+/// claimed, so a retry under the same id is refused with `run: null`.
+#[test]
+fn a_call_cancelled_while_queued_leaves_no_run_and_keeps_its_id_claimed() {
+    let dir = scratch("queued");
+    let mut client = start(&dir);
+    let holder = client
+        .begin("tools/call", seam_call("holder", None))
+        .unwrap();
+    loop {
+        let message = client.next_message().unwrap();
+        if message["method"] == "notifications/progress" {
+            break;
+        }
+    }
+    let queued = client
+        .begin("tools/call", seam_call("queued", Some("retry-me")))
+        .unwrap();
+    client
+        .notify(
+            "notifications/cancelled",
+            serde_json::json!({ "requestId": queued, "reason": "test" }),
+        )
+        .unwrap();
+    // Everything up to the holder's answer: nothing for the queued call names a run.
+    let mut seen = Vec::new();
+    loop {
+        let message = client.next_message().unwrap();
+        if message.get("id").and_then(|v| v.as_u64()) == Some(holder) {
+            break;
+        }
+        seen.push(message);
+    }
+    assert!(
+        seen.iter()
+            .filter(|m| m["params"]["progressToken"] == "queued")
+            .all(|m| m["params"]["_meta"].get("table-manners/run").is_none()),
+        "{seen:#?}"
+    );
+    assert!(
+        !seen
+            .iter()
+            .any(|m| m.get("id").and_then(|v| v.as_u64()) == Some(queued)
+                && m.get("result").is_some()),
+        "the cancelled call got a result"
+    );
+    let listed = runs(&mut client);
+    assert_eq!(listed["runs"].as_array().unwrap().len(), 1, "{listed:#}");
+    assert!(
+        listed["runs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["client_run_id"].is_null())
+    );
+    let retry = client
+        .begin("tools/call", seam_call("retry", Some("retry-me")))
+        .unwrap();
+    let got = responses(&mut client, &[retry]);
+    assert_eq!(refusal(&got[&retry])["run"], serde_json::Value::Null);
+    client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }

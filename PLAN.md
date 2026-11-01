@@ -1544,7 +1544,8 @@ attaches to every later notification.
 - [ ] Through the independent client: a queued call's heartbeats carry no `_meta`; after
       allocation every notification carries a reference equal to the result's `run` without
       `dir`; no message contains `rascal://`.
-- [ ] A cancel between the permit and allocation leaves no run directory and no runs entry.
+- [ ] A cancel while queued leaves no run directory and no runs entry; the check once the permit
+      is held covers the window before allocation, too narrow to time in a test.
 
 **Files.** `crates/rascal-mcp/src/server.rs`, `crates/rascal-mask/src/actions.rs`,
 `crates/rascal-testkit/src/mcp_client.rs`, tests. **Size.** M.

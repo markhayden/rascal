@@ -16,7 +16,7 @@ use rascal_core::contract::table_manners::{
 use rascal_core::workspace::Cancel;
 use rascal_mcp::server::{
     ActionResult, Actions, McpResource as Resource, McpResourceTemplate as ResourceTemplate,
-    McpTool as Tool, ResourceBody,
+    McpTool as Tool, Progress, ResourceBody,
 };
 use serde_json::{Map, Value, json};
 
@@ -382,9 +382,14 @@ impl ContractActions {
         &self,
         recipe: &str,
         args: &Map<String, Value>,
-        progress: &(dyn Fn(String) + Send + Sync),
+        client_run_id: Option<&str>,
+        progress: &(dyn Fn(Progress) + Send + Sync),
         cancel: Arc<Cancel>,
     ) -> std::result::Result<ActionResult, String> {
+        // A cancel that lands before allocation leaves no run (table-manners 4.2).
+        if cancel.load(Ordering::SeqCst) {
+            return Err("cancelled".to_string());
+        }
         std::fs::create_dir_all(&self.runs).map_err(|e| e.to_string())?;
         let started_ms = run_json::allocate_ms();
         let id = run_json::new_id(started_ms);
@@ -395,11 +400,26 @@ impl ContractActions {
             .and_then(|v| v.as_str())
             .map(str::to_string);
         let _ = std::fs::create_dir_all(&inputs);
-        // The run's directory exists from allocation, before the first progress line and any
-        // paid work, so the runs list shows it `running` from that moment (task 9.4).
+        // The run's directory and its association exist from allocation, before the first
+        // progress line and any paid work, so the runs list shows it `running` with its ids from
+        // that moment (tasks 9.4 and 11.3).
         std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
-        let _ = std::fs::write(inputs.join("action"), describe::action_name(recipe));
-        progress(format!("run {id} started (rascal://run/{id}/run.json)"));
+        let association = Association {
+            action: describe::action_name(recipe),
+            session_id: Some(self.session.id.clone()),
+            client_run_id: client_run_id.map(str::to_string),
+        };
+        let _ = std::fs::write(
+            inputs.join(Association::FILE),
+            serde_json::to_string(&association).unwrap_or_default(),
+        );
+        progress(Progress::Run(json!({
+            "id": id,
+            "resource": format!("rascal://run/{id}/run.json"),
+            "session_id": association.session_id,
+            "client_run_id": association.client_run_id,
+        })));
+        progress(Progress::Line("run started".to_string()));
         let prepared = self
             .run_args(recipe, args, &out, &inputs, cancel)
             .and_then(|run_args| {
@@ -416,7 +436,7 @@ impl ContractActions {
                     fresh: true,
                     started_ms,
                     session_id: Some(self.session.id.clone()),
-                    client_run_id: None,
+                    client_run_id: client_run_id.map(str::to_string),
                     input_identity: format!(
                         "sha256:{}",
                         run_json::input_identity(&Value::Object(args.clone()))
@@ -431,6 +451,7 @@ impl ContractActions {
                 pending.id = id.clone();
                 pending.started_ms = started_ms;
                 pending.session_id = Some(self.session.id.clone());
+                pending.client_run_id = client_run_id.map(str::to_string);
                 let done = AtomicBool::new(false);
                 let journal = out.join("journal.jsonl");
                 let ended = std::thread::scope(|scope| {
@@ -597,13 +618,14 @@ impl ContractActions {
             let done: Option<Value> = std::fs::read_to_string(entry.path().join(run_json::FILE))
                 .ok()
                 .and_then(|t| serde_json::from_str(&t).ok());
-            let action = done
+            let association: Option<Association> = std::fs::read_to_string(
+                self.runs.join(format!("{name}.in")).join(Association::FILE),
+            )
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok());
+            let action = association
                 .as_ref()
-                .and_then(|d| d["action"].as_str().map(str::to_string))
-                .or_else(|| {
-                    std::fs::read_to_string(self.runs.join(format!("{name}.in")).join("action"))
-                        .ok()
-                })
+                .map(|a| a.action.clone())
                 .unwrap_or_else(|| "unknown".to_string());
             let status = match done.as_ref().and_then(|d| d["status"].as_str()) {
                 Some("completed") => RunState::Completed,
@@ -617,12 +639,8 @@ impl ContractActions {
                 RunSummary {
                     id: name.clone(),
                     resource: format!("rascal://run/{name}/run.json"),
-                    session_id: done
-                        .as_ref()
-                        .and_then(|d| d["run"]["session_id"].as_str().map(str::to_string)),
-                    client_run_id: done
-                        .as_ref()
-                        .and_then(|d| d["run"]["client_run_id"].as_str().map(str::to_string)),
+                    session_id: association.as_ref().and_then(|a| a.session_id.clone()),
+                    client_run_id: association.and_then(|a| a.client_run_id),
                     action,
                     status,
                     started: run_json::rfc3339(ms),
@@ -642,8 +660,21 @@ impl ContractActions {
     }
 }
 
+/// What a run was asked as, written into its inputs directory when it is allocated, before any
+/// paid work (table-manners 4.3): the runs list reads it for a run still going.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Association {
+    action: String,
+    session_id: Option<String>,
+    client_run_id: Option<String>,
+}
+
+impl Association {
+    const FILE: &str = "association.json";
+}
+
 /// Sends a progress line for every op the run journals, until `done`.
-fn watch_journal(journal: &Path, done: &AtomicBool, progress: &(dyn Fn(String) + Send + Sync)) {
+fn watch_journal(journal: &Path, done: &AtomicBool, progress: &(dyn Fn(Progress) + Send + Sync)) {
     let mut seen = 0usize;
     loop {
         let finished = done.load(Ordering::SeqCst);
@@ -655,7 +686,7 @@ fn watch_journal(journal: &Path, done: &AtomicBool, progress: &(dyn Fn(String) +
                 };
                 if let (Some(step), Some(op)) = (value["step"].as_str(), value["op"].as_str()) {
                     let status = value["envelope"]["status"].as_str().unwrap_or("done");
-                    progress(format!("step {step} ({op}): {status}"));
+                    progress(Progress::Line(format!("step {step} ({op}): {status}")));
                 }
             }
         }
@@ -719,7 +750,8 @@ impl Actions for ContractActions {
         &self,
         name: &str,
         args: &Map<String, Value>,
-        progress: &(dyn Fn(String) + Send + Sync),
+        client_run_id: Option<&str>,
+        progress: &(dyn Fn(Progress) + Send + Sync),
         cancel: Arc<Cancel>,
     ) -> std::result::Result<ActionResult, String> {
         if name == "describe" {
@@ -753,7 +785,7 @@ impl Actions for ContractActions {
             });
         }
         let recipe = recipe_of(name).ok_or_else(|| format!("no action {name}"))?;
-        self.run_action(recipe, args, progress, cancel)
+        self.run_action(recipe, args, client_run_id, progress, cancel)
     }
 
     fn resources(&self) -> Vec<Resource> {
