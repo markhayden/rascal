@@ -18,6 +18,8 @@ sha2 = { workspace = true }
 table-manners = { workspace = true }
 image = { workspace = true }
 tracing = { workspace = true }
+# The mask bundle (ADR 0022): a ustar archive read and written in memory, never unpacked.
+tar = { workspace = true }
 
 [lints]
 workspace = true

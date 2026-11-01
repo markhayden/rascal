@@ -172,6 +172,8 @@ pub struct Mask {
     pub prescriptions: Vec<LoadedPrescription>,
 }
 
+/// The record's file name inside a mask directory.
+pub const MASK_TOML: &str = "mask.toml";
 const BAND_FILE: &str = "band.profile.json";
 const SIGMA_FILE: &str = "sigma.series.json";
 
@@ -587,34 +589,73 @@ impl Mask {
         artifacts.join(self.dir_name())
     }
 
-    /// Writes `mask.toml`, the three planes, the profile files and every prescription's series
-    /// into `dir` (created if needed).
-    pub fn write(&self, dir: &Path) -> Result<()> {
+    /// Every file of the mask directory by name, sorted, with the bytes `write` puts there:
+    /// `mask.toml`, the three planes, the profile files and every prescription's series. A
+    /// mask bundle carries exactly these (ADR 0022).
+    pub fn files(&self) -> Result<Vec<(String, Vec<u8>)>> {
         self.check()?;
-        std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
+        let mut files: Vec<(String, Vec<u8>)> = Vec::new();
         for (name, plane) in [
             (&self.record.zones.core, &self.core),
             (&self.record.zones.blend, &self.blend),
             (&self.record.zones.protect, &self.protect),
         ] {
-            canonical::write_gray(&dir.join(name), plane)?;
+            files.push((
+                name.clone(),
+                canonical::encode_png(&image::DynamicImage::ImageLuma8(plane.clone()))?,
+            ));
         }
         if let (Some(section), Some(profile)) = (&self.record.profile, &self.profile) {
-            profile.band.write(&dir.join(&section.band))?;
-            profile.sigma_px.write(&dir.join(&section.sigma_px))?;
+            files.push((section.band.clone(), profile.band.to_json()?));
+            files.push((section.sigma_px.clone(), profile.sigma_px.to_json()?));
         }
         for (record, loaded) in self.record.prescriptions.iter().zip(&self.prescriptions) {
             match (record, loaded) {
                 (
                     Prescription::ToneRamp { step: file, .. },
                     LoadedPrescription::ToneRamp { step, .. },
-                ) => step.write(&dir.join(file))?,
+                ) => files.push((file.clone(), step.to_json()?)),
             }
         }
-        let path = dir.join("mask.toml");
         let text = toml::to_string_pretty(&self.record)
-            .map_err(|e| Error::usage(format!("{}: {e}", path.display())))?;
-        std::fs::write(&path, text).map_err(|e| Error::io(&path, e))
+            .map_err(|e| Error::usage(format!("mask.toml: {e}")))?;
+        files.push((MASK_TOML.to_string(), text.into_bytes()));
+        files.sort_by(|a, b| a.0.cmp(&b.0));
+        Ok(files)
+    }
+
+    /// The names of the files `mask.toml` names, and `mask.toml` itself.
+    pub fn file_names(&self) -> Vec<String> {
+        let mut names = vec![
+            MASK_TOML.to_string(),
+            self.record.zones.core.clone(),
+            self.record.zones.blend.clone(),
+            self.record.zones.protect.clone(),
+        ];
+        if let Some(section) = &self.record.profile {
+            names.push(section.band.clone());
+            names.push(section.sigma_px.clone());
+        }
+        for p in &self.record.prescriptions {
+            match p {
+                Prescription::ToneRamp { step, .. } => names.push(step.clone()),
+            }
+        }
+        names
+    }
+
+    /// Writes `mask.toml`, the three planes, the profile files and every prescription's series
+    /// into `dir` (created if needed); `mask.toml` last.
+    pub fn write(&self, dir: &Path) -> Result<()> {
+        let files = self.files()?;
+        std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
+        let (record, rest): (Vec<_>, Vec<_>) =
+            files.into_iter().partition(|(name, _)| name == MASK_TOML);
+        for (name, bytes) in rest.into_iter().chain(record) {
+            let path = dir.join(&name);
+            std::fs::write(&path, bytes).map_err(|e| Error::io(&path, e))?;
+        }
+        Ok(())
     }
 
     /// Reads a mask directory and checks every invariant, naming the one that fails.
@@ -629,15 +670,48 @@ impl Mask {
     /// names in `mask.toml` are still required to be plain, so a read never leaves the
     /// directory.
     pub fn read_unchecked(dir: &Path) -> Result<Mask> {
-        let path = dir.join("mask.toml");
-        let text = std::fs::read_to_string(&path).map_err(|e| Error::io(&path, e))?;
+        Mask::assemble(dir, &|name: &str| {
+            let path = dir.join(name);
+            std::fs::read(&path).map_err(|e| Error::io(&path, e))
+        })
+    }
+
+    /// A mask from its files by name (a bundle's members), every invariant and the identity
+    /// checked. A file `mask.toml` names that is not there is an error naming it.
+    pub fn from_files(files: &BTreeMap<String, Vec<u8>>) -> Result<Mask> {
+        let label = Path::new("mask");
+        let mask = Mask::assemble(label, &|name: &str| {
+            files.get(name).cloned().ok_or_else(|| {
+                Error::usage(format!(
+                    "mask/{name} is named by mask.toml but is not in the bundle"
+                ))
+            })
+        })?;
+        mask.check()?;
+        Ok(mask)
+    }
+
+    /// The mask from a source of file bytes by name; `label` is where they are said to be in
+    /// an error. Nothing is checked but the file names.
+    fn assemble(label: &Path, file: &dyn Fn(&str) -> Result<Vec<u8>>) -> Result<Mask> {
+        let path = label.join(MASK_TOML);
+        let text = String::from_utf8(file(MASK_TOML)?)
+            .map_err(|_| Error::usage(format!("{}: not UTF-8", path.display())))?;
         let record: MaskRecord = toml::from_str(&text).map_err(|source| Error::Toml {
             path: path.clone(),
             source: Box::new(source),
         })?;
         check_file_names(&record)?;
         let plane = |name: &str| -> Result<GrayImage> {
-            Ok(crate::image::decode_limited(&dir.join(name))?.to_luma8())
+            let decoded =
+                crate::image::decode_limited_bytes(&file(name)?).map_err(|e| match e {
+                    Error::Image { source, .. } => Error::Image {
+                        path: label.join(name),
+                        source,
+                    },
+                    other => other,
+                })?;
+            Ok(decoded.to_luma8())
         };
         let core = plane(&record.zones.core)?;
         let blend = plane(&record.zones.blend)?;
@@ -645,8 +719,11 @@ impl Mask {
         let profile = match &record.profile {
             Some(section) => Some(Profile {
                 line: section.line.clone(),
-                band: BandProfile::read(&dir.join(&section.band))?,
-                sigma_px: Series::read(&dir.join(&section.sigma_px))?,
+                band: BandProfile::from_json(&file(&section.band)?, &label.join(&section.band))?,
+                sigma_px: Series::from_json(
+                    &file(&section.sigma_px)?,
+                    &label.join(&section.sigma_px),
+                )?,
             }),
             None => None,
         };
@@ -659,7 +736,7 @@ impl Mask {
                     share,
                 } => prescriptions.push(LoadedPrescription::ToneRamp {
                     version: *version,
-                    step: Series::read(&dir.join(step))?,
+                    step: Series::from_json(&file(step)?, &label.join(step))?,
                     share: *share,
                 }),
             }

@@ -1,0 +1,86 @@
+{
+  "mask_bundle_version": 1,
+  "artifact_type": "Mask",
+  "identity": "sha256:e3aaf571d586f3171c058ce4399da4636e54a01a22edcf42fef86f3b3d194b38",
+  "frames": [
+    {
+      "frame_version": 1,
+      "id": "raw:256x128:equirectangular",
+      "kind": "raw",
+      "width": 256,
+      "height": 128,
+      "projection": "equirectangular",
+      "topology": "wrap",
+      "identity": "sha256:5138859f60e4afcb64968ab1ee6737c5ebfbe888d9f04415054163971aed65f3"
+    },
+    {
+      "frame_version": 1,
+      "id": "cut:094cc4901b68:25f8e028f5d9",
+      "kind": "cut",
+      "parent": "raw:256x128:equirectangular",
+      "parent_identity": "sha256:5138859f60e4afcb64968ab1ee6737c5ebfbe888d9f04415054163971aed65f3",
+      "plan": {
+        "plan_version": 1,
+        "parent": "raw:256x128:equirectangular",
+        "parent_identity": "sha256:5138859f60e4afcb64968ab1ee6737c5ebfbe888d9f04415054163971aed65f3",
+        "width": 256,
+        "height": 128,
+        "strip": 64,
+        "left_span": [
+          192,
+          256
+        ],
+        "right_span": [
+          0,
+          64
+        ],
+        "identity": "sha256:25f8e028f5d9ec25b75504a70f4d90fa1781779441d926ac0c83a29a05571617"
+      },
+      "width": 128,
+      "height": 128,
+      "projection": "flat",
+      "topology": "bounded",
+      "identity": "sha256:b4ca42000e776117bdde83824595966361f6cd78203cc1e472c204778baf5ec9"
+    },
+    {
+      "frame_version": 1,
+      "id": "crop:1",
+      "kind": "crop",
+      "parent": "cut:094cc4901b68:25f8e028f5d9",
+      "parent_identity": "sha256:b4ca42000e776117bdde83824595966361f6cd78203cc1e472c204778baf5ec9",
+      "bbox": [
+        0,
+        0,
+        128,
+        128
+      ],
+      "width": 128,
+      "height": 128,
+      "projection": "flat",
+      "topology": "bounded",
+      "identity": "sha256:a2adfd2d4e5375ff35a569832a3861f5c947496d0ee9e3a274d2e9c8119b0172"
+    }
+  ],
+  "members": [
+    {
+      "path": "mask/blend.png",
+      "size": 774,
+      "sha256": "sha256:178e3594081f574297b5f85a5c19c7e3c95a58f7c4b91700275402da614aacc2"
+    },
+    {
+      "path": "mask/core.png",
+      "size": 221,
+      "sha256": "sha256:7445484d672ded0b3b9020ecbbdd835283c285f3f8a151244267cfe584d569a3"
+    },
+    {
+      "path": "mask/mask.toml",
+      "size": 451,
+      "sha256": "sha256:59f13ae5972d836a6395c9461564a4f6637b3898e654d2e9179a1b7fdc82fb37"
+    },
+    {
+      "path": "mask/protect.png",
+      "size": 147,
+      "sha256": "sha256:6fd721689e21a4b833e91133887fc72e7148a1158b1e232daee5e5766915f98b"
+    }
+  ]
+}

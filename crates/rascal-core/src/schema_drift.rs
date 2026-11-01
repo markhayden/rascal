@@ -81,6 +81,7 @@ macro_rules! boundary_type {
 
 /// Every boundary type in the core. Each task that adds one adds a line here.
 pub fn inventory() -> Vec<BoundaryType> {
+    use crate::bundle::MaskBundleManifest;
     use crate::config::Config;
     use crate::frame::{Frame, Plan};
     use crate::image::ImageRecord;
@@ -102,6 +103,12 @@ pub fn inventory() -> Vec<BoundaryType> {
     use crate::workspace::registry::Generation;
     use crate::workspace::repair::Report;
     vec![
+        boundary_type!(
+            MaskBundleManifest,
+            "rascal/mask-bundle-v1.json",
+            Source::Generated,
+            ["mask-bundle-v1/windowed.json"]
+        ),
         boundary_type!(
             Report,
             "rascal/repair-v1.json",
@@ -304,6 +311,7 @@ pub fn inventory() -> Vec<BoundaryType> {
 /// of their own. The schema test asserts each appears in the `$defs` of a committed schema,
 /// so a type cannot hide here.
 pub const COMPONENTS: &[&str] = &[
+    "MaskBundleMember",
     "Projection",
     "Topology",
     "FrameKind",

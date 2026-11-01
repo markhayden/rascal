@@ -1543,11 +1543,12 @@ portable_cli::`; `just check`.
 `docs/adr/0022-mask-bundles.md`, `docs/workspace.md`, `SPEC.md`, `README.md`. **Size.** M.
 
 **Commits.** (1) this plan, the SPEC lines and ADR 0022; (2) `feat(core)`: frame verification
-and the commit's frame-id guard; (3) `feat(core)`: the mask's files in memory and the bundle
-writer; (4) `feat(core)`: the bundle reader and `Workspace::import_mask`; (5) `feat(mask)`:
-`workspace export-mask` and `import-mask`; (6) `feat(mask)`: `workspace import-location`, the
-checklist ticked. Each leaves `just check` green. The rollback point is commit (1): the plan and
-the ADR stand alone, and reverting (2) to (6) together (`git revert --no-commit`, newest first)
+and the commit's frame-id guard; (3) `feat(core)`: the mask's files in memory, the bundle
+writer and reader, `Workspace::export_mask` and `import_mask` (one commit: the writer's
+determinism is tested through the reader); (4) `feat(mask)`: `workspace export-mask` and
+`import-mask`; (5) `feat(mask)`: `workspace import-location`, the checklist ticked. Each leaves
+`just check` green. The rollback point is commit (1): the plan and the ADR stand alone, and
+reverting (2) to (5) together (`git revert --no-commit`, newest first)
 removes the feature with nothing else depending on it; (2) alone is a fix worth keeping.
 
 ## Milestone M11: Table manners v0.2

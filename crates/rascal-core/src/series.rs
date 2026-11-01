@@ -136,19 +136,29 @@ impl Series {
         self.values.get(index * c..(index + 1) * c)
     }
 
+    /// The record's bytes as `write` puts them in a file: pretty JSON and a newline.
+    pub fn to_json(&self) -> Result<Vec<u8>> {
+        let mut bytes =
+            serde_json::to_vec_pretty(self).map_err(|e| Error::usage(format!("series: {e}")))?;
+        bytes.push(b'\n');
+        Ok(bytes)
+    }
+
     /// Writes the record.
     pub fn write(&self, path: &Path) -> Result<()> {
-        let text = serde_json::to_string_pretty(self).map_err(|source| Error::Json {
-            path: path.to_path_buf(),
-            source,
-        })?;
-        std::fs::write(path, text + "\n").map_err(|e| Error::io(path, e))
+        std::fs::write(path, self.to_json()?).map_err(|e| Error::io(path, e))
     }
 
     /// Reads and checks a record, including its identity.
     pub fn read(path: &Path) -> Result<Series> {
-        let text = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
-        let series: Series = serde_json::from_str(&text).map_err(|source| Error::Json {
+        let bytes = std::fs::read(path).map_err(|e| Error::io(path, e))?;
+        Series::from_json(&bytes, path)
+    }
+
+    /// Parses and checks a record's bytes, including its identity; `path` names them in an
+    /// error.
+    pub fn from_json(bytes: &[u8], path: &Path) -> Result<Series> {
+        let series: Series = serde_json::from_slice(bytes).map_err(|source| Error::Json {
             path: path.to_path_buf(),
             source,
         })?;

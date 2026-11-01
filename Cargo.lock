@@ -1361,6 +1361,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "table-manners",
+ "tar",
  "thiserror",
  "toml",
  "tracing",

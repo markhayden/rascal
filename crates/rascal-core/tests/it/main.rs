@@ -11,6 +11,7 @@ mod lab_focus;
 mod locations_mapping;
 mod many_bindings;
 mod mask;
+mod mask_bundle;
 mod op_contracts;
 mod recipe;
 mod recovery;

@@ -30,7 +30,7 @@ use std::time::Instant;
 use crate::artifact::{Artifact, ArtifactType};
 use crate::canonical;
 use crate::error::{Error, Result};
-use crate::frame::{Frame, FrameTable};
+use crate::frame::{Frame, FrameKind, FrameTable};
 use crate::image::{Image, ImageRecord, Role};
 use crate::journal::{Event, Journal, JournalLine};
 use crate::location::Location;
@@ -70,6 +70,33 @@ pub struct Invocation {
     /// Cancellation was requested. Before the writer lock, nothing was published and
     /// `committed` is `None`; after it, the commit ran to completion and `committed` is set.
     pub cancelled: bool,
+}
+
+/// A mask exported as a bundle (ADR 0022).
+#[derive(Debug, Clone)]
+pub struct ExportedMask {
+    /// The bundle's bytes.
+    pub bytes: Vec<u8>,
+    /// The mask's identity.
+    pub identity: String,
+    /// The mask's frame id.
+    pub frame: String,
+    /// `sha256:` over the bundle's bytes.
+    pub sha256: String,
+}
+
+/// What importing a mask bundle did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportedMask {
+    /// The mask's local id: new, or the existing one when it was already present.
+    pub id: String,
+    pub identity: String,
+    /// The mask's frame id in this workspace.
+    pub frame: String,
+    /// `sha256:` over the bundle's bytes.
+    pub bundle_sha256: String,
+    /// The workspace held the identity already; nothing was published.
+    pub already_present: bool,
 }
 
 /// A cancellation request, checked once before the writer lock is taken.
@@ -393,16 +420,36 @@ impl Workspace {
                 image.record.frame, frame.id
             )));
         }
+        self.add_built(
+            "image",
+            Artifact::Image(Arc::new(image)),
+            vec![frame.clone()],
+            op_name,
+            params,
+            format!("{op_name}: an image in {}", frame.id),
+        )
+    }
+
+    /// Commits an artifact that came from outside the op graph as one record under
+    /// `op_name`, output port `port`, registering `frames` the snapshot does not know.
+    fn add_built(
+        &self,
+        port: &str,
+        artifact: Artifact,
+        frames: Vec<Frame>,
+        op_name: &str,
+        params: serde_json::Value,
+        summary: String,
+    ) -> Result<(String, Artifact)> {
         let started = Instant::now();
-        let artifact = Artifact::Image(Arc::new(image));
         let mut outputs = BTreeMap::new();
-        outputs.insert("image".to_string(), artifact.clone());
-        let mut envelope = Envelope::ok(format!("{op_name}: an image in {}", frame.id));
+        outputs.insert(port.to_string(), artifact.clone());
+        let mut envelope = Envelope::ok(summary);
         envelope.artifacts.insert(
-            "image".to_string(),
+            port.to_string(),
             op::ArtifactRef {
-                artifact_type: ArtifactType::Image,
-                id: "image".to_string(),
+                artifact_type: artifact.artifact_type(),
+                id: port.to_string(),
                 identity: artifact.identity().as_str().to_string(),
             },
         );
@@ -422,9 +469,9 @@ impl Workspace {
             None,
             0,
         );
-        let (_, ids) = self.publish(&outputs, vec![frame.clone()], &mut record, started)?;
+        let (_, ids) = self.publish(&outputs, frames, &mut record, started)?;
         self.journal_record(&record)?;
-        Ok((ids["image"].clone(), artifact))
+        Ok((ids[port].clone(), artifact))
     }
 
     /// Adds a location to the registry as a committed `locate` record and returns its id.
@@ -911,6 +958,158 @@ impl Workspace {
                 Err(e)
             }
         }
+    }
+
+    // --- portable masks (task 10.5, ADR 0022) ----------------------------------------------------
+
+    /// A mask of the snapshot as a bundle: its files and its frame chain from the root.
+    pub fn export_mask(&self, id_or_identity: &str) -> Result<ExportedMask> {
+        let generation = self.snapshot()?;
+        let kind = if generation.location(id_or_identity).is_some() {
+            Some(ArtifactType::Location)
+        } else if generation.plan(id_or_identity).is_some() {
+            Some(ArtifactType::Plan)
+        } else {
+            generation
+                .artifact(id_or_identity)
+                .map(|entry| entry.artifact_type)
+        };
+        match kind {
+            Some(ArtifactType::Mask) => {}
+            Some(other) => {
+                return Err(Error::usage(format!(
+                    "{id_or_identity} is a{} {other}; only a Mask is exported as a bundle",
+                    if other == ArtifactType::Image {
+                        "n"
+                    } else {
+                        ""
+                    }
+                )));
+            }
+            None => {
+                return Err(Error::usage(format!(
+                    "{id_or_identity}: no such artifact in {}",
+                    self.root.display()
+                )));
+            }
+        }
+        let Artifact::Mask(mask) = self.load(id_or_identity)? else {
+            return Err(Error::usage(format!("{id_or_identity} is not a Mask")));
+        };
+        let table = FrameTable {
+            frames: generation.frames,
+        };
+        let mut chain: Vec<Frame> = table
+            .chain(&mask.record.frame)?
+            .into_iter()
+            .cloned()
+            .collect();
+        chain.reverse();
+        let bytes = crate::bundle::write(&mask, &chain)?;
+        Ok(ExportedMask {
+            identity: mask.record.identity.clone(),
+            frame: mask.record.frame.clone(),
+            sha256: crate::bundle::sha256(&bytes),
+            bytes,
+        })
+    }
+
+    /// Imports a mask bundle: every check of [`crate::bundle::read`] first, then one `import_mask`
+    /// commit with the frames the workspace does not know. `expect_sha256`, when given, must be
+    /// the file's digest (with or without `sha256:`). A mask already present publishes nothing.
+    pub fn import_mask(&self, path: &Path, expect_sha256: Option<&str>) -> Result<ImportedMask> {
+        let label = |e: Error| match e {
+            Error::Usage { message } => Error::usage(format!("{}: {message}", path.display())),
+            other => other,
+        };
+        let bytes = crate::bundle::read_file(path).map_err(label)?;
+        let digest = crate::bundle::sha256(&bytes);
+        if let Some(expected) = expect_sha256 {
+            let expected = expected.strip_prefix("sha256:").unwrap_or(expected);
+            if digest.strip_prefix("sha256:") != Some(expected) {
+                return Err(label(Error::usage(format!(
+                    "the bundle's sha256 is {digest}, not sha256:{expected}; nothing was imported"
+                ))));
+            }
+        }
+        let read = crate::bundle::read(&bytes).map_err(label)?;
+        let generation = self.snapshot()?;
+        if let Some(existing) = generation.artifact(&read.mask.record.identity) {
+            return Ok(ImportedMask {
+                id: existing.id.clone(),
+                identity: existing.identity.clone(),
+                frame: existing.frame.clone(),
+                bundle_sha256: digest,
+                already_present: true,
+            });
+        }
+        // The chain under this workspace's ids: a frame it knows keeps its id; a new frame keeps
+        // the bundle's id unless another frame holds it, when a crop takes a free number.
+        let mut renamed: BTreeMap<String, String> = BTreeMap::new();
+        let mut new_frames: Vec<Frame> = Vec::new();
+        let taken = |id: &str, new: &[Frame]| {
+            generation.frame(id).is_some() || new.iter().any(|f| f.id == id)
+        };
+        for frame in &read.manifest.frames {
+            let mut frame = frame.clone();
+            if let Some(parent) = frame.parent.clone() {
+                let parent = renamed.get(&parent).cloned().unwrap_or(parent);
+                if let Some(plan) = frame.plan.as_mut() {
+                    plan.parent = parent.clone();
+                }
+                frame.parent = Some(parent);
+            }
+            if let Some(known) = generation
+                .frames
+                .iter()
+                .find(|f| f.identity == frame.identity)
+            {
+                renamed.insert(frame.id.clone(), known.id.clone());
+                continue;
+            }
+            if taken(&frame.id, &new_frames) {
+                if frame.kind != FrameKind::Crop {
+                    return Err(label(Error::usage(format!(
+                        "mask bundle refused: frame id {} is bound to another frame in {}; nothing was imported",
+                        frame.id,
+                        self.root.display()
+                    ))));
+                }
+                let mut n = 1u64;
+                while taken(&format!("crop:{n}"), &new_frames) {
+                    n += 1;
+                }
+                let id = format!("crop:{n}");
+                renamed.insert(frame.id.clone(), id.clone());
+                frame.id = id;
+            }
+            new_frames.push(frame);
+        }
+        let mut mask = read.mask;
+        if let Some(id) = renamed.get(&mask.record.frame) {
+            mask.record.frame = id.clone();
+        }
+        let frame = mask.record.frame.clone();
+        let identity = mask.record.identity.clone();
+        let params = serde_json::json!({
+            "source": path.file_name().and_then(|n| n.to_str()).unwrap_or_default(),
+            "bundle_sha256": digest,
+        });
+        let (id, _) = self.add_built(
+            "mask",
+            Artifact::Mask(Arc::new(mask)),
+            new_frames,
+            "import_mask",
+            params,
+            format!("import_mask: a Mask in {frame}"),
+        )?;
+        Ok(ImportedMask {
+            id,
+            identity,
+            frame,
+            bundle_sha256: digest,
+            already_present: false,
+        })
     }
 
     /// Lists the snapshot: `(kind, id, identity, frame)` for every frame, location and artifact.
