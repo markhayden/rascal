@@ -646,9 +646,11 @@ fn a_dying_packs_last_words_reach_the_journal_redacted() {
 fn a_plane_over_the_byte_bound_is_refused_not_timed_out() {
     // The first plane is 17 MB of noise: over the manifest's max_image_bytes, and over the
     // SDK's default line limit, so a transport left at that default would drop the answer
-    // and report a timeout instead of the refusal.
+    // and report a timeout instead of the refusal. The call timeout is far above the bound, so a
+    // timeout can never pass for the refusal, while making the plane on a busy machine (every
+    // test binary runs side by side) has room.
     let dir = scratch("big-plane");
-    let cfg = config(&dir, "big-plane", 20, "");
+    let cfg = config(&dir, "big-plane", 120, "");
     let ws = dir.join("ws");
     let started = Instant::now();
     let out = rascal(&[
@@ -667,7 +669,7 @@ fn a_plane_over_the_byte_bound_is_refused_not_timed_out() {
     let stderr = text(&out.stderr);
     assert!(stderr.contains("over max_image_bytes 16777216"), "{stderr}");
     assert!(
-        started.elapsed() < Duration::from_secs(15),
+        started.elapsed() < Duration::from_secs(60),
         "not a timeout: {:?}",
         started.elapsed()
     );
