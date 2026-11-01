@@ -158,7 +158,9 @@ pub struct BundleSource {
     _scratch: Option<tempdir::Scratch>,
 }
 
-/// A scratch directory removed on drop.
+/// A scratch directory removed on drop: created new (never an existing directory, which on a
+/// shared temporary directory another user could have made and could write into between the
+/// digest check and the install) and readable by its user only.
 mod tempdir {
     use std::path::{Path, PathBuf};
 
@@ -166,16 +168,22 @@ mod tempdir {
 
     impl Scratch {
         pub fn new(name: &str) -> std::io::Result<Scratch> {
-            let dir = std::env::temp_dir().join(format!(
-                "rascal-setup-{name}-{}-{}",
-                std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_millis())
-                    .unwrap_or_default()
-            ));
-            std::fs::create_dir_all(&dir)?;
-            Ok(Scratch(dir))
+            let stem = format!("rascal-setup-{name}-{}", std::process::id());
+            let mut builder = std::fs::DirBuilder::new();
+            #[cfg(unix)]
+            std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+            for n in 0..1000u32 {
+                let dir = std::env::temp_dir().join(format!("{stem}-{n}"));
+                match builder.create(&dir) {
+                    Ok(()) => return Ok(Scratch(dir)),
+                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                    Err(e) => return Err(e),
+                }
+            }
+            Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("no new {stem}-<n> directory under the temporary directory"),
+            ))
         }
 
         pub fn path(&self) -> &Path {
@@ -694,5 +702,18 @@ mod tests {
             assert!(err.contains("1000 byte ceiling"), "{with_length}: {err}");
         }
         assert_eq!(download(&serve(body.clone(), false), 4000).unwrap(), body);
+    }
+
+    #[test]
+    fn a_scratch_directory_is_always_new_and_private_to_its_user() {
+        let a = tempdir::Scratch::new("fresh").unwrap();
+        let b = tempdir::Scratch::new("fresh").unwrap();
+        assert_ne!(a.path(), b.path(), "two scratches never share a directory");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(a.path()).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o700, "{mode:o}");
+        }
     }
 }
