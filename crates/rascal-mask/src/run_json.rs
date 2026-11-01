@@ -368,8 +368,8 @@ pub fn finish(
         duration_ms: u64::try_from(finished.saturating_sub(pending.started_ms)).unwrap_or(u64::MAX),
         input_identity: pending.input_identity.clone(),
         spend: Spend {
-            usd: spent.usd,
-            unresolved_usd: spent.unresolved_usd,
+            usd: usd(spent.usd),
+            unresolved_usd: usd(spent.unresolved_usd),
             basis: SpendBasis::Estimated,
         },
         cache: match ended.cache {
@@ -390,6 +390,12 @@ pub fn finish(
         body,
     };
     write(&pending.dir, &result).map(|()| spent)
+}
+
+/// A dollar amount as the contract writes it: at most six decimals (4.6), so a sum of prices
+/// never carries a float's tail (0.1 and 0.2 make 0.3, not 0.30000000000000004).
+pub fn usd(amount: f64) -> f64 {
+    (amount * 1e6).round() / 1e6
 }
 
 /// `run.json` into `dir`, atomically.
@@ -611,5 +617,18 @@ pub fn ended_ok(
         result,
         body: body_of(recipe, status, stopped_at, reason, mask_dir, filler),
         cache,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::usd;
+
+    #[test]
+    fn an_amount_keeps_at_most_six_decimals() {
+        assert_eq!((0.1_f64 + 0.2).to_string(), "0.30000000000000004");
+        assert_eq!(usd(0.1 + 0.2).to_string(), "0.3");
+        assert_eq!(usd(0.021_005_4).to_string(), "0.021005");
+        assert_eq!(usd(0.0).to_string(), "0");
     }
 }

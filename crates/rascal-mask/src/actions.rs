@@ -20,7 +20,7 @@ use rascal_mcp::server::{
 };
 use serde_json::{Map, Value, json};
 
-use crate::run_json::{self, Ended};
+use crate::run_json::{self, Ended, usd};
 use crate::{heal, run};
 use rascal_mask::describe::{self, INLINE_BYTES, recipe_of};
 use rascal_mask::filler::Spent;
@@ -51,11 +51,6 @@ impl Session {
             started_ms: run_json::now_ms(),
         }
     }
-}
-
-/// A dollar amount as the contract writes it: at most six decimals (4.6).
-fn usd(amount: f64) -> f64 {
-    (amount * 1e6).round() / 1e6
 }
 
 /// The session's spend: a call reserves its worst case when the limits pass, in the same step
@@ -804,8 +799,8 @@ impl Actions for ContractActions {
                 structured: json!({
                     "contract": rascal_core::contract::CONTRACT_VERSION,
                     "action": action,
-                    "worst_case_usd": limits.worst_case_usd,
-                    "call_cap_usd": limits.call_cap_usd,
+                    "worst_case_usd": usd(limits.worst_case_usd),
+                    "call_cap_usd": limits.call_cap_usd.map(usd),
                     "allowed": limits.check().is_ok(),
                 }),
                 is_error: false,
