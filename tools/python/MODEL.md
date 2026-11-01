@@ -76,8 +76,8 @@ scores it 0.07 for "a wooden chair" (0.02 for "chair"), as PyTorch does on the s
 the recorded case uses threshold 0.05. On photographs the default threshold, 0.2, is the
 right one. No test downloads anything.
 
-`crates/rascal-mask/tests/packs_real.rs` drives the pack through rascal's client and calls
-`segment` when the artifacts are present; `crates/rascal-mask/tests/remove_prompt.rs` runs
+`crates/rascal-mask/tests/it/packs_real.rs` drives the pack through rascal's client and calls
+`segment` when the artifacts are present; `crates/rascal-mask/tests/it/remove_prompt.rs` runs
 `remove-prompt` through the fake pack. The bundle acceptance (`scripts/bundle-acceptance.sh`)
 calls `segment` from a bundle that carries the models.
 

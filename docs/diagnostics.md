@@ -70,5 +70,5 @@ to the MCP stream, so an operator can watch a session live. One span per op carr
 the step id and the input identities; the closing event carries the duration and whether the op
 returned. A filler call adds a `filler` span (the entry, request bytes and size) and a pack call
 a `pack` span (the pack, the tool, the call id, request bytes) whose closing event carries the
-status, duration and response bytes. Nothing in a span is a key or a pixel; `tests/dash.rs`,
-`tests/heal.rs` and `tests/packs.rs` check runs' output.
+status, duration and response bytes. Nothing in a span is a key or a pixel; `tests/it/dash.rs`,
+`tests/it/heal.rs` and `tests/it/packs.rs` check runs' output.

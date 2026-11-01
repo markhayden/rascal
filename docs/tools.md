@@ -132,7 +132,7 @@ a `workspace_import` of base64 bytes fits any image rascal decodes; a `path` imp
 file the server process can, as the spec says, so give a host only the workspace it should
 touch. Tracing goes to stderr only, never to the protocol stream. The
 testkit's independent client (`crates/rascal-testkit/src/mcp_client.rs`), written against the
-protocol document and nothing of rascal's, drives the server in `tests/serve.rs`.
+protocol document and nothing of rascal's, drives the server in `tests/it/serve.rs`.
 
 ## The packs
 
@@ -246,7 +246,7 @@ The pack's tests are offline (`pytest`, `ruff`; `scripts/check-python.sh`, part 
 check` when the environment exists), with a parity harness that compares a tool's answer to
 stored outputs within a stated tolerance and skips the `segmenter`-marked case until every
 artifact is fetched. Launch is `tools/python/.venv/bin/rascal-tools serve` after `uv sync
---frozen` there; `crates/rascal-mask/tests/packs_real.rs` drives it through rascal's client,
+--frozen` there; `crates/rascal-mask/tests/it/packs_real.rs` drives it through rascal's client,
 `segment` included when the artifacts are present.
 
 **The bundle and offline setup.** A release ships one bundle per platform (`macos-arm64`,
@@ -298,6 +298,6 @@ disabled, calls the pack, and uploads the archive with its `.sha256` to the tag'
 `big-plane`, `die`, `ignore-signals`, `mutate <marker>`, `stderr`, `mute`, `env`,
 `no-annotation`, `old-version`; `--concurrent` marks its manifest concurrent and `--name=<tool>` renames the
 tool.
-`crates/rascal-mask/tests/packs.rs` drives each through the client; `tests/isolation.rs` is the
+`crates/rascal-mask/tests/it/packs.rs` drives each through the client; `tests/it/isolation.rs` is the
 isolation suite (G5): instruction-like filenames, prompts and tool output never alter control
 flow, ids never resolve outside the registry, a pack sees the allowlisted environment only.

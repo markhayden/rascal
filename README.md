@@ -132,7 +132,7 @@ One manual step, then everything is a `just` recipe:
 
 ```
 cargo install just --version 1.59.0 --locked    # or: brew install just
-just bootstrap                                  # pinned cargo-deny and cargo-dist
+just bootstrap                                  # pinned cargo-deny, cargo-dist and cargo-nextest
 just hooks                                      # the pre-commit hook
 just check                                      # what every commit must pass
 ```

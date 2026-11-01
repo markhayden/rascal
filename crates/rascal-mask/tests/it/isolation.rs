@@ -1,7 +1,7 @@
 //! The isolation suite (G5): instruction-like text in filenames, prompts and tool output
 //! never alters control flow across recipes, workspaces and packs; ids never resolve outside
 //! the registry; a pack receives the allowlisted environment only. (A filler's key appearing
-//! in no file is proven in `tests/fillers.rs` and `tests/heal.rs`.)
+//! in no file is proven in `tests/it/fillers.rs` and `tests/it/heal.rs`.)
 #![cfg(feature = "testkit")]
 #![allow(clippy::unwrap_used)]
 
