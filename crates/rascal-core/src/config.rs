@@ -256,6 +256,9 @@ impl FillerConfig {
         {
             return Err(fail("max_side must be at least 1".into()));
         }
+        if self.fill_max_side == Some(0) {
+            return Err(fail("fill_max_side must be at least 1".into()));
+        }
         Ok(())
     }
 
