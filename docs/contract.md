@@ -127,9 +127,14 @@ are left for failures before a run exists (an unknown tool, malformed arguments)
   `[A-Za-z0-9._:-]`; anything else is refused with `-32602` before a run). `serve` claims it when
   it accepts the call, before the permit wait, so duplicates execute at most once; a claimed id
   is refused with `-32602` and `data: {reason: "client_run_id_reused", run}`, `run` being the
-  earlier call's reference, or null while it has none. A claim lasts the session, a call
-  cancelled while queued included: a retry uses a new id (table-manners 4.4, task 11.3). `describe`
-  and `estimate` are not runs and take no id.
+  earlier call's reference, or null while it has none. Once a run is allocated its claim lasts
+  the session, whatever the run's outcome, and so does the claim of a call cancelled while queued
+  or before allocation (with `run: null`): a retry uses a new id (table-manners 4.4, task 11.3). A
+  call that ends in a JSON-RPC error while it has no run (the action's error or a panic before
+  allocation, any refusal before a run) releases its id, so the corrected call retries under the
+  same id; the release and the claim are one step under the same lock, and a run reference the
+  action sent just before it ended reaches the claim first (v0.3, task 12.7). `describe` and
+  `estimate` are not runs and take no id.
 - **Cancellation.** A call cancelled while it waits for the permit, or before its run is
   allocated (checked again once the permit is held), leaves no run. After allocation,
   `notifications/cancelled` sets the run's flag: the run stops before its next

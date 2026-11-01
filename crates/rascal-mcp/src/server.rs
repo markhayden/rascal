@@ -68,8 +68,9 @@ pub trait Actions: Send + Sync {
     /// Runs one. `client_run_id` is the caller's correlation id, already claimed (table-manners
     /// 4.4); `progress` takes the run's reference at allocation, then a line about each step;
     /// `cancel` is set when the client cancels. `Err` is a failure before a run exists (a
-    /// JSON-RPC error); a run's own outcome, `invalid` and `error` included, is an
-    /// `ActionResult`. A cancelled run returns `Err`, and the server sends no result for it.
+    /// JSON-RPC error, which releases the correlation id when no run was allocated); a run's own
+    /// outcome, `invalid` and `error` included, is an `ActionResult`. A cancelled run returns
+    /// `Err`, and the server sends no result for it.
     fn call(
         &self,
         name: &str,
@@ -158,7 +159,8 @@ struct Inner {
     /// The contract's action tools and run resources, supplied by the binary.
     actions: Option<Arc<dyn Actions>>,
     /// The correlation ids claimed in this session, each with its run's reference once the run
-    /// is allocated (table-manners 4.4). A claim is never released.
+    /// is allocated (table-manners 4.4). A claim is released only when its request ends in a
+    /// JSON-RPC error while it still has no run; a request cancelled before allocation keeps it.
     claims: std::sync::Mutex<BTreeMap<String, Option<serde_json::Value>>>,
 }
 
@@ -850,7 +852,9 @@ impl Server {
     ) -> std::result::Result<CallToolResponse, ErrorData> {
         let exclusive = actions.exclusive(&name);
         // A run's correlation id is claimed before the permit wait, so duplicates queued
-        // together execute at most once; a claim outlives its request (table-manners 4.4).
+        // together execute at most once. The claim outlives its request once a run is
+        // allocated, or when the request is cancelled before allocation; a request that ends in
+        // a JSON-RPC error with no run releases it (table-manners 4.4, from v0.3).
         let client_run_id = match context.meta.get(CLIENT_RUN_ID) {
             _ if !exclusive => None,
             None | Some(serde_json::Value::Null) => None,
@@ -955,9 +959,33 @@ impl Server {
                 }
             }
         };
-        let result = outcome
-            .map_err(|e| ErrorData::internal_error(format!("the call panicked: {e}"), None))?
-            .map_err(invalid)?;
+        // What the action sent just before it returned may still be queued: the run's reference
+        // reaches the claim before the claim is judged. Lines after the end are dropped.
+        while let Ok(progress) = rx.try_recv() {
+            if let Progress::Run(reference) = progress
+                && let Some(id) = &client_run_id
+            {
+                self.inner
+                    .claims
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(id.clone(), Some(reference));
+            }
+        }
+        let result = match outcome {
+            Ok(Ok(result)) => result,
+            Ok(Err(message)) => {
+                self.release(client_run_id.as_deref());
+                return Err(invalid(message));
+            }
+            Err(panicked) => {
+                self.release(client_run_id.as_deref());
+                return Err(ErrorData::internal_error(
+                    format!("the call panicked: {panicked}"),
+                    None,
+                ));
+            }
+        };
         let summary = result
             .structured
             .get("status")
@@ -975,6 +1003,21 @@ impl Server {
         call.structured_content = Some(result.structured);
         call.is_error = Some(result.is_error);
         Ok(call.into())
+    }
+}
+
+impl Server {
+    /// Releases the claim on a correlation id whose request ended in a JSON-RPC error, when it
+    /// still holds no run (table-manners 4.4): under the claims lock, so a concurrent request
+    /// with the id sees the claim or nothing. A claim with a run reference is kept.
+    fn release(&self, client_run_id: Option<&str>) {
+        let Some(id) = client_run_id else {
+            return;
+        };
+        let mut claims = self.inner.claims.lock().unwrap_or_else(|e| e.into_inner());
+        if matches!(claims.get(id), Some(None)) {
+            claims.remove(id);
+        }
     }
 }
 

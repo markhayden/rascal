@@ -2080,12 +2080,14 @@ outcome. The release and the claim are under the same lock, so a concurrent requ
 sees either the claim or nothing.
 
 **Acceptance.**
-- [ ] A request with id X that fails before a run (the testkit's actions double returns `Err`
-      before allocation) gets a plain `-32602` with no refusal data; a second request with X is
-      accepted and its run carries X.
-- [ ] A request with id Y cancelled while queued behind a slow run leaves no run; a retry with Y
+- [x] A request with id X that fails before a run (an actions double in `rascal-mcp`'s tests,
+      `tests/it/claims.rs`, returns `Err` or panics before allocation; the testkit cannot hold it,
+      since it does not depend on `rascal-mcp`) gets a plain `-32602` with no refusal data (only
+      rascal's `class`); a second request with X is accepted and its run carries X; a request
+      that fails after allocation keeps X with its run.
+- [x] A request with id Y cancelled while queued behind a slow run leaves no run; a retry with Y
       gets `client_run_id_reused` with `run: null`.
-- [ ] M11's reuse tests still pass (an id whose run ended is refused with that run).
+- [x] M11's reuse tests still pass (an id whose run ended is refused with that run).
 
 **Verification.** `cargo nextest run -p rascal-mcp --test it`; `cargo nextest run -p
 rascal-mask --features testkit --test it -- serve_contract::`; `just check`.
