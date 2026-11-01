@@ -71,6 +71,9 @@ lose the zones, the profile and the prescriptions and invent an identity (ADR 00
 
 - A bundle made by one rascal version imports into another while the mask record version and
   the bundle version agree; a change to either is a new version, refused by older readers.
+  Both versions are read before anything else, so the refusal says what to do: a newer bundle
+  "made by a newer rascal (bundle version N); this rascal reads version 1: upgrade rascal", an
+  older one "made by an older rascal (bundle version N) that this rascal no longer reads".
 - The MCP tools for export and import wait for the operations profile (M10, 10.1 to 10.4); the
   bundle does not presume its artifact reference.
 - Images are not bundled: a mask's frame is coordinates, not pixels, so the target needs the

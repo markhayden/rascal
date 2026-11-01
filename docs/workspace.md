@@ -106,6 +106,13 @@ reach 256 MiB. At the largest image rascal takes (32,768 px a side) a plane is 1
 zones (a box, a band, a feathered blend) make a bundle of a few to about 25 MiB, but planes of
 per-pixel detail (a ragged instance union across the frame) do not compress and can pass the cap.
 
+Import reads the two versions first, `mask_bundle_version` in `bundle.json` and the mask
+record's `version` in `mask/mask.toml`, before any field it might not know. A bundle from a newer
+rascal is refused with `made by a newer rascal (bundle version N); this rascal reads version 1:
+upgrade rascal` (and the same for the mask record version); one from an older rascal whose format
+this one has dropped, with `made by an older rascal (bundle version N) that this rascal no longer
+reads`.
+
 Import trusts nothing in the file. It reads at most 256 MiB (a larger file is refused from its
 size), at most 16 members, a `bundle.json` of at most 1 MiB, member names `mask/<plain name>` of
 at most 64 bytes, and checks each member's declared size against what remains before reading it.

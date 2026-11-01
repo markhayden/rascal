@@ -174,6 +174,8 @@ pub struct Mask {
 
 /// The record's file name inside a mask directory.
 pub const MASK_TOML: &str = "mask.toml";
+/// The mask record version this build writes and reads.
+pub const RECORD_VERSION: u32 = 1;
 const BAND_FILE: &str = "band.profile.json";
 const SIGMA_FILE: &str = "sigma.series.json";
 
@@ -212,7 +214,7 @@ impl Mask {
         }
         let mut mask = Mask {
             record: MaskRecord {
-                version: 1,
+                version: RECORD_VERSION,
                 id: id.to_string(),
                 frame: frame.id.clone(),
                 frame_identity: frame.identity.clone(),

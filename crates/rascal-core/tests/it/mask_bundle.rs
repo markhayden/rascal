@@ -454,10 +454,6 @@ fn a_wrong_frame_chain_or_identity_is_refused() {
             "bundle.json names identity",
             with_manifest(&bytes, |m| m.identity = m.frames[0].identity.clone()),
         ),
-        (
-            "mask_bundle_version 2",
-            with_manifest(&bytes, |m| m.mask_bundle_version = 2),
-        ),
     ];
     for (says, tampered) in cases {
         refused(&b, &write(&dir, "t.tar", &tampered), says);
@@ -793,6 +789,85 @@ fn export_never_writes_a_bundle_import_would_refuse() {
             &format!("{} frames", chain.len()),
             &format!("limit of {}", chain.len() - 1),
         ],
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The manifest as JSON edited and the bundle rebuilt around it (a newer manifest may carry
+/// fields this build does not know).
+fn with_manifest_json(bytes: &[u8], edit: impl FnOnce(&mut serde_json::Value)) -> Vec<u8> {
+    let mut members = unpack(bytes);
+    let mut value: serde_json::Value = serde_json::from_slice(&members[0].1).unwrap();
+    edit(&mut value);
+    let mut json = serde_json::to_vec_pretty(&value).unwrap();
+    json.push(b'\n');
+    members[0].1 = json;
+    repack(&members)
+}
+
+/// `mask/mask.toml` edited as text, its manifest entry's size and digest made to match.
+fn with_mask_toml(bytes: &[u8], edit: impl FnOnce(String) -> String) -> Vec<u8> {
+    let mut members = unpack(bytes);
+    let at = members
+        .iter()
+        .position(|(p, _)| p == "mask/mask.toml")
+        .unwrap();
+    let text = edit(String::from_utf8(members[at].1.clone()).unwrap());
+    members[at].1 = text.into_bytes();
+    let (size, digest) = (members[at].1.len() as u64, bundle::sha256(&members[at].1));
+    let mut manifest: bundle::MaskBundleManifest = serde_json::from_slice(&members[0].1).unwrap();
+    let entry = manifest
+        .members
+        .iter_mut()
+        .find(|m| m.path == "mask/mask.toml")
+        .unwrap();
+    entry.size = size;
+    entry.sha256 = digest;
+    let mut json = serde_json::to_vec_pretty(&manifest).unwrap();
+    json.push(b'\n');
+    members[0].1 = json;
+    repack(&members)
+}
+
+#[test]
+fn a_version_mismatch_says_what_to_do() {
+    let dir = scratch("versions");
+    let (a, seam, _) = seam_workspace(&dir.join("a"));
+    let b = Workspace::open(&dir.join("b")).unwrap();
+    let bytes = export(&a, &seam);
+    // A newer bundle, with a field this build has never seen: the version is read first.
+    let newer = with_manifest_json(&bytes, |m| {
+        m["mask_bundle_version"] = 2.into();
+        m["thumbnail"] = "mask/thumb.png".into();
+    });
+    refused(
+        &b,
+        &write(&dir, "t.tar", &newer),
+        "bundle.json: made by a newer rascal (bundle version 2); this rascal reads version 1: upgrade rascal",
+    );
+    let older = with_manifest_json(&bytes, |m| m["mask_bundle_version"] = 0.into());
+    refused(
+        &b,
+        &write(&dir, "t.tar", &older),
+        "bundle.json: made by an older rascal (bundle version 0) that this rascal no longer reads",
+    );
+    // The mask record inside: the same two answers.
+    let newer = with_mask_toml(&bytes, |t| {
+        format!(
+            "{}\nhalo = 3\n",
+            t.replacen("version = 1", "version = 2", 1)
+        )
+    });
+    refused(
+        &b,
+        &write(&dir, "t.tar", &newer),
+        "mask/mask.toml: made by a newer rascal (mask record version 2); this rascal reads version 1: upgrade rascal",
+    );
+    let older = with_mask_toml(&bytes, |t| t.replacen("version = 1", "version = 0", 1));
+    refused(
+        &b,
+        &write(&dir, "t.tar", &older),
+        "mask/mask.toml: made by an older rascal (mask record version 0) that this rascal no longer reads",
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

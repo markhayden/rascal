@@ -328,14 +328,27 @@ pub fn read(bytes: &[u8]) -> Result<Bundle> {
         return Err(not_a_bundle(what));
     }
     let (manifest_raw, members) = entries(bytes)?;
+    // The versions first, from a loose parse: a newer bundle may carry fields this build does
+    // not know, and the person needs to hear "upgrade", not "unknown field".
+    let loose: serde_json::Value =
+        serde_json::from_slice(&manifest_raw).map_err(|e| refused(format!("{MANIFEST}: {e}")))?;
+    if let Some(found) = loose.get("mask_bundle_version").and_then(|v| v.as_u64()) {
+        check_version(MANIFEST, "bundle version", found, VERSION)?;
+    }
+    if let Some(toml_bytes) = members.get(&format!("{MASK_DIR}{}", crate::mask::MASK_TOML))
+        && let Ok(text) = std::str::from_utf8(toml_bytes)
+        && let Ok(record) = text.parse::<toml::Table>()
+        && let Some(found) = record.get("version").and_then(|v| v.as_integer())
+    {
+        check_version(
+            &format!("{MASK_DIR}{}", crate::mask::MASK_TOML),
+            "mask record version",
+            u64::try_from(found).unwrap_or(0),
+            crate::mask::RECORD_VERSION,
+        )?;
+    }
     let manifest: MaskBundleManifest =
         serde_json::from_slice(&manifest_raw).map_err(|e| refused(format!("{MANIFEST}: {e}")))?;
-    if manifest.mask_bundle_version != VERSION {
-        return Err(refused(format!(
-            "{MANIFEST}: mask_bundle_version {} is not {VERSION}, the version this rascal reads",
-            manifest.mask_bundle_version
-        )));
-    }
     if manifest.artifact_type != ArtifactType::Mask {
         return Err(refused(format!(
             "{MANIFEST}: it carries a {}, not a Mask",
@@ -388,6 +401,22 @@ pub fn read(bytes: &[u8]) -> Result<Bundle> {
         mask,
         sha256: sha256(bytes),
     })
+}
+
+/// A version read from a bundle against the one this build reads: a newer one says to upgrade,
+/// an older one that this build no longer reads it.
+fn check_version(member: &str, what: &str, found: u64, reads: u32) -> Result<()> {
+    if found == u64::from(reads) {
+        Ok(())
+    } else if found > u64::from(reads) {
+        Err(refused(format!(
+            "{member}: made by a newer rascal ({what} {found}); this rascal reads version {reads}: upgrade rascal"
+        )))
+    } else {
+        Err(refused(format!(
+            "{member}: made by an older rascal ({what} {found}) that this rascal no longer reads"
+        )))
+    }
 }
 
 /// The archive's members, bounded: the manifest's bytes and every other member by path.
