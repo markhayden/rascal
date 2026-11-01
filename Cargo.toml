@@ -47,6 +47,8 @@ table-manners = { path = "../table-manners", version = "=0.2.0" }
 rmcp = { version = "=3.8.0", default-features = false, features = ["server", "client", "transport-io", "transport-child-process", "schemars"] }
 # The subscriber behind RASCAL_LOG (SPEC "Diagnostics"): spans to stderr, off by default.
 tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "std", "ansi"] }
+# The serving session's id (table-manners 4.6): a random UUID; the crate rmcp already brings in.
+uuid = { version = "1.29", features = ["v4"] }
 tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "process", "io-util", "time", "sync", "signal"] }
 tar = "0.4"
 flate2 = "1.1"

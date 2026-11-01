@@ -150,8 +150,12 @@ the call's worst case are one step under the session ledger's lock (task 9.2), s
 (`--concurrency`) never both pass against the same spend; the run's end settles the reservation
 into what it spent (unresolved charges included), and a run that ends without settling counts its
 reservation as unresolved spend. The `estimate` action returns the worst case for an action and
-filler, the cap, the budget, the session's spent, unresolved and reserved amounts, what is left
-after both, and whether the call would be allowed. An action `may_spend` in the description when a
+filler, the effective per-call cap and whether the call would be allowed; the session is read
+from `rascal://session` (table-manners 4.6, task 11.2): one atomic observation of the ledger
+under a random UUID made when `serve` starts, with `budget_usd` and `remaining_usd` (both null
+when uncapped), `spent_usd` (unresolved included), `unresolved_usd` and `reserved_usd`, amounts at
+six decimals. rascal reads its configuration once, so a session lasts the process, and every run
+`serve` makes carries its id. An action `may_spend` in the description when a
 configured filler has a price. Each run's start time is strictly increasing within the process, so
 calls allocated in the same millisecond still get distinct ids and directories.
 

@@ -10,7 +10,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use rascal_core::Error;
 use rascal_core::config::Config;
 use rascal_core::contract::table_manners::images::{ImageReference, Locator};
-use rascal_core::contract::table_manners::{RunState, RunSummary, RunsList, Tool as TmTool};
+use rascal_core::contract::table_manners::{
+    RunState, RunSummary, RunsList, Session as TmSession, Tool as TmTool,
+};
 use rascal_core::workspace::Cancel;
 use rascal_mcp::server::{
     ActionResult, Actions, McpResource as Resource, McpResourceTemplate as ResourceTemplate,
@@ -30,6 +32,30 @@ pub struct ContractActions {
     pub runs: PathBuf,
     /// What this server process has spent and holds for calls under way (table-manners 4.5).
     pub ledger: std::sync::Mutex<Ledger>,
+    /// The serving session the ledger belongs to (table-manners 4.6).
+    pub session: Session,
+}
+
+/// A serving session: one process's ledger, named by a random UUID (v4) when `serve` starts.
+/// rascal reads its configuration once, so a session lasts the process.
+#[derive(Debug, Clone)]
+pub struct Session {
+    pub id: String,
+    pub started_ms: u128,
+}
+
+impl Session {
+    pub fn start() -> Session {
+        Session {
+            id: uuid::Uuid::new_v4().to_string(),
+            started_ms: run_json::now_ms(),
+        }
+    }
+}
+
+/// A dollar amount as the contract writes it: at most six decimals (4.6).
+fn usd(amount: f64) -> f64 {
+    (amount * 1e6).round() / 1e6
 }
 
 /// The session's spend: a call reserves its worst case when the limits pass, in the same step
@@ -389,7 +415,7 @@ impl ContractActions {
                     workspace: out.clone(),
                     fresh: true,
                     started_ms,
-                    session_id: None,
+                    session_id: Some(self.session.id.clone()),
                     client_run_id: None,
                     input_identity: format!(
                         "sha256:{}",
@@ -404,6 +430,7 @@ impl ContractActions {
                 let mut pending = run_json::pending_for(&run_args, filler.as_deref());
                 pending.id = id.clone();
                 pending.started_ms = started_ms;
+                pending.session_id = Some(self.session.id.clone());
                 let done = AtomicBool::new(false);
                 let journal = out.join("journal.jsonl");
                 let ended = std::thread::scope(|scope| {
@@ -524,6 +551,31 @@ impl ContractActions {
             is_error,
             images: blocks,
         })
+    }
+
+    /// The `rascal://session` observation: one copy of the ledger, taken under its lock.
+    fn session_view(&self) -> TmSession {
+        let ledger = self.ledger();
+        let budget = self
+            .config
+            .as_ref()
+            .and_then(|c| c.limits.as_ref())
+            .and_then(|l| l.session_budget_usd);
+        TmSession {
+            contract: rascal_core::contract::CONTRACT_VERSION.to_string(),
+            tool: TmTool {
+                name: "rascal".to_string(),
+                version: env!("CARGO_PKG_VERSION").to_string(),
+            },
+            id: self.session.id.clone(),
+            started: run_json::rfc3339(self.session.started_ms),
+            budget_usd: budget.map(usd),
+            spent_usd: usd(ledger.spent_usd),
+            unresolved_usd: usd(ledger.unresolved_usd),
+            reserved_usd: usd(ledger.reserved_usd),
+            remaining_usd: budget
+                .map(|b| usd((b - ledger.spent_usd - ledger.reserved_usd).max(0.0))),
+        }
     }
 
     fn runs_list(&self) -> RunsList {
@@ -694,11 +746,6 @@ impl Actions for ContractActions {
                     "action": action,
                     "worst_case_usd": limits.worst_case_usd,
                     "call_cap_usd": limits.call_cap_usd,
-                    "session_budget_usd": limits.session_budget_usd,
-                    "session_spent_usd": ledger.spent_usd,
-                    "session_unresolved_usd": ledger.unresolved_usd,
-                    "session_reserved_usd": ledger.reserved_usd,
-                    "session_left_usd": limits.session_budget_usd.map(|b| (b - limits.session_held_usd).max(0.0)),
                     "allowed": limits.check().is_ok(),
                 }),
                 is_error: false,
@@ -713,7 +760,11 @@ impl Actions for ContractActions {
         let mut runs = Resource::new("rascal://runs", "runs");
         runs.description = Some("Recent runs, newest first (table-manners 4.3).".into());
         runs.mime_type = Some("application/json".into());
-        vec![runs]
+        let mut session = Resource::new("rascal://session", "session");
+        session.description =
+            Some("This server's spend ledger, one atomic observation (table-manners 4.6).".into());
+        session.mime_type = Some("application/json".into());
+        vec![runs, session]
     }
 
     fn templates(&self) -> Vec<ResourceTemplate> {
@@ -736,6 +787,12 @@ impl Actions for ContractActions {
     }
 
     fn read(&self, uri: &str) -> Option<ResourceBody> {
+        if uri == "rascal://session" {
+            return Some(ResourceBody::Text {
+                mime: "application/json".into(),
+                text: serde_json::to_string_pretty(&self.session_view()).ok()?,
+            });
+        }
         if uri == "rascal://runs" {
             return Some(ResourceBody::Text {
                 mime: "application/json".into(),

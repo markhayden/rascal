@@ -9,6 +9,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use rascal_core::contract::table_manners;
 use rascal_testkit::mcp_client::{Client, Failure, base64_decode};
 
 fn repo_root() -> PathBuf {
@@ -28,7 +29,7 @@ fn config(dir: &Path) -> PathBuf {
     std::fs::write(
         &path,
         format!(
-            "config_version = 1\n[fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"fake\"\n\n[fillers.slow]\ncommand = [{bin:?}, \"fake-filler\", \"slow\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"slow\"\nspend_usd_per_call = 0.04\n"
+            "config_version = 1\n[fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"fake\"\n\n[fillers.slow]\ncommand = [{bin:?}, \"fake-filler\", \"slow\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"slow\"\nspend_usd_per_call = 0.04\n\n[fillers.failing]\ncommand = [{bin:?}, \"fake-filler\", \"failing\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\ntimeout_s = 30\nrevision = \"failing\"\nspend_usd_per_call = 0.04\n"
         ),
     )
     .unwrap();
@@ -49,6 +50,51 @@ fn start(dir: &Path) -> Client {
         ])
         .env_remove("RASCAL_LOG");
     Client::start(&mut command).unwrap()
+}
+
+struct Embedded;
+
+impl jsonschema::Retrieve for Embedded {
+    fn retrieve(
+        &self,
+        uri: &jsonschema::Uri<String>,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        let text = table_manners::SCHEMAS
+            .iter()
+            .find(|(id, _)| *id == uri.as_str())
+            .map(|(_, text)| *text)
+            .ok_or_else(|| format!("no embedded schema {uri}"))?;
+        Ok(serde_json::from_str(text)?)
+    }
+}
+
+/// Asserts `value` is valid against the contract's schema `id`.
+fn valid(id: &str, value: &serde_json::Value) {
+    let (_, text) = table_manners::SCHEMAS
+        .iter()
+        .find(|(i, _)| *i == id)
+        .unwrap();
+    let schema: serde_json::Value = serde_json::from_str(text).unwrap();
+    let validator = jsonschema::options()
+        .with_retriever(Embedded)
+        .build(&schema)
+        .unwrap();
+    let errors: Vec<String> = validator
+        .iter_errors(value)
+        .map(|e| e.to_string())
+        .collect();
+    assert!(errors.is_empty(), "{id}: {errors:?}\n{value:#}");
+}
+
+/// `rascal://session`, valid against the contract's session schema.
+fn session(client: &mut Client) -> serde_json::Value {
+    let text = read_resource(client, "rascal://session")["text"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+    valid("urn:table-manners:core:session", &value);
+    value
 }
 
 fn read_resource(client: &mut Client, uri: &str) -> serde_json::Value {
@@ -478,9 +524,11 @@ fn concurrent_calls_reserve_the_budget_atomically() {
             .unwrap()
     };
     let after = estimate(&mut client);
-    assert_eq!(after["session_spent_usd"], 0.04, "{after:#}");
-    assert_eq!(after["session_reserved_usd"], 0.0);
-    assert_eq!(after["allowed"], false);
+    assert_eq!(after["allowed"], false, "{after:#}");
+    let ledger = session(&mut client);
+    assert_eq!(ledger["spent_usd"], 0.04, "{ledger:#}");
+    assert_eq!(ledger["reserved_usd"], 0.0);
+    assert_eq!(ledger["remaining_usd"], 0.01);
     client.close().unwrap();
 
     // A run under way holds its worst case: with a budget for two, a second call is allowed
@@ -518,13 +566,13 @@ fn concurrent_calls_reserve_the_budget_atomically() {
         }
     }
     let held = estimate(&mut client);
-    assert_eq!(held["session_reserved_usd"], 0.04, "{held:#}");
-    assert_eq!(held["allowed"], true);
+    assert_eq!(held["allowed"], true, "{held:#}");
+    assert_eq!(session(&mut client)["reserved_usd"], 0.04);
     let got = responses(&mut client, &[a]);
     assert_eq!(got[&a]["result"]["structuredContent"]["spend"]["usd"], 0.04);
-    let settled = estimate(&mut client);
-    assert_eq!(settled["session_reserved_usd"], 0.0, "{settled:#}");
-    assert_eq!(settled["session_spent_usd"], 0.04);
+    let settled = session(&mut client);
+    assert_eq!(settled["reserved_usd"], 0.0, "{settled:#}");
+    assert_eq!(settled["spent_usd"], 0.04);
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -600,5 +648,92 @@ fn reads_answer_while_a_run_holds_the_permit_and_the_run_is_listed() {
     }
     assert_eq!(order.last(), Some(&run), "the reads waited for the run");
     client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 11.2 (table-manners 4.6): `rascal://session` is one atomic observation of the server's
+/// ledger under a random UUID per process. Uncapped, the budget and what remains are both null;
+/// it answers while a run holds the permit and shows the run's reservation; a run carries its
+/// server's session id; an unresolved charge is counted in `unresolved_usd` and in `spent_usd`.
+#[test]
+fn the_session_is_one_observation_of_the_servers_ledger() {
+    let dir = scratch("session");
+    let mut client = start(&dir);
+    let resources = client
+        .request("resources/list", serde_json::json!({}))
+        .unwrap();
+    assert!(
+        resources["resources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r["uri"] == "rascal://session"),
+        "{resources:#}"
+    );
+    let described = client
+        .call("describe", serde_json::json!({}))
+        .unwrap()
+        .structured
+        .unwrap();
+    assert!(
+        described["resources"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("rascal://session"))
+    );
+    let first = session(&mut client);
+    let id = first["id"].as_str().unwrap().to_string();
+    assert_eq!(first["budget_usd"], serde_json::Value::Null);
+    assert_eq!(first["remaining_usd"], serde_json::Value::Null);
+    assert_eq!(first["spent_usd"], 0.0);
+
+    // While a run holds the permit, the session answers and shows its reservation.
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let run = client
+        .begin(
+            "tools/call",
+            serde_json::json!({
+                "name": "seam",
+                "arguments": { "image": { "path": pano.to_str().unwrap() }, "filler": "slow" },
+                "_meta": { "progressToken": "session" }
+            }),
+        )
+        .unwrap();
+    loop {
+        let message = client.next_message().unwrap();
+        if message["method"] == "notifications/progress" {
+            break;
+        }
+    }
+    let held = session(&mut client);
+    assert_eq!(held["reserved_usd"], 0.04, "{held:#}");
+    assert_eq!(held["id"], id.as_str());
+    let got = responses(&mut client, &[run]);
+    let result = &got[&run]["result"]["structuredContent"];
+    assert_eq!(result["run"]["session_id"], id.as_str(), "{result:#}");
+    let settled = session(&mut client);
+    assert_eq!(settled["spent_usd"], 0.04, "{settled:#}");
+    assert_eq!(settled["reserved_usd"], 0.0);
+    assert_eq!(settled["unresolved_usd"], 0.0);
+
+    // A filler that fails after the request was sent leaves its charge unresolved.
+    let failed = client
+        .call(
+            "seam",
+            serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "failing" }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    assert_eq!(failed["spend"]["unresolved_usd"], 0.04, "{failed:#}");
+    let after = session(&mut client);
+    assert_eq!(after["unresolved_usd"], 0.04, "{after:#}");
+    assert_eq!(after["spent_usd"], 0.08);
+    client.close().unwrap();
+
+    // Another server is another session.
+    let mut other = start(&dir);
+    assert_ne!(session(&mut other)["id"], id.as_str());
+    other.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }

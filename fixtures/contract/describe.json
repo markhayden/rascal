@@ -664,7 +664,8 @@
   "resources": [
     "rascal://runs",
     "rascal://run/{id}/run.json",
-    "rascal://run/{id}/journal"
+    "rascal://run/{id}/journal",
+    "rascal://session"
   ],
   "tool": {
     "name": "rascal",
