@@ -328,6 +328,14 @@ fn the_identity_is_a_function_of_the_components_alone() {
     let mut bumped = fixture.components.clone();
     bumped.filler.revision.push_str(" 2");
     assert_ne!(bumped.identity(), fixture.identity);
+    // The scaled window changes the work the filler does, so it is a new cell (decision 10).
+    let mut scaled = fixture.components.clone();
+    assert_eq!(scaled.filler.fill_max_side, None);
+    scaled.filler.fill_max_side = Some(1024);
+    assert_ne!(scaled.identity(), fixture.identity);
+    let mut smaller = scaled.clone();
+    smaller.filler.fill_max_side = Some(512);
+    assert_ne!(smaller.identity(), scaled.identity());
     let mut constants: BTreeMap<String, String> = fixture.components.constants.clone();
     constants.insert("fan".into(), "fan-v1".into());
     let mut other_set = fixture.components.clone();

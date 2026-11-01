@@ -268,12 +268,16 @@ takes the bundle as a directory, as the `.tar.gz` `scripts/build-bundle.sh --arc
 `rascal-tools-bundle-<platform>.tar.gz`: the download is the one network step, `--sha256`
 (the `.sha256` file beside the archive) is required for a URL and checked for a local archive
 before anything is unpacked, and the archive is unpacked under a scratch directory for the
-install. It then checks the platform, verifies every digest (a mismatch or a missing file is refused with exit 3 naming the
+install: an entry that is a link, a device or a fifo, a path that is absolute or climbs out
+with `..`, or files passing 16 GiB together are refused naming the entry, since a bundle holds
+plain files and directories only. It then checks the platform, verifies every digest (a mismatch or a missing file is refused with exit 3 naming the
 file, before anything is written), copies exactly the listed files, runs `uv sync --frozen
 --no-dev --offline --no-index --find-links wheelhouse --no-cache` with interpreter downloads
 forbidden, smokes the launcher's `--version`, and prints the `command` line for the pack
-entry; an earlier install in the same directory (one holding a `bundle.toml`) is replaced
-whole, any other non-empty directory is refused. The SHA-256 of `bundle.toml` is the bundle
+entry; an earlier install of the same pack in the same directory (one holding its
+`bundle.toml` and nothing beyond its listed files and `.venv`) has those replaced, and any other
+non-empty directory, another pack's install or an install with other files beside it is
+refused naming what is there. The SHA-256 of `bundle.toml` is the bundle
 digest the lab records. Launch never touches the network. `scripts/bundle-acceptance.sh`
 (part of `scripts/acceptance.sh`, and a macOS job in the package workflow) builds this
 machine's bundle, installs it with the network disabled where the kernel allows (`unshare
@@ -288,7 +292,8 @@ uv. `setup` runs uv and the launcher with the baseline environment only (`PATH`,
 `LANG`, `LC_ALL`, `TMPDIR`), so no key and no uv setting of the shell's reaches them, and the
 environment is always `<dir>/.venv`. A bundle given as a URL (the spec's one network step)
 is built per platform by the `bundles` workflow on a version tag (`.github/workflows/bundles.yml`),
-which fetches the model files from the `models-2026-10` release when it exists, builds the
+which fetches the model files from the `models-2026-10` release (required on a version tag,
+`BUNDLE_MODELS=required`, so a release bundle always carries `segment`), builds the
 bundle on that platform's runner, installs it from the packed archive with the network
 disabled, calls the pack, and uploads the archive with its `.sha256` to the tag's release.
 

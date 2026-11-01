@@ -66,7 +66,8 @@ command line is applied after them and wins (`docs/recipes.md`).
 
 **`fill_max_side`** is the scaled window (owner decision 10): a model trained on small images,
 such as LaMa at a few hundred pixels, smears a band it is handed at ten times that. With
-`fill_max_side` set, a request whose longest side exceeds it is sent downscaled to fit (the
+`fill_max_side` set (at least 1; 0 is refused when the configuration is read, as for
+`max_side`), a request whose longest side exceeds it is sent downscaled to fit (the
 image resampled with Lanczos, the mask with a triangle filter and, when binary, thresholded
 back to binary) and the fill comes back scaled to the support with Lanczos before the paste.
 The journal notes the two sizes, the call records the scaled request's dimensions and bytes,

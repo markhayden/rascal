@@ -2,13 +2,13 @@
 
 Task 7.1's benchmark, not a gate: the time `rascal_ops::poisson::solve` takes on a domain of
 about a million pixels in a release build. The case is the ignored test in
-`crates/rascal-ops/tests/poisson.rs`: a 1024×1024 flat frame, a 1000×1000 core two pixels of
+`crates/rascal-ops/tests/it/poisson.rs` (`bench_a_1000_by_1000_domain`): a 1024×1024 flat frame, a 1000×1000 core two pixels of
 blend ring away from the border, a base of slow ramps, a fill offset by 30 levels with a
 textured red channel, `poisson-v1` (`tol 1e-4`, `max_iter 2000`), the three channels on three
 threads.
 
 ```
-cargo test --release -p rascal-ops --test poisson -- --ignored --nocapture bench
+cargo test --release -p rascal-ops --test it -- --ignored --nocapture poisson::bench
 ```
 
 | date | machine | domain | iterations (max over channels) | solve |

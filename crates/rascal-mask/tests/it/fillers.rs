@@ -550,6 +550,14 @@ revision = "r1"
             "[fillers.x]\ncommand = [\"a\"]\nprofile = \"grey\"\nbogus = 1\n",
             "unknown field",
         ),
+        (
+            "[fillers.x]\nurl = \"http://h\"\nprofile = \"grey\"\nmax_side = 0\n",
+            "max_side must be at least 1",
+        ),
+        (
+            "[fillers.x]\nurl = \"http://h\"\nprofile = \"grey\"\nfill_max_side = 0\n",
+            "fill_max_side must be at least 1",
+        ),
     ] {
         let err = Config::parse(&format!("config_version = 1\n{bad}"), "test")
             .unwrap_err()

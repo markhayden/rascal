@@ -28,7 +28,7 @@ the shared contract of its sibling tools, so an agent can chain it with
 
 ## Install
 
-Three ways to get the `rascal` command, and one more step for the Python pack.
+Two ways to get the `rascal` command, and one more step for the Python pack.
 
 **From crates.io** (needs a Rust toolchain):
 
@@ -125,7 +125,7 @@ exchange documents without translation; rascal is fully standalone and depends o
 
 ## Status
 
-Pre-release. M0 to M6 are merged (the scaffold, the core, the seam, MCP, the refinements, the Python pack with its segmenter and bundle, the lab) and M7's Poisson paste with them; the lab's three rounds met success criterion 6 (`docs/results/seam-03.md`). Left: publishing the segmenter's model files and the release (task 7.2). The design is in [SPEC.md](SPEC.md), the build order
+Released: `v0.1.0` (2026-11-01), with the segmenter's model files as the `models-2026-10` release. M0 to M9 and M11 are merged (the scaffold, the core, the seam, MCP, the refinements, the Python pack with its segmenter and bundle, the lab, the Poisson paste and the release, the shared contract, spend and the launcher, its v0.2 pin), with M10's portable masks; the rest of M10 (operations) is open; the lab's rounds met success criterion 6 (`docs/results/seam-03.md`), and the seven criteria are recorded in [docs/architecture.md](docs/architecture.md#the-success-criteria-specmd-their-outcome-and-the-command-that-proves-each). The design is in [SPEC.md](SPEC.md), the build order
 in [PLAN.md](PLAN.md), the decisions in [docs/adr/](docs/adr/README.md), and the current state
 of each part in [docs/architecture.md](docs/architecture.md#status).
 
