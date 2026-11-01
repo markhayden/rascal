@@ -98,8 +98,10 @@ its price; after it, `filler call: {…}` with the entry's name, the command as 
 duration, the exit code or HTTP status, the outcome, and `charge`: `not_sent`, `known` or
 `unresolved` (`docs/contract.md`, "The fill cache, prices and limits"). A run's spend is read from
 these notes, so a failed, cancelled or interrupted run keeps what it may have been charged. The key is handed to the
-`Authorization` header and appears in no file, message or span; a wrong key is reported as the
-server's status, and an unset `key_env` as a usage error naming the variable.
+`Authorization` header and appears in no file, message or span. A key the server rejects (HTTP
+401 or 403) ends the run `credential`, never retryable (exit 3), and spends nothing; a key that is
+not set never reaches the filler, since the call is refused as not ready before its run
+(`docs/contract.md`, "Readiness").
 
 ## `heal`: the typed graph
 

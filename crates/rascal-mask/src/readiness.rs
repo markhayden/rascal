@@ -60,7 +60,7 @@ pub struct Setup<'a> {
     pub failed_packs: &'a BTreeMap<String, String>,
 }
 
-/// The readiness of `action` used as `filler` says: every requirement that use reads, and
+/// The readiness of `action` for the use `filler`: every requirement that use reads, and
 /// `needs_setup` when one is `missing` or `invalid` (rascal never reports `unavailable`).
 pub fn for_call(setup: &Setup<'_>, action: &str, filler: Use<'_>) -> Readiness {
     let mut requirements: Vec<Requirement> = Vec::new();

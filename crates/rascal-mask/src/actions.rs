@@ -27,8 +27,8 @@ use serde_json::{Map, Value, json};
 use crate::run_json::{self, Ended, usd};
 use crate::{heal, run};
 use rascal_mask::describe::{self, INLINE_BYTES, recipe_of};
-use rascal_mask::filler::Spent;
-use rascal_mask::readiness::{self, Answers, Setup, Use};
+use rascal_mask::filler::{CALL_PREFIX, FillerCall, Spent};
+use rascal_mask::readiness::{self, Answer, Answers, Setup, Use};
 
 /// The contract's actions over the shipped recipes, with runs under `runs`.
 pub struct ContractActions {
@@ -40,6 +40,9 @@ pub struct ContractActions {
     pub config_state: ConfigState,
     /// The packs that did not start, with the reason: their requirement reads `invalid`.
     pub failed_packs: BTreeMap<String, String>,
+    /// What providers said about each credential in this session, by variable name: a fresh
+    /// session has none, so a key reads `present` until a real call settles it (3.1).
+    pub answers: std::sync::Mutex<Answers>,
     pub runs: PathBuf,
     /// What this server process has spent and holds for calls under way (table-manners 4.5).
     pub ledger: std::sync::Mutex<Ledger>,
@@ -173,16 +176,62 @@ fn image_in_schema(description: &str) -> Value {
 
 impl ContractActions {
     fn description(&self) -> rascal_core::error::Result<Value> {
-        let d = describe::description(&self.setup())?;
+        let d = self.with_setup(describe::description)?;
         serde_json::to_value(&d).map_err(|e| Error::usage(format!("description: {e}")))
     }
 
-    /// What readiness inspects in this session.
-    fn setup(&self) -> Setup<'_> {
-        Setup {
+    /// Runs `f` with what readiness inspects in this session (the answers as they stand).
+    fn with_setup<R>(&self, f: impl FnOnce(&Setup<'_>) -> R) -> R {
+        let answers = self
+            .answers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        f(&Setup {
             config: &self.config_state,
-            answers: &NO_ANSWERS,
+            answers: &answers,
             failed_packs: &self.failed_packs,
+        })
+    }
+
+    /// Keeps what providers said about credentials in a run that ended (3.1): from its filler
+    /// call records, a 2xx makes the filler's key `valid` and a 401 or 403 `invalid`; any other
+    /// answer, or a cache hit (no call), leaves it as it was.
+    fn learn(&self, result: &Value) {
+        let Some(config) = &self.config else {
+            return;
+        };
+        let Some(dir) = result.pointer("/run/dir").and_then(|d| d.as_str()) else {
+            return;
+        };
+        let Ok(lines) = rascal_core::journal::Journal::read(&Path::new(dir).join("journal.jsonl"))
+        else {
+            return;
+        };
+        let mut answers = self.answers.lock().unwrap_or_else(|e| e.into_inner());
+        for note in lines.iter().filter_map(|l| l.note.as_deref()) {
+            let Some(call) = note
+                .strip_prefix(CALL_PREFIX)
+                .and_then(|json| serde_json::from_str::<FillerCall>(json).ok())
+            else {
+                continue;
+            };
+            let Some(var) = config
+                .fillers
+                .get(&call.filler)
+                .and_then(|f| f.key_env.clone())
+            else {
+                continue;
+            };
+            match call.status {
+                200..=299 => {
+                    answers.insert(var, Answer::Valid);
+                }
+                401 | 403 => {
+                    answers.insert(var, Answer::Invalid);
+                }
+                _ => {}
+            }
         }
     }
 
@@ -193,7 +242,7 @@ impl ContractActions {
             Some(name) => Use::Filler(name),
             None => Use::MaskOnly,
         };
-        let readiness = readiness::for_call(&self.setup(), action, filler);
+        let readiness = self.with_setup(|setup| readiness::for_call(setup, action, filler));
         not_ready(action, &readiness).map_or(Ok(()), Err)
     }
 
@@ -723,9 +772,6 @@ impl ContractActions {
     }
 }
 
-/// No provider has answered yet (task 12.3 keeps the session's answers).
-static NO_ANSWERS: Answers = Answers::new();
-
 /// The `not_ready` refusal for a call whose readiness is not `ready`: a JSON-RPC `-32602` with
 /// `{reason: "not_ready", run: null, requirements}` naming exactly the missing or invalid
 /// requirements (`refusal.json`). None when the call is ready.
@@ -880,8 +926,11 @@ impl Actions for ContractActions {
         }
         let recipe = recipe_of(name).ok_or_else(|| format!("no action {name}"))?;
         self.ready_for(name, args)?;
-        self.run_action(recipe, args, client_run_id, progress, cancel)
-            .map_err(CallError::from)
+        let result = self
+            .run_action(recipe, args, client_run_id, progress, cancel)
+            .map_err(CallError::from)?;
+        self.learn(&result.structured);
+        Ok(result)
     }
 
     fn resources(&self) -> Vec<Resource> {

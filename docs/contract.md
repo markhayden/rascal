@@ -81,7 +81,7 @@ never starts a pack, sends a request or writes anything.
 |---|---|---|
 | `config` | `rascal.toml` | `present`, `invalid` (with the reason in `setup`) or `missing`; listed on every action once a file is given, and on `remove_prompt` always |
 | `model` | `fillers.<name>` | `present` for each configured filler (configured, not checked) |
-| `credential` | a filler's `key_env` | `missing` when the variable does not exist, else `valid` or `invalid` from this session's provider answers (task 12.3), else `present` |
+| `credential` | a filler's `key_env` | `missing` when the variable does not exist, else `valid` or `invalid` from this session's provider answers, else `present` |
 | `dependency` | a command filler's `command[0]` | `present` when it is an executable file (by path, or found on `PATH`), else `missing` |
 | `dependency` | `packs.<name>` (`remove_prompt`) | the entry whose command is `<dir>/.venv/bin/rascal-tools`: `missing` with no such entry or no launcher there, `invalid` when `serve` could not start it, else `present` |
 | `file` | each model file the install's `artifacts.toml` names | `present` when it is in the directory the pack reads and not empty, else `missing` naming that directory; digests are not hashed here (the pack checks them before use), so a file is never `valid` |
@@ -93,6 +93,12 @@ install directory when it exists, else `~/.cache/rascal-tools`. `fixtures/readin
 is the table both the Rust and the Python suites check. The install's `artifacts.toml` is the one
 at its root (a bundle install) or under `src/rascal_tools/` (a checkout's `tools/python`). A
 command filler passes no variables of its own, so it adds no `env` requirement.
+
+The session keeps what providers said about each credential (task 12.3): when a run ends,
+its filler call records update `serve`'s answers, a 2xx making the filler's key `valid` and a 401
+or 403 `invalid` (any other answer, or a cache hit, which makes no call, leaves it as it was). A
+fresh session, and the command line, show `present` until a real call settles it; a key a
+provider rejected stays `invalid` for the session, since its environment cannot change.
 
 A call is refused only for what it needs, before any run: its arguments are read for the
 filler, its own readiness is computed (`MaskOnly`, or the one filler it names), and when a
@@ -124,6 +130,7 @@ journal) and rascal's body (`recipe`, `outcome` in rascal's own statuses, `stopp
 | a location on another image, one rascal cannot hold, an image it cannot decode | `invalid` | `input` |
 | reading or writing its files | `error` | `io` (retryable) |
 | a filler endpoint | `error` | `provider` (retryable) |
+| a filler endpoint that rejects the key (HTTP 401 or 403) | `error` | `credential` (never retryable; exit 3) |
 | a filler command or a pack that died | `error` | `tool_process` (retryable) |
 | a timeout | `error` | `timeout` (retryable) |
 | anything else | `error` | `internal` |

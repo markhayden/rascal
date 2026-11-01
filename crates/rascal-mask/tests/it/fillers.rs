@@ -398,17 +398,19 @@ fn each_fake_behaviour_produces_its_outcome_over_http_and_the_key_stays_out_of_e
     )
     .unwrap()
     .with_key_source(|_| Some("not-the-key".to_string()));
-    let err = wrong
-        .call(&request, &dir)
-        .into_result()
-        .unwrap_err()
-        .to_string();
+    let err = wrong.call(&request, &dir).into_result().unwrap_err();
+    assert!(
+        matches!(&err, rascal_core::Error::Credential { filler, .. } if filler == "hosted"),
+        "{err:?}"
+    );
+    let err = err.to_string();
     assert!(
         err.contains("HTTP 401") && !err.contains("not-the-key"),
         "{err}"
     );
-    // An unset key_env (the real environment, where the variable does not exist) is a usage
-    // error naming the variable, before any call.
+    // An unset key_env (the real environment, where the variable does not exist) is not sent;
+    // it is a bug past the readiness check (task 12.3), an operational error naming the
+    // variable.
     let unset = filler::from_config("hosted", &http_config(&url, Some(var), 5)).unwrap();
     let err = unset
         .call(&request, &dir)
@@ -417,6 +419,25 @@ fn each_fake_behaviour_produces_its_outcome_over_http_and_the_key_stays_out_of_e
         .to_string();
     assert!(err.contains(var) && err.contains("not set"), "{err}");
     assert_eq!(seen.lock().unwrap().len(), 2, "the unset key made no call");
+    // A 403 is a rejected credential too (task 12.3).
+    let (forbidding, _) =
+        rascal_testkit::fake_filler::spawn_rejecting(Behaviour::Exact, Some(key.to_string()), 403);
+    let err = HttpFiller::new(
+        "hosted",
+        &forbidding,
+        Some(var.to_string()),
+        Duration::from_secs(5),
+    )
+    .unwrap()
+    .with_key_source(|_| Some("not-the-key".to_string()))
+    .call(&request, &dir)
+    .into_result()
+    .unwrap_err();
+    assert!(
+        matches!(&err, rascal_core::Error::Credential { .. })
+            && err.to_string().contains("HTTP 403"),
+        "{err:?}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 

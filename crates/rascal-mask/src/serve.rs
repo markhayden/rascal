@@ -74,6 +74,7 @@ pub fn serve(args: &ServeArgs) -> Result<()> {
         config: config.clone(),
         config_state: state,
         failed_packs,
+        answers: std::sync::Mutex::default(),
         runs: args
             .runs
             .clone()

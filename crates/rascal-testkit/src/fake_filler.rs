@@ -206,6 +206,17 @@ pub fn serve(
     expected_key: Option<String>,
     seen: Arc<Mutex<Vec<Seen>>>,
 ) {
+    serve_rejecting(listener, behaviour, expected_key, 401, seen)
+}
+
+/// As [`serve`], a request without the expected key answered `reject` (401 or 403).
+pub fn serve_rejecting(
+    listener: TcpListener,
+    behaviour: Behaviour,
+    expected_key: Option<String>,
+    reject: u16,
+    seen: Arc<Mutex<Vec<Seen>>>,
+) {
     for stream in listener.incoming() {
         let Ok(mut stream) = stream else { continue };
         let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
@@ -245,7 +256,7 @@ pub fn serve(
         {
             respond(
                 &mut stream,
-                401,
+                reject,
                 "text/plain",
                 b"missing or wrong bearer key",
             );
@@ -268,11 +279,20 @@ pub fn spawn(
     behaviour: Behaviour,
     expected_key: Option<String>,
 ) -> (String, Arc<Mutex<Vec<Seen>>>) {
+    spawn_rejecting(behaviour, expected_key, 401)
+}
+
+/// As [`spawn`], a request without the expected key answered `reject` (401 or 403).
+pub fn spawn_rejecting(
+    behaviour: Behaviour,
+    expected_key: Option<String>,
+    reject: u16,
+) -> (String, Arc<Mutex<Vec<Seen>>>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
     let url = format!("http://{}/fill", listener.local_addr().expect("local addr"));
     let seen = Arc::new(Mutex::new(Vec::new()));
     let log = seen.clone();
-    std::thread::spawn(move || serve(listener, behaviour, expected_key, log));
+    std::thread::spawn(move || serve_rejecting(listener, behaviour, expected_key, reject, log));
     (url, seen)
 }
 
@@ -380,6 +400,7 @@ fn respond(stream: &mut std::net::TcpStream, status: u16, content_type: &str, bo
         200 => "OK",
         400 => "Bad Request",
         401 => "Unauthorized",
+        403 => "Forbidden",
         500 => "Internal Server Error",
         _ => "",
     };

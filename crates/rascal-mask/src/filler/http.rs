@@ -52,15 +52,19 @@ impl HttpFiller {
         self
     }
 
-    /// The bearer key, read now and handed to the header only.
+    /// The bearer key, read now and handed to the header only. A key that is not set is a bug
+    /// here: the call's readiness check refuses it before any run (task 12.2).
     fn key(&self) -> Result<Option<String>> {
         match &self.key_env {
             None => Ok(None),
             Some(var) => (self.key_source)(var).map(Some).ok_or_else(|| {
-                Error::usage(format!(
-                    "fillers.{}: key_env names {var}, which is not set",
-                    self.name
-                ))
+                Error::op(
+                    "filler",
+                    format!(
+                        "fillers.{}: {var} is not set, which the readiness check should have refused before the run",
+                        self.name
+                    ),
+                )
             }),
         }
     }
@@ -194,6 +198,20 @@ impl HttpFiller {
         if !(200..300).contains(&status) {
             // An endpoint that echoes its request could put the bearer key in the body.
             let text = scrub(excerpt(&body, 200), key.as_deref());
+            if matches!(status, 401 | 403) {
+                return Err(Error::Credential {
+                    filler: self.name.clone(),
+                    reason: format!(
+                        "fillers.{}: HTTP {status}: the provider rejected the credential{}: {}",
+                        self.name,
+                        self.key_env
+                            .as_deref()
+                            .map(|v| format!(" in {v}"))
+                            .unwrap_or_default(),
+                        text.trim()
+                    ),
+                });
+            }
             return Err(Error::op(
                 "filler",
                 format!("fillers.{}: HTTP {status}: {}", self.name, text.trim()),

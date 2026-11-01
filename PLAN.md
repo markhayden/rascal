@@ -1915,12 +1915,12 @@ A later call whose filler's key is `invalid` in this session is refused `not_rea
 check, without sending (the process environment cannot change within a session).
 
 **Acceptance.**
-- [ ] Through the fake HTTP filler: a 401 and a 403 each end `error`/`credential`,
+- [x] Through the fake HTTP filler: a 401 and a 403 each end `error`/`credential`,
       `retryable: false`, spend 0, the mask kept in `images.out` (2.3); `rascal heal` exits 3.
-- [ ] After a 2xx the credential reads `valid` in `describe` and after a 401 `invalid`; a new
+- [x] After a 2xx the credential reads `valid` in `describe` and after a 401 `invalid`; a new
       `serve` shows `present` again; the next call after a 401 is refused `not_ready` naming the
       `invalid` credential, with no run and no request (the fake filler's `seen` unchanged).
-- [ ] `provider` stays retryable for a 5xx and a timeout stays `timeout`.
+- [x] `provider` stays retryable for a 5xx and a timeout stays `timeout`.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- fillers::
 heal:: serve_contract:: readiness::`; `just check`.

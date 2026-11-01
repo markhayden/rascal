@@ -86,6 +86,11 @@ pub enum Error {
     /// location kind a later task implements. Exit 3.
     #[error("{op}: {message}")]
     Op { op: String, message: String },
+    /// A provider rejected a filler's credential (HTTP 401 or 403) during the run: never
+    /// retryable unchanged, since a person fixes the key first (table-manners 2.2). A key that
+    /// is not set never gets here: the call is refused `not_ready` before any run. Exit 3.
+    #[error("{reason}")]
+    Credential { filler: String, reason: String },
 }
 
 /// The core's result type.

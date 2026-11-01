@@ -1346,3 +1346,108 @@ fn a_call_that_needs_what_is_missing_is_refused_not_ready() {
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The state of the credential `var` in `seam`'s readiness, from the server's `describe`.
+fn credential_state(client: &mut Client, var: &str) -> String {
+    let described = client
+        .call("describe", serde_json::json!({}))
+        .unwrap()
+        .structured
+        .unwrap();
+    valid("urn:table-manners:core:description", &described);
+    readiness_of(&described, "seam")["requirements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["kind"] == "credential" && r["name"] == var)
+        .unwrap()["state"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+/// Task 12.3 (table-manners 2.2, 3.1): the session keeps what providers said about each
+/// credential. A fresh session shows `present`; a 2xx makes the key `valid`; a 401 ends the run
+/// `error`/`credential`, never retryable, spending nothing, and makes it `invalid`; the next
+/// call with it is refused `not_ready` naming it, with no run and no request; a new session
+/// shows `present` again.
+#[test]
+fn the_session_marks_credentials_by_what_providers_answered() {
+    let dir = scratch("answers");
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let (url, seen) = rascal_testkit::fake_filler::spawn(
+        rascal_testkit::fake_filler::Behaviour::Exact,
+        Some("the-right-key".to_string()),
+    );
+    let config = dir.join("rascal.toml");
+    std::fs::write(
+        &config,
+        format!(
+            "config_version = 1\n[fillers.good]\nurl = \"{url}\"\nprofile = \"grey\"\nkey_env = \"SERVE_GOOD_KEY\"\nspend_usd_per_call = 0.04\n[fillers.bad]\nurl = \"{url}\"\nprofile = \"grey\"\nkey_env = \"SERVE_BAD_KEY\"\nspend_usd_per_call = 0.04\n"
+        ),
+    )
+    .unwrap();
+    let runs_dir = dir.join("runs");
+    let args = [
+        "--runs",
+        runs_dir.to_str().unwrap(),
+        "--config",
+        config.to_str().unwrap(),
+    ];
+    let env = [
+        ("SERVE_GOOD_KEY", "the-right-key"),
+        ("SERVE_BAD_KEY", "zq-wrong-key-zq"),
+    ];
+    let mut client = start_with(&dir, &args, &env);
+    assert_eq!(credential_state(&mut client, "SERVE_GOOD_KEY"), "present");
+    assert_eq!(credential_state(&mut client, "SERVE_BAD_KEY"), "present");
+    let seam = |filler: &str| serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": filler });
+
+    let out = client.call("seam", seam("good")).unwrap();
+    assert_eq!(out.structured.unwrap()["status"], "completed");
+    assert_eq!(credential_state(&mut client, "SERVE_GOOD_KEY"), "valid");
+    assert_eq!(credential_state(&mut client, "SERVE_BAD_KEY"), "present");
+
+    let out = client.call("seam", seam("bad")).unwrap();
+    assert!(out.is_error);
+    let r = out.structured.unwrap();
+    valid("urn:table-manners:core:result", &r);
+    assert_eq!(r["status"], "error", "{r:#}");
+    assert_eq!(r["error"]["code"], "credential");
+    assert_eq!(r["error"]["retryable"], false);
+    assert_eq!(r["spend"]["usd"], 0.0);
+    assert!(
+        r["images"]["out"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|o| o["role"] == "mask"),
+        "{r:#}"
+    );
+    assert!(!r.to_string().contains("zq-wrong-key-zq"));
+    assert_eq!(credential_state(&mut client, "SERVE_BAD_KEY"), "invalid");
+    assert_eq!(credential_state(&mut client, "SERVE_GOOD_KEY"), "valid");
+
+    // The next call with the rejected key is not sent.
+    let requests = seen.lock().unwrap().len();
+    let runs_before = run_dirs(&runs_dir).len();
+    let refused = not_ready(client.call("seam", seam("bad")).unwrap_err());
+    assert_eq!(
+        refused["requirements"],
+        serde_json::json!([{ "kind": "credential", "name": "SERVE_BAD_KEY", "state": "invalid",
+                             "setup": "A provider rejected `SERVE_BAD_KEY` in this session. Set a working key in the environment and restart rascal." }])
+    );
+    assert_eq!(seen.lock().unwrap().len(), requests, "no request");
+    assert_eq!(run_dirs(&runs_dir).len(), runs_before, "no run");
+    let ledger = session(&mut client);
+    assert_eq!(ledger["spent_usd"], 0.04, "{ledger:#}");
+    assert_eq!(ledger["reserved_usd"], 0.0);
+    client.close().unwrap();
+
+    // A new session has heard nothing yet.
+    let mut client = start_with(&dir, &args, &env);
+    assert_eq!(credential_state(&mut client, "SERVE_GOOD_KEY"), "present");
+    assert_eq!(credential_state(&mut client, "SERVE_BAD_KEY"), "present");
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
