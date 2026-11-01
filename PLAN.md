@@ -1705,7 +1705,7 @@ one milestone branch, `m12-table-manners-v03`, cut from `main` after `m11`, with
 table-manners = { path = "../table-manners", version = "=0.3.0" }
 ```
 
-on a sibling checkout of table-manners at branch `v0.3`, at `7f9316c` or later (the commits that
+on a sibling checkout of table-manners at branch `v0.3`, at `a3e1507` or later (the commits that
 settled the questions this plan raised) (`scripts/check-contract.sh` already
 reads the exact version of a path pin). Each task is a commit (or a short task branch
 `m12/<task>` merged into the milestone branch when tasks run in parallel) with `just check` green
@@ -1786,7 +1786,8 @@ serve_contract:: run_json:: table_manners_fixtures::`; `scripts/test-checks.sh`;
 **Description.** Configuration is read once into a **config state**: `missing` (no `--config`,
 or a path that does not exist), `invalid` (it does not parse or check; the reason kept, never a
 value), or `loaded` (the `Config` and its **identity**, the SHA-256 of its canonical
-serialization, ADR 0016; with no configuration in force the identity is that of `null`). rascal
+serialization, ADR 0016; with no file, the digest of rascal's built-in defaults, which are a
+configuration too, so the identity is never null). rascal
 keeps having no default lookup: the only way to choose a configuration is `--config <path>`, as
 4.6 allows. `rascal describe [--json] [--config <path>]` never fails on configuration and exits
 0; `rascal serve [--config <path>]` starts in every config state, and `--workspace` becomes
@@ -1798,7 +1799,8 @@ why, and its requirement says so.
 Readiness is one function, `readiness::for_call(state, action, filler, answers)` in a new module,
 used by `describe` and later by the estimate and the limits check (the call's one filler, 3.1: an
 estimate's readiness is the call's own). In `describe` an action's readiness describes its
-**default use** (3.1), which for rascal is what its configuration offers: with no filler
+**default use** (3.1: the action as configured now, its requirements naming every variable that
+use reads), which for rascal is what its configuration offers: with no filler
 configured, the mask alone, which needs nothing (every action but `remove_prompt` is `ready`
 with no requirements); with fillers configured, healing with any of them (the union of their
 requirements), so every variable a configured filler reads is named and a host passes it (4.6).
@@ -1963,14 +1965,16 @@ function shared with the limits check so the two cannot disagree:
   verified as the call would and then dropped) and a `Mask` input by the stored mask's identity.
   Every other argument (`max_spend_usd` included) enters as sent.
 - `effective`: `model` is `fillers.<name>` for the call's filler (null for a mask-only call);
-  `config_identity` from 12.2 (null with no configuration); `x-rascal`: `{filler: {name, kind: "http" | "command", revision,
+  `config_identity` from 12.2 (the loaded file's, or the built-in defaults' with no file; null
+  only when the call needs a configuration that is missing or invalid); `x-rascal`: `{filler: {name, kind: "http" | "command", revision,
   paste, fill_max_side}}` or `{filler: null}`.
 - `worst_case_usd` (the reservation the limits check would make: the filler's
   `spend_usd_per_call` for the one call a heal makes, 0 for a mask-only call) and `cap_usd`
-  (12.4's effective cap, null when uncapped). When the call cannot be priced, `worst_case_usd` is
-  null and `refused` is `readiness`, never a made-up zero (4.5): a filler that is not configured,
-  and any call with no configuration, where `effective.config_identity` is null too (the schema
-  requires a string identity on every estimate not refused for readiness).
+  (12.4's effective cap, null when uncapped). A mask-only call with no file is priced: allowed,
+  `worst_case_usd` 0, `config_identity` the built-in defaults' digest. When the call cannot be
+  priced, `worst_case_usd` is null and `refused` is `readiness`, never a made-up zero (4.5): a
+  filler that is not configured, or `remove_prompt` without its pack; `config_identity` is null
+  there only when what is missing is the configuration itself (no file, or an invalid one).
 - `allowed` and `refused`: `readiness` when the call's readiness (12.2, for its filler) is not
   `ready`, else `cap`, else `budget`, else allowed; an over-cap `max_spend_usd` or any other bad
   argument is not an estimate but a JSON-RPC `-32602` naming the argument (an estimate is not a
@@ -1997,7 +2001,8 @@ image changed by a byte the binding changes.
 **Acceptance.**
 - [ ] Every estimate validates against `urn:table-manners:core:estimate`: allowed; refused for
       `cap`, `budget` and `readiness`; a mask-only call with a configuration (`model` null, worst
-      case 0, allowed); any call without one (`refused: "readiness"`, `worst_case_usd` and
+      case 0, allowed), and the same with no file (`config_identity` the defaults' digest);
+      `remove_prompt` with no file (`refused: "readiness"`, `worst_case_usd` and
       `config_identity` null).
 - [ ] The binding is stable for the same call (path or the same bytes inline give one binding,
       and so do calls differing only in `return_images` or `image_blocks`), and changes with the
@@ -2124,8 +2129,9 @@ set: `describe.json` (configured, `ready`); `describe-unconfigured.json` (no `--
 `estimate-refused-cap.json`, `estimate-refused-budget.json`, `estimate-refused-readiness.json`;
 `run-stale-estimate-image.json`, `-argument.json`, `-session.json` (a server restarted under
 another configuration: for rascal one fixture stands for both the configuration and the session,
-as the coordinator settled) and `-expired.json`; `estimate-cli.json` (no session); `estimate-unconfigured.json` (refused for readiness,
-`worst_case_usd` null); `run-cap.json`, `run-budget.json`, `run-credential-rejected.json` (a 401 during the run);
+as the coordinator settled) and `-expired.json`; `estimate-cli.json` (no session); `estimate-unconfigured.json` (a mask-only call with no
+file: allowed, `worst_case_usd` 0, the defaults' identity), while `estimate-refused-readiness.json` above is
+`remove_prompt` without its pack (`worst_case_usd` null); `run-cap.json`, `run-budget.json`, `run-credential-rejected.json` (a 401 during the run);
 `refusal-not-ready.json` (a call naming a filler whose key is unset, refused before any run; a
 missing credential is no longer a run); `run-claim-released.json` (the accepted retry, carrying the id
 the refused request released) and `refusal-cancelled-before-allocation.json` (`run: null`);
@@ -2189,8 +2195,8 @@ into `main` by the checkpoint procedure.
   unconfigured rascal is `ready` but for `remove_prompt`), healing with the configured fillers
   otherwise, so their variables are named for the host. A call fails only for what it needs.
   Recommended, assumed.
-- `estimate` is served in every configuration (with no configuration every estimate is refused
-  for readiness with no price, 4.5); the contract lets any tool serve it and requires it of one
+- `estimate` is served in every configuration (with no file a mask-only call estimates at 0
+  under the built-in defaults' identity, 4.5); the contract lets any tool serve it and requires it of one
   that may spend (settled). Assumed.
 - A missing key is refused `not_ready` before any run on the command line too (exit 64, no run
   directory), mirroring `serve`. Recommended, assumed.
