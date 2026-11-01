@@ -4,8 +4,9 @@ name: bundles
 # tag, one bundle per platform is built by scripts/build-bundle.sh on that platform's runner,
 # packed as a tar.gz with its SHA-256 beside it, smoked by scripts/bundle-acceptance.sh from
 # the packed archive, and uploaded to the tag's GitHub release (the one dist creates from the
-# same tag). The models join the bundle when the `models-2026-10` release holds them; a bundle
-# built without them says so and serves echo_region only.
+# same tag). The models come from the `models-2026-10` release: on a version tag they are
+# required (BUNDLE_MODELS=required), so a release bundle never ships without `segment`; a manual
+# run without them builds a bundle that says so and serves echo_region only.
 on:
   push:
     tags: ["v*"]
@@ -54,6 +55,8 @@ jobs:
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: cargo build --release -p rascal-mask
       - name: Build the bundle and pack it
+        env:
+          BUNDLE_MODELS: ${{ startsWith(github.ref, 'refs/tags/v') && 'required' || '' }}
         run: |
           scripts/build-bundle.sh ${{ matrix.platform }} bundle --archive rascal-tools-bundle-${{ matrix.platform }}.tar.gz
           shasum -a 256 rascal-tools-bundle-${{ matrix.platform }}.tar.gz > rascal-tools-bundle-${{ matrix.platform }}.tar.gz.sha256
