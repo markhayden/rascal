@@ -26,7 +26,8 @@ identities never use ids; a command accepts either.
 ## The commit protocol
 
 An op stages its outputs in `staging/<token>/`, then: syncs the staged tree; takes the writer
-lock; reads `CURRENT`, allocates ids and the sequence number, writes its record into staging
+lock; reads `CURRENT`, refuses a frame id the generation already binds to another identity
+(nothing moved yet, so nothing is left behind), allocates ids and the sequence number, writes its record into staging
 and syncs it; renames the artifacts and the record into place (an identical identity already
 there is left alone) and syncs those directories; writes the next generation and syncs it and
 `registry/`; writes the pointer aside, syncs it, renames it over `CURRENT`, syncs the root;

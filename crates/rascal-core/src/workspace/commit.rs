@@ -4,7 +4,7 @@
 //!
 //! 1. sync every staged file and every directory of the staged trees;
 //! 2. take the writer lock;
-//! 3. read `CURRENT` and the generation, allocate ids and the sequence number, write the
+//! 3. read `CURRENT` and the generation, refuse a frame id bound to another identity, allocate ids and the sequence number, write the
 //!    record with its sequence into staging and sync it;
 //! 4. rename artifacts into `artifacts/` and `images/` and the record into `ops/` (an
 //!    existing identical identity is left in place); sync those directories;
@@ -114,6 +114,26 @@ fn commit_locked(
         }
         None => Generation::first(),
     };
+    // A frame id is bound to one identity for the workspace's life: a second binding would
+    // silently put the new artifacts in the old frame (two `window`s taking the same `crop:<n>`,
+    // an import naming a frame the workspace knows by another meaning). Checked before anything
+    // moves, so a refusal leaves nothing behind.
+    for frame in frames {
+        if let Some(existing) = generation.frame(&frame.id)
+            && existing.identity != frame.identity
+        {
+            return Err(Error::op(
+                "workspace",
+                format!(
+                    "frame id {} is already bound to {} in {}, not {}; nothing was published",
+                    frame.id,
+                    existing.identity,
+                    ws.root.display(),
+                    frame.identity
+                ),
+            ));
+        }
+    }
     let seq = generation.records.len() as u64 + 1;
     record.seq = seq;
     let record_staged = staging_dir.join("record.json");

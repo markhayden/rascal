@@ -144,6 +144,47 @@ fn cut_and_crop_frames_carry_their_parent_and_mapping() {
     assert_eq!(table.next_crop(), 2);
 }
 
+/// Task 10.5: a frame read from outside is checked against what its fields and its parent make
+/// of it, so a bundle's frame chain cannot lie about an identity, an id, a plan or a parent.
+#[test]
+fn a_frame_verifies_against_its_fields_and_its_parent() {
+    let pano = Frame::raw(64, 32, Projection::Equirectangular);
+    let plan = Plan::new(&pano, 0.25).unwrap();
+    let cut = Frame::cut(&pano, "abcdef012345", &plan).unwrap();
+    let crop = Frame::crop(&cut, 3, [2, 4, 10, 20]).unwrap();
+    pano.verify(None).unwrap();
+    cut.verify(Some(&pano)).unwrap();
+    crop.verify(Some(&cut)).unwrap();
+    assert_eq!(Plan::with_strip(&pano, plan.strip).unwrap(), plan);
+
+    let refuse = |frame: &Frame, parent: Option<&Frame>, says: &str| {
+        let e = frame.verify(parent).unwrap_err().to_string();
+        assert!(e.contains(says), "{e} should say {says}");
+    };
+    let mut lying = pano.clone();
+    lying.identity = crop.identity.clone();
+    refuse(&lying, None, "its fields make");
+    let mut renamed = pano.clone();
+    renamed.id = "raw:64x32:flat".to_string();
+    refuse(&renamed, None, "not the one its fields make");
+    refuse(&pano, Some(&cut), "a raw frame has no parent");
+    refuse(&cut, None, "needs its parent");
+    // The parent named is not the parent given, or not the parent's identity.
+    let other = Frame::raw(128, 64, Projection::Equirectangular);
+    refuse(&cut, Some(&other), "parent");
+    let mut wrong_plan = cut.clone();
+    if let Some(p) = wrong_plan.plan.as_mut() {
+        p.left_span = [0, 1];
+    }
+    refuse(&wrong_plan, Some(&pano), "plan");
+    let mut bad_id = crop.clone();
+    bad_id.id = "crop:x".to_string();
+    refuse(&bad_id, Some(&cut), "crop:<n>");
+    let mut moved = crop.clone();
+    moved.bbox = Some([2, 4, 10, 21]);
+    refuse(&moved, Some(&cut), "its fields make");
+}
+
 // --- the dependency order and reference substitution --------------------------------------------
 
 #[test]
