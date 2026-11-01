@@ -474,3 +474,33 @@ fn workspaces_with_different_allocation_histories_agree_on_identities() {
     assert_ne!(ids_a, ids_b, "the local ids differ");
     assert_eq!(identities_a, identities_b, "the identities agree");
 }
+
+/// Task 10.5: a commit never rebinds a frame id to another identity. Two concurrent `window`s
+/// could otherwise both take `crop:<n>`, and an import could shadow a frame.
+#[test]
+fn a_commit_naming_a_frame_id_bound_to_another_identity_is_refused() {
+    let dir = scratch("rebind");
+    let ws = Workspace::open(&dir).unwrap();
+    let f = frame();
+    ws.add_canonical(canonical(&f), &f, "flat").unwrap();
+    let before = ws.read_current().unwrap();
+    let mut impostor = f.clone();
+    impostor.identity = Frame::raw(41, 30, Projection::Flat).identity;
+    let image = Image::new(
+        "i",
+        DynamicImage::ImageRgb8(rascal_testkit::images::flat(40, 30, 10)),
+        &impostor,
+        Role::Canonical,
+        None,
+    );
+    let e = ws
+        .add_canonical(image, &impostor, "impostor")
+        .unwrap_err()
+        .to_string();
+    assert!(
+        e.contains("raw:40x30:flat") && e.contains("already bound"),
+        "{e}"
+    );
+    assert_eq!(ws.read_current().unwrap(), before, "nothing published");
+    let _ = std::fs::remove_dir_all(&dir);
+}

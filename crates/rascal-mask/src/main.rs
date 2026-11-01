@@ -172,7 +172,7 @@ enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
-    /// A workspace: list what it holds, or import an image into it.
+    /// A workspace: list what it holds, import an image or a location, export or import a mask bundle.
     Workspace {
         #[command(subcommand)]
         command: WorkspaceCommand,
@@ -366,6 +366,34 @@ enum WorkspaceCommand {
         image: PathBuf,
         #[arg(long)]
         projection: Option<ProjectionArg>,
+    },
+    /// Export a Mask as a bundle (a canonical tar with its frame chain, ADR 0022); prints its
+    /// identity and the bundle's sha256.
+    ExportMask {
+        dir: PathBuf,
+        /// The mask's id or identity.
+        mask: String,
+        /// The bundle file, written over if it exists.
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// Import a mask bundle, checked whole before anything is committed; prints the id, the
+    /// frame and the identity. A PNG or any other file is refused (64).
+    ImportMask {
+        dir: PathBuf,
+        bundle: PathBuf,
+        /// The bundle's expected sha256 (as export-mask printed it).
+        #[arg(long)]
+        sha256: Option<String>,
+    },
+    /// Import a location from a JSON file (rascal's own or a table-manners one), validated
+    /// against an image of the workspace; prints its id and frame.
+    ImportLocation {
+        dir: PathBuf,
+        location: PathBuf,
+        /// The image (id or identity) the location is on.
+        #[arg(long)]
+        image: String,
     },
 }
 
@@ -902,6 +930,19 @@ fn main() {
                     projection,
                 } => workspace_cmd::import(&dir, &image, projection.map(Into::into)),
                 WorkspaceCommand::Repair { dir, json } => workspace_cmd::repair(&dir, json),
+                WorkspaceCommand::ExportMask { dir, mask, out } => {
+                    workspace_cmd::export_mask(&dir, &mask, &out)
+                }
+                WorkspaceCommand::ImportMask {
+                    dir,
+                    bundle,
+                    sha256,
+                } => workspace_cmd::import_mask(&dir, &bundle, sha256.as_deref()),
+                WorkspaceCommand::ImportLocation {
+                    dir,
+                    location,
+                    image,
+                } => workspace_cmd::import_location(&dir, &location, &image),
             };
             match result {
                 Ok(()) => exit::OK,

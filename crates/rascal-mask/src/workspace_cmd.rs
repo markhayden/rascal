@@ -1,4 +1,5 @@
-//! `rascal workspace list <dir>` and `rascal workspace import <dir> <image>`, and the per-op
+//! `rascal workspace list <dir>`, `import <dir> <image>`, `export-mask`, `import-mask` (mask
+//! bundles, ADR 0022) and `import-location`, and the per-op
 //! subcommands every op gets from its manifest: `rascal <op> --workspace <dir> --<port> <id>
 //! [--<param> <value>] [--constants <set>]`.
 
@@ -49,6 +50,43 @@ pub fn import(dir: &Path, image: &Path, projection: Option<Projection>) -> Resul
     let (id, frame, _) = ws.import(image, projection)?;
     let reference = rascal_core::contract::image_reference(&ws, &id)?;
     println!("{id} {} file_sha256:{}", frame.id, reference.file_sha256);
+    Ok(())
+}
+
+/// Exports a mask as a bundle to `out` (written over, as `cp` would) and prints its identity
+/// and the bundle's SHA-256 (ADR 0022).
+pub fn export_mask(dir: &Path, mask: &str, out: &Path) -> Result<()> {
+    let ws = Workspace::open(dir)?;
+    let exported = ws.export_mask(mask)?;
+    std::fs::write(out, &exported.bytes).map_err(|e| Error::io(out, e))?;
+    println!("{} {}", exported.identity, exported.sha256);
+    Ok(())
+}
+
+/// Imports a mask bundle and prints the id, the frame and the identity; `already present` when
+/// the workspace held the identity and nothing was published.
+pub fn import_mask(dir: &Path, bundle: &Path, sha256: Option<&str>) -> Result<()> {
+    let ws = Workspace::open(dir)?;
+    let imported = ws.import_mask(bundle, sha256)?;
+    println!(
+        "{} {} {}{}",
+        imported.id,
+        imported.frame,
+        imported.identity,
+        if imported.already_present {
+            " (already present)"
+        } else {
+            ""
+        }
+    );
+    Ok(())
+}
+
+/// Imports a location file against an image of the workspace and prints its id and frame.
+pub fn import_location(dir: &Path, location: &Path, image: &str) -> Result<()> {
+    let ws = Workspace::open(dir)?;
+    let (id, artifact) = ws.import_location(location, image)?;
+    println!("{id} {} {}", artifact.frame(), artifact.identity().as_str());
     Ok(())
 }
 

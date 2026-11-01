@@ -94,7 +94,24 @@ impl Plan {
                 "strip must be in (0, 0.5], got {fraction}"
             )));
         }
-        let s = Plan::strip_width(parent.width, fraction);
+        Plan::with_strip(parent, Plan::strip_width(parent.width, fraction))
+    }
+
+    /// The plan for a parent frame and a strip width `s`: even, at least 2, `2s <= width`.
+    pub fn with_strip(parent: &Frame, s: u32) -> Result<Plan> {
+        if parent.width < 4
+            || s < 2
+            || !s.is_multiple_of(2)
+            || 2 * u64::from(s) > u64::from(parent.width)
+        {
+            return Err(Error::op(
+                "cut",
+                format!(
+                    "strip {s} does not fit a frame {} wide: it is even, at least 2, and at most half the width",
+                    parent.width
+                ),
+            ));
+        }
         let mut plan = Plan {
             plan_version: 1,
             parent: parent.id.clone(),
@@ -278,6 +295,71 @@ impl Frame {
     /// True for a root frame.
     pub fn is_raw(&self) -> bool {
         self.kind == FrameKind::Raw
+    }
+
+    /// Checks a frame read from outside (a mask bundle) against what its fields and its
+    /// parent make of it: the record is rebuilt from the kind's constructor and must be equal,
+    /// identity, id and plan included. `parent` is the frame `parent` names, already checked;
+    /// `None` for a raw frame. Names what differs.
+    pub fn verify(&self, parent: Option<&Frame>) -> Result<()> {
+        self.validate()?;
+        let fail = |what: &str| Error::usage(format!("frame {}: {what}", self.id));
+        if let Some(parent) = parent
+            && self.kind != FrameKind::Raw
+            && (self.parent.as_deref() != Some(parent.id.as_str())
+                || self.parent_identity.as_deref() != Some(parent.identity.as_str()))
+        {
+            return Err(fail(&format!(
+                "its parent is {} ({}), not {} ({})",
+                self.parent.as_deref().unwrap_or_default(),
+                self.parent_identity.as_deref().unwrap_or_default(),
+                parent.id,
+                parent.identity
+            )));
+        }
+        let rebuilt = match (self.kind, parent) {
+            (FrameKind::Raw, None) => Frame::raw(self.width, self.height, self.projection),
+            (FrameKind::Raw, Some(_)) => return Err(fail("a raw frame has no parent")),
+            (_, None) => return Err(fail("a derived frame needs its parent")),
+            (FrameKind::Cut, Some(parent)) => {
+                let plan = self
+                    .plan
+                    .as_ref()
+                    .ok_or_else(|| fail("a cut frame carries its plan"))?;
+                let image_id = self
+                    .id
+                    .strip_prefix("cut:")
+                    .and_then(|rest| rest.rsplit_once(':'))
+                    .map(|(image, _)| image)
+                    .ok_or_else(|| fail("a cut frame's id is cut:<image>:<plan>"))?;
+                let expected = Plan::with_strip(parent, plan.strip)?;
+                if *plan != expected {
+                    return Err(fail("its plan is not the one its parent and strip make"));
+                }
+                Frame::cut(parent, image_id, &expected)?
+            }
+            (FrameKind::Crop, Some(parent)) => {
+                let n = self
+                    .id
+                    .strip_prefix("crop:")
+                    .and_then(|n| n.parse::<u64>().ok())
+                    .ok_or_else(|| fail("a crop frame's id is crop:<n>"))?;
+                let bbox = self
+                    .bbox
+                    .ok_or_else(|| fail("a crop frame carries its bbox"))?;
+                Frame::crop(parent, n, bbox)?
+            }
+        };
+        if rebuilt.identity != self.identity {
+            return Err(fail(&format!(
+                "its identity is {}, but its fields make {}",
+                self.identity, rebuilt.identity
+            )));
+        }
+        if rebuilt != *self {
+            return Err(fail("its record is not the one its fields make"));
+        }
+        Ok(())
     }
 
     /// The fields the kind needs are set and no other.

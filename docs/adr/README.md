@@ -26,5 +26,7 @@ decision's shape without reversing it. Format: Context, Decision, Alternatives, 
 | 0018 | The segmenter: branch A with OWLv2 and MobileSAM, exported to ONNX | accepted 2026-10-29 |
 | 0019 | The pack protocol: manifests in `_meta`, many ports, replay never calls, the escalation | accepted 2026-10-29 |
 | 0020 | rascal conforms to table-manners, the shared contract of the waffle tools | accepted 2026-10-30 |
+| 0021 | reserved for M10's operations path (PLAN.md 10.7) | |
+| 0022 | A Mask travels as a canonical tar bundle, checked whole before it is imported | proposed 2026-11-01 |
 
 Every decision the plan named by ADR is made.

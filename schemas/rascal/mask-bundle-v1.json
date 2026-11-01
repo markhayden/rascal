@@ -1,0 +1,299 @@
+{
+  "$defs": {
+    "ArtifactType": {
+      "description": "The artifact types a port can declare.",
+      "enum": [
+        "Image",
+        "Location",
+        "Mask",
+        "BandProfile",
+        "Series",
+        "Plan"
+      ],
+      "type": "string"
+    },
+    "Frame": {
+      "additionalProperties": false,
+      "description": "A frame record, as written to `frames.json`. The fields a kind needs are set; the others\nare absent (`serde(flatten)` and `deny_unknown_fields` do not combine, so the derived\nframes' fields are optional rather than a tagged union).",
+      "properties": {
+        "bbox": {
+          "description": "`[left, top, right, bottom)` in parent pixels, for a `crop:` frame.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "frame_version": {
+          "description": "The record's version.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "description": "The semantic id: `raw:<W>x<H>:<projection>`, `cut:<image-id>:<plan-id>`, `crop:<n>`.",
+          "type": "string"
+        },
+        "identity": {
+          "description": "`sha256:` over the kind, size, projection and topology, and for a derived frame its\nparent's identity and the mapping parameters; no image is involved.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/FrameKind"
+        },
+        "parent": {
+          "description": "The parent frame id, for a derived frame.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parent_identity": {
+          "description": "The parent's identity, for a derived frame.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "plan": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Plan"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The cut plan, for a `cut:` frame."
+        },
+        "projection": {
+          "$ref": "#/$defs/Projection"
+        },
+        "topology": {
+          "$ref": "#/$defs/Topology"
+        },
+        "width": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "frame_version",
+        "id",
+        "kind",
+        "width",
+        "height",
+        "projection",
+        "topology",
+        "identity"
+      ],
+      "type": "object"
+    },
+    "FrameKind": {
+      "description": "The kinds of frame.",
+      "oneOf": [
+        {
+          "const": "raw",
+          "description": "A root: the frame of an imported image.",
+          "type": "string"
+        },
+        {
+          "const": "cut",
+          "description": "The two edge strips of a wrapped parent, side by side; the centre column is the\nparent's wrap edge. Carries `parent`, `parent_identity` and `plan`.",
+          "type": "string"
+        },
+        {
+          "const": "crop",
+          "description": "An integer bbox of the parent. Carries `parent`, `parent_identity` and `bbox`.",
+          "type": "string"
+        }
+      ]
+    },
+    "MaskBundleMember": {
+      "additionalProperties": false,
+      "description": "One member of a bundle.",
+      "properties": {
+        "path": {
+          "description": "The path inside the archive: `mask/<file>`.",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "`sha256:` over the member's bytes.",
+          "type": "string"
+        },
+        "size": {
+          "description": "The member's size in bytes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "size",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "Plan": {
+      "additionalProperties": false,
+      "description": "The cut plan: how a `cut:` canvas was taken from its parent and how `put` returns it.",
+      "properties": {
+        "height": {
+          "description": "The parent's height.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "identity": {
+          "description": "`sha256:` over the parent frame's identity, width, height, strip and the spans.",
+          "type": "string"
+        },
+        "left_span": {
+          "description": "The parent columns `[start, end)` the canvas's left half came from: the rightmost `s`.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "parent": {
+          "description": "The parent frame id.",
+          "type": "string"
+        },
+        "parent_identity": {
+          "description": "The parent frame's identity.",
+          "type": "string"
+        },
+        "plan_version": {
+          "description": "The record's version.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "right_span": {
+          "description": "The parent columns the canvas's right half came from: the leftmost `s`.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "strip": {
+          "description": "The strip width: even, at least 2, `2s <= width`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "width": {
+          "description": "The parent's width.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "plan_version",
+        "parent",
+        "parent_identity",
+        "width",
+        "height",
+        "strip",
+        "left_span",
+        "right_span",
+        "identity"
+      ],
+      "type": "object"
+    },
+    "Projection": {
+      "description": "How an image's pixels map onto the world.",
+      "oneOf": [
+        {
+          "const": "flat",
+          "description": "An ordinary photograph.",
+          "type": "string"
+        },
+        {
+          "const": "equirectangular",
+          "description": "A full 360 by 180 panorama whose left and right edges meet.",
+          "type": "string"
+        }
+      ]
+    },
+    "Topology": {
+      "description": "Whether the frame's horizontal edges meet.",
+      "oneOf": [
+        {
+          "const": "wrap",
+          "description": "The left and right edges are the same column: a complete equirectangular frame.",
+          "type": "string"
+        },
+        {
+          "const": "bounded",
+          "description": "The edges are edges.",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "`bundle.json`.",
+  "properties": {
+    "artifact_type": {
+      "$ref": "#/$defs/ArtifactType",
+      "description": "What the bundle carries: `Mask`."
+    },
+    "frames": {
+      "description": "The frame chain, the root raw frame first and the mask's frame last.",
+      "items": {
+        "$ref": "#/$defs/Frame"
+      },
+      "type": "array"
+    },
+    "identity": {
+      "description": "The mask's identity.",
+      "type": "string"
+    },
+    "mask_bundle_version": {
+      "description": "The bundle format's version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "members": {
+      "description": "Every member but this manifest, in archive order.",
+      "items": {
+        "$ref": "#/$defs/MaskBundleMember"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "mask_bundle_version",
+    "artifact_type",
+    "identity",
+    "frames",
+    "members"
+  ],
+  "title": "MaskBundleManifest",
+  "type": "object"
+}

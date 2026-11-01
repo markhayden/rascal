@@ -1461,7 +1461,95 @@ operations profile in table-manners that rascal drafts and squint and Wafflehous
 - **10.7** The Line → Rasterize → Feather path through the independent client, positive and
   negative fixtures, ADR 0021, `docs/contract.md`, `docs/tools.md`.
 
-Tasks with acceptance and files are written when the profile is agreed.
+10.5 is written out below; the other tasks get their acceptance and files when the profile is
+agreed.
+
+### Task 10.5: Native artifacts portable
+
+**Description.** A Mask leaves one workspace and enters another with the same identity, as a
+file a person can hand over: a **mask bundle**, an uncompressed ustar archive (`tar`, already in
+the lock for `tools setup`; ADR 0022) whose members are, in this order, `bundle.json` (the
+manifest: `mask_bundle_version`, the mask's identity, its frame chain from the root raw frame to
+the mask's frame, and every other member's path, size and SHA-256) and `mask/<file>` for
+`mask.toml` and each file it names (the three planes, the band profile, the sigma series, each
+prescription's series), sorted by name. Every header is fixed (mode 0644, uid and gid 0, mtime 0,
+no user or group name), so the same stored mask always gives the same bytes and the bundle's
+SHA-256 is a stable name for it. Export reads nothing but the workspace; import trusts nothing in
+the file: it reads at most 256 MiB, at most 16 members, `bundle.json` at most 1 MiB, member names
+at most 64 bytes and plain; each member's size is checked against the bytes that remain before
+it is read; then it checks the manifest against the members, the archive against the canonical
+bytes rebuilt from them, each frame's identity recomputed from its fields and its parent, the
+record's frame against the chain's last, every mask invariant, and the identity recomputed from
+the pixels against both the record and the manifest. Only then does it commit, as one `import`
+record (the bundle's SHA-256 and file name in its parameters), registering any frame of the chain
+the workspace does not know: a frame the workspace has under another id keeps the workspace's id
+(the record's `frame` follows; ids are not identity), and a `crop:` id held by a different frame
+takes the next free crop number. A mask whose identity is already present publishes nothing and
+answers with the existing id. A file that is a PNG, a JPEG, a directory or any archive that is not
+a mask bundle is refused naming what it is: a rendering is an `Image` and never a Mask (SPEC
+"Frames and images"). Locations import from JSON (rascal's own location or a table-manners one,
+the two shapes `--location` takes, through one function shared with `run`), validated against a
+named image of the workspace. The commit itself gains the guard the import relies on: a frame id
+already bound to a different identity is refused, never silently kept (concurrent `window`s could
+otherwise both take `crop:<n>`). CLI and library only; the MCP tools wait for the operations
+profile (10.1 to 10.4), whose artifact reference this does not presume.
+
+**CLI scenario.** `rascal run seam pano.png --out a/`, then `rascal workspace export-mask a/
+<mask id> --out seam.mask.tar` prints the identity and `sha256:<bundle digest>`; `rascal workspace
+import-mask b/ seam.mask.tar --sha256 <digest>` into a fresh workspace prints a new id, the same
+frame and the same identity; `rascal inspect --json` on both agrees; `rascal workspace import-mask
+b/ a/seam-grey.png` exits 64 naming a PNG; `rascal workspace import-location b/ finding.json
+--image img-1` prints a location id.
+
+**Acceptance.**
+- [x] Export, then import into a fresh workspace, yields the same mask identity, the same frame
+      identities for the whole chain (raw, cut, crop), and identical planes, profile and
+      prescriptions; exporting the imported mask gives a byte-identical bundle.
+- [x] The same mask exported twice gives the same bytes and the same bundle digest.
+- [x] A tampered bundle is refused with an error naming the fault and nothing is committed (the
+      generation number unchanged, no new file under `artifacts/`): any byte of any member
+      flipped, a member missing, an extra member, a member renamed, a truncated archive, bytes
+      after the end, a frame chain that is wrong (a frame's identity, a broken parent link, a
+      chain that does not end at a raw frame, a mask frame other than the chain's last), a
+      manifest identity other than the record's, a `--sha256` that does not match.
+- [x] A PNG, a JPEG, a directory, an empty file, a text file and a tar that is not a mask bundle
+      are each refused as not a mask bundle, exit 64, with nothing committed; `workspace export-mask`
+      of an `Image` or a `Location` is refused naming its type.
+- [x] Hostile input is bounded: a file over 256 MiB is refused before it is read, a header
+      claiming more bytes than remain is refused before any allocation of that size, a
+      `bundle.json` over 1 MiB, more than 16 members and a member name that is not plain are refused.
+- [x] Importing a bundle whose identity the workspace already holds publishes nothing (no new
+      generation) and prints the existing id; importing into a workspace holding a different
+      `crop:<n>` registers the crop under a free number with the identity unchanged.
+- [x] A commit naming a frame id the generation binds to another identity is refused.
+- [x] `import-location` takes rascal's location and a table-manners location (8.2's shapes),
+      validates it against the named image (a location on another file, a frame other than the
+      image's, a seam-straddling bbox: refused, 64) and registers it; the same file twice gives
+      the same id.
+- [x] `schemas/rascal/mask-bundle-v1.json` through the drift harness; `docs/workspace.md`, SPEC
+      "Workspace" and "Commands", README.
+
+**Verification.** `cargo nextest run -p rascal-core --test it -- mask_bundle:: frames_identity::
+workspace::` and `cargo nextest run -p rascal-mask --features testkit --test it --
+portable_cli::`; `just check`.
+
+**Dependencies.** M1 (1.2, 1.3, 1.7a), 8.2. **Files.** `crates/rascal-core/src/bundle.rs`
+(new), `mask.rs` (`files`, one reader for a directory and for members), `frame.rs` (`verify`),
+`contract.rs` (`location_from_json`, moved from `crates/rascal-mask/src/run.rs`),
+`workspace/{mod,commit}.rs`, `crates/rascal-core/Cargo.toml` (`tar`), `schema_drift.rs`,
+`schemas/rascal/mask-bundle-v1.json`, `fixtures/schemas/mask-bundle-v1/`,
+`crates/rascal-mask/src/{main,workspace_cmd}.rs`, tests
+`crates/rascal-core/tests/it/mask_bundle.rs`, `crates/rascal-mask/tests/it/portable_cli.rs`,
+`docs/adr/0022-mask-bundles.md`, `docs/workspace.md`, `SPEC.md`, `README.md`. **Size.** M.
+
+**Commits.** (1) this plan, the SPEC lines and ADR 0022; (2) `feat(core)`: frame verification
+and the commit's frame-id guard; (3) `feat(core)`: the mask's files in memory, the bundle
+writer and reader, `Workspace::export_mask` and `import_mask` (one commit: the writer's
+determinism is tested through the reader); (4) `feat(mask)`: `workspace export-mask` and
+`import-mask`; (5) `feat(mask)`: `workspace import-location`, the checklist ticked. Each leaves
+`just check` green. The rollback point is commit (1): the plan and the ADR stand alone, and
+reverting (2) to (5) together (`git revert --no-commit`, newest first)
+removes the feature with nothing else depending on it; (2) alone is a fix worth keeping.
 
 ## Milestone M11: Table manners v0.2
 

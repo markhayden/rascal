@@ -1,0 +1,456 @@
+//! Mask bundles (task 10.5, ADR 0022): a Mask as one file that leaves a workspace and enters
+//! another with the same identity.
+//!
+//! A bundle is an uncompressed ustar archive. Its members, in this order: `bundle.json` (the
+//! [`MaskBundleManifest`]: the mask's identity, its frame chain from the root raw frame to the mask's
+//! frame, and every other member's path, size and SHA-256), then `mask/mask.toml` and each file
+//! it names, sorted by name. Every header is fixed (a regular file, mode 0644, uid and gid 0,
+//! mtime 0, no user or group name) and the archive ends with its two zero blocks, so the same
+//! mask gives the same bytes and the bundle's SHA-256 names it.
+//!
+//! [`read`] trusts nothing: it is bounded ([`MAX_BUNDLE_BYTES`], [`MAX_MEMBERS`],
+//! [`MAX_MANIFEST_BYTES`], [`MAX_NAME_BYTES`]), checks the manifest against the members both
+//! ways, the archive against the canonical bytes rebuilt from them, every frame of the chain
+//! against what its fields and parent make, and the mask's invariants and identity. Any fault
+//! is an error naming it; nothing here writes anywhere.
+
+use std::collections::BTreeMap;
+use std::io::Read;
+use std::path::Path;
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+use crate::artifact::ArtifactType;
+use crate::error::{Error, Result};
+use crate::frame::{Frame, FrameKind};
+use crate::mask::Mask;
+
+/// The largest bundle file read, in bytes; a larger file is refused before it is read.
+pub const MAX_BUNDLE_BYTES: u64 = 256 << 20;
+/// The most members a bundle may hold, the manifest included.
+pub const MAX_MEMBERS: usize = 16;
+/// The largest `bundle.json`, in bytes.
+pub const MAX_MANIFEST_BYTES: u64 = 1 << 20;
+/// The longest member file name under `mask/`, in bytes.
+pub const MAX_NAME_BYTES: usize = 64;
+/// The longest frame chain.
+pub const MAX_FRAMES: usize = 64;
+/// The manifest's member name.
+pub const MANIFEST: &str = "bundle.json";
+/// The directory the mask's files sit under.
+pub const MASK_DIR: &str = "mask/";
+/// The bundle version this build writes and reads.
+pub const VERSION: u32 = 1;
+
+/// `bundle.json`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MaskBundleManifest {
+    /// The bundle format's version.
+    pub mask_bundle_version: u32,
+    /// What the bundle carries: `Mask`.
+    pub artifact_type: ArtifactType,
+    /// The mask's identity.
+    pub identity: String,
+    /// The frame chain, the root raw frame first and the mask's frame last.
+    pub frames: Vec<Frame>,
+    /// Every member but this manifest, in archive order.
+    pub members: Vec<MaskBundleMember>,
+}
+
+/// One member of a bundle.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MaskBundleMember {
+    /// The path inside the archive: `mask/<file>`.
+    pub path: String,
+    /// The member's size in bytes.
+    pub size: u64,
+    /// `sha256:` over the member's bytes.
+    pub sha256: String,
+}
+
+/// Member bytes by path.
+type Members = BTreeMap<String, Vec<u8>>;
+
+/// A bundle that passed every check.
+#[derive(Debug, Clone)]
+pub struct Bundle {
+    pub manifest: MaskBundleManifest,
+    /// The mask, its invariants and identity checked.
+    pub mask: Mask,
+    /// `sha256:` over the bundle's bytes.
+    pub sha256: String,
+}
+
+/// `sha256:<hex>` over bytes.
+pub fn sha256(bytes: &[u8]) -> String {
+    format!(
+        "sha256:{}",
+        crate::canonical::to_hex(&Sha256::digest(bytes))
+    )
+}
+
+/// The bundle of a mask whose frame chain, root first, is `frames`.
+pub fn write(mask: &Mask, frames: &[Frame]) -> Result<Vec<u8>> {
+    verify_chain(frames)?;
+    check_leaf(frames, mask)?;
+    let members: Vec<(String, Vec<u8>)> = mask
+        .files()?
+        .into_iter()
+        .map(|(name, bytes)| (format!("{MASK_DIR}{name}"), bytes))
+        .collect();
+    let manifest = MaskBundleManifest {
+        mask_bundle_version: VERSION,
+        artifact_type: ArtifactType::Mask,
+        identity: mask.record.identity.clone(),
+        frames: frames.to_vec(),
+        members: members
+            .iter()
+            .map(|(path, bytes)| MaskBundleMember {
+                path: path.clone(),
+                size: bytes.len() as u64,
+                sha256: sha256(bytes),
+            })
+            .collect(),
+    };
+    pack(&manifest_bytes(&manifest)?, &members)
+}
+
+/// The manifest's canonical bytes: pretty JSON and a newline.
+fn manifest_bytes(manifest: &MaskBundleManifest) -> Result<Vec<u8>> {
+    let mut bytes = serde_json::to_vec_pretty(manifest)
+        .map_err(|e| Error::usage(format!("{MANIFEST}: {e}")))?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
+/// The canonical archive of the manifest and the members, in that order.
+fn pack(manifest: &[u8], members: &[(String, Vec<u8>)]) -> Result<Vec<u8>> {
+    let mut builder = tar::Builder::new(Vec::new());
+    let entries = std::iter::once((MANIFEST, manifest))
+        .chain(members.iter().map(|(p, b)| (p.as_str(), b.as_slice())));
+    for (path, bytes) in entries {
+        let mut header = tar::Header::new_ustar();
+        header
+            .set_path(path)
+            .map_err(|e| Error::usage(format!("bundle member {path}: {e}")))?;
+        header.set_entry_type(tar::EntryType::Regular);
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_uid(0);
+        header.set_gid(0);
+        header.set_mtime(0);
+        header.set_cksum();
+        builder
+            .append(&header, bytes)
+            .map_err(|e| Error::usage(format!("bundle member {path}: {e}")))?;
+    }
+    builder
+        .into_inner()
+        .map_err(|e| Error::usage(format!("bundle: {e}")))
+}
+
+/// Reads a bundle file within [`MAX_BUNDLE_BYTES`]: a directory or a larger file is refused
+/// before any byte is read.
+pub fn read_file(path: &Path) -> Result<Vec<u8>> {
+    let meta = std::fs::metadata(path).map_err(|e| Error::io(path, e))?;
+    if meta.is_dir() {
+        return Err(not_a_bundle(
+            "it is a directory (a mask directory goes in with `rascal workspace export-mask` from its workspace first)",
+        ));
+    }
+    if meta.len() > MAX_BUNDLE_BYTES {
+        return Err(refused(format!(
+            "the file is {} bytes, over the limit of {MAX_BUNDLE_BYTES}; nothing was read",
+            meta.len()
+        )));
+    }
+    let file = std::fs::File::open(path).map_err(|e| Error::io(path, e))?;
+    let mut bytes = Vec::new();
+    file.take(MAX_BUNDLE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| Error::io(path, e))?;
+    if bytes.len() as u64 > MAX_BUNDLE_BYTES {
+        return Err(refused(format!(
+            "the file grew past the limit of {MAX_BUNDLE_BYTES} bytes while it was read"
+        )));
+    }
+    Ok(bytes)
+}
+
+fn not_a_bundle(what: impl std::fmt::Display) -> Error {
+    Error::usage(format!("not a mask bundle: {what}; nothing was imported"))
+}
+
+fn refused(what: impl std::fmt::Display) -> Error {
+    Error::usage(format!("mask bundle refused: {what}; nothing was imported"))
+}
+
+/// What a file that is not a tar archive looks like, for the refusal.
+fn sniff(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.is_empty() {
+        return Some("the file is empty");
+    }
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Some(
+            "it is a PNG image; an image goes in with `rascal workspace import`, and a rendering of a mask is an Image, never a Mask",
+        );
+    }
+    if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+        return Some("it is a JPEG image; an image goes in with `rascal workspace import`");
+    }
+    if bytes.starts_with(&[0x1f, 0x8b]) {
+        return Some("it is gzip-compressed; a mask bundle is an uncompressed tar");
+    }
+    if bytes.len() < 512 || bytes.get(257..262) != Some(b"ustar".as_slice()) {
+        return Some("it is not a tar archive");
+    }
+    None
+}
+
+/// Reads and checks a bundle's bytes.
+pub fn read(bytes: &[u8]) -> Result<Bundle> {
+    if bytes.len() as u64 > MAX_BUNDLE_BYTES {
+        return Err(refused(format!(
+            "{} bytes, over the limit of {MAX_BUNDLE_BYTES}",
+            bytes.len()
+        )));
+    }
+    if let Some(what) = sniff(bytes) {
+        return Err(not_a_bundle(what));
+    }
+    let (manifest_raw, members) = entries(bytes)?;
+    let manifest: MaskBundleManifest =
+        serde_json::from_slice(&manifest_raw).map_err(|e| refused(format!("{MANIFEST}: {e}")))?;
+    if manifest.mask_bundle_version != VERSION {
+        return Err(refused(format!(
+            "{MANIFEST}: mask_bundle_version {} is not {VERSION}, the version this rascal reads",
+            manifest.mask_bundle_version
+        )));
+    }
+    if manifest.artifact_type != ArtifactType::Mask {
+        return Err(refused(format!(
+            "{MANIFEST}: it carries a {}, not a Mask",
+            manifest.artifact_type
+        )));
+    }
+    if manifest_bytes(&manifest)? != manifest_raw {
+        return Err(refused(format!("{MANIFEST} is not in its canonical form")));
+    }
+    check_members(&manifest, &members)?;
+    let ordered: Vec<(String, Vec<u8>)> = manifest
+        .members
+        .iter()
+        .filter_map(|m| members.get(&m.path).map(|b| (m.path.clone(), b.clone())))
+        .collect();
+    let canonical = pack(&manifest_raw, &ordered)?;
+    if canonical != bytes {
+        let at = canonical
+            .iter()
+            .zip(bytes)
+            .position(|(a, b)| a != b)
+            .unwrap_or(canonical.len().min(bytes.len()));
+        return Err(refused(format!(
+            "the archive differs from its canonical form at byte {at} (a header, padding, or bytes after the end)"
+        )));
+    }
+    verify_chain(&manifest.frames).map_err(refused)?;
+    let files: BTreeMap<String, Vec<u8>> = members
+        .into_iter()
+        .filter_map(|(path, b)| path.strip_prefix(MASK_DIR).map(|n| (n.to_string(), b)))
+        .collect();
+    let mask = Mask::from_files(&files).map_err(refused)?;
+    let named: Vec<String> = mask.file_names();
+    for name in files.keys() {
+        if !named.iter().any(|n| n == name) {
+            return Err(refused(format!(
+                "member {MASK_DIR}{name} is not a file mask.toml names"
+            )));
+        }
+    }
+    check_leaf(&manifest.frames, &mask).map_err(refused)?;
+    if mask.record.identity != manifest.identity {
+        return Err(refused(format!(
+            "{MANIFEST} names identity {}, the mask's is {}",
+            manifest.identity, mask.record.identity
+        )));
+    }
+    Ok(Bundle {
+        manifest,
+        mask,
+        sha256: sha256(bytes),
+    })
+}
+
+/// The archive's members, bounded: the manifest's bytes and every other member by path.
+fn entries(bytes: &[u8]) -> Result<(Vec<u8>, Members)> {
+    let mut archive = tar::Archive::new(bytes);
+    let iter = archive
+        .entries()
+        .map_err(|e| not_a_bundle(format!("not a readable tar archive: {e}")))?;
+    let mut manifest: Option<Vec<u8>> = None;
+    let mut members: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+    for (index, entry) in iter.enumerate() {
+        let mut entry = entry.map_err(|e| {
+            if index == 0 {
+                not_a_bundle(format!("not a readable tar archive: {e}"))
+            } else {
+                refused(format!("the archive is damaged after member {index}: {e}"))
+            }
+        })?;
+        if index >= MAX_MEMBERS {
+            return Err(refused(format!("more than {MAX_MEMBERS} members")));
+        }
+        let path = String::from_utf8(entry.path_bytes().into_owned())
+            .map_err(|_| refused(format!("member {index}'s name is not UTF-8")))?;
+        let kind = entry.header().entry_type();
+        if kind != tar::EntryType::Regular {
+            return Err(refused(format!(
+                "member {path} is a {kind:?}, not a regular file"
+            )));
+        }
+        let size = entry
+            .header()
+            .size()
+            .map_err(|e| refused(format!("member {path}: {e}")))?;
+        let remaining = (bytes.len() as u64).saturating_sub(entry.raw_file_position());
+        if size > remaining {
+            return Err(refused(format!(
+                "member {path} claims {size} bytes but {remaining} remain (a truncated archive)"
+            )));
+        }
+        if index == 0 {
+            if path != MANIFEST {
+                return Err(not_a_bundle(format!(
+                    "its first member is {path}, not {MANIFEST}"
+                )));
+            }
+            if size > MAX_MANIFEST_BYTES {
+                return Err(refused(format!(
+                    "{MANIFEST} is {size} bytes, over the limit of {MAX_MANIFEST_BYTES}"
+                )));
+            }
+        } else {
+            check_member_path(&path)?;
+        }
+        let mut data = Vec::new();
+        (&mut entry)
+            .take(size)
+            .read_to_end(&mut data)
+            .map_err(|e| refused(format!("member {path}: {e}")))?;
+        if data.len() as u64 != size {
+            return Err(refused(format!(
+                "member {path} holds {} of its {size} bytes (a truncated archive)",
+                data.len()
+            )));
+        }
+        if index == 0 {
+            manifest = Some(data);
+        } else if members.insert(path.clone(), data).is_some() {
+            return Err(refused(format!("member {path} appears twice")));
+        }
+    }
+    let manifest = manifest.ok_or_else(|| not_a_bundle("the archive is empty"))?;
+    Ok((manifest, members))
+}
+
+/// A member other than the manifest is `mask/<plain name>`.
+fn check_member_path(path: &str) -> Result<()> {
+    let plain = path.strip_prefix(MASK_DIR).is_some_and(|name| {
+        !name.is_empty()
+            && name.len() <= MAX_NAME_BYTES
+            && !name.starts_with('.')
+            && !name.contains(['/', '\\'])
+    });
+    if plain {
+        Ok(())
+    } else {
+        Err(refused(format!(
+            "member {path} is not {MASK_DIR}<a plain name of at most {MAX_NAME_BYTES} bytes>"
+        )))
+    }
+}
+
+/// The manifest's members against the archive's, both ways, by size and digest.
+fn check_members(manifest: &MaskBundleManifest, members: &BTreeMap<String, Vec<u8>>) -> Result<()> {
+    for listed in &manifest.members {
+        let Some(bytes) = members.get(&listed.path) else {
+            return Err(refused(format!(
+                "member {} is in {MANIFEST} but not in the archive",
+                listed.path
+            )));
+        };
+        if bytes.len() as u64 != listed.size {
+            return Err(refused(format!(
+                "member {} is {} bytes, {MANIFEST} says {}",
+                listed.path,
+                bytes.len(),
+                listed.size
+            )));
+        }
+        let digest = sha256(bytes);
+        if digest != listed.sha256 {
+            return Err(refused(format!(
+                "member {}: sha256 is {digest}, {MANIFEST} says {}",
+                listed.path, listed.sha256
+            )));
+        }
+    }
+    for path in members.keys() {
+        if !manifest.members.iter().any(|m| &m.path == path) {
+            return Err(refused(format!(
+                "member {path} is in the archive but not in {MANIFEST}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// A frame chain, root first: it starts at a raw frame, each frame names the one before it as
+/// its parent, and each is what its fields and its parent make.
+pub fn verify_chain(frames: &[Frame]) -> Result<()> {
+    if frames.is_empty() {
+        return Err(Error::usage("the frame chain is empty"));
+    }
+    if frames.len() > MAX_FRAMES {
+        return Err(Error::usage(format!(
+            "the frame chain has {} frames, over {MAX_FRAMES}",
+            frames.len()
+        )));
+    }
+    if frames[0].kind != FrameKind::Raw {
+        return Err(Error::usage(format!(
+            "the frame chain starts at {}, not at a raw frame",
+            frames[0].id
+        )));
+    }
+    let mut parent: Option<&Frame> = None;
+    for frame in frames {
+        frame.verify(parent)?;
+        parent = Some(frame);
+    }
+    Ok(())
+}
+
+/// The mask is in the chain's last frame.
+fn check_leaf(frames: &[Frame], mask: &Mask) -> Result<()> {
+    let Some(leaf) = frames.last() else {
+        return Err(Error::usage("the frame chain is empty"));
+    };
+    if leaf.id != mask.record.frame || leaf.identity != mask.record.frame_identity {
+        return Err(Error::usage(format!(
+            "the mask is in frame {} ({}), but the chain ends at {} ({})",
+            mask.record.frame, mask.record.frame_identity, leaf.id, leaf.identity
+        )));
+    }
+    if (leaf.width, leaf.height) != (mask.record.width, mask.record.height) {
+        return Err(Error::usage(format!(
+            "the mask is {}x{} but its frame {} is {}x{}",
+            mask.record.width, mask.record.height, leaf.id, leaf.width, leaf.height
+        )));
+    }
+    Ok(())
+}
