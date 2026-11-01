@@ -1135,7 +1135,7 @@ spec's constant-fill case returns `base`; `rascal heal seam … --config poisson
 entry with `paste = "poisson"`) heals the step-sky fixture through the fake filler.
 
 **Acceptance.**
-- [ ] The spec's cases plus the single-pixel zero-RHS case; the no-boundary component is
+- [x] The spec's cases plus the single-pixel zero-RHS case; the no-boundary component is
       `not_applicable`; non-convergence at a tiny `max_iter` is an operational error; a `wrap`
       frame is refused; a **benchmark** (not a gate) records the solve time for a 1000×1000 domain
       in release on the owner's machine in `docs/results/poisson-bench.md`.

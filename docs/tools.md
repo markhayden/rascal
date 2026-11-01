@@ -274,8 +274,10 @@ plain files and directories only. It then checks the platform, verifies every di
 file, before anything is written), copies exactly the listed files, runs `uv sync --frozen
 --no-dev --offline --no-index --find-links wheelhouse --no-cache` with interpreter downloads
 forbidden, smokes the launcher's `--version`, and prints the `command` line for the pack
-entry; an earlier install in the same directory (one holding a `bundle.toml`) is replaced
-whole, any other non-empty directory is refused. The SHA-256 of `bundle.toml` is the bundle
+entry; an earlier install of the same pack in the same directory (one holding its
+`bundle.toml` and nothing beyond its listed files and `.venv`) has those replaced, and any other
+non-empty directory, another pack's install or an install with other files beside it is
+refused naming what is there. The SHA-256 of `bundle.toml` is the bundle
 digest the lab records. Launch never touches the network. `scripts/bundle-acceptance.sh`
 (part of `scripts/acceptance.sh`, and a macOS job in the package workflow) builds this
 machine's bundle, installs it with the network disabled where the kernel allows (`unshare
