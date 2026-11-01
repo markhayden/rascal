@@ -14,3 +14,6 @@ hosting = "github"
 # A pull request builds and uploads the archives without releasing.
 pr-run-mode = "upload"
 publish-prereleases = true
+# GitHub retires the macos-14 image dist defaults to on 2026-11-02 (a brownout cancelled the first
+# v0.1.0 build); the macOS archive builds on macos-15, the image CI and the bundles workflow use.
+github-custom-runners = { "aarch64-apple-darwin" = "macos-15" }
