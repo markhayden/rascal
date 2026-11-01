@@ -46,9 +46,9 @@ round) and 5. Criterion 5's Linux half was stale ("once the model files are publ
 models release came before the tag (decision 11), and the bundles workflow on `v0.1.0` built
 the Linux bundle with them and ran the acceptance from the packed archive before the upload.
 That acceptance calls `segment` only when the bundle holds the models and passed silently
-without them, so it is fixed (finding 6) so that a tag requires them. The run's log was not
-opened in this pass (no network); the line `bundle: the installed pack segments the chair`
-in the v0.1.0 `bundles` run for `linux-x86_64` is the direct evidence.
+without them, so it is fixed (finding 6) so that a tag requires them. The v0.1.0 `bundles`
+run (41348361987) logs `bundle: the installed pack segments the chair from the bundled models`
+for both `linux-x86_64` and `macos-arm64`, checked 2026-11-01: criterion 5 is met on both.
 
 ## Findings and dispositions
 
