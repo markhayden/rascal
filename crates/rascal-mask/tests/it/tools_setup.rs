@@ -5,6 +5,9 @@
 //! `RASCAL_BUNDLE` naming a bundle built by `scripts/build-bundle.sh` for this machine, it
 //! installs into a clean directory with no network and the installed pack answers
 //! `echo_region` (skipped with a note otherwise; the acceptance script requires it).
+//! Task 7.2's forms: an archive or a URL with its digest checked before anything is unpacked
+//! (a wrong one refused for both), and an archive holding a link, or no bundle, refused with
+//! nothing written.
 #![allow(clippy::unwrap_used)]
 
 use std::path::{Path, PathBuf};
@@ -446,5 +449,89 @@ fn setup_takes_an_archive_or_a_url_and_checks_its_digest_first() {
         "{stdout}\n{}",
         text(&out.stderr)
     );
+    let _ = std::fs::remove_dir_all(&into);
+    // A URL whose bytes are not the digest given: refused after the download, before anything
+    // is unpacked or written.
+    let url = serve_once(&archive);
+    let wrong = format!("sha256:{}", "1".repeat(64));
+    let out = rascal(
+        &[
+            "tools",
+            "setup",
+            "--bundle",
+            &url,
+            "--sha256",
+            &wrong,
+            "--into",
+            into.to_str().unwrap(),
+        ],
+        &[],
+    );
+    assert_eq!(out.status.code(), Some(64), "{}", text(&out.stderr));
+    assert!(
+        text(&out.stderr).contains(&format!(
+            "the archive's digest is {digest}, not {wrong}; nothing was unpacked"
+        )),
+        "{}",
+        text(&out.stderr)
+    );
+    assert!(!into.exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn setup_refuses_an_archive_with_a_link_or_without_a_bundle_and_writes_nothing() {
+    let dir = scratch("hostile");
+    let host = host_platform().unwrap_or("linux-x86_64");
+    let into = dir.join("into");
+    // A sound bundle whose uv.lock is a link out of the archive, packed without following it.
+    let linked = dir.join("rascal-tools-bundle-linked");
+    synthetic(&linked, host);
+    std::fs::remove_file(linked.join("uv.lock")).unwrap();
+    std::os::unix::fs::symlink("/etc/hosts", linked.join("uv.lock")).unwrap();
+    let archive = dir.join("linked.tar.gz");
+    pack(&linked, &archive);
+    let out = rascal(
+        &[
+            "tools",
+            "setup",
+            "--bundle",
+            archive.to_str().unwrap(),
+            "--into",
+            into.to_str().unwrap(),
+        ],
+        &[],
+    );
+    assert_eq!(out.status.code(), Some(64), "{}", text(&out.stderr));
+    let stderr = text(&out.stderr);
+    assert!(
+        stderr.contains("rascal-tools-bundle-linked/uv.lock") && stderr.contains("no links"),
+        "{stderr}"
+    );
+    assert!(!into.exists());
+    // An archive with no bundle.toml where a bundle's would be.
+    let empty = dir.join("not-a-bundle");
+    std::fs::create_dir_all(&empty).unwrap();
+    std::fs::write(empty.join("README"), "x").unwrap();
+    let archive = dir.join("empty.tar.gz");
+    pack(&empty, &archive);
+    let out = rascal(
+        &[
+            "tools",
+            "setup",
+            "--bundle",
+            archive.to_str().unwrap(),
+            "--into",
+            into.to_str().unwrap(),
+        ],
+        &[],
+    );
+    assert_eq!(out.status.code(), Some(64), "{}", text(&out.stderr));
+    assert!(
+        text(&out.stderr).contains("holds no bundle.toml"),
+        "{}",
+        text(&out.stderr)
+    );
+    assert!(!into.exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
