@@ -75,8 +75,9 @@ lose the zones, the profile and the prescriptions and invent an identity (ADR 00
   Both versions are read before anything else, so the refusal says what to do: a newer bundle
   "made by a newer rascal (bundle version N); this rascal reads version 1: upgrade rascal", an
   older one "made by an older rascal (bundle version N) that this rascal no longer reads".
-- The MCP tools for export and import wait for the operations profile (M10, 10.1 to 10.4); the
-  bundle does not presume its artifact reference.
+- The MCP tools for export and import wait for the operations profile (table-manners v0.4's
+  reserved `export` and `import`, PLAN.md 10.10); the bundle does not presume its artifact
+  reference.
 - Images are not bundled: a mask's frame is coordinates, not pixels, so the target needs the
   image only to apply the mask, and it imports the image by its own path. The manifest names that
   image (the nearest image in the root frame among the mask's inputs, through the records; none

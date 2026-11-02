@@ -32,7 +32,7 @@ fan-and-ramp mask on the owner's corpus, and last the Poisson paste.
 | M7 Poisson | the gradient-domain paste wired into `paste` and `heal`; the final timing run; the v0.1.0 release | `m7`, `v0.1.0` |
 | M8 Table manners | conformance to the shared contract, `table-manners` v0.1.0 | `m8` |
 | M9 Spend and launcher | spend that survives every status, the reserved budget, reads off the permit, runs listed from allocation, the Wafflehouse launcher | `m9` |
-| M10 Operations | the ops under the contract: declared, bound by checked reference, portable native artifacts (R3) | `m10` |
+| M10 Operations | table-manners v0.4: the path rule first; every op an action with `kind`, `group` and typed ports, a call a run; artifacts by reference and identity, the `binding` refusal, previews, the artifact resource; `export` and `import` over the mask bundles (10.5); `invocation` on every result, `rascal call` and bundle replay (R3) | `m10` |
 | M11 Table manners v0.2 | run association (ids in `_meta`, correlation ids, the paged runs list) and the session ledger | `m11` |
 | M12 Table manners v0.3 | readiness without configuration, the estimate bound to its call, the cap and budget apart, `credential`, claims released with no run, renders a host can embed | `m12` |
 
@@ -1436,38 +1436,314 @@ release build exits 69 with no offer; the installer is a testkit-only seam (`--i
 
 The shared names for run association and the session are adopted in M11.
 
-## Milestone M10: Operations (R3)
+## Milestone M10: Operations (table-manners v0.4)
 
-The ops under the contract, so a client tests one piece at a time: Line on an image, its Location
-to Rasterize, a saved Mask to Feather with a changed sigma, without a finder or filler and without
-rerunning anything upstream. Accepted as R3's home by decision 14; the shared declaration is an
-operations profile in table-manners that rascal drafts and squint and Wafflehouse review, so
-10.2 to 10.4 wait on it and 10.5 starts first.
+rascal adopts table-manners v0.4 (CONTRACT.md draft `b1ae034`, its "Changes from v0.3"): a host
+runs one step alone on artifacts it already holds, so a client tests one piece at a time: Line on
+an image, its Location to Rasterize, the saved Mask to Feather with a new sigma, with no finder or
+filler and nothing upstream rerun (R3, decision 14). Every op becomes an ordinary contract action
+with `kind: "operation"`, a `group` and typed `ports`, so an op call is a run with `run.json`, a
+run reference, readiness, an estimate, progress and cancellation (4.7); the op tools and the
+`workspace_*` tools of ADR 0015, with rascal's own envelope as their result, leave `serve` (no
+shims). Artifacts cross by **reference** (type, schema version, identity, opaque frame, the image
+they were made on, a resource), never by workspace id, and resolve by identity in the session's
+store, which is how a saved binding reopens after a restart or a workspace move. A Mask leaves and
+enters through the reserved `export` and `import` tools over 10.5's mask bundles (5.1). Every
+result records its `invocation`, `rascal call <action> --arguments <file>` runs it again, and
+`rascal call --bundle` replays a host's invocation bundle (4.8, 4.9). And first, ahead of all of
+it: the path rule (5.2), since today `serve` reads any absolute path a caller names, which is a
+live gap on v0.3 as well.
 
-- **10.1** The operations profile drafted into table-manners' PROPOSALS.md: `operations` in the
-  description (name, purpose, category, the manifest's parameter schema, typed ports with `many`,
-  constant sets); shared types `image` and `location`, rascal's own namespaced and opaque
-  (`rascal:Mask`, `rascal:BandProfile`, `rascal:Series`, `rascal:Plan`); an artifact reference
-  (type, schema version, identity, frame). A host may suggest a binding by type; rascal validates
-  it: type, schema version, frame compatibility, and resolution in its own store.
-- **10.2** `describe` emits the operations from the manifests.
-- **10.3** An op call is a run: `run.json` with the typed references out and an overlay or
-  preview image for every output, so each result can be inspected while native artifacts stay
-  opaque to the host.
-- **10.4** Binding by reference: a wrong type, schema version or frame, or an unresolved
-  artifact, is `invalid` naming the port, what it takes and what it got; upstream steps never
-  rerun.
-- **10.5** Native artifacts portable: a Mask exported as a hash-checked bundle (record, frame
-  chain, rasters) and imported into another workspace with the same identity; a PNG is never
-  taken as a Mask; Locations import as JSON. Starts first.
-- **10.6** Persistence and relocation: a saved binding reopens after a restart, and after the
-  workspace moves, by identity through rascal, never by the host searching folders. After the
-  binding interface (10.1, 10.4) is settled.
-- **10.7** The Line → Rasterize → Feather path through the independent client, positive and
-  negative fixtures, ADR 0021, `docs/contract.md`, `docs/tools.md`.
+Task numbers follow the contract's priorities; 10.5 (portable masks, CLI and library) is done and
+keeps its number, and the MCP tools it waited for are 10.10. The old outline's 10.1 (drafting the
+profile) is done in table-manners: the coordinator wrote the operations profile from the v0.4
+design memo, so nothing here drafts the contract.
 
-10.5 is written out below; the other tasks get their acceptance and files when the profile is
-agreed.
+**The pin.** 10.1 builds on `main` against `table-manners = "=0.3.0"` and merges on its own. From
+10.2 on, the milestone branch `m10-operations` (cut from `main` after 10.1 merges) builds by path
+against the v0.4 draft, as M11 and M12 did:
+
+```toml
+# M10 builds against the v0.4.0 draft by path until it is tagged and published (PLAN.md 10.15).
+table-manners = { path = "../table-manners", version = "=0.4.0" }
+```
+
+where `../table-manners`, from the rascal checkout being built, resolves to a table-manners
+checkout on branch `v0.4` at `b1ae034` (the settled questions) or later, and at least at the
+commit that lands the v0.4 schemas, types and examples (at `b1ae034` `schemas/` is still
+v0.3's, so 10.2 starts when they land). `scripts/check-contract.sh` already reads the exact
+version of a path pin and warns that the build is against a draft. Each commit message names the
+table-manners commit it was built against. The milestone branch merges into `main` only at 10.15,
+after the owner tags and publishes v0.4.0 and the pin is `=0.4.0`. Nothing here waits on squint's
+or Wafflery's v0.4 work except the tag itself.
+
+**What rascal does not take from v0.4.** Bundles for `rascal:Plan`, `rascal:Series` and
+`rascal:BandProfile` (declared `portable: none`, so a host labels them workspace-dependent;
+PROPOSALS "Left for later than v0.4"). Operations served by a pack (`segment`): a description is
+a local inspection (3.1, 12.2) and a pack's tools are known only by starting it, so pack tools
+leave `serve` with the op tools and the segmenter stays reachable through `remove_prompt`; listing
+a pack's operations from its install needs the install to record the pack's manifests, a question
+for the coordinator below. Workspace ids in MCP arguments (CONTRACT 10.1 allows them):
+references are the one form, so the id-shaped arguments go with the tools that took them.
+
+**Order and parallel tracks.** 10.1 first, on `main`, alone: it touches the path handling and
+`serve`'s flags and nothing else, so it can ship on v0.3 while the contract is reviewed. Then the
+chain **10.2 → 10.3 → 10.4 → 10.6** (the pin and shapes; references, the store and the binding
+refusal; operations in the description; an operation call is a run). After 10.4, **10.10** (export
+and import, in a new module) runs beside 10.6. After 10.6 four tracks: **A** 10.7 (the artifact
+resource, reopening after a restart and a move); **B** 10.8 (tasks list their Masks); **C** 10.9
+(estimates for operations); **D** 10.11 → 10.12 (the invocation, `rascal call`), then 10.13 (the
+bundle replay) once 10.10 is in. A and 10.10 live mostly in new modules (`artifact_resource.rs`,
+`transfer.rs`) and run in parallel with anything; B, C and D all edit `actions.rs`, `estimate.rs`
+and `run_json.rs`, so they run in one session in the order 10.8, 10.9, 10.11 unless two sessions
+take care to merge 10.8 first. 10.14 (the end-to-end path, fixtures, ADR 0021, docs) waits for
+every track; 10.15 for 10.14, squint's v0.4 fixtures and the owner's release.
+
+**Commits and rollback.** One commit per task (a task marked "split" may be two), `just check`
+green, conventional scope (`feat(mcp)`, `feat(core)`, `feat(mask)`, `test(mask)`, `docs`), the
+checklist in `tasks/todo.md` ticked in the task's own commit. Rollback checkpoints are annotated
+tags: `m10.1` on `main`'s merge of 10.1 (the path rule on v0.3, the one M10 change `main` carries
+before the release); on the milestone branch `m10.2` after 10.2 (a v0.4 rascal with no new
+behaviour), `m10.3` after 10.3, 10.4 and 10.6 (operations run, bound by reference), `m10.4` after
+10.7 to 10.10 (artifacts reopen by identity, tasks' Masks bind, estimates cover operations, Masks
+export and import), `m10.5` after 10.11 to 10.13 (the invocation and `rascal call`). A task group
+that goes wrong is reverted on the branch (rule 1, `git revert --no-commit` newest first: 10.13
+before 10.12 before 10.11; 10.9, 10.8 and 10.7 before 10.6; 10.6 before 10.4 before 10.3), or the
+branch is reset to the last tag after a `rescue/` reference (rule 2). 10.1 on `main` is undone
+alone by rule 4 (revert its merge), which reopens the gap and is therefore a last resort. If v0.4
+changes under rascal before it is tagged, the affected task is amended forward on the branch; if
+v0.4 is abandoned, the milestone branch is never merged and `main` stays on `=0.3.0` with 10.1
+(rule 3). After the merge, undoing M10 is rule 4, which returns the pin to `=0.3.0` and keeps 10.1;
+the published crate and the contract's `fixtures/rascal/` are external state and stay.
+
+### Task 10.1: The path rule
+
+**Description.** `serve` reads a caller's path only inside the directories the session allows
+(CONTRACT 5.2, 10.1; squint's rule, which rascal lacks: today `estimate::image_in` takes any
+absolute path that is a file, says "is not a file" otherwise, and `workspace_import` and the
+recipe actions' `mask` and `protect` arguments read any path at all). `rascal serve --allow-dir
+<abs>` is repeatable; each value must be absolute and name an existing directory, else `serve`
+exits 64 before it answers anything, naming the flag (it is the host's argv, not a caller's
+path). Each is resolved once at start (`std::fs::canonicalize`: `.`, `..` and every symlink), then
+narrowed by the configuration's new `[serve] allow_dirs` (absolute paths, resolved the same way),
+which may only take away: the allowed set is the intersection of the two trees (a flag directory
+inside a configured one stays; a configured directory inside a flag one replaces it; anything
+else goes), with no `[serve]` the flags as given, and `allow_dirs = []` allowing nothing. With no
+`--allow-dir` every path is refused; inline images keep working. The set is fixed for the session,
+printed on stderr at start, and from 10.2 shown as the session's `allowed_dirs`.
+
+One function, `paths::admit(slot, given, allowed) -> Result<PathBuf>` in a new module, is the
+only way a caller path is read: the path must be absolute, its canonical form must exist, be a
+regular file and lie under an allowed directory (a component-wise prefix of a canonical path, so
+`/a/bc` is not under `/a/b`); the file is then read through the canonical path, never the given
+one. Every failure is one refusal with one text, `<slot>: this path is not readable here (only
+files inside the directories rascal serve allows; CONTRACT 5.2)`, which names neither the path's
+existence nor its kind, so a missing file, a directory, a symlink out of the tree and a path
+outside it are indistinguishable. In a run it is `invalid` with code `input` (today such paths are
+`usage`); in `estimate` it is the `invalid_arguments` refusal with code `input`; in
+`workspace_import` (until 10.6 removes it) its usual error. The rule covers every caller path
+`serve` takes: image slots, `mask` and `protect` (stored mask directories until 10.3 makes them
+references) and `workspace_import`. It governs `serve` only: `rascal run`, `heal` and every other
+command keep taking the person's own paths (5.2); `rascal call` and `rascal import` take the flag
+in 10.12 and 10.10. Writes are audited: `serve` writes only under its runs root, its workspace and
+its cache (images out, inline inputs and renders already are), never at a caller path, and a test
+proves it by listing. A check-then-read race (a symlink swapped between `canonicalize` and the
+read) is outside the threat this guards (a caller on the host's own stdio, 5.2's purpose is to
+keep an agent from naming files like a key) and is recorded as such in `docs/contract.md`.
+
+This builds on v0.3.0 and is mergeable alone: the session resource's schema is closed at v0.3, so
+`allowed_dirs` waits for 10.2; nothing else in the v0.3 shapes changes. Closing paths by default
+breaks any host that passes paths today without `--allow-dir` (Wafflery's v0.3 client), so the
+merge is coordinated (question 1 below).
+
+**CLI scenario.** `rascal serve --runs r/ --allow-dir "$PWD/in"` answers a `seam` call with
+`{"image": {"path": "$PWD/in/pano.png"}}` as before; the same call with `/etc/hosts`, with
+`$PWD/in/../secret.png`, with `$PWD/in/link.png` pointing outside, and with `$PWD/in/missing.png`
+each ends `invalid`/`input` with the same reason; `rascal serve --allow-dir in` (relative) exits 64.
+
+**Acceptance.**
+- [ ] With `--allow-dir D`: a file in D (and in a subdirectory, and through a symlink that stays
+      inside D) runs; a path outside D, a `..` escape, a symlink inside D to a file outside, a
+      missing file inside D, a missing file outside, a directory, and a relative path each end
+      `invalid`/`input` with byte-identical reasons and no import into the workspace.
+- [ ] With no `--allow-dir` every path is refused the same way, and an inline image still runs.
+- [ ] `[serve] allow_dirs` narrows (a flag directory outside it allows nothing; a configured
+      subdirectory of a flag directory is the only one allowed; `[]` allows nothing) and never
+      widens (a configured directory with no flag allows nothing).
+- [ ] A relative `--allow-dir`, one that does not exist and one that is a file each exit 64 naming
+      the flag, before `initialize` is answered.
+- [ ] `estimate` with a refused path is `-32602` with `invalid_arguments`, code `input`, the same
+      reason; `workspace_import` and the `mask` and `protect` arguments are held to the rule.
+- [ ] After a session of calls (images out by path, inline inputs, the dash render), every file
+      `serve` created lies under its runs root, workspace or cache.
+- [ ] `rascal run` and `heal` still take any path the person names.
+
+**Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- paths::
+serve_contract:: estimate::`; `cargo nextest run -p rascal-core --test it -- config::`; `just
+check`.
+
+**Dependencies.** M12 (`m12`, `main` at `a80b023`); table-manners `=0.3.0`. **Files.**
+`crates/rascal-mask/src/paths.rs` (new), `estimate.rs` (`image_in` through `admit`),
+`actions.rs` (`mask`, `protect`, the allowed set in `ContractActions`), `serve.rs`, `main.rs`
+(`--allow-dir`), `crates/rascal-core/src/config.rs` (`ServeConfig { allow_dirs }`),
+`crates/rascal-mcp/src/server.rs` (`workspace_import` through a path guard the server is given),
+`crates/rascal-testkit/src/mcp_client.rs` (spawning `serve` with `--allow-dir` by default),
+`crates/rascal-mask/tests/it/paths.rs` (new), `serve_contract.rs`, `estimate.rs`,
+`docs/contract.md` ("serve": the path rule), `docs/tools.md`, SPEC "The MCP server and client"
+and "Commands", README. **Size.** M.
+
+### Task 10.2: The pin to v0.4 and the shapes
+
+**Description.** The pin moves to the v0.4 crate by path (above); `contract` is `0.4.0`
+everywhere. The shapes the v0.4 types force, with no new behaviour: every action (the seven
+recipe actions) carries `kind: "task"` and no `group`; `vocabulary` moves to the core's object
+with the images profile's four lists in it as before; `rascal://session` gains `allowed_dirs`
+(10.1's set, `[]` with no `--allow-dir`); every result carries `invocation`, `null` for now
+(filled in 10.11; the schema allows null, and nothing outside the branch reads it before then);
+`profiles` stays `["images"]` until 10.4 adds `operations`. The description's text and
+`docs/contract.md` stop mentioning MCP roots (rascal never used them). `fixtures/table-manners/`
+and `fixtures/contract/describe.json` are regenerated at v0.4.
+
+**Acceptance.**
+- [ ] `rascal describe --json` validates against the v0.4 description schema: `kind: "task"` on
+      every action, `vocabulary` with the four lists, no `group`, no `artifact_types`.
+- [ ] `rascal://session` validates with `allowed_dirs` equal to 10.1's resolved set, and `[]`
+      for a server started with no `--allow-dir`.
+- [ ] Every `run.json`, the runs pages, the estimates and the refusals validate against v0.4;
+      `UPDATE_FIXTURES=1` regenerates `fixtures/table-manners/` and the check passes after.
+
+**Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- describe::
+serve_contract:: run_json:: table_manners_fixtures::`; `scripts/test-checks.sh`; `just check`.
+
+**Dependencies.** 10.1; a table-manners checkout on branch `v0.4` with the v0.4 schemas and types.
+**Files.** `Cargo.toml`, `Cargo.lock`,
+`crates/rascal-mask/src/{describe,actions,run_json,estimate}.rs`,
+`crates/rascal-core/src/contract.rs`, `crates/rascal-mask/tests/it/{describe,serve_contract}.rs`,
+`fixtures/table-manners/`, `fixtures/contract/`, `docs/contract.md`. **Size.** S.
+
+### Task 10.3: References, the store and the binding refusal
+
+**Description.** The artifact reference (3.4) and its resolution, in `rascal-core`, used first by
+the one place today's actions take a native artifact: `protect`'s `mask` argument and the
+`protect` argument of `remove` and `remove_prompt` (paths to stored mask directories since M8).
+
+- **Types.** `ArtifactType::contract_type()` maps rascal's types to the contract's names: `Image`
+  → `image`, `Location` → `location`, the rest `rascal:Mask`, `rascal:BandProfile`,
+  `rascal:Series`, `rascal:Plan`; every record's schema version is 1. A type string with another
+  tool's prefix, an unknown name or an unprefixed rascal name is no type of rascal's.
+- **The reference.** `contract::artifact_ref(workspace, artifact)` builds `{type,
+  schema_version: 1, tool: "rascal", identity, frame, on, resource}`: `identity` is the
+  artifact's identity (`sha256:<hex>`, SPEC "Artifacts and identity"), except an `image`, whose
+  identity is `sha256:<file_sha256>` (3.4; rascal's own image identity stays internal); `frame` is
+  the artifact's frame identity (`sha256:<hex>`; null for no type rascal has today, since every
+  type is framed); `on` is the image reference (8) of the image at the root of the frame chain when
+  the workspace holds one, else left out; `resource` is `rascal://artifact/<identity>` (served from
+  10.7). Workspace ids never appear.
+- **The store.** The session's store is `serve`'s workspace (`--workspace`, its default
+  unchanged). `Workspace::resolve(type, identity)` finds an artifact by identity in the current
+  generation (an index built from the registry once per generation, not a scan per call); an
+  `image` resolves by the source file digest every import records (8.1, M8).
+- **Binding.** `bind(port, expected type, reference) -> Result<Artifact, Binding>` checks, in
+  order, the type (`wrong_type`), the schema version (`wrong_version`) and resolution
+  (`unresolved`), and the caller checks frames across ports (`wrong_frame`, 10.6). Each problem
+  carries `port`, `index` for an item of a `many` port, `expected` ("rascal:Mask v1"), `got` (the
+  type and version given, or the identity) and, for `unresolved`, a `remedy` by type: a Mask,
+  "Import its bundle with the import tool (rascal import), then call again."; a location, "Pass the
+  location itself, or import it with the import tool."; an image, "Pass the image by path or
+  inline, with this reference as expect."; a `portable: none` type, "This artifact cannot move
+  between workspaces; start rascal serve on the workspace that made it." A call with several
+  problems names them all, in argument order.
+- **The refusal.** A call whose references do not bind is refused before any run: JSON-RPC
+  `-32602` with refusal data `{"reason": "binding", "run": null, "bindings": [...]}` (4.7), through
+  M12's structured `CallError`, so it allocates nothing, writes no run, spends nothing and
+  releases its `client_run_id` (12.7). The recipe actions' `mask` and `protect` arguments take a
+  `rascal:Mask` reference and nothing else (the path form goes, no shim; the `params_schema` names
+  the reference schema); the resolved mask enters the run's own workspace through 10.5's
+  import (in memory, with its frame chain), so the recipe runs as today and a mask in a `crop:`
+  frame now works where M12's path form needed the making run's `--workspace`. The estimate's
+  binding (12.5) digests the reference by its identity, as it digested the stored mask's identity
+  before. Until 10.10, a test puts a Mask
+  into the store with `rascal workspace import-mask` (10.5).
+
+**CLI scenario.** With a store holding a mask from `rascal workspace import-mask`, a served
+`protect` call with that mask's reference runs; the same call naming an identity the store does not
+hold is refused `binding`/`unresolved` with the import remedy and its `client_run_id` is accepted on
+the corrected retry.
+
+**Acceptance.**
+- [ ] `artifact_ref` for an image, a location, a Mask in a raw frame and a Mask in a `crop:` frame
+      validates against `urn:table-manners:operations:artifact-ref`; the image's identity is
+      `sha256:<file_sha256>`; `on` is the root image's reference; no id appears in any reference.
+- [ ] `Workspace::resolve` finds each type by identity; a workspace reopened (a restart) and a
+      workspace directory moved and reopened resolve the same identities (the library half of the
+      old 10.6).
+- [ ] A served `protect` call with the mask's reference runs and gives the same mask identity as
+      M12's path form did on the same inputs; `wrong_type` (a location's reference, a reference of
+      type `squint:Thing`), `wrong_version` (schema version 2) and `unresolved` (with its remedy)
+      are each a `-32602` `binding` refusal validating against `refusal.json`, with no run
+      directory and the `client_run_id` accepted on the retry; a call with two bad references
+      names both.
+- [ ] A path where a reference is expected is `-32602` invalid params (the input schema rejects
+      it); an estimate's binding is unchanged for the same mask.
+
+**Verification.** `cargo nextest run -p rascal-core --test it -- artifact_ref:: workspace::`;
+`cargo nextest run -p rascal-mask --features testkit --test it -- binding:: serve_contract::
+estimate::`; `just check`.
+
+**Dependencies.** 10.2, 10.5. **Files.** `crates/rascal-core/src/{artifact,contract}.rs`,
+`crates/rascal-core/src/workspace/mod.rs` (`resolve`, the identity index),
+`crates/rascal-core/src/binding.rs` (new), `crates/rascal-mask/src/{actions,estimate,describe}.rs`,
+`crates/rascal-core/tests/it/artifact_ref.rs` (new), `crates/rascal-mask/tests/it/binding.rs`
+(new), `serve_contract.rs`, `estimate.rs`, `docs/contract.md`. **Size.** M.
+
+### Task 10.4: Operations described
+
+**Description.** `describe` emits every built-in op as an action (3, 4.7), and the description
+becomes an operations tool's: `profiles: ["images", "operations"]`, top-level `artifact_types`,
+`vocabulary.group`. For each of the 24 ops of `rascal_ops::registry()` (SPEC "Operations" but
+`segment`, which is a pack's):
+
+- `name` the op's name (no op shares a name with a recipe action or a reserved name: the `rect`
+  recipe is already `mask_rect`; a test keeps it so), `title` the name in words, `purpose` from
+  the manifest (its `purpose`, with `when_to_use` and `when_not_to_use` appended as sentences),
+  `kind: "operation"`,
+  `group` one of `find`, `refine`, `prep`, `out`, `inspect` (SPEC's table, carried by a new
+  `Op::group()` so a new op cannot forget it), listed in `vocabulary.group`;
+- `ports`: `in` and `out` from the manifest's ports, each with `name`, `type` (10.3's mapping),
+  `required`, `many` and `purpose`;
+- `params_schema` the manifest's parameters (the same JSON Schema `serve` builds from them today)
+  plus `constants` as an `enum` of the op's constant sets when it has any, with the default set the
+  op uses; no `max_spend_usd` and no image or location slot (ports only: `images: []`,
+  `locations: []`), `outputs` naming the roles of the images its out-ports make and `locations:
+  ["found"]` when an out-port is a `location`;
+- `cost: {"may_spend": false}`, `readiness` `ready` with no requirements (a built-in op reads no
+  configuration), `duration` from the manifest's `cost.seconds`, and no `renders` (the dash reads a
+  task's run workspace; an operation's picture is its preview).
+
+The seven recipe actions stay `kind: "task"` with no group. `artifact_types` lists `location`
+(`portable: "json"`, `preview: true`), `rascal:Mask` (`bundle`, `true`), `rascal:BandProfile`,
+`rascal:Series` and `rascal:Plan` (`none`, `false`), each with `schema_versions: [1]` and a
+purpose, and never `image` (3.3). Every result now carries `artifacts: {"in": [], "out": []}`, so
+every document agrees with `profiles` before 10.6 fills them. This task changes the description
+only: `tools/list` keeps today's op tools, whose names the actions now share, until 10.6 swaps
+them in one step (the description and `tools/list` disagree on the branch for one task).
+
+**Acceptance.**
+- [ ] `rascal describe --json` (no configuration, and the M12 test configuration) validates
+      against v0.4 with `operations` in `profiles`: `ports` on every operation and on no task,
+      `group` on every operation and in `vocabulary.group`, `artifact_types` with `bundle`, `json`
+      and `none` types, with and without previews, and no `image`; no action name is reserved or
+      repeated.
+- [ ] Each operation's `params_schema` accepts the manifest's documented defaults and rejects an
+      unknown parameter; its port names never clash with a parameter.
+- [ ] Every result validates with `artifacts` present and empty.
+
+**Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- describe::
+run_json::`; `cargo nextest run -p rascal-ops --test it`; `just check`.
+
+**Dependencies.** 10.3. **Files.** `crates/rascal-core/src/op.rs` (`Op::group`, `Group`),
+`crates/rascal-ops/src/*.rs` (each op's group), `crates/rascal-mask/src/{describe,run_json}.rs`,
+`crates/rascal-mask/tests/it/describe.rs`, `fixtures/contract/describe.json`. **Size.** M.
 
 ### Task 10.5: Native artifacts portable
 
@@ -1496,8 +1772,8 @@ a mask bundle is refused naming what it is: a rendering is an `Image` and never 
 the two shapes `--location` takes, through one function shared with `run`), validated against a
 named image of the workspace. The commit itself gains the guard the import relies on: a frame id
 already bound to a different identity is refused, never silently kept (concurrent `window`s could
-otherwise both take `crop:<n>`). CLI and library only; the MCP tools wait for the operations
-profile (10.1 to 10.4), whose artifact reference this does not presume.
+otherwise both take `crop:<n>`). CLI and library only; the MCP tools are 10.10's, over the
+operations profile's artifact reference, which this does not presume.
 
 **CLI scenario.** `rascal run seam pano.png --out a/`, then `rascal workspace export-mask a/
 <mask id> --out seam.mask.tar` prints the identity and `sha256:<bundle digest>`; `rascal workspace
@@ -1555,6 +1831,486 @@ determinism is tested through the reader); (4) `feat(mask)`: `workspace export-m
 `just check` green. The rollback point is commit (1): the plan and the ADR stand alone, and
 reverting (2) to (5) together (`git revert --no-commit`, newest first)
 removes the feature with nothing else depending on it; (2) alone is a fix worth keeping.
+
+### Task 10.6: An operation call is a run
+
+**Description.** `serve` offers one MCP tool per action of the description and nothing else
+(plus the reserved tools): the op tools, the pack tools and the five `workspace_*` tools of ADR
+0015 leave `rascal_mcp::server` (no shims; `workspace_import`'s job is an image port's path or
+inline image, `workspace_list` is the host's own references, `workspace_describe` and
+`workspace_read` are the artifact resource of 10.7, `workspace_dash` is the dash render). An
+operation's MCP input schema is its `params_schema` plus one property per in-port (4.7): an
+artifact reference, a non-empty array of them for a `many` port, and for an `image` port also an
+image in (10.1, through 10.1's path rule) and for a `location` port also a location (9), which is
+imported into the store as `workspace import-location` does, validated against the call's image.
+
+A call runs through the machinery the recipe actions already use (`ContractActions::call`): the
+claim, readiness, the permit (an operation is exclusive like any run), cancellation, the run
+directory under the runs root with its journal and `run.json` written atomically and last,
+progress with the run's reference, and the limits check (an operation's worst case is 0, so it
+only checks the arguments). Before allocation it binds every in-port with 10.3's `bind` and then
+checks frames across ports with a new `Op::check_frames(inputs)` (default: every framed input
+shares one frame identity; `unwindow`, `put`, `invert`, `window` and `measure` state their own
+relations), so a bad binding of any kind is the `binding` refusal, never a run; the op's own
+validation stays as a second line. The run invokes the op with `Workspace::invoke_with` on the
+store, so its outputs commit there (one operation record, as for the op CLI) and resolve by
+identity at once; the run directory holds the journal line and the previews, not a workspace.
+Upstream steps never rerun: an operation works on what it is given or refuses.
+
+The result is a v0.4 result: `status` from the envelope (`ok` and `measured_nothing` are
+`completed`; `not_applicable` is `completed` with the reason in `notes` and empty
+`artifacts.out`, since nothing was published; `invalid_args` is `invalid`/`usage`; an operational
+failure `error` with its code); `artifacts.in` one entry per bound input (`preview: null`) and
+`artifacts.out` one per output, a `many` port once per item in order, each with its reference and,
+for a type with `preview: true`, a **preview**: an image out with role `preview`, PNG, written into
+the run directory and located as `return_images` asks. A Mask's preview is `inspect`'s overlay of
+the mask on its frame's image when the store holds that image, else its grey rendering
+(`render`); a location's is its rasterized outline drawn on its image. One function,
+`preview::draw(store, artifact) -> Option<Image>`, deterministic, so the same artifact always gives
+the same preview bytes (10.7 reuses it). Images an operation takes appear in `images.in` with the
+port's name as `slot`, images it makes and every preview in `images.out`, locations taken in
+`locations.used` and made in `locations.found` (4.7, 11.1); the native envelope goes in `body`
+(`{"envelope": …}`). `input_identity` is the operation record's input digest.
+
+**CLI scenario.** Through the independent client: `line` on `{"image": {"path": …}, "column":
+0.5, "width_px": 24}` completes with a `location` out and its preview; `rasterize` on
+`{"location": <that reference>, "image": <the image's reference>}` completes with a `rascal:Mask`
+out and its preview; `feather` on `{"mask": <that reference>, "sigma_px": 6}` completes with a new
+Mask whose identity differs from the input's; `line` was not rerun (one `line` record in the
+store's journal).
+
+**Acceptance.**
+- [ ] `tools/list` equals the description's actions plus `describe`, `estimate` (and from 10.10
+      `export` and `import`); no op, pack or `workspace_*` tool remains, and the server crate no
+      longer knows ops.
+- [ ] Line → Rasterize → Feather runs through the independent client one call at a time; every
+      `run.json` validates against v0.4 with `artifacts.in` and `artifacts.out`, a preview on every
+      Mask and location out and none on another type, and the same images and locations in
+      `images` and `locations`; the run resources and the runs list include them.
+- [ ] A `many` port (`select`'s planes) takes an array of references and lists each in
+      `artifacts.in` in order; a bad item is refused naming its `index`.
+- [ ] `wrong_frame`: `paste` given a mask drawn in a `crop:` frame and a base in the raw frame is
+      the `binding` refusal naming the port, with no run; each of the four problems from a call
+      validates against `refusal.json` and releases its `client_run_id`.
+- [ ] An op's `not_applicable` (`rasterize` on a `view` location) completes with a note and no
+      out; an `invalid_args` is `invalid`/`usage`; cancellation while queued leaves no run and
+      during the run a `cancelled` `run.json`.
+- [ ] The same artifact gives byte-identical previews in two runs.
+- [ ] `isolation.rs` and `serve.rs` (which drove the op tools) drive the operations instead,
+      proving the same isolation and protocol properties.
+
+**Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- operations::
+serve:: serve_contract:: isolation::`; `cargo nextest run -p rascal-mcp --test it`; `just check`.
+
+**Dependencies.** 10.4. **Files.** `crates/rascal-mcp/src/server.rs` (the op, pack and workspace
+tools removed; the server serves `Actions` only), `crates/rascal-core/src/op.rs`
+(`check_frames`), the five ops with frame relations, `crates/rascal-mask/src/operations.rs` (new:
+an operation as a run), `preview.rs` (new), `actions.rs`, `run_json.rs`, `serve.rs`, `packs.rs`
+(no pack tools in `serve`), `crates/rascal-testkit/src/mcp_client.rs`,
+`crates/rascal-mask/tests/it/operations.rs` (new), `serve.rs`, `isolation.rs`,
+`serve_contract.rs`, `docs/tools.md`, `docs/contract.md`. **Size.** L, split into the serving
+swap with Line, Rasterize and Feather (10.6a) and the remaining ops' frame relations, `many`
+ports and the rewritten isolation suite (10.6b) if it runs long.
+
+### Task 10.7: The artifact resource; reopening after a restart and a move
+
+**Description.** `rascal://artifact/{identity}` (4.7) returns `{contract, tool, artifact:
+<reference>, preview: <image out or null>, record}` for any artifact the store holds (the record
+is what `workspace_describe` returned: the tool's own, which a host never reads), and
+`rascal://artifact/{identity}/preview` the preview PNG itself, for a type with `preview: true`.
+The preview is 10.6's `preview::draw`, written once into rascal's cache
+(`$XDG_CACHE_HOME/rascal/previews/<identity>.png`, outside the store and every run directory) and
+located by path on stdio. Both templates are in the description's `resources`. A read of an
+identity the store does not hold (or of `/preview` for a type without one) fails with refusal
+data `{"reason": "binding", "run": null, "bindings": [{"port": null, "problem": "unresolved",
+"expected": …, "got": <identity>, "remedy": …}]}`. Reads never wait for the permit (4.5).
+
+This is the old 10.6, persistence and relocation, end to end: a host stores references, restarts
+`serve`, and reads and binds them again; after the workspace directory moves, the host starts
+`rascal serve --workspace <new>` and the same identities resolve. rascal never searches folders
+for an artifact.
+
+**Acceptance.**
+- [ ] A Mask's and a location's resources validate against the v0.4 artifact-resource shape with
+      a preview; a Plan's (from `cut`) has `preview: null`; `/preview` returns a PNG equal to the
+      run's preview.
+- [ ] After Line → Rasterize, a new `serve` on the same workspace reads both references and a
+      `feather` call bound to the saved Mask reference completes; after the workspace directory is
+      moved and `serve` started on the new path, the same.
+- [ ] An identity the store does not hold is the `binding`/`unresolved` refusal with `port: null`
+      and a remedy; a read while a slow run holds the permit answers at once.
+
+**Verification.** `cargo nextest run -p rascal-mask --features testkit --test it --
+artifact_resource:: serve_contract::`; `just check`.
+
+**Dependencies.** 10.6. **Files.** `crates/rascal-mask/src/artifact_resource.rs` (new),
+`actions.rs` (`resources`, `templates`, `read`), `describe.rs` (`resources`),
+`crates/rascal-mask/tests/it/artifact_resource.rs` (new), `docs/contract.md`,
+`docs/workspace.md`. **Size.** S.
+
+### Task 10.8: Tasks list their Masks
+
+**Description.** Every action fills `artifacts`, tasks included (4.7): a recipe action lists in
+`artifacts.out` each Mask its recipe outputs (`port: "mask"`, the recipe's output name), with its
+reference and preview, on `completed` and also on `error` and `cancelled` when the mask was made
+(2.3: a salvaged mask can be bound to another filler's call or to an operation); a `protect` or
+`mask` argument appears in `artifacts.in`. A task still runs in its own run directory with its
+own workspace (self-contained runs, 1.9; the dash and `--replay` read it), so when the run ends
+`serve` publishes each output Mask into the session's store through 10.5's import (in memory, the
+same checks, idempotent by identity, its frame chain registered), and the reference resolves
+there. `rascal run` and `heal` on the command line fill `artifacts` the same way, with references
+into the run's own workspace (the resource resolves only in a server whose store holds it, which
+the reference does not promise).
+
+**Acceptance.**
+- [ ] A served `remove` lists its Mask in `artifacts.out` with a preview, validating against v0.4;
+      a `feather` call bound to that reference, in the same session, completes.
+- [ ] A heal whose filler fails (`error`) still lists the Mask, and it binds.
+- [ ] Two identical `seam` calls publish one Mask (one import record, the second none).
+- [ ] `rascal run remove … --out r/` writes `run.json` with the same `artifacts.out` reference as
+      the served call on the same inputs.
+
+**Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- run_json::
+serve_contract:: operations::`; `just check`.
+
+**Dependencies.** 10.6. **Files.** `crates/rascal-mask/src/{actions,run_json,run,heal}.rs`,
+`crates/rascal-core/src/workspace/mod.rs` (`publish_mask` over `import_mask`'s checks),
+tests `run_json.rs`, `serve_contract.rs`, `operations.rs`. **Size.** M.
+
+### Task 10.9: Estimates for operations
+
+**Description.** `estimate` answers for every action, operations included (4.5): an operation's
+estimate is allowed, `worst_case_usd` 0, `cap_usd` as configured, `effective.model` null,
+`x-rascal: {"constants": <the set it would use>}`, its readiness `ready`. Its binding digests each
+in-port's reference by identity and each image by file digest (12.5's recipe, extended), so an
+estimate and the call it binds agree. A call whose references do not bind gets the same `binding`
+refusal from `estimate` as from the call (4.5), from one function. A served operation carrying
+`_meta["table-manners/estimate"]` is checked as in 12.6.
+
+**Acceptance.**
+- [ ] `estimate` for `feather` on a held Mask validates and is allowed at 0; the binding is the
+      same for the same reference and changes with `sigma_px`, the Mask's identity and the
+      configuration.
+- [ ] `estimate` for each binding problem is the `binding` refusal, validating, byte-equal in its
+      `bindings` to the call's.
+- [ ] A `feather` call carrying its estimate's binding runs; with another `sigma_px` it ends
+      `invalid`/`stale_estimate`.
+- [ ] `no_provider_call.rs` covers operation estimates.
+
+**Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- estimate::
+no_provider_call::`; `just check`.
+
+**Dependencies.** 10.6. **Files.** `crates/rascal-mask/src/{estimate,operations}.rs`, tests
+`estimate.rs`, `no_provider_call.rs`. **Size.** S.
+
+### Task 10.10: Export and import
+
+**Description.** The reserved `export` and `import` tools and the commands `rascal export --json
+<file|->` and `rascal import --json <file|->` (5.1), wrapping 10.5's mask bundles and location
+JSON. They are controls: no run, never in `actions`, never waiting for the permit; failures are
+JSON-RPC errors, and on the command line a refusal exits 64 with the refusal JSON on stdout.
+
+- **Export** `{artifact: <reference>}`: the reference is bound (10.3; `port: "artifact"`); a
+  `rascal:Mask` is written as its bundle (`Workspace::export_mask`, ADR 0022), a `location` as
+  the contract's location JSON (8.2's `location_out`), into rascal's export area
+  (`$XDG_DATA_HOME/rascal/exports/<identity with : as ->.mask.tar` or `.location.json`), outside
+  every run directory and the store, and answered with the reference and `file {path, sha256,
+  bytes, media_type}` (`application/x-tar`, `application/json`). The same artifact always gives
+  the same bytes, and a file already there with the right digest is reused. An unresolved
+  reference is the `binding` refusal; a `portable: none` type (Plan, Series, BandProfile) is
+  `invalid_arguments` (`usage`) naming the type; an artifact export would refuse by 10.5's bounds
+  is `invalid_arguments` (`input`) with 10.5's message.
+- **Import** `{file: {path}, sha256?}` or `{inline: {media_type, data}}` (up to
+  `limits.inline_bytes`): a path under 10.1's rule (`rascal import` takes `--allow-dir` the same
+  way, none refusing every path); `sha256` checked against the bytes; a mask bundle is imported
+  through 10.5's checks whole, a location JSON validated against an image the store holds (an
+  image it lacks is `invalid_arguments` naming the image's file digest and the remedy, passing
+  the image to any action first), and answered with the reference and `already_present`. A PNG,
+  a JPEG or any file that is neither a mask bundle nor a location is `invalid_arguments`
+  (`input`) naming what it is: a rendering is never a Mask (5.1). A refused path says nothing
+  about the file.
+- Both are in `tools/list` exactly when a type is portable (always, for rascal) and are listed in
+  the description's text (`docs/contract.md`), not in `actions`. `rascal export` keeps its
+  `--compat` mode beside `--json` (exactly one of the two; question 9). The commands take
+  `--workspace` (the store, `serve`'s default) and `--config`.
+
+**CLI scenario.** `echo '{"artifact": <mask ref>}' | rascal export --json - --workspace a/`
+prints the file's path and digest; `echo '{"file": {"path": "<that path>"}}' | rascal import
+--json - --workspace b/ --allow-dir <exports dir>` prints the same reference with
+`already_present: false`, and again `true`; the same with a PNG exits 64 with the refusal JSON.
+
+**Acceptance.**
+- [ ] Through `serve`: a Mask exported, imported into an empty store (`already_present: false`),
+      imported again (`true`), the reference equal throughout and the exported bytes equal to
+      `workspace export-mask`'s; a location exported and imported inline; each output validating
+      against v0.4.
+- [ ] Refusals, each validating against `refusal.json`: a PNG given as a mask bundle, a
+      `portable: none` export, an unresolved export (`binding`, `port: "artifact"`), a digest
+      mismatch, a path outside the allowed directories (indistinguishable from a missing file).
+- [ ] Both answer while a slow run holds the permit; neither writes a run or touches the runs
+      list; export writes only under the export area.
+- [ ] The commands print the same documents as the tools and exit 0, or 64 with the refusal JSON.
+
+**Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- transfer::
+portable_cli:: serve_contract::`; `just check`.
+
+**Dependencies.** 10.4 (and through it 10.3 and 10.1), 10.5. **Files.**
+`crates/rascal-mask/src/transfer.rs` (new), `main.rs` (`export --json`, `import --json`),
+`actions.rs` (the two tools), `crates/rascal-core/src/{bundle,contract}.rs` (a location's
+portable JSON), `crates/rascal-mask/tests/it/transfer.rs` (new), `portable_cli.rs`,
+`docs/workspace.md`, `docs/export.md`, `docs/contract.md`, `docs/adr/0022-mask-bundles.md` (the
+MCP tools now exist). **Size.** M.
+
+### Task 10.11: The invocation on every result
+
+**Description.** Every result, tasks, operations, the command line and every status, carries
+`invocation` (4.8) in place of 10.2's `null`: `action`; `arguments` as resolved, with every
+default of the action's `params_schema` applied, each image as `{"expect": <image reference>}`
+with no `path` or `inline`, each artifact (in-ports, `mask`, `protect`) as its reference, each
+location as given (a location given inline stays inline; a location port bound by reference stays
+a reference), `max_spend_usd` kept, and `return_images` and `image_blocks` left out; `effective`
+the estimate's object from the same function (12.5): `model`, `config_identity`, and `x-rascal`
+(the filler and its revision, paste and `fill_max_side`, and the constant sets in force by step);
+`requirements` the names of the readiness requirements the call used (12.2's `for_call`), never a
+value. It is `null` only on an `invalid` run whose arguments did not resolve. On the command line
+(`rascal run`, `heal`) the invocation is written as the matching action's arguments (the recipe's
+action name; `--location` and `--stroke` files as locations, `--set` as `set`), so a CLI run is
+callable through `serve` and `rascal call` alike.
+
+**Acceptance.**
+- [ ] Every fixture and every result in the suite has a non-null `invocation` validating against
+      v0.4, but an `invalid` run whose arguments did not parse, which has `null`.
+- [ ] The invocation names no path anywhere (a test walks it for strings starting with `/`), and
+      two calls on the same image given by path and inline give equal invocations.
+- [ ] `invocation.effective` equals the estimate's `effective` for the same call; `requirements`
+      lists the credential's name and never its value (the sentinel search of 12.2).
+
+**Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- run_json::
+serve_contract:: operations:: estimate::`; `just check`.
+
+**Dependencies.** 10.6. **Files.** `crates/rascal-mask/src/invocation.rs` (new),
+`run_json.rs`, `actions.rs`, `operations.rs`, `estimate.rs`, `run.rs`, `heal.rs`, tests
+`run_json.rs`, `serve_contract.rs`. **Size.** M.
+
+### Task 10.12: `rascal call`
+
+**Description.** `rascal call <action> --arguments <file.json|-> [--config <path>] [--allow-dir
+<abs>]… [--workspace <dir>] [--runs <dir>]` runs any action from exactly the arguments an MCP
+call would send (4.8): the same parsing, readiness, binding, limits and run as `serve`, through
+the same `ContractActions` with no session (`session_id` null, no budget ledger, the cap still
+applied). Paths in the arguments follow 10.1's rule with the given `--allow-dir` (none refusing
+every path). The run goes under `--runs` (`serve`'s default runs root); the store is
+`--workspace` (`serve`'s default). It prints the result on stdout and exits as in 6 (0, 3, 64,
+130, 143); a refusal that is a JSON-RPC error in `serve` (`not_ready`, `binding`) prints the
+refusal JSON and exits 64. So an invocation's `arguments`, with a `path` added to each image, are
+the file for `rascal call <invocation.action>`.
+
+**CLI scenario.** Take a served `feather` result's `invocation.arguments` into `args.json`;
+`rascal call feather --arguments args.json --workspace <the store>` prints a result whose
+`invocation` equals the original and whose out reference is the same.
+
+**Acceptance.**
+- [ ] For a task (`seam` with the command filler, an image path added) and an operation
+      (`feather`), `rascal call` of a result's invocation gives a result whose `invocation`
+      equals the original's and whose outputs have the same identities.
+- [ ] Each exit code: 0 completed, 3 error (a failing filler), 64 invalid, a refused path, a
+      `binding` refusal (refusal JSON on stdout), 130 on SIGINT.
+- [ ] A path outside `--allow-dir` is refused as in 10.1; inline images need no flag.
+
+**Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- call_cli::`;
+`just check`.
+
+**Dependencies.** 10.11. **Files.** `crates/rascal-mask/src/{main,call}.rs` (the second new),
+`actions.rs` (a session-less entry), `crates/rascal-mask/tests/it/call_cli.rs` (new),
+`README.md`, SPEC "Commands", `docs/contract.md`. **Size.** S.
+
+### Task 10.13: `rascal call --bundle`
+
+**Description.** `rascal call --bundle <path> [--config] [--allow-dir <abs>]… [--workspace]
+[--runs]` replays an invocation bundle (4.9) built by a host. The bundle path follows 10.1's rule.
+The reader is bounded as 10.5's is (256 MiB, a member count, a manifest size, plain member names,
+each size checked against what remains) and checks the whole file before acting: the manifest
+against `urn:table-manners:core:invocation-bundle`, every member it names present and no other,
+each `artifacts/` member's `sha256` and each `inputs/` member's `file_sha256`. Then for each step
+in order: a step of another tool is refused (exit 64, naming the step; question 11); each
+artifact member is imported into the store (10.10's import, so it is checked whole); each input
+member is copied into rascal's own replay area (`$XDG_DATA_HOME/rascal/replay/<bundle digest>/`,
+a directory rascal owns, so it is not a caller path); the step is called with its
+`invocation.arguments` plus a `path` on each image, as 10.12 does. A later step that names an
+earlier step's output by reference resolves because the earlier replayed step published it with
+the same identity; when it did not (a step whose output differs, such as a filler's), the later
+step's binding refusal says so. A step that lists `reference_only` inputs or `unportable`
+artifacts is refused before anything runs, naming them. It prints one result per line (JSON
+Lines), stops at the first step that does not complete, and exits with that step's code.
+
+**Acceptance.**
+- [ ] A bundle of Line → Rasterize → Feather, written by the testkit's bundle writer from the
+      results and `export`, replays from another directory into a fresh store with the original
+      workspace deleted; each replayed `invocation` equals the bundle's and the final Mask has
+      the original identity.
+- [ ] A tampered bundle (an artifact member's byte, an input's byte, a missing member, an extra
+      member, an oversized manifest) is refused with nothing imported and nothing run; a bundle
+      with `unportable` or `reference_only` entries is refused naming them.
+- [ ] Two calls of `--bundle` on the same file are idempotent in the store (imports
+      `already_present`).
+
+**Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- call_bundle::`;
+`just check`.
+
+**Dependencies.** 10.12, 10.10. **Files.** `crates/rascal-mask/src/call.rs`,
+`crates/rascal-core/src/invocation_bundle.rs` (new: the bounded reader),
+`crates/rascal-testkit/src/invocation_bundle.rs` (new: a host-side writer for tests, since no tool
+builds one), `crates/rascal-mask/tests/it/call_bundle.rs` (new), `docs/contract.md`, README.
+**Size.** M.
+
+### Task 10.14: Line → Rasterize → Feather end to end, fixtures, ADR 0021, docs
+
+**Description.** The old 10.7. The path through the independent client as one test
+(`operations_path.rs`): import nothing by hand; `line` on an image path, `rasterize` on its
+location reference, the Mask exported, `serve` restarted on a moved workspace, the Mask reference
+read back, `feather` with a new sigma bound to it, its result's invocation run by `rascal call`,
+and the chain replayed from a bundle in another directory; plus `remove`'s Mask bound by a later
+`feather`. Then rascal's v0.4 fixtures for table-manners `fixtures/rascal/` (CONTRACT 7, item 7,
+v0.4), produced by rascal's own server and CLI in `table_manners_fixtures.rs`, never by hand,
+normalised as in 11.6, written under `UPDATE_FIXTURES=1` and compared otherwise, each held to the
+contract as its `tests/fixtures.rs` holds it:
+
+- `describe.json` (and the v0.3 set's describes, now with `kind`, `group`, `ports`,
+  `artifact_types`);
+- `run-op-line.json`, `run-op-rasterize.json`, `run-op-feather.json`; `run-remove-mask.json` (a
+  task listing its Mask) and `run-op-feather-from-remove.json` (binding it);
+- `refusal-binding-wrong-type.json`, `-wrong-version.json`, `-wrong-frame.json`,
+  `-unresolved.json`, each from a call, the same four from `estimate`
+  (`refusal-binding-estimate-*.json`), `refusal-binding-many-index.json`, and
+  `run-binding-claim-released.json` (the retry accepted under the released id);
+- `artifact-mask.json`, `artifact-location.json`, `artifact-plan.json` (no preview),
+  `refusal-artifact-unresolved.json`;
+- `export-mask.json`, `import-mask.json` (`already_present: false`), `import-mask-again.json`
+  (`true`), `import-location-inline.json`, `refusal-import-png.json`,
+  `refusal-export-not-portable.json`, `refusal-export-unresolved.json`;
+- `invocation` on every result, and `run-call-feather.json` (a `rascal call --arguments` run of
+  `run-op-feather.json`'s invocation, the invocations equal);
+- `bundle-line-rasterize-feather/invocation.json` with its members, and the results of its
+  replay by `rascal call --bundle` from another directory with the original workspace gone;
+- `session.json` with `allowed_dirs`, `session-no-allow-dir.json` (`[]`), and
+  `run-path-outside.json`, `-dotdot.json`, `-symlink.json`, `-missing.json` (the same refusal as
+  the existing file outside), `-no-allow-dir.json`, each `invalid`/`input`;
+- the M11 and M12 sets kept at v0.4.
+
+rascal copies them into the table-manners branch `v0.4` and commits there, and fills rascal's
+column of MAPPING's v0.4 table. **ADR 0021**, "Operations are actions": every op an action with
+`kind`, `group` and `ports`; artifacts by reference and identity, resolved in the session's store;
+the `binding` refusal; op runs commit into the store and tasks publish their Masks into it; the
+previews; export and import over the mask bundle; the op and `workspace_*` tools removed,
+superseding ADR 0015's op surface (its transport decision stands); the path rule; pack operations
+deferred. ADR 0020 gains an M10 amendment, ADR 0015 a superseded-in-part note, ADR 0022 its MCP
+tools. Docs move to v0.4: `docs/contract.md` (operations, references, binding, artifacts,
+previews, the artifact resource, export and import, the invocation, `rascal call`, bundles, the
+path rule), `docs/tools.md` (the operations as actions; the op CLI unchanged), `docs/workspace.md`
+(the store, the export area, relocation), SPEC "Operations", "The MCP server and client",
+"Workspace", "External interface" and "Commands", README (`serve --allow-dir`, `rascal call`,
+`export --json`, `import --json`), `docs/architecture.md`.
+
+**Acceptance.**
+- [ ] `operations_path.rs` passes through the independent client, end to end as above.
+- [ ] table-manners' fixtures test (`cargo test --test fixtures` there) passes for
+      `fixtures/rascal/`; rascal's own check passes without `UPDATE_FIXTURES`.
+- [ ] The docs name v0.4; none describes the op tools, the `workspace_*` tools, workspace ids in
+      MCP arguments, a path form of a mask argument, or MCP roots.
+
+**Verification.** `UPDATE_FIXTURES=1 cargo nextest run -p rascal-mask --features testkit --test
+it -- table_manners_fixtures::`, then the same without it; `cargo nextest run -p rascal-mask
+--features testkit --test it -- operations_path::`; in the table-manners checkout `cargo test`;
+`just check`.
+
+**Dependencies.** 10.7 to 10.13. **Files.** `crates/rascal-mask/tests/it/{operations_path,
+table_manners_fixtures}.rs` (the first new), `crates/rascal-mask/tests/it/main.rs`,
+`fixtures/table-manners/`, `docs/adr/0021-operations-are-actions.md` (new), `docs/adr/README.md`,
+`docs/adr/{0015,0020,0022}-*.md`, `docs/contract.md`, `docs/tools.md`, `docs/workspace.md`,
+`docs/architecture.md`, `SPEC.md`, `README.md`, table-manners `fixtures/rascal/` and `MAPPING.md`.
+**Size.** M.
+
+### Task 10.15: The pin to the release (owner)
+
+**Description.** Once squint's v0.4 fixtures pass too, the table-manners branch merges, the owner
+tags `v0.4.0` and publishes the crate, and rascal pins `table-manners = "=0.4.0"` in place of the
+path; `scripts/check-contract.sh` reports it as the newest. The fixtures are regenerated if the
+published contract differs from the branch rascal built against, and the milestone branch merges
+into `main` by the checkpoint procedure.
+
+**Acceptance.**
+- [ ] `just check` and CI green on both platforms on the pinned release; the milestone branch
+      merged; tag `m10`.
+
+**Verification.** `scripts/check-contract.sh`; `just ci-local`; CI on the merge commit.
+
+**Dependencies.** 10.14; squint's v0.4 fixtures; the owner's tag and publish. **Files.**
+`Cargo.toml`, `Cargo.lock`, `PLAN.md`, `tasks/todo.md`. **Size.** XS.
+
+### Checkpoint M10
+- [ ] Tasks 10.1 to 10.15 done (10.5 done 2026-11-01), CI green on both platforms; tag `m10`.
+
+### Owner decisions for M10
+- The path rule ships ahead of v0.4 on `=0.3.0` and is closed by default (no `--allow-dir`, no
+  path), as v0.4 requires; hosts that pass paths add `--allow-dir`. Recommended, assumed (question
+  1 to the coordinator).
+- The configuration narrows the allowed directories with `[serve] allow_dirs`, intersecting trees.
+  Recommended, assumed.
+- References are the only form of a native artifact over MCP: workspace ids and mask paths leave
+  the MCP surface. Recommended, assumed.
+- The session's store is `serve`'s workspace; operation runs commit into it, and tasks keep their
+  self-contained run workspaces and publish their Masks into the store when they end. Recommended,
+  assumed.
+- Previews for `rascal:Mask` (an overlay on its image, else its grey rendering) and `location` (its
+  outline on its image); none for BandProfile, Series and Plan. Recommended, assumed.
+- Operations declare no renders; their preview is their picture. Recommended, assumed.
+- Pack operations (`segment`) are not served in M10 (question 6). Recommended, assumed.
+- Exports go to `$XDG_DATA_HOME/rascal/exports/`, previews to `$XDG_CACHE_HOME/rascal/previews/`,
+  bundle replays to `$XDG_DATA_HOME/rascal/replay/`. Recommended, assumed.
+
+### Questions for the coordinator (M10)
+
+Raised about the v0.4 draft (`b1ae034`); the plan assumes the recommendation in each until the
+coordinator settles it.
+
+1. 10.1 ships the path rule on `=0.3.0`, closed by default. Any host passing paths without
+   `--allow-dir` (Wafflery's v0.3 client) then gets `invalid`/`input`. May 10.1 merge to `main`
+   before Wafflery passes `--allow-dir`, or should the two land together? Recommended: together.
+2. On v0.3 the session schema is closed, so `allowed_dirs` is printed on stderr only until 10.2.
+   Acceptable? Recommended: yes.
+3. A `--allow-dir` that is relative, missing or not a directory: the contract is silent. rascal
+   exits 64 at start naming the flag. Confirm, or should it be dropped with a warning?
+4. "Narrowed by the configuration, which may only take away": rascal intersects the trees (a
+   configured subdirectory of a flag directory replaces it). Confirm, versus keeping only flag
+   directories that are themselves listed.
+5. The v0.4 schemas, types and examples are not at `b1ae034`. 10.2 assumes `invocation` may be
+   `null` in the schema (filled in 10.11), that `resource` and `on` in the artifact reference are
+   optional or required as the text's example marks them, and that an action may omit `renders`.
+6. Pack operations: a description is a local inspection and a pack's tools are known only by
+   starting it, so `segment` cannot be described without the install recording the pack's
+   manifests. Leave pack operations out of v0.4 for rascal (planned), or have `tools setup` record
+   the manifests so `describe` lists them?
+7. A task's artifact argument (`protect`'s `mask`): 4.7 defines the `binding` refusal for an
+   operation's ports. rascal uses it for task arguments too, with `port` the argument's name.
+   Confirm.
+8. "A task lists each native artifact it produced": rascal lists the recipe's outputs (the Mask),
+   not intermediates such as a `fan`'s BandProfile. Confirm.
+9. `rascal export` already exists as the compatibility export (`--compat`). 5.1 reserves
+   `<tool> export --json`. rascal keeps one subcommand with two exclusive modes. Acceptable, or
+   rename the compatibility export?
+10. A missed artifact read carries the `binding` refusal data; which JSON-RPC code: `-32602` like
+    every refusal (planned), or MCP's resource-not-found `-32002`?
+11. `rascal call --bundle` on a bundle holding another tool's step: refuse it (planned) or skip
+    it? And the output of a multi-step replay: one result per line (planned), stopping at the
+    first step that does not complete, with that step's exit code?
+12. A bundle chain whose later step names an earlier step's image output (not an artifact) by
+    reference: the replay maps it only when the replayed output has the same file digest, which a
+    filler's output does not. Is that the intended limit (only the call repeats, 4.9), and should
+    `inputs` then carry such intermediates?
+13. For `location`, the identity is each tool's recipe (unlike `image`), so squint and rascal give
+    the same location different identities. Intended?
+14. An `image` port given an artifact reference with no locator: rascal resolves it by file digest
+    in its store (planned). Confirm the contract means this, beside the image-in forms.
 
 ## Milestone M11: Table manners v0.2
 
