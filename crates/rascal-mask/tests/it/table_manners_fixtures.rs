@@ -2,7 +2,8 @@
 //! contract's `fixtures/rascal/`, produced by `rascal serve` and `rascal estimate` through the
 //! independent client and never written by hand.
 //!
-//! M11's set: the description, a run per status (an unresolved charge among them), two pages of
+//! v0.4 (task 10.2) adds `kind` to every action, `allowed_dirs` to the session and `invocation`
+//! to every result. M11's set: the description, a run per status (an unresolved charge among them), two pages of
 //! the runs list, the session, and both reuse refusals. v0.3's: the description with no
 //! configuration and with a key missing, present (every action `ready`), valid (after a 2xx)
 //! and invalid (after a 401); estimates allowed, refused for the cap, the budget and readiness,
@@ -14,7 +15,7 @@
 //! released, and an id cancelled before allocation still refused.
 //!
 //! Machine-specific values are replaced by fixed stand-ins that stay valid (paths under `/runs`,
-//! `/data` and `/work`, one time, session ids, run ids, estimate bindings and configuration
+//! `/data`, `/work` and `/tmp`, one time, session ids, run ids, estimate bindings and configuration
 //! identities in their order, the fake filler's address), so the files compare equal on any
 //! machine. `UPDATE_FIXTURES=1` rewrites `fixtures/table-manners/`; otherwise the output must
 //! match it, file for file. Every file holds to the contract exactly as table-manners'
@@ -389,9 +390,10 @@ struct Normalise {
 }
 
 impl Normalise {
-    /// `sessions` and `runs` in the order they were made; `issued` every estimate made, whose
-    /// bindings and configuration identities (but the built-in defaults', which is the same on
-    /// every machine) are replaced in order of appearance; `url` the fake filler's address.
+    /// `sessions` and `runs` in the order they were made; `issued` every estimate made and then
+    /// every result's invocation, whose bindings and configuration identities (but the built-in
+    /// defaults', which is the same on every machine) are replaced in order of appearance; `url`
+    /// the fake filler's address.
     fn new(
         dir: &Path,
         sessions: &[String],
@@ -457,6 +459,16 @@ impl Normalise {
             "/rascal".to_string(),
         ));
         replacements.push((dir.to_string_lossy().into_owned(), "/work".to_string()));
+        // The temporary directory `serve_command` allows, resolved (the session's
+        // `allowed_dirs`), after the scratch directory inside it.
+        replacements.push((
+            std::env::temp_dir()
+                .canonicalize()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned(),
+            "/tmp".to_string(),
+        ));
         let host = url
             .trim_start_matches("http://")
             .split('/')
@@ -956,6 +968,13 @@ fn the_table_manners_fixtures_hold() {
         .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
         .filter(|n| n.starts_with("run-") && !n.ends_with(".in"))
         .collect();
+    // The invocations' configuration identities after the estimates', in file order.
+    issued.extend(
+        out.values()
+            .filter_map(|v| v.get("invocation"))
+            .filter(|i| i.is_object())
+            .cloned(),
+    );
     let normalise = Normalise::new(&dir, &sessions, &runs, &issued, &url);
     let stored = repo_root().join("fixtures/table-manners");
     let update = std::env::var_os("UPDATE_FIXTURES").is_some();
@@ -970,6 +989,15 @@ fn the_table_manners_fixtures_hold() {
             assert!(!text.contains(secret), "{name} carries a key's value");
         }
         conforms(name, &value);
+        // Every result records its invocation (4.8), but the run whose image is not the one it
+        // expected: its arguments did not resolve.
+        if name.starts_with("run-") {
+            assert_eq!(
+                value["invocation"].is_null(),
+                *name == "run-invalid.json",
+                "{name}: {value:#}"
+            );
+        }
         let path = stored.join(name);
         if update {
             std::fs::write(&path, &text).unwrap();

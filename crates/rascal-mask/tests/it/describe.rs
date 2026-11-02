@@ -6,6 +6,9 @@
 //! Task 12.2: readiness without configuration. `describe` exits 0 with no file, a missing one
 //! and an invalid one; each action's readiness is its default use (the mask alone unconfigured,
 //! healing with the configured fillers otherwise).
+//! Task 10.2: at v0.4, every action a `task` with no `group`, `vocabulary` the core's object
+//! with the images profile's four lists, no `artifact_types`, no reserved name among the actions,
+//! and the defaults a call runs with declared in `params_schema`.
 #![allow(clippy::unwrap_used)]
 
 use std::path::{Path, PathBuf};
@@ -21,14 +24,40 @@ fn rascal(args: &[&str]) -> Output {
         .unwrap()
 }
 
-/// The v0.3 shapes every description has, whatever the configuration.
-fn assert_v03_shapes(doc: &serde_json::Value) {
-    assert_eq!(doc["contract"], "0.3.0");
+/// The v0.4 shapes every description has, whatever the configuration.
+fn assert_v04_shapes(doc: &serde_json::Value) {
+    assert_eq!(doc["contract"], "0.4.0");
+    assert_eq!(doc["profiles"], serde_json::json!(["images"]));
+    // The core's word lists: the images profile's four, and no `group`, since no action has one.
+    assert_eq!(
+        doc["vocabulary"],
+        serde_json::json!({ "disposition": [], "confidence": [], "evidence": [],
+                            "score_kind": ["owlv2-detection"] })
+    );
+    // No operations, so no artifact types (3.3).
+    assert!(doc.get("artifact_types").is_none());
     let actions = doc["actions"].as_array().unwrap();
     for action in actions {
         let name = action["name"].as_str().unwrap();
-        // `estimate` is reserved: an MCP tool, never an action (table-manners 3, 5).
-        assert_ne!(name, "estimate");
+        // The reserved names are MCP tools, never actions (table-manners 3, 5).
+        for reserved in ["describe", "estimate", "export", "import"] {
+            assert_ne!(name, reserved);
+        }
+        // Every recipe action is a whole job: a task, in no group, with no ports.
+        assert_eq!(action["kind"], "task", "{name}");
+        assert!(action.get("group").is_none(), "{name}");
+        assert!(action.get("ports").is_none(), "{name}");
+        // The defaults a call runs with are declared, so its invocation can apply them (4.8).
+        assert_eq!(
+            action["params_schema"]["properties"]["strict"]["default"], false,
+            "{name}"
+        );
+        let projection = &action["params_schema"]["properties"]["projection"]["default"];
+        if name == "seam" {
+            assert_eq!(projection, "equirectangular");
+        } else {
+            assert!(projection.is_null(), "{name}");
+        }
         assert!(action["cost"].get("needs_env").is_none(), "{name}");
         let state = action["readiness"]["state"].as_str().unwrap();
         assert!(["ready", "needs_setup"].contains(&state), "{name}: {state}");
@@ -134,7 +163,7 @@ fn describe_is_the_contracts_document_and_matches_its_fixture() {
     let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     let errors = valid("urn:table-manners:core:description", &doc);
     assert!(errors.is_empty(), "{errors:?}");
-    assert_v03_shapes(&doc);
+    assert_v04_shapes(&doc);
     // Unconfigured, an action's default use is the mask alone, which needs nothing; only
     // `remove_prompt` needs its pack, configured in a file that was not given.
     for action in doc["actions"].as_array().unwrap() {
@@ -215,7 +244,7 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 #[test]
-fn the_m11_configuration_describes_at_v03() {
+fn the_m11_configuration_describes_at_v04() {
     let dir = scratch("m11");
     let config = command_fillers(&dir);
     let out = rascal(&["describe", "--json", "--config", config.to_str().unwrap()]);
@@ -228,7 +257,7 @@ fn the_m11_configuration_describes_at_v03() {
     let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     let errors = valid("urn:table-manners:core:description", &doc);
     assert!(errors.is_empty(), "{errors:?}");
-    assert_v03_shapes(&doc);
+    assert_v04_shapes(&doc);
     let bin = env!("CARGO_BIN_EXE_rascal");
     for action in doc["actions"].as_array().unwrap() {
         assert_eq!(action["cost"]["may_spend"], true);
@@ -283,7 +312,7 @@ fn a_configured_filler_is_offered_and_may_spend_with_its_key_a_credential() {
         let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
         let errors = valid("urn:table-manners:core:description", &doc);
         assert!(errors.is_empty(), "{errors:?}");
-        assert_v03_shapes(&doc);
+        assert_v04_shapes(&doc);
         (doc, out)
     };
     let (doc, _) = describe(&[]);
@@ -367,7 +396,7 @@ fn a_configuration_file_that_is_missing_or_invalid_is_described_and_exits_0() {
         let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
         let errors = valid("urn:table-manners:core:description", &doc);
         assert!(errors.is_empty(), "{errors:?}");
-        assert_v03_shapes(&doc);
+        assert_v04_shapes(&doc);
         // A file was given, so every action's default use reads it; it stands in the way.
         for action in doc["actions"].as_array().unwrap() {
             let config = &action["readiness"]["requirements"][0];

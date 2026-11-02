@@ -15,6 +15,7 @@
           "slot": "image"
         }
       ],
+      "kind": "task",
       "locations": [
         {
           "kinds": [
@@ -67,6 +68,7 @@
             "type": "object"
           },
           "strict": {
+            "default": false,
             "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
             "type": "boolean"
           }
@@ -123,6 +125,7 @@
           "slot": "image"
         }
       ],
+      "kind": "task",
       "locations": [],
       "name": "seam",
       "outputs": {
@@ -145,7 +148,8 @@
             "type": "number"
           },
           "projection": {
-            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "default": "equirectangular",
+            "description": "The image's projection; equirectangular unless the call names another.",
             "enum": [
               "flat",
               "equirectangular"
@@ -167,6 +171,7 @@
             "type": "object"
           },
           "strict": {
+            "default": false,
             "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
             "type": "boolean"
           }
@@ -223,6 +228,7 @@
           "slot": "image"
         }
       ],
+      "kind": "task",
       "locations": [
         {
           "kinds": [
@@ -281,6 +287,7 @@
             "type": "object"
           },
           "strict": {
+            "default": false,
             "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
             "type": "boolean"
           }
@@ -337,6 +344,7 @@
           "slot": "image"
         }
       ],
+      "kind": "task",
       "locations": [],
       "name": "remove_prompt",
       "outputs": {
@@ -392,6 +400,7 @@
             "type": "object"
           },
           "strict": {
+            "default": false,
             "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
             "type": "boolean"
           }
@@ -463,6 +472,7 @@
           "slot": "image"
         }
       ],
+      "kind": "task",
       "locations": [
         {
           "kinds": [
@@ -515,6 +525,7 @@
             "type": "object"
           },
           "strict": {
+            "default": false,
             "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
             "type": "boolean"
           }
@@ -571,6 +582,7 @@
           "slot": "image"
         }
       ],
+      "kind": "task",
       "locations": [
         {
           "kinds": [
@@ -624,6 +636,7 @@
             "type": "object"
           },
           "strict": {
+            "default": false,
             "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
             "type": "boolean"
           }
@@ -680,6 +693,7 @@
           "slot": "image"
         }
       ],
+      "kind": "task",
       "locations": [],
       "name": "protect",
       "outputs": {
@@ -728,6 +742,7 @@
             "type": "object"
           },
           "strict": {
+            "default": false,
             "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
             "type": "boolean"
           }
@@ -772,7 +787,7 @@
       "title": "Protect an earlier edit"
     }
   ],
-  "contract": "0.3.0",
+  "contract": "0.4.0",
   "limits": {
     "inline_bytes": 67108864
   },

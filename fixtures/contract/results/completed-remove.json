@@ -6,7 +6,7 @@
     "recipe": "remove"
   },
   "cache": "off",
-  "contract": "0.3.0",
+  "contract": "0.4.0",
   "duration_ms": 0,
   "error": null,
   "finished": "<time>",
@@ -40,6 +40,53 @@
     ]
   },
   "input_identity": "sha256:e9a2526c9081d60aeb1b0da43cf2c896591782fedf1e4176dc6aec39139264cf",
+  "invocation": {
+    "action": "remove",
+    "arguments": {
+      "image": {
+        "expect": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        }
+      },
+      "location": {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "bbox",
+        "parts": [
+          {
+            "bbox": [
+              0.27,
+              0.21,
+              0.53,
+              0.79
+            ]
+          }
+        ],
+        "straddles_wrap": false
+      },
+      "projection": "flat",
+      "strict": false
+    },
+    "effective": {
+      "config_identity": "sha256:ecacf98c64387c1697e576e92ec3925051e7a4a8a16073ea901f59c5775f514d",
+      "model": null,
+      "x-rascal": {
+        "filler": null
+      }
+    },
+    "requirements": []
+  },
   "locations": {
     "found": [],
     "used": [

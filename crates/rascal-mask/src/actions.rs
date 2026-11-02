@@ -25,7 +25,7 @@ use rascal_mcp::server::{
 use serde_json::{Map, Value, json};
 
 use crate::run_json::{self, Ended, usd};
-use crate::{estimate, heal, run};
+use crate::{estimate, heal, invocation, run};
 use rascal_mask::describe::{self, recipe_of};
 use rascal_mask::filler::{CALL_PREFIX, FillerCall, Spent};
 use rascal_mask::readiness::{self, Answer, Answers, Setup, Use};
@@ -166,7 +166,7 @@ fn image_in_schema(description: &str) -> Value {
         "description": description,
         "type": "object",
         "properties": {
-            "path": { "type": "string", "description": "An absolute path (local transports only)." },
+            "path": { "type": "string", "description": "An absolute path inside the directories rascal serve allows (--allow-dir; CONTRACT 5.2)." },
             "inline": {
                 "type": "object",
                 "properties": {
@@ -319,6 +319,8 @@ impl ContractActions {
         }
     }
 
+    /// The checked arguments (`estimate::check_arguments`, which `run_action` calls first) as a
+    /// run's: the image as a file, the locations written into the inputs directory.
     fn run_args(
         &self,
         recipe: &str,
@@ -327,15 +329,6 @@ impl ContractActions {
         inputs: &Path,
         cancel: Arc<Cancel>,
     ) -> rascal_core::error::Result<run::RunArgs> {
-        // The arguments, `max_spend_usd` among them, as an estimate checks them: the first step
-        // of the limits check's order (`reserve`).
-        estimate::check_arguments(
-            recipe,
-            &describe::action_name(recipe),
-            args,
-            self.config.as_ref(),
-            &self.paths,
-        )?;
         let image = self.image_file(
             args.get("image")
                 .ok_or_else(|| Error::usage("image: required"))?,
@@ -414,8 +407,9 @@ impl ContractActions {
     }
 
     /// The limits check (table-manners 4.5, docs/contract.md): after allocation and before any
-    /// paid step, in a fixed order. The arguments first (`run_args`, `max_spend_usd` among
-    /// them: not above zero or above the configured cap is `invalid`/`usage`), then the
+    /// paid step, in a fixed order. The arguments first (`estimate::check_arguments` in
+    /// `run_action`, `max_spend_usd` among them: not above zero or above the configured cap is
+    /// `invalid`/`usage`), then the
     /// estimate the call names (`stale_estimate`), then the cap (the worst case over the
     /// effective cap is `cap`), then the budget (a session that cannot hold it is `budget`), and
     /// the reservation of the worst case in the same step under the ledger's lock, so two calls
@@ -613,12 +607,27 @@ impl ContractActions {
             "client_run_id": association.client_run_id,
         })));
         progress(Progress::Line("run started".to_string()));
-        let prepared = self
-            .run_args(recipe, args, &out, &inputs, cancel)
-            .and_then(|run_args| {
-                self.reserve(recipe, args, meta.estimate.as_ref())
-                    .map(|reservation| (run_args, reservation))
-            });
+        // The arguments first; once they check the call resolves to its invocation (4.8), which
+        // every result after that carries, a refusal by the limits included.
+        let action = describe::action_name(recipe);
+        let mut invocation = None;
+        let prepared =
+            estimate::check_arguments(recipe, &action, args, self.config.as_ref(), &self.paths)
+                .and_then(|()| {
+                    let price = self.with_setup(|setup| estimate::price(setup, &action, args))?;
+                    invocation = Some(invocation::of_call(
+                        recipe,
+                        &action,
+                        args,
+                        &self.paths,
+                        &price,
+                    )?);
+                    self.run_args(recipe, args, &out, &inputs, cancel)
+                })
+                .and_then(|run_args| {
+                    self.reserve(recipe, args, meta.estimate.as_ref())
+                        .map(|reservation| (run_args, reservation))
+                });
         let (pending, ended, reservation) = match prepared {
             Err(error) => {
                 let pending = run_json::Pending {
@@ -636,11 +645,13 @@ impl ContractActions {
                     ),
                     images_in: Vec::new(),
                     locations_used: Vec::new(),
+                    invocation,
                 };
                 (pending, run_json::ended_with(recipe, &error), None)
             }
             Ok((run_args, reservation)) => {
                 let mut pending = run_json::pending_for(&run_args, filler.as_deref());
+                pending.invocation = invocation;
                 pending.id = id.clone();
                 pending.started_ms = started_ms;
                 pending.session_id = Some(self.session.id.clone());
@@ -789,6 +800,12 @@ impl ContractActions {
             reserved_usd: usd(ledger.reserved_usd),
             remaining_usd: budget
                 .map(|b| usd((b - ledger.spent_usd - ledger.reserved_usd).max(0.0))),
+            allowed_dirs: self
+                .paths
+                .dirs()
+                .iter()
+                .map(|d| d.display().to_string())
+                .collect(),
         }
     }
 
@@ -888,6 +905,7 @@ pub fn not_ready(action: &str, readiness: &Readiness) -> Option<CallError> {
         run: None,
         requirements: Some(unmet.clone()),
         error: None,
+        bindings: None,
     };
     Some(CallError::refused(
         format!("{action} is not ready: {}", readiness::summary(&unmet)),
@@ -910,6 +928,7 @@ pub fn invalid_arguments(action: &str, error: &Error) -> CallError {
         run: None,
         requirements: None,
         error: Some(info),
+        bindings: None,
     };
     CallError::refused(
         format!("estimate of {action}: {error}"),

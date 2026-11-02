@@ -1,18 +1,20 @@
 # table-manners: rascal's side of the shared contract
 
-rascal conforms to [table-manners](https://github.com/markhayden/table-manners) v0.3 (milestones
-M8 and M9 for v0.1.0, M11 for v0.2.0, M12 for v0.3.0), pinned `=0.3.0` from crates.io (PLAN.md
-12.10); the shared contract of the owner's tools (ADR 0020, decisions 13 and 14): what
-an agent, a script or the playground sees from outside is the same for squint, rascal and the
-tools after them. The contract's text is the specification; this page is what rascal does under
-it (PLAN.md M8, M9, M11 and M12).
+rascal conforms to [table-manners](https://github.com/markhayden/table-manners) v0.3 on `main`
+(milestones M8 and M9 for v0.1.0, M11 for v0.2.0, M12 for v0.3.0), pinned `=0.3.0` from crates.io
+(PLAN.md 12.10), and to the v0.4 draft on the M10 branch (PLAN.md M10); the shared contract of
+the owner's tools (ADR 0020, decisions 13 and 14): what an agent, a script or the playground sees
+from outside is the same for squint, rascal and the tools after them. The contract's text is the
+specification; this page is what rascal does under it (PLAN.md M8 to M12), as built on the M10
+branch.
 
 ## The pin
 
-`table-manners = "=0.2.0"` in the workspace `Cargo.toml` of `main`: the crate's serde types and
-embedded schemas, no logic. On the M12 branch the pin is
-`{ path = "../table-manners", version = "=0.3.0" }`, a sibling checkout of the contract's `v0.3`
-branch, until v0.3.0 is published (PLAN.md 12.10). `scripts/check-contract.sh` warns in CI when
+`table-manners = "=0.3.0"` in the workspace `Cargo.toml` of `main`: the crate's serde types and
+embedded schemas, no logic. On the M10 branch the pin is
+`{ path = "../table-manners", version = "=0.4.0" }`, a sibling checkout of the contract's `v0.4`
+branch (built from `d9e6058`, the commit with the v0.4 schemas, types and examples), until v0.4.0
+is published (PLAN.md 10.15). `scripts/check-contract.sh` warns in CI when
 crates.io has a newer release, and when the pin is a path (a build against a draft); moving the
 pin is a deliberate commit that also refreshes `fixtures/contract/`.
 
@@ -49,17 +51,27 @@ rascal describe --json [--config rascal.toml]
 
 The contract's description document: one action per shipped recipe (`seam`, `remove`,
 `remove_prompt`, `repair`, `repair_area`, `protect`, and `mask_rect` for the `rect` recipe, so
-it does not take the `rect` op's name in `serve`), with the image slots (role
+it does not take the `rect` op's name in `serve`), each `kind: "task"` (a whole job) with no
+`group` and no `ports` (v0.4, task 10.2: `profiles` is `["images"]`, so there are no operations
+and no `artifact_types`), with the image slots (role
 `source`), the location slots and the kinds each takes, the text and mask inputs and the common
-arguments (`filler`, `set`, `projection`, `strict`) as `params_schema`, the outputs (`mask`,
+arguments (`filler`, `set`, `projection`, `strict`) as `params_schema`, each with the default a
+call that leaves it out runs with where there is one (`strict: false`; `seam`'s projection
+`equirectangular`, the projection its recipe declares; without one the image's shape decides,
+2:1 being equirectangular), the outputs (`mask`,
 `result`; `remove_prompt` fills `locations.found`), the cost, the readiness, the duration and the
 two renders (3.2): `dash` (`kind: "server"`, `ready_timeout_s: 10`, `rascal dash {run.dir}
 --serve --port 0 --frame-ancestor {frame_ancestor}`) and `page` (`kind: "document"`, `rascal
 dash {run.dir} --document`), described in `docs/diagnostics.md`. Every action's `params_schema` declares
 `max_spend_usd` as `{"type": "number", "exclusiveMinimum": 0}`, since every action takes a filler
 and so may be paid. With `--config`, the configured fillers are the `filler` enum and a
-configured filler with a price makes an action `may_spend`. `estimate` is a reserved tool, never
-an action (see "Estimates" below). `fixtures/contract/describe.json` pins the document without a configuration. The
+configured filler with a price makes an action `may_spend`. `vocabulary` is the core's object of
+word lists: the images profile's four (`disposition`, `confidence` and `evidence` empty,
+`score_kind` `["owlv2-detection"]`) and no `group`, since no action has one. `describe`,
+`estimate`, `export` and `import` are the contract's reserved names, tools and never actions
+(`describe::RESERVED`; `estimate` below; `export` and `import` arrive with task 10.10). The
+description does not use MCP roots: caller paths are governed by `--allow-dir` (8.5).
+`fixtures/contract/describe.json` pins the document without a configuration. The
 `describe` MCP tool returns the same document (8.5).
 
 ### Readiness (3.1, task 12.2)
@@ -150,6 +162,35 @@ that still lists the mask. `locations.used` holds the location the run took in;
 digest, the location files, `--set`, the prompt, the filler), so equal requests have equal
 identities. `spend` and `cache` come from the fill (8.6).
 
+### The invocation (4.8, task 10.2)
+
+Every result records `invocation`, what the call resolved to, so it can be repeated from another
+directory, by another client or on another machine (`crates/rascal-mask/src/invocation.rs`):
+
+- `action`: the action's name (a recipe file run by `rascal run` has no action and is `custom`).
+- `arguments`: the call's, resolved. Every default the action's `params_schema` declares is
+  applied (`strict: false`), and `projection` names the projection the image ran in (given,
+  declared by the recipe, or chosen by the image's shape). Each image is `{"expect": <image
+  reference>}` with no `path` or `inline`: the reference of the file, the same one `images.in`
+  names, so one image given by path or inline records one invocation. Each location is as given;
+  `max_spend_usd` is kept; `return_images` and `image_blocks` (delivery) are left out. `mask` and
+  `protect` are still absolute paths to stored mask directories: task 10.3 makes them artifact
+  references, and until then they are the one place an invocation names a path.
+- `effective`: the estimate's object, from the one function both use (`estimate::effective`).
+- `requirements`: the name of each readiness requirement the call used (its own readiness, 3.1),
+  never a value; a filler program given by path is named by its file name (`rascal`), so no path
+  is recorded.
+
+It is null only on an `invalid` run whose arguments did not resolve (a bad argument, an image
+that does not match its `expect` or cannot be read, a location on another image). A run that
+resolved and then failed, was cancelled or was refused by the limits (`cap`, `budget`,
+`stale_estimate`) records it. On the command line, `rascal run` and `heal` record their flags as
+the matching action's arguments: the image by its reference, `--bbox`, `--location` and
+`--stroke` as the contract locations the run used (a contract location file as given), `--set`
+as `set` with its values typed, `--prompt`, `--projection`, `--strict`, `--mask` and `--protect`
+(absolute), and `heal`'s filler; so a command-line run is callable through `serve` with a locator
+added to its image.
+
 ## `serve` (8.5)
 
 ```
@@ -190,9 +231,10 @@ not ready).
   configured directory that does not resolve allows nothing (stderr says so); a configuration
   that does not load allows no caller path, failing closed since what it would narrow is unknown
   (stderr says why; `serve` still starts, and `describe`, `estimate` and inline images work). With
-  no `--allow-dir` every caller path is refused, closed by default; inline images keep working. The set is fixed for the session and printed on stderr at
-  start (`rascal serve: callers' paths are read only inside: …`); the v0.3 session resource has no
-  field for it, so `rascal://session` shows it from v0.4 (`allowed_dirs`, task 10.2).
+  no `--allow-dir` every caller path is refused, closed by default; inline images keep working. The set is fixed for the session, printed on stderr at
+  start (`rascal serve: callers' paths are read only inside: …`) and listed by `rascal://session`
+  as `allowed_dirs` (4.6, task 10.2: absolute, resolved, `[]` with none). MCP roots are not used:
+  `serve` never sends `roots/list`.
   `rascal_core::paths::PathRule::admit` is the one check, for every caller path `serve` takes:
   the image slots, `mask` and `protect` (stored mask directories) and `workspace_import`'s
   `path`. The path must be absolute and its canonical form (every symlink resolved, the final
@@ -299,7 +341,7 @@ as the limits check; the session is read
 from `rascal://session` (table-manners 4.6, task 11.2): one atomic observation of the ledger
 under a random UUID made when `serve` starts, with `budget_usd` and `remaining_usd` (both null
 when uncapped), `spent_usd` (unresolved included), `unresolved_usd` and `reserved_usd`, amounts at
-six decimals. rascal reads its configuration once, so a session lasts the process, and every run
+six decimals, and `allowed_dirs`, the directories caller paths may name (8.5). rascal reads its configuration once, so a session lasts the process, and every run
 `serve` makes carries its id. An action `may_spend` in the description when a
 configured filler has a price. Each run's start time is strictly increasing within the process, so
 calls allocated in the same millisecond still get distinct ids and directories.
@@ -343,7 +385,9 @@ the run does and prices the call with the function the limits check uses (`estim
   `config_identity` is the loaded file's identity, or the built-in defaults' when the call reads
   no configuration (with no file, or with one that is missing or invalid), null only when the
   call needs the configuration that is missing or invalid; `x-rascal` is `{"filler": {name,
-  kind: "http" | "command", revision, paste, fill_max_side}}` or `{"filler": null}`.
+  kind: "http" | "command", revision, paste, fill_max_side}}` or `{"filler": null}`. The same
+  function (`estimate::effective`) gives the run's `invocation.effective`, so an estimate and the
+  call it priced name the same choices.
 - `readiness` (the call's own), `session` (one observation of the ledger, the document
   `rascal://session` returns, taken once with the budget check) and `session_id`, and `expires`,
   one hour after the estimate (prices are configuration, fixed for the session).
@@ -418,9 +462,12 @@ installation that fails, or leaves no program, exits 74 and runs nothing. Off a 
   compares them file for file, holding each to the contract as the contract's own
   `tests/fixtures.rs` does (the schema its name chooses, the contract version, the tool's name,
   the crate's types, at most six decimals in every dollar amount). Machine values are replaced by
-  stand-ins that stay valid: paths under `/runs`, `/data` and `/work`, one time, session ids, run
-  ids, estimate bindings and configuration identities in their order (the built-in defaults'
-  identity is kept, being the same everywhere), the fake filler's address.
+  stand-ins that stay valid: paths under `/runs`, `/data`, `/work` and `/tmp` (the temporary
+  directory the suite's servers allow), one time, session ids, run ids, estimate bindings and
+  configuration identities in their order, the estimates' and then the invocations' (the
+  built-in defaults' identity is kept, being the same everywhere), the fake filler's address.
+  At v0.4 (task 10.2) every action has `kind`, the session has `allowed_dirs`, and every result
+  has its `invocation`, null only in `run-invalid.json`, whose image is not the one it expected.
 
   | file | what it shows |
   |---|---|

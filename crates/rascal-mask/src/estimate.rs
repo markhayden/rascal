@@ -72,16 +72,17 @@ pub fn request(value: &Map<String, Value>) -> Option<(&str, &Map<String, Value>)
 }
 
 /// What one action takes, by the recipe's inputs.
-struct Slots {
-    images: Vec<String>,
-    locations: Vec<String>,
-    texts: Vec<String>,
-    masks: Vec<String>,
-    required: Vec<String>,
-    steps: Vec<String>,
+pub struct Slots {
+    pub images: Vec<String>,
+    pub locations: Vec<String>,
+    pub texts: Vec<String>,
+    pub masks: Vec<String>,
+    pub required: Vec<String>,
+    pub steps: Vec<String>,
 }
 
-fn slots(recipe: &str) -> Result<Slots> {
+/// The slots of a recipe (a shipped one by name, or a recipe file).
+pub fn slots(recipe: &str) -> Result<Slots> {
     let recipe = load_recipe(recipe)?;
     let mut slots = Slots {
         images: Vec::new(),
@@ -375,6 +376,20 @@ pub fn price(setup: &Setup<'_>, action: &str, args: &Map<String, Value>) -> Resu
     })
 }
 
+/// What a priced call uses where its arguments leave the choice to rascal (4.5): the one
+/// function behind both the estimate's `effective` and the invocation's (4.8), so the two are
+/// equal for the same call. `x-rascal` holds the filler (its name, kind, revision, paste and
+/// scaled side), or null.
+pub fn effective(price: &Price) -> Effective {
+    let mut extensions = BTreeMap::new();
+    extensions.insert("x-rascal".to_string(), json!({ "filler": price.filler }));
+    Effective {
+        model: price.model.clone(),
+        config_identity: price.config_identity.clone(),
+        extensions,
+    }
+}
+
 /// The spend a call may make, and the limits it is held to (table-manners 4.5).
 pub struct Limits {
     pub worst_case_usd: f64,
@@ -582,8 +597,6 @@ pub fn document(
     expires_ms: u128,
 ) -> Estimate {
     let refused = refusal(&price, held);
-    let mut extensions = BTreeMap::new();
-    extensions.insert("x-rascal".to_string(), json!({ "filler": price.filler }));
     Estimate {
         contract: rascal_core::contract::CONTRACT_VERSION.to_string(),
         tool: TmTool {
@@ -593,11 +606,7 @@ pub fn document(
         action: action.to_string(),
         binding: bound.binding.clone(),
         session_id: session.as_ref().map(|s| s.id.clone()),
-        effective: Effective {
-            model: price.model,
-            config_identity: price.config_identity,
-            extensions,
-        },
+        effective: effective(&price),
         worst_case_usd: price.worst_case_usd.map(usd),
         cap_usd: price.cap_usd.map(usd),
         allowed: refused.is_none(),

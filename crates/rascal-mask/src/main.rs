@@ -6,6 +6,7 @@ mod exit;
 mod export;
 mod heal;
 mod inspect;
+mod invocation;
 mod lab_run;
 use rascal_mask::lab;
 use rascal_mask::readiness::{self, Setup};
@@ -696,7 +697,10 @@ fn main() {
                 eprintln!("rascal run: {error}");
                 std::process::exit(exit::code_for(&error));
             }
-            let pending = run_json::begin(run_json::pending_for(&args, None));
+            let resolved = invocation::of_command(&args, None);
+            let mut pending = run_json::pending_for(&args, None);
+            pending.invocation = resolved.as_ref().ok().cloned();
+            let pending = run_json::begin(pending);
             run_json::watch_signals();
             let result = run::run(&args);
             let ended = match &result {
@@ -713,7 +717,7 @@ fn main() {
                 ),
                 Err(error) => run_json::ended_with(&args.recipe, error),
             };
-            run_json::conclude(&pending, ended);
+            run_json::conclude(&pending, unresolved(&args.recipe, ended, &resolved));
             match result {
                 Ok(report) => {
                     for (profile, path) in &report.renders {
@@ -802,7 +806,10 @@ fn main() {
                 eprintln!("rascal heal: {error}");
                 std::process::exit(exit::code_for(&error));
             }
-            let pending = run_json::begin(run_json::pending_for(&args.run, Some(&args.filler)));
+            let resolved = invocation::of_command(&args.run, Some(&args.filler));
+            let mut pending = run_json::pending_for(&args.run, Some(&args.filler));
+            pending.invocation = resolved.as_ref().ok().cloned();
+            let pending = run_json::begin(pending);
             run_json::watch_signals();
             let result = heal::heal(&args);
             let ended = match &result {
@@ -819,7 +826,7 @@ fn main() {
                 ),
                 Err(error) => run_json::ended_with(&args.run.recipe, error),
             };
-            run_json::conclude(&pending, ended);
+            run_json::conclude(&pending, unresolved(&args.run.recipe, ended, &resolved));
             match result {
                 Ok(report) => {
                     for (profile, path) in &report.renders {
@@ -1379,6 +1386,23 @@ fn estimate_cmd(
 /// requirement is a usage error naming them. Under `--replay` the check is not made: a replay
 /// answers from a recorded run, so whether it needs the pack or the filler is known only as it
 /// runs.
+/// How a command-line run ended, given whether its flags resolved to an invocation (4.8): a
+/// run whose arguments did not resolve is `invalid` with the reason, whatever the recipe did,
+/// since only an `invalid` result may lack its invocation. The resolution reads what the run
+/// reads, so in practice the run has already failed the same way.
+fn unresolved(
+    recipe: &str,
+    ended: run_json::Ended,
+    resolved: &rascal_core::error::Result<rascal_core::contract::table_manners::Invocation>,
+) -> run_json::Ended {
+    match resolved {
+        Err(error) if ended.status != rascal_core::contract::table_manners::Status::Invalid => {
+            run_json::ended_with(recipe, error)
+        }
+        _ => ended,
+    }
+}
+
 fn ready_for(
     recipe: &str,
     config: Option<&std::path::Path>,

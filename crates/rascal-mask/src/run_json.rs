@@ -12,7 +12,7 @@ use rascal_core::contract::table_manners::images::{
     Projection as TmProjection, Source, Topology as TmTopology,
 };
 use rascal_core::contract::table_manners::{
-    Cache, ErrorCode, ErrorInfo, Run, RunResult, Spend, SpendBasis, Status, Tool,
+    Cache, ErrorCode, ErrorInfo, Invocation, Run, RunResult, Spend, SpendBasis, Status, Tool,
 };
 use rascal_core::contract::{self, LocationMeta, location_out};
 use rascal_mask::filler::{self, Spent};
@@ -84,6 +84,9 @@ pub struct Pending {
     pub input_identity: String,
     pub images_in: Vec<ImageTaken>,
     pub locations_used: Vec<TmLocation>,
+    /// What the call resolved to (4.8, `crate::invocation`); none only when its arguments did
+    /// not resolve, which ends the run `invalid`.
+    pub invocation: Option<Invocation>,
 }
 
 /// The run a signal would cancel, if any.
@@ -367,6 +370,7 @@ pub fn finish(
         finished: rfc3339(finished),
         duration_ms: u64::try_from(finished.saturating_sub(pending.started_ms)).unwrap_or(u64::MAX),
         input_identity: pending.input_identity.clone(),
+        invocation: pending.invocation.clone(),
         spend: Spend {
             usd: usd(spent.usd),
             unresolved_usd: usd(spent.unresolved_usd),
@@ -382,6 +386,7 @@ pub fn finish(
             None => Cache::Off,
         },
         images: Some(Images { taken, out }),
+        artifacts: None,
         locations: Some(Locations {
             used: if pending.locations_used.is_empty() {
                 used
@@ -453,6 +458,7 @@ pub fn pending_for(args: &crate::run::RunArgs, filler: Option<&str>) -> Pending 
         input_identity: format!("sha256:{}", input_identity(&parts)),
         images_in: Vec::new(),
         locations_used: Vec::new(),
+        invocation: None,
     }
 }
 

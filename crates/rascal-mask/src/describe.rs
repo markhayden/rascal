@@ -1,18 +1,19 @@
 //! The contract's description document (table-manners 3 and 11.2; ADR 0020): one action per
-//! shipped recipe, built from the recipes and the configuration, so a client that knows only the
-//! contract can form a call. `rascal describe --json` prints it; `serve` returns it from the
-//! `describe` tool.
+//! shipped recipe, each of kind `task`, built from the recipes and the configuration, so a client
+//! that knows only the contract can form a call. `rascal describe --json` prints it; `serve`
+//! returns it from the `describe` tool.
 
 use std::collections::BTreeMap;
 
 use rascal_core::contract::table_manners::images::{
-    ImageSlot, Limits, LocationKind, LocationOutput, LocationSlot, Outputs, Vocabulary,
+    ImageSlot, Limits, LocationKind, LocationOutput, LocationSlot, Outputs,
 };
 use rascal_core::contract::table_manners::{
-    Action, Cost, DescribedTool, Description, Duration, Profile, Render, RenderKind, SpendBasis,
+    Action, ActionKind, Cost, DescribedTool, Description, Duration, Profile, Render, RenderKind,
+    SpendBasis, Vocabulary,
 };
 use rascal_core::error::Result;
-use rascal_core::recipe::InputType;
+use rascal_core::recipe::{InputType, Recipe};
 use serde_json::{Value, json};
 
 use crate::readiness::{self, Setup, Use};
@@ -130,10 +131,67 @@ pub fn max_spend_usd_schema() -> Value {
             "description": "Lower the per-call spend cap for this call (USD, above zero)." })
 }
 
+/// The arguments every action takes beside its recipe's inputs: `filler` (from `fillers`, the
+/// configured names), `set`, `projection`, `strict` and `max_spend_usd`, each with the default the
+/// tool uses when the call leaves it out, where there is one.
+fn common_properties(recipe: &Recipe, fillers: &[String]) -> serde_json::Map<String, Value> {
+    let mut properties = serde_json::Map::new();
+    properties.insert(
+        "filler".to_string(),
+        if fillers.is_empty() {
+            json!({ "type": "string",
+                    "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone. None is configured." })
+        } else {
+            json!({ "type": "string", "enum": fillers,
+                    "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone." })
+        },
+    );
+    properties.insert(
+        "set".to_string(),
+        json!({ "type": "object",
+                "description": "Step overrides for this run, `<step>.<param>` to a value (`fan.constants`: `fan-v1`, `grow.px`: 8); journaled.",
+                "propertyNames": { "pattern": "^[a-z_][a-z0-9_-]*\\.[a-z_][a-z0-9_]*$" },
+                "additionalProperties": { "type": ["string", "number", "boolean"] } }),
+    );
+    let mut projection = json!({ "type": "string", "enum": ["flat", "equirectangular"],
+                "description": "The image's projection; without it an exactly 2:1 image is equirectangular." });
+    if let Some(declared) = recipe.projection {
+        // A recipe that declares its projection runs with it unless the call names another.
+        projection["default"] = json!(declared.name());
+        projection["description"] = json!(format!(
+            "The image's projection; {} unless the call names another.",
+            declared.name()
+        ));
+    }
+    properties.insert("projection".to_string(), projection);
+    properties.insert(
+        "strict".to_string(),
+        json!({ "type": "boolean", "default": false,
+                "description": "Fail (exit 1) when the recipe stops at a step that is not applicable." }),
+    );
+    properties.insert("max_spend_usd".to_string(), max_spend_usd_schema());
+    properties
+}
+
+/// The defaults an action's `params_schema` declares (3): what a call that leaves the argument
+/// out runs with. The invocation applies them (4.8).
+pub fn defaults(recipe: &str) -> Result<serde_json::Map<String, Value>> {
+    let recipe = load_recipe(recipe)?;
+    Ok(common_properties(&recipe, &[])
+        .into_iter()
+        .filter_map(|(name, schema)| Some((name, schema.get("default")?.clone())))
+        .collect())
+}
+
+/// The names the contract reserves for its own tools (3, 5): never an action's.
+pub const RESERVED: [&str; 4] = ["describe", "estimate", "export", "import"];
+
 /// The description for the shipped recipes under the configuration `setup` holds (its fillers
 /// name the spend and the keys; without one no filler is configured and nothing spends), each
 /// action's readiness its default use (3.1, [`readiness::for_call`]). It never fails on the
-/// configuration. `estimate` is a reserved tool (3, 5), never one of the actions.
+/// configuration. Every action is a `task` with no `group` (the operations profile is not
+/// listed, so there are no operations and no artifact types); the [`RESERVED`] names are tools,
+/// never actions.
 pub fn description(setup: &Setup<'_>) -> Result<Description> {
     let config = setup.config.config();
     let fillers: Vec<String> = config
@@ -200,38 +258,13 @@ pub fn description(setup: &Setup<'_>) -> Result<Description> {
                 _ => {}
             }
         }
-        properties.insert(
-            "filler".to_string(),
-            if fillers.is_empty() {
-                json!({ "type": "string",
-                        "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone. None is configured." })
-            } else {
-                json!({ "type": "string", "enum": fillers,
-                        "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone." })
-            },
-        );
-        properties.insert(
-            "set".to_string(),
-            json!({ "type": "object",
-                    "description": "Step overrides for this run, `<step>.<param>` to a value (`fan.constants`: `fan-v1`, `grow.px`: 8); journaled.",
-                    "propertyNames": { "pattern": "^[a-z_][a-z0-9_-]*\\.[a-z_][a-z0-9_]*$" },
-                    "additionalProperties": { "type": ["string", "number", "boolean"] } }),
-        );
-        properties.insert(
-            "projection".to_string(),
-            json!({ "type": "string", "enum": ["flat", "equirectangular"],
-                    "description": "The image's projection; without it an exactly 2:1 image is equirectangular." }),
-        );
-        properties.insert(
-            "strict".to_string(),
-            json!({ "type": "boolean",
-                    "description": "Fail (exit 1) when the recipe stops at a step that is not applicable." }),
-        );
-        properties.insert("max_spend_usd".to_string(), max_spend_usd_schema());
+        properties.extend(common_properties(&recipe, &fillers));
         let found = recipe.step.iter().any(|s| s.op == "segment");
         actions.push(Action {
             name: action_name(name),
             title: title.to_string(),
+            kind: ActionKind::Task,
+            group: None,
             purpose: purpose.to_string(),
             params_schema: json!({
                 "type": "object",
@@ -258,6 +291,7 @@ pub fn description(setup: &Setup<'_>) -> Result<Description> {
                 typical_s: if found { 20.0 } else { 5.0 },
                 max_s,
             },
+            ports: None,
             renders: renders(),
         });
     }
@@ -271,11 +305,13 @@ pub fn description(setup: &Setup<'_>) -> Result<Description> {
         },
         actions,
         vocabulary: Some(Vocabulary {
-            disposition: vec![],
-            confidence: vec![],
-            evidence: vec![],
-            score_kind: vec![SEGMENT_SCORE_KIND.to_string()],
+            group: None,
+            disposition: Some(vec![]),
+            confidence: Some(vec![]),
+            evidence: Some(vec![]),
+            score_kind: Some(vec![SEGMENT_SCORE_KIND.to_string()]),
         }),
+        artifact_types: None,
         limits: Some(Limits {
             inline_bytes: INLINE_BYTES,
         }),

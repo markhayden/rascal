@@ -7,6 +7,7 @@
 //! `--allow-dir` every path is refused and inline images still work. A bad `--allow-dir` exits
 //! 64 before anything is answered; the allowed set is printed on stderr. `serve` writes only
 //! under its runs root, workspace and cache, and the person's own command line is not held to the rule.
+//! Task 10.2 (CONTRACT 4.6): `rascal://session` lists the set as `allowed_dirs`, `[]` with none.
 #![cfg(feature = "testkit")]
 #![allow(clippy::unwrap_used)]
 
@@ -311,6 +312,7 @@ fn estimate_mask_protect_and_import_are_held_to_the_rule() {
 fn with_no_allowed_directory_every_path_is_refused_and_inline_runs() {
     let dir = layout("closed");
     let mut client = start(&dir, &[]);
+    assert_eq!(allowed_dirs(&mut client), serde_json::json!([]));
     for path in [dir.join("in/pano.png"), dir.join("in/missing.png")] {
         refused(&seam(&mut client, s(&path)), "image");
     }
@@ -340,6 +342,19 @@ fn with_no_allowed_directory_every_path_is_refused_and_inline_runs() {
         stderr(&out)
     );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `rascal://session`'s `allowed_dirs` (4.6).
+fn allowed_dirs(client: &mut Client) -> serde_json::Value {
+    let result = client
+        .request(
+            "resources/read",
+            serde_json::json!({ "uri": "rascal://session" }),
+        )
+        .unwrap();
+    let session: serde_json::Value =
+        serde_json::from_str(result["contents"][0]["text"].as_str().unwrap()).unwrap();
+    session["allowed_dirs"].clone()
 }
 
 /// The line `serve` prints with the allowed set, as a list.
@@ -413,6 +428,7 @@ fn the_configuration_narrows_to_the_overlap_and_never_widens() {
     // And the calls follow the set: with `in/sub` configured, `in/pano.png` is refused.
     let narrowed = config("calls", &[&sub]);
     let mut client = start(&dir, &["--allow-dir", s(&inside), "--config", s(&narrowed)]);
+    assert_eq!(allowed_dirs(&mut client), serde_json::json!([s(&sub)]));
     refused(&seam(&mut client, s(&inside.join("pano.png"))), "image");
     estimate(
         &mut client,

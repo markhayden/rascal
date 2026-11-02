@@ -489,6 +489,12 @@ fn the_cap_and_the_budget_fail_with_their_own_codes() {
         low["error"]["reason"].as_str().unwrap().contains("cap"),
         "{low:#}"
     );
+    // Refused by the limits, its arguments resolved: it carries its invocation, the cap kept.
+    assert_eq!(low["invocation"]["action"], "seam", "{low:#}");
+    assert_eq!(
+        low["invocation"]["arguments"]["max_spend_usd"], 0.03,
+        "{low:#}"
+    );
 
     // The first call fits the budget and spends 0.04; the second would go over 0.05.
     let first = spend_call(&mut client, None);
@@ -785,6 +791,21 @@ fn the_session_is_one_observation_of_the_servers_ledger() {
     );
     let first = session(&mut client);
     let id = first["id"].as_str().unwrap().to_string();
+    // The directories the server was started with (`serve_command`: the repository and the
+    // temporary directory), resolved (4.6, 10.2).
+    let mut dirs: Vec<String> = first["allowed_dirs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| d.as_str().unwrap().to_string())
+        .collect();
+    dirs.sort();
+    let mut expected: Vec<String> = [repo_root(), std::env::temp_dir()]
+        .iter()
+        .map(|d| std::fs::canonicalize(d).unwrap().display().to_string())
+        .collect();
+    expected.sort();
+    assert_eq!(dirs, expected, "{first:#}");
     assert_eq!(first["budget_usd"], serde_json::Value::Null);
     assert_eq!(first["remaining_usd"], serde_json::Value::Null);
     assert_eq!(first["spent_usd"], 0.0);
@@ -1186,6 +1207,8 @@ fn a_cap_of_zero_is_an_invalid_run_that_spends_nothing() {
             "{s:#}"
         );
         assert_eq!(s["spend"]["usd"], 0.0);
+        // Its arguments did not resolve, so it records no invocation (4.8, 10.2).
+        assert_eq!(s["invocation"], serde_json::Value::Null, "{s:#}");
     }
     let ledger = session(&mut client);
     assert_eq!(ledger["spent_usd"], 0.0, "{ledger:#}");
@@ -1536,4 +1559,109 @@ fn the_session_marks_credentials_by_what_providers_answered() {
     assert_eq!(credential_state(&mut client, "SERVE_BAD_KEY"), "present");
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The strings in `value` that start with `/`, by where they are, but under `mask` and
+/// `protect` (stored mask directories until 10.3).
+fn paths_in(value: &serde_json::Value, at: &str, out: &mut Vec<String>) {
+    match value {
+        serde_json::Value::String(s) if s.starts_with('/') => out.push(format!("{at}: {s}")),
+        serde_json::Value::Array(items) => {
+            for (i, item) in items.iter().enumerate() {
+                paths_in(item, &format!("{at}/{i}"), out);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for (key, item) in map {
+                if at == "/arguments" && (key == "mask" || key == "protect") {
+                    continue;
+                }
+                paths_in(item, &format!("{at}/{key}"), out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Task 10.2 (table-manners 4.8): every result records what its call resolved to. The image is
+/// its reference (`expect`) with no locator, the same one `images.taken` names; the delivery
+/// choices are left out; the defaults the description declares are applied and the projection
+/// the image ran in is named; `effective` names the filler; `requirements` are names, a filler
+/// program by its file name; and nothing in it is a path.
+#[test]
+fn every_result_records_its_invocation() {
+    let dir = scratch("invocation");
+    let mut client = start(&dir);
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let out = client
+        .call(
+            "seam",
+            serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "fake",
+                                "return_images": "inline", "image_blocks": true }),
+        )
+        .unwrap();
+    let r = out.structured.unwrap();
+    valid("urn:table-manners:core:result", &r);
+    assert_eq!(r["status"], "completed", "{r:#}");
+    let invocation = &r["invocation"];
+    assert_eq!(invocation["action"], "seam");
+    assert_eq!(
+        invocation["arguments"],
+        serde_json::json!({
+            "image": { "expect": r["images"]["in"][0]["image"] },
+            "filler": "fake",
+            "projection": "equirectangular",
+            "strict": false,
+        }),
+        "{invocation:#}"
+    );
+    let filler = &invocation["effective"]["x-rascal"]["filler"];
+    assert_eq!(filler["name"], "fake", "{invocation:#}");
+    assert_eq!(filler["revision"], "fake");
+    assert_eq!(invocation["effective"]["model"], "fillers.fake");
+    assert_eq!(
+        invocation["requirements"],
+        serde_json::json!(["rascal.toml", "fillers.fake", "rascal"]),
+        "{invocation:#}"
+    );
+    let mut paths = Vec::new();
+    paths_in(invocation, "", &mut paths);
+    assert!(paths.is_empty(), "{paths:?}");
+
+    // A mask alone on a flat picture: the shape chose the projection, and it is named.
+    let flat = repo_root().join("fixtures/images/chair-blob.png");
+    let r = client
+        .call(
+            "mask_rect",
+            serde_json::json!({ "image": { "path": flat.to_str().unwrap() },
+                                "location": rect_on(&flat) }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    valid("urn:table-manners:core:result", &r);
+    assert_eq!(r["status"], "completed", "{r:#}");
+    let invocation = &r["invocation"];
+    assert_eq!(invocation["arguments"]["projection"], "flat", "{r:#}");
+    assert_eq!(invocation["arguments"]["location"], rect_on(&flat));
+    assert_eq!(invocation["requirements"], serde_json::json!([]));
+    assert_eq!(
+        invocation["effective"]["x-rascal"]["filler"],
+        serde_json::Value::Null
+    );
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A bbox location on the image at `path`, by its reference, as a host would send it.
+fn rect_on(path: &Path) -> serde_json::Value {
+    let bytes = std::fs::read(path).unwrap();
+    let (width, height) = image::image_dimensions(path).unwrap();
+    serde_json::json!({
+        "image": { "file_sha256": rascal_core::contract::file_sha256(&bytes), "width": width,
+                   "height": height, "projection": "flat", "topology": "bounded" },
+        "kind": "bbox",
+        "parts": [{ "bbox": [0.1, 0.1, 0.3, 0.3] }],
+        "straddles_wrap": false
+    })
 }
