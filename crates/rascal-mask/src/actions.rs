@@ -450,7 +450,7 @@ impl ContractActions {
     }
 
     /// The ledger as it stands.
-    fn ledger(&self) -> Ledger {
+    pub(crate) fn ledger(&self) -> Ledger {
         *self.ledger.lock().unwrap_or_else(|e| e.into_inner())
     }
 
@@ -473,7 +473,17 @@ impl ContractActions {
         let action = describe::action_name(recipe);
         let price = self.with_setup(|setup| estimate::price(setup, recipe, &action, args))?;
         if let Some(named) = named {
-            self.check_estimate(named, recipe, &action, args, &price)?;
+            let now = estimate::bind(
+                recipe,
+                &action,
+                args,
+                price.config_identity.as_deref(),
+                Some(&self.session.id),
+                estimate::VERSION,
+                &self.paths,
+            )?;
+            let images = estimate::slots(recipe)?.images;
+            self.check_estimate(named, &action, &now, &images)?;
         }
         let mut ledger = self.ledger.lock().unwrap_or_else(|e| e.into_inner());
         let held = self.held(&ledger);
@@ -496,14 +506,15 @@ impl ContractActions {
     /// value that is not a binding, a binding this session never issued (another session's,
     /// which for rascal is also any other configuration's, or the command line's), one that
     /// differs from the call's recomputed binding (naming what changed) or one past its
-    /// `expires` is `stale_estimate`.
-    fn check_estimate(
+    /// `expires` is `stale_estimate`. `now` is the call's binding, made by the function its
+    /// estimate used (a task's `estimate::bind`, an operation's `ContractActions::operation_bound`); `images`
+    /// name its image slots or ports, so what changed is said.
+    pub(crate) fn check_estimate(
         &self,
         named: &Value,
-        recipe: &str,
         action: &str,
-        args: &Map<String, Value>,
-        price: &estimate::Price,
+        now: &estimate::Bound,
+        images: &[String],
     ) -> rascal_core::error::Result<()> {
         let stale = |reason: String| Error::StaleEstimate { reason };
         let Some(binding) = named
@@ -525,19 +536,10 @@ impl ContractActions {
                 "this session never issued the estimate {binding} (another session's, another configuration's or the command line's); ask this server for a new estimate"
             )));
         };
-        let bound = estimate::bind(
-            recipe,
-            action,
-            args,
-            price.config_identity.as_deref(),
-            Some(&self.session.id),
-            estimate::VERSION,
-            &self.paths,
-        )?;
-        if bound.binding != binding {
+        if now.binding != binding {
             return Err(stale(format!(
                 "the call differs from its estimate: {}; ask for a new estimate",
-                estimate::changed(recipe, &issued, action, &bound.parts)
+                estimate::changed(images, &issued, action, &now.parts)
             )));
         }
         if run_json::now_ms() >= issued.expires_ms {
@@ -550,7 +552,7 @@ impl ContractActions {
     }
 
     /// The session budget and what the ledger holds against it.
-    fn held(&self, ledger: &Ledger) -> estimate::Held {
+    pub(crate) fn held(&self, ledger: &Ledger) -> estimate::Held {
         estimate::Held {
             budget_usd: self.budget_usd(),
             held_usd: ledger.spent_usd + ledger.reserved_usd,
@@ -895,7 +897,7 @@ impl ContractActions {
     }
 
     /// The session observation for one copy of the ledger.
-    fn session_view_of(&self, ledger: &Ledger) -> TmSession {
+    pub(crate) fn session_view_of(&self, ledger: &Ledger) -> TmSession {
         let budget = self.budget_usd();
         TmSession {
             contract: rascal_core::contract::CONTRACT_VERSION.to_string(),
@@ -1174,6 +1176,13 @@ impl Actions for ContractActions {
                     "estimate: the arguments are {\"action\": <name>, \"arguments\": {…}}",
                 )
             })?;
+            if self.is_operation(action) {
+                return Ok(ActionResult {
+                    structured: self.estimate_operation(action, arguments)?,
+                    is_error: false,
+                    images: Vec::new(),
+                });
+            }
             return Ok(ActionResult {
                 structured: self
                     .estimate(action, arguments)

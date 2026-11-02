@@ -372,7 +372,7 @@ not ready, references that do not bind).
   always `ready`. Then the run is allocated like a task's (the claim, the permit, progress with
   the run's reference, cancellation, the association, `run.json` atomically and last); the limits
   check only checks the arguments (an operation's worst case is 0; an estimate named in `_meta`
-  is `stale_estimate`, since this session issues none for an operation until task 10.9). Images
+  is checked as a task's, against the operation's binding, task 10.9 below). Images
   and locations given by value are registered in the store, and the frame check runs again over
   every input (a mismatch is `invalid`/`usage`). The op runs with `Workspace::invoke_with` on the
   store, step id the run's id, so its outputs commit there as one operation record and bind by
@@ -586,6 +586,24 @@ each image whose bytes changed and each argument added, removed or changed), or 
 its `expires`. A matching estimate is no reservation: the cap and the budget are checked again,
 so an allowed estimate followed by a call the budget can no longer hold ends `budget`. A call
 that names no estimate is checked against the limits alone.
+
+**Estimates for operations (task 10.9).** `estimate` answers for an operation too. Its ports are
+read and bound by the call's own function (`bind_ports`: type, version, resolution in the store,
+and the frames together), so a reference that does not bind gets the same `binding` refusal, its
+`bindings` byte-equal to the call's; its parameters are resolved by the run's function, so a bad
+one is `invalid_arguments` (`usage`), as is a malformed port value (which a call would send as
+plain invalid params: the `estimate` tool's input schema cannot reject it). The document is
+allowed (unless the session's budget is already spent), `worst_case_usd` 0, `cap_usd` the
+configured per-call cap, `readiness` `ready`, `effective.model` null and `x-rascal` `{"constants":
+<the set the call would use>}`, the operation invocation's own. Its `binding` is the record
+identity of the same `{action, arguments, tool_version, config_identity, session_id}`, where each
+in-port's reference enters as `{"artifact": <its identity>}` (a `many` port as the list, in
+order), each image given by value as `{"file_sha256": …}` (an `expect` verified, then dropped),
+each location as sent, and each parameter as sent; delivery is left out. Nothing is read into the
+store. A served operation naming its estimate is checked as above, against this binding, after
+allocation (so a mismatch is the run's `invalid`/`stale_estimate`, the reason naming the argument
+or the image port that changed). `rascal estimate --json` on the command line prices tasks only:
+it has no store for an operation's references to bind in.
 
 `rascal estimate --json` prints the same document with no session: `session_id` and `session`
 are null and the binding is made over a null session id, so no server accepts it; the budget is

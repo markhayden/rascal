@@ -33,6 +33,9 @@
 //!   set's values and the manifest's defaults applied, `constants` named), each artifact as the
 //!   store's reference, each image as `{"expect": <reference>}` and each location as given;
 //!   `effective` names the configuration and, in `x-rascal`, the constant set; no requirement.
+//! - **The estimate** (4.5; PLAN.md 10.9): the same ports and binding, the same parameters,
+//!   allowed at 0 and ready; its binding digests each reference by identity and each image by
+//!   file digest, and a call naming it is checked against the call's binding.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -361,6 +364,145 @@ impl ContractActions {
             .map_err(CallError::from)
     }
 
+    /// The estimate of an operation call (4.5; PLAN.md 10.9): its ports read and bound as the
+    /// call binds them (one function, so a call that does not bind gets the same `binding`
+    /// refusal), its parameters resolved as the run resolves them, then a document allowed at a
+    /// worst case of 0 under the configured cap, ready, naming no model and, in `x-rascal`, the
+    /// constant set it would use. Its binding ([`ContractActions::operation_bound`]) is recorded,
+    /// so a call naming it is checked as a task's. Nothing is read into the store.
+    pub(crate) fn estimate_operation(
+        &self,
+        name: &str,
+        args: &Map<String, Value>,
+    ) -> Result<Value, CallError> {
+        let wrong = |e: Error| crate::actions::invalid_arguments(name, &e);
+        let op = self
+            .ops
+            .get(name)
+            .ok_or_else(|| wrong(Error::usage(format!("action: no action {name}"))))?;
+        let manifest = op.manifest();
+        let items = items(&manifest, args).map_err(|e| wrong(Error::usage(e.message)))?;
+        self.bind_ports(op, &items)?;
+        let (_, resolution) = resolve(op, &manifest, args).map_err(wrong)?;
+        let bound = self
+            .operation_bound(&manifest, args, &items)
+            .map_err(wrong)?;
+        let cap_usd = estimate::effective_cap(self.config.as_ref(), args).map_err(wrong)?;
+        let config_identity = self.config_state.identity();
+        let ledger = self.ledger();
+        let expires_ms = run_json::now_ms() + estimate::ttl_ms();
+        self.issued
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .record(
+                &bound.binding,
+                estimate::IssuedEstimate {
+                    action: name.to_string(),
+                    expires_ms,
+                    parts: bound.parts.clone(),
+                },
+            );
+        let price = estimate::Price {
+            readiness: rascal_core::contract::table_manners::Readiness {
+                state: rascal_core::contract::table_manners::ReadinessState::Ready,
+                requirements: vec![],
+            },
+            model: None,
+            config_identity: config_identity.clone(),
+            filler: Value::Null,
+            constants: BTreeMap::new(),
+            worst_case_usd: Some(0.0),
+            cap_usd,
+        };
+        let mut document = estimate::document(
+            name,
+            &bound,
+            price,
+            Some(self.held(&ledger)),
+            Some(self.session_view_of(&ledger)),
+            expires_ms,
+        );
+        let mut extensions = BTreeMap::new();
+        extensions.insert(
+            "x-rascal".to_string(),
+            json!({ "constants": resolution.params.get("constants").and_then(|c| c.as_str()) }),
+        );
+        document.effective = Effective {
+            model: None,
+            config_identity,
+            extensions,
+        };
+        serde_json::to_value(&document).map_err(|e| wrong(Error::usage(format!("estimate: {e}"))))
+    }
+
+    /// The binding of an operation call (4.5; 12.5's recipe, extended): a digest over the
+    /// action, each argument (delivery left out) with every in-port's reference by its identity
+    /// and every image by its file digest (a `many` port's items in order), the version, the
+    /// configuration's identity and the session, so an estimate and the call it binds agree.
+    fn operation_bound(
+        &self,
+        manifest: &Manifest,
+        args: &Map<String, Value>,
+        items: &[Item],
+    ) -> rascal_core::error::Result<estimate::Bound> {
+        let mut entered_ports: BTreeMap<&str, Vec<Value>> = BTreeMap::new();
+        for item in items {
+            let label = match item.index {
+                Some(n) => format!("{}[{n}]", item.port),
+                None => item.port.clone(),
+            };
+            let entered = match &item.given {
+                Given::Reference(reference) => json!({ "artifact": reference.identity }),
+                Given::Image(value) => {
+                    let image = estimate::image_in(&label, value, &self.paths)?;
+                    let bytes = image.bytes()?;
+                    estimate::verify_expect(&label, value, &image, &bytes)?;
+                    json!({ "file_sha256": rascal_core::contract::file_sha256(&bytes) })
+                }
+                Given::Location(value) => value.clone(),
+            };
+            entered_ports.entry(&item.port).or_default().push(entered);
+        }
+        let mut arguments = Map::new();
+        let mut parts = BTreeMap::new();
+        for (key, value) in args {
+            if DELIVERY.contains(&key.as_str()) {
+                continue;
+            }
+            let entered = match manifest.inputs.iter().find(|p| &p.name == key) {
+                Some(port) => {
+                    let mut values = entered_ports.remove(key.as_str()).unwrap_or_default();
+                    if port.many {
+                        Value::Array(values)
+                    } else {
+                        values.pop().unwrap_or(Value::Null)
+                    }
+                }
+                None => value.clone(),
+            };
+            parts.insert(
+                key.clone(),
+                rascal_core::canonical::identity("estimate-argument", &entered)
+                    .as_str()
+                    .to_string(),
+            );
+            arguments.insert(key.clone(), entered);
+        }
+        let payload = json!({
+            "action": manifest.name,
+            "arguments": arguments,
+            "tool_version": estimate::VERSION,
+            "config_identity": self.config_state.identity(),
+            "session_id": self.session.id,
+        });
+        Ok(estimate::Bound {
+            binding: rascal_core::canonical::identity("estimate", &payload)
+                .as_str()
+                .to_string(),
+            parts,
+        })
+    }
+
     /// Binds every reference among `items` (10.3) and checks the bound inputs' frames
     /// together (`wrong_frame`); every problem in one `binding` refusal, in item order.
     fn bind_ports(
@@ -569,42 +711,15 @@ impl ContractActions {
     ) -> Result<Outcome, (Error, Option<Value>)> {
         let plain = |e: Error| (e, None);
         if let Some(named) = &meta.estimate {
-            // The session issues no estimate for an operation (PLAN.md 10.9), so a call naming
-            // one names an estimate this session never issued (4.5).
-            return Err(plain(Error::StaleEstimate {
-                reason: format!(
-                    "this session never issued the estimate {named}; ask this server for a new estimate"
-                ),
-            }));
+            // Checked as a task's (4.5, 12.6): the call's binding from the function its
+            // estimate used (PLAN.md 10.9).
+            let now = self
+                .operation_bound(manifest, args, &items)
+                .map_err(plain)?;
+            self.check_estimate(named, &manifest.name, &now, &image_ports(manifest))
+                .map_err(plain)?;
         }
-        let mut params = Params::new();
-        for (key, value) in args {
-            if manifest.inputs.iter().any(|p| &p.name == key) || DELIVERY.contains(&key.as_str()) {
-                continue;
-            }
-            if key == "constants" {
-                let set = value.as_str().ok_or_else(|| {
-                    plain(Error::usage(format!(
-                        "constants: {value} is not the name of a constant set"
-                    )))
-                })?;
-                params.insert(key.clone(), toml::Value::String(set.to_string()));
-            } else if let Some(param) = manifest.param(key) {
-                params.insert(key.clone(), json_param(param, value).map_err(plain)?);
-            } else {
-                return Err(plain(Error::usage(format!(
-                    "{key}: {} takes no argument {key}",
-                    manifest.name
-                ))));
-            }
-        }
-        let resolution = rascal_core::op::resolve_step(op, &params).map_err(|e| {
-            plain(Error::usage(match e {
-                rascal_core::op::Unresolved::NoSet(m) | rascal_core::op::Unresolved::Invalid(m) => {
-                    format!("{}: {m}", manifest.name)
-                }
-            }))
-        })?;
+        let (params, resolution) = resolve(op, manifest, args).map_err(plain)?;
         // Until the invocation is known, whatever stops the run is its arguments not resolving:
         // `invalid` (4.8 allows a null invocation only there), never an `error`.
         let resolving = |e: Error| match run_json::error_of(&e).0 {
@@ -1117,6 +1232,55 @@ fn item(port: &Port, index: Option<usize>, value: &Value) -> Result<Item, CallEr
         artifact_type: port.artifact_type,
         given,
     })
+}
+
+/// An operation's parameters from its arguments as given, and resolved as the run resolves them
+/// (the constant set's values and the manifest's defaults applied): the run's and the
+/// estimate's one function. A bad one is `usage`.
+fn resolve(
+    op: &dyn Op,
+    manifest: &Manifest,
+    args: &Map<String, Value>,
+) -> rascal_core::error::Result<(Params, rascal_core::op::Resolution)> {
+    let mut params = Params::new();
+    for (key, value) in args {
+        if manifest.inputs.iter().any(|p| &p.name == key) || DELIVERY.contains(&key.as_str()) {
+            continue;
+        }
+        if key == "constants" {
+            let set = value.as_str().ok_or_else(|| {
+                Error::usage(format!(
+                    "constants: {value} is not the name of a constant set"
+                ))
+            })?;
+            params.insert(key.clone(), toml::Value::String(set.to_string()));
+        } else if let Some(param) = manifest.param(key) {
+            params.insert(key.clone(), json_param(param, value)?);
+        } else {
+            return Err(Error::usage(format!(
+                "{key}: {} takes no argument {key}",
+                manifest.name
+            )));
+        }
+    }
+    let resolution = rascal_core::op::resolve_step(op, &params).map_err(|e| {
+        Error::usage(match e {
+            rascal_core::op::Unresolved::NoSet(m) | rascal_core::op::Unresolved::Invalid(m) => {
+                format!("{}: {m}", manifest.name)
+            }
+        })
+    })?;
+    Ok((params, resolution))
+}
+
+/// The in-ports that take an image, which a stale estimate names when its bytes changed.
+fn image_ports(manifest: &Manifest) -> Vec<String> {
+    manifest
+        .inputs
+        .iter()
+        .filter(|p| p.artifact_type == ArtifactType::Image)
+        .map(|p| p.name.clone())
+        .collect()
 }
 
 fn absolute(path: &Path) -> String {

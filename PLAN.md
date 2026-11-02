@@ -2161,18 +2161,33 @@ estimate and the call it binds agree. A call whose references do not bind gets t
 refusal from `estimate` as from the call (4.5), from one function. A served operation carrying
 `_meta["table-manners/estimate"]` is checked as in 12.6.
 
+As built: the operation's estimate reads its ports with the call's `items` and binds them with
+the call's `bind_ports`, so the refusal and its `bindings` are the call's; its parameters go
+through `resolve`, which the run now shares (the parameters as given and as resolved). A port
+value of the wrong shape, plain invalid params on a call, is `invalid_arguments` (`usage`) from
+`estimate`, whose input schema cannot reject it. The binding (`operation_bound`) enters a
+reference as `{"artifact": <identity>}`, a `many` port as the list in order, an image by value as
+`{"file_sha256": …}` after its `expect` is checked, a location and each parameter as sent, and
+the configuration as `config_identity`; it reads nothing into the store. The call checks a named
+estimate after allocation (as before 10.9, so a mismatch is the run's `invalid`/`stale_estimate`)
+through `check_estimate`, now shared with tasks: the caller passes the call's binding and its
+image slots or ports (`estimate::changed` takes those names instead of a recipe). `cap_usd` is
+the configured per-call cap (an operation takes no `max_spend_usd`). `rascal estimate --json` on
+the command line still prices tasks only: it has no store for an operation's references to
+bind in.
+
 **Acceptance.**
-- [ ] `estimate` for `feather` on a held Mask validates and is allowed at 0; the binding is the
+- [x] `estimate` for `feather` on a held Mask validates and is allowed at 0; the binding is the
       same for the same reference and changes with `sigma_px`, the Mask's identity and the
       configuration.
-- [ ] `estimate` for each binding problem is the `binding` refusal, validating, byte-equal in its
+- [x] `estimate` for each binding problem is the `binding` refusal, validating, byte-equal in its
       `bindings` to the call's.
-- [ ] A `feather` call carrying its estimate's binding runs; with another `sigma_px` it ends
+- [x] A `feather` call carrying its estimate's binding runs; with another `sigma_px` it ends
       `invalid`/`stale_estimate`.
-- [ ] `no_provider_call.rs` covers operation estimates.
+- [x] `no_provider_call.rs` covers operation estimates.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- estimate::
-no_provider_call::`; `just check`.
+no_provider_call::`; `just check`. Done 2026-11-01 (on `m10-operations`).
 
 **Dependencies.** 10.6. **Files.** `crates/rascal-mask/src/{estimate,operations}.rs`, tests
 `estimate.rs`, `no_provider_call.rs`. **Size.** S.

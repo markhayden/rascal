@@ -596,14 +596,14 @@ impl Issued {
 }
 
 /// What differs between the call an estimate was made for and the call as it arrived, for
-/// people: each image whose bytes changed and each argument added, removed or changed.
+/// people: each image whose bytes changed (`images`, the action's image slots or ports) and each
+/// argument added, removed or changed.
 pub fn changed(
-    recipe: &str,
+    images: &[String],
     issued: &IssuedEstimate,
     action: &str,
     now: &BTreeMap<String, String>,
 ) -> String {
-    let images = slots(recipe).map(|s| s.images).unwrap_or_default();
     let mut what = Vec::new();
     if issued.action != action {
         what.push(format!("it was made for {}, not {action}", issued.action));
@@ -825,13 +825,14 @@ mod tests {
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
-        let text = changed("seam", &then, "seam", &now);
+        let images = ["image".to_string()];
+        let text = changed(&images, &then, "seam", &now);
         assert_eq!(
             text,
             "the argument `filler` changed; the image `image` changed; the argument `set` was added; the argument `strict` was removed"
         );
         assert_eq!(
-            changed("seam", &then, "remove", &then.parts),
+            changed(&images, &then, "remove", &then.parts),
             "it was made for seam, not remove"
         );
     }
