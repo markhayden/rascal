@@ -2211,7 +2211,7 @@ into `main` by the checkpoint procedure.
 `Cargo.toml`, `Cargo.lock`, `PLAN.md`, `tasks/todo.md`. **Size.** XS.
 
 ### Checkpoint M12
-- [ ] Tasks 12.1 to 12.10 done, CI green on both platforms; tag `m12`.
+- [x] Tasks 12.1 to 12.10 done, CI green on both platforms; tag `m12` (2026-11-01, table-manners 0.3.0 from crates.io).
 
 ### Owner decisions for M12
 - No default configuration lookup: `--config <path>` is the only way to choose one, for

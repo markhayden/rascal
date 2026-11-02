@@ -1020,8 +1020,8 @@ behind the tool.
 
 ## External interface (table-manners)
 
-rascal conforms to **table-manners** v0.3 (milestone M12, after v0.2.0 in M11), built against the
-v0.3 draft until v0.3.0 is published and pinned (PLAN.md 12.10)
+rascal conforms to **table-manners** v0.3 (milestone M12, after v0.2.0 in M11), pinned `=0.3.0`
+from crates.io (PLAN.md 12.10)
 (https://github.com/markhayden/table-manners; ADR 0020, decisions 13 and 14), the shared contract of the owner's tools: what an agent, a script or the
 playground sees from outside is the same for squint, rascal and the tools after them, so they
 chain in one pipeline without glue code. The contract's text is the specification of that

@@ -1,9 +1,8 @@
 # table-manners: rascal's side of the shared contract
 
 rascal conforms to [table-manners](https://github.com/markhayden/table-manners) v0.3 (milestones
-M8 and M9 for v0.1.0, M11 for v0.2.0, M12 for v0.3.0), built against the v0.3 draft on the M12
-branch until v0.3.0 is published, while `main` stays on v0.2.0 until that branch merges
-(PLAN.md 12.10); the shared contract of the owner's tools (ADR 0020, decisions 13 and 14): what
+M8 and M9 for v0.1.0, M11 for v0.2.0, M12 for v0.3.0), pinned `=0.3.0` from crates.io (PLAN.md
+12.10); the shared contract of the owner's tools (ADR 0020, decisions 13 and 14): what
 an agent, a script or the playground sees from outside is the same for squint, rascal and the
 tools after them. The contract's text is the specification; this page is what rascal does under
 it (PLAN.md M8, M9, M11 and M12).
