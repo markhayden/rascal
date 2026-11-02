@@ -103,7 +103,8 @@ echo '{"action":"seam","arguments":{"image":{"path":"/abs/pano.png"},"filler":"h
 rascal playground                                         # open Wafflery, the shared program (separate)
 rascal serve [--config rascal.toml] [--allow-dir /abs/in]   # the table-manners actions as MCP tools over stdio: one per recipe
                                                           # and one per op (an operation, bound by artifact reference), with run
-                                                          # resources, `describe`, `estimate`, `export` and `import`; starts with no flags at all,
+                                                          # and artifact resources, `describe`, `estimate`, `export` and `import`;
+                                                          # starts with no flags at all,
                                                           # refusing only what a call needs.
                                                           # A caller's path is read only inside an --allow-dir (repeatable;
                                                           # `[serve] allow_dirs` narrows them); with none, every path is refused

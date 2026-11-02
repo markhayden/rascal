@@ -1019,23 +1019,8 @@ impl ContractActions {
                     Some((bytes, frame)) => {
                         let file = dir.join(format!("preview-{name}.png"));
                         std::fs::write(&file, &bytes).map_err(|e| Error::io(&file, e))?;
-                        let (width, height) =
-                            image::image_dimensions(&file).map_err(|source| Error::Image {
-                                path: file.clone(),
-                                source,
-                            })?;
-                        let out = ImageOut {
-                            role: "preview".to_string(),
-                            image: ImageReference {
-                                file_sha256: contract::file_sha256(&bytes),
-                                width,
-                                height,
-                                projection: contract::projection(&frame),
-                                topology: contract::topology(&frame),
-                                pixel_sha256: None,
-                            },
-                            locator: Locator::Path(absolute(&file)),
-                        };
+                        let out =
+                            preview::image_out(&bytes, &frame, Locator::Path(absolute(&file)))?;
                         account.images_out.push(out.clone());
                         Some(out)
                     }

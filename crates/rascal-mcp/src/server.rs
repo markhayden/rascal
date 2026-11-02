@@ -57,6 +57,16 @@ impl CallError {
     }
 }
 
+impl From<CallError> for ErrorData {
+    /// The JSON-RPC invalid-params error a refusal or a caller's mistake is sent as.
+    fn from(error: CallError) -> ErrorData {
+        match error.data {
+            Some(data) => ErrorData::invalid_params(error.message, Some(data)),
+            None => invalid(error.message),
+        }
+    }
+}
+
 impl From<String> for CallError {
     fn from(message: String) -> CallError {
         CallError {
@@ -118,8 +128,9 @@ pub trait Actions: Send + Sync {
     fn resources(&self) -> Vec<Resource>;
     /// Resource templates (`rascal://run/{id}/run.json`, …).
     fn templates(&self) -> Vec<ResourceTemplate>;
-    /// A resource by URI, when there is one.
-    fn read(&self, uri: &str) -> Option<ResourceBody>;
+    /// A resource by URI: `Ok(None)` when there is none, `Err` when the read is refused (the
+    /// artifact resource's `binding` refusal, CONTRACT 4.7), sent like a call's.
+    fn read(&self, uri: &str) -> std::result::Result<Option<ResourceBody>, CallError>;
 }
 
 /// What an action tells the server while it works.
@@ -291,6 +302,7 @@ impl ServerHandler for Server {
         let body = tokio::task::spawn_blocking(move || actions.read(&lookup))
             .await
             .map_err(|e| ErrorData::internal_error(e.to_string(), None))?
+            .map_err(ErrorData::from)?
             .ok_or_else(|| ErrorData::resource_not_found(format!("no resource {uri}"), None))?;
         let contents = match body {
             ResourceBody::Text { mime, text } => {
@@ -472,10 +484,7 @@ impl Server {
             Ok(Ok(result)) => result,
             Ok(Err(error)) => {
                 self.release(client_run_id.as_deref());
-                return Err(match error.data {
-                    Some(data) => ErrorData::invalid_params(error.message, Some(data)),
-                    None => invalid(error.message),
-                });
+                return Err(error.into());
             }
             Err(panicked) => {
                 self.release(client_run_id.as_deref());

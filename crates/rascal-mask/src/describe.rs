@@ -444,6 +444,8 @@ pub fn description(setup: &Setup<'_>) -> Result<Description> {
             "rascal://run/{id}/run.json".to_string(),
             "rascal://run/{id}/journal".to_string(),
             "rascal://session".to_string(),
+            "rascal://artifact/{identity}".to_string(),
+            "rascal://artifact/{identity}/preview".to_string(),
         ],
         extensions: BTreeMap::new(),
     })

@@ -5,7 +5,7 @@
 //! recipe) runs as a `run` (or a `heal` when a filler is named) in its own run directory under
 //! the runs root, its images in by path or inline; an operation (a built-in op,
 //! `crate::operations`) runs on the session's store. Either's result is the run's `run.json`;
-//! the runs are resources.
+//! the runs and the store's artifacts (`crate::artifact_resource`) are resources.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -28,7 +28,7 @@ use rascal_mcp::server::{
 use serde_json::{Map, Value, json};
 
 use crate::run_json::{self, Ended, usd};
-use crate::{estimate, heal, invocation, run};
+use crate::{artifact_resource, estimate, heal, invocation, run};
 use rascal_mask::describe::{self, recipe_of};
 use rascal_mask::filler::{CALL_PREFIX, FillerCall, Spent};
 use rascal_mask::readiness::{self, Answer, Answers, Setup, Use};
@@ -1173,6 +1173,8 @@ impl Actions for ContractActions {
                 "application/x-ndjson",
             ),
             ("rascal://run/{id}/images/{role}", "image", "image/png"),
+            (artifact_resource::TEMPLATE, "artifact", "application/json"),
+            (artifact_resource::PREVIEW_TEMPLATE, "preview", "image/png"),
         ]
         .into_iter()
         .map(|(uri, name, mime)| {
@@ -1183,7 +1185,17 @@ impl Actions for ContractActions {
         .collect()
     }
 
-    fn read(&self, uri: &str) -> Option<ResourceBody> {
+    fn read(&self, uri: &str) -> std::result::Result<Option<ResourceBody>, CallError> {
+        if let Some(answer) = artifact_resource::read(&self.store, &self.ops, uri) {
+            return answer.map(Some);
+        }
+        Ok(self.read_run_resource(uri))
+    }
+}
+
+impl ContractActions {
+    /// The runs list, the session and a run's resources, when `uri` names one.
+    fn read_run_resource(&self, uri: &str) -> Option<ResourceBody> {
         if uri == "rascal://session" {
             return Some(ResourceBody::Text {
                 mime: "application/json".into(),

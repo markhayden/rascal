@@ -2,6 +2,7 @@
 //! graph is linked once, not once per file. `cargo nextest run` runs each test in its own
 //! process.
 
+mod artifact_resource;
 mod binding;
 mod cli;
 mod contract_locations;

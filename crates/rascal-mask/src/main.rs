@@ -11,6 +11,7 @@ mod lab_run;
 use rascal_mask::lab;
 use rascal_mask::readiness::{self, Setup};
 mod actions;
+mod artifact_resource;
 mod estimate;
 mod measure;
 mod operations;

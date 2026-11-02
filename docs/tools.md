@@ -142,7 +142,11 @@ rasterized outline), images in `images.in` and `images.out` (previews included),
 `locations.used` and `locations.found`, and the op's envelope as `body.envelope`. `ok` and
 `measured_nothing` complete; `not_applicable` completes with a note and nothing out;
 `invalid_args` is `invalid`/`usage`. Progress, cancellation, the correlation id, the runs list
-and the run resources work as for a task (`docs/contract.md`).
+and the run resources work as for a task (`docs/contract.md`). Every reference's `resource`,
+`rascal://artifact/{identity}`, reads the artifact back from the store by identity (its
+reference, a preview for a location or a Mask, rascal's own record), and `…/preview` is that
+PNG, so a host that kept references after a restart, or after moving the workspace, reads and
+binds them again (task 10.7).
 
 Runs are serial by default; `--concurrency n` lets `n` run at once, each still committing in
 turn; `describe`, `estimate`, `export` and `import` never wait for the permit. One request is one line of at most

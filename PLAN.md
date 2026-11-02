@@ -2067,18 +2067,33 @@ This is the old 10.6, persistence and relocation, end to end: a host stores refe
 `rascal serve --workspace <new>` and the same identities resolve. rascal never searches folders
 for an artifact.
 
+As built: the identity alone finds the artifact (`Workspace::resolve` for each type in turn, so
+the read needs no type); a malformed identity is the same `unresolved` refusal. The refusal's
+`expected` reads "an artifact this store holds (any rascal type, v1)" (for `/preview`, one whose
+type has a preview), and the remedy names the import tool or starting `serve` on the workspace
+that holds it; `/preview` of a Plan, Series or band profile says its type has none. `record` is
+rascal's own record as `workspace_describe` gave it (an image's, a Mask's or a location's record;
+a band profile, series or plan as stored). The cached preview is named by identity, as specified,
+and reused once written: a Mask previewed first in a store that lacked its frame's image keeps the
+grey rendering when another store reads it (a preview is for people and never stands for the
+artifact). The preview's image out is built by `preview::image_out`, which the operation results
+now share, and the cache root by `dash::cache_root`, which the dash document shares.
+`Actions::read` became fallible (`Result<Option<ResourceBody>, CallError>`) so a read can carry
+the refusal, sent like a call's. The fixtures with the description's `resources` were
+regenerated; an artifact-resource fixture for table-manners waits for 10.14.
+
 **Acceptance.**
-- [ ] A Mask's and a location's resources validate against the v0.4 artifact-resource shape with
+- [x] A Mask's and a location's resources validate against the v0.4 artifact-resource shape with
       a preview; a Plan's (from `cut`) has `preview: null`; `/preview` returns a PNG equal to the
       run's preview.
-- [ ] After Line → Rasterize, a new `serve` on the same workspace reads both references and a
+- [x] After Line → Rasterize, a new `serve` on the same workspace reads both references and a
       `feather` call bound to the saved Mask reference completes; after the workspace directory is
       moved and `serve` started on the new path, the same.
-- [ ] An identity the store does not hold is the `binding`/`unresolved` refusal with `port: null`
+- [x] An identity the store does not hold is the `binding`/`unresolved` refusal with `port: null`
       and a remedy; a read while a slow run holds the permit answers at once.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it --
-artifact_resource:: serve_contract::`; `just check`.
+artifact_resource:: serve_contract::`; `just check`. Done 2026-11-01 (on `m10-operations`).
 
 **Dependencies.** 10.6. **Files.** `crates/rascal-mask/src/artifact_resource.rs` (new),
 `actions.rs` (`resources`, `templates`, `read`), `describe.rs` (`resources`),

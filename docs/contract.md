@@ -315,7 +315,7 @@ not ready, references that do not bind).
   digest; `frame` is the frame's identity, never its id; `on` is the image at the root of the
   frame chain it was made on, as its file digest with the root frame's size, projection and
   topology and no pixel digest, so every store gives an artifact the same reference; `resource`
-  is `rascal://artifact/<identity>` (served from task 10.7). No workspace id appears. The
+  is `rascal://artifact/<identity>` (the artifact resource, below). No workspace id appears. The
   session's store is `serve`'s workspace (`--workspace`): a reference resolves there by identity
   (`Workspace::resolve`, from an index built once per generation; an image by the file digest
   its `import` recorded, or, for an image rascal made, the digest of the PNG it wrote, read once
@@ -418,6 +418,23 @@ not ready, references that do not bind).
   `rascal://run/{id}/run.json`, `rascal://run/{id}/journal`, `rascal://run/{id}/images/{role}`. An
   id is exactly `run-<ms>-<pid>`; nothing else under the runs root, and nothing outside it, can be
   read.
+- **The artifact resource (4.7, task 10.7).** `rascal://artifact/{identity}` reads any artifact
+  the session's store holds, found by its contract identity alone (`Workspace::resolve` for each
+  type in turn; ids and the directory's place play no part, so it answers the same after a
+  restart and after the workspace moves), as `{contract, tool, artifact, preview, record}`: its
+  reference (`contract::artifact_ref`, equal to the one a result gave), its preview as an image
+  out with role `preview` for `location` and `rascal:Mask` (null for every other type) and
+  `record`, rascal's own record of it (an image's, a Mask's or a location's record, a band
+  profile, series or plan as stored), which a host never reads.
+  `rascal://artifact/{identity}/preview` is the preview's PNG (`image/png`). The preview is
+  `crate::preview::draw`, the drawing an operation's result carries, written once into rascal's
+  cache at `$XDG_CACHE_HOME/rascal/previews/<identity, : as ->.png` (else `~/.cache/…`;
+  a temporary name, then a rename), outside the store and every run directory, and located there
+  by path; a later read reuses the file. An identity the store does not hold, a malformed one,
+  and `/preview` of a type without a preview are the `-32602` `binding` refusal with one entry,
+  `port: null`, `problem: "unresolved"`, `got` the identity and a remedy (question 10). Both
+  templates are in `resources/templates/list` and the description's `resources`, and a read
+  takes no permit.
 
 ## The fill cache, prices and limits (8.6)
 

@@ -105,8 +105,8 @@ impl Actions for Double {
         Vec::new()
     }
 
-    fn read(&self, _uri: &str) -> Option<ResourceBody> {
-        None
+    fn read(&self, _uri: &str) -> Result<Option<ResourceBody>, CallError> {
+        Ok(None)
     }
 }
 

@@ -12,6 +12,10 @@ use std::sync::Arc;
 
 use rascal_core::Error;
 use rascal_core::artifact::{Artifact, ArtifactType};
+use rascal_core::contract::{
+    self,
+    table_manners::images::{ImageOut, ImageReference, Locator},
+};
 use rascal_core::error::Result;
 use rascal_core::frame::{Frame, FrameTable};
 use rascal_core::image::{Image, Role};
@@ -64,6 +68,31 @@ pub fn draw(store: &Workspace, ops: &OpRegistry, id: &str) -> Result<Option<(Vec
         return Err(Error::op("preview", "the drawing is not an image"));
     };
     Ok(Some((png(&picture)?, frame)))
+}
+
+/// A preview's PNG `bytes`, drawn in `frame`, as the image out a result or the artifact
+/// resource lists (role `preview`, CONTRACT 4.7), located by `locator`.
+pub fn image_out(bytes: &[u8], frame: &Frame, locator: Locator) -> Result<ImageOut> {
+    let (width, height) = image::ImageReader::new(std::io::Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|e| Error::op("preview", e.to_string()))?
+        .into_dimensions()
+        .map_err(|source| Error::Image {
+            path: "<preview>".into(),
+            source,
+        })?;
+    Ok(ImageOut {
+        role: "preview".to_string(),
+        image: ImageReference {
+            file_sha256: contract::file_sha256(bytes),
+            width,
+            height,
+            projection: contract::projection(frame),
+            topology: contract::topology(frame),
+            pixel_sha256: None,
+        },
+        locator,
+    })
 }
 
 /// The image an artifact was drawn on in `frame`: following the records back from the artifact

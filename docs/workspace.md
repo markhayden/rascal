@@ -36,7 +36,12 @@ lookup reads an index built from the registry and the records once per generatio
 does not scan the workspace. Nothing in it depends on ids or on where the directory is: a
 workspace reopened after a restart, or moved and reopened, resolves the same identities.
 `rascal serve` resolves its callers' references in its own workspace, the session's store
-(`docs/contract.md`); a Mask that store lacks goes in with `workspace import-mask`.
+(`docs/contract.md`); a Mask that store lacks goes in with `workspace import-mask` or the
+`import` tool. Its artifact resource, `rascal://artifact/{identity}` (task 10.7), reads by
+identity alone, trying each type in turn, so a host that kept references reads and binds them
+again after `serve` restarts on the same workspace, or starts with `--workspace` on the directory
+after it moved. rascal never searches folders for an artifact: a store that does not hold the
+identity refuses the read.
 
 ## The commit protocol
 

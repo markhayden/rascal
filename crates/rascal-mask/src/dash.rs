@@ -487,7 +487,12 @@ pub fn write(root: &Path, out: &Path) -> Result<PathBuf> {
 pub fn document(root: &Path) -> Result<PathBuf> {
     let html = build(root)?;
     let run = root.canonicalize().map_err(|e| Error::io(root, e))?;
-    let dir = cache_root()?.join("rascal").join("dash");
+    let dir = cache_root()
+        .ok_or_else(|| {
+            Error::usage("dash: no cache directory (set XDG_CACHE_HOME or HOME) for --document")
+        })?
+        .join("rascal")
+        .join("dash");
     if resolved(&dir).starts_with(&run) {
         return Err(Error::usage(format!(
             "dash: the document's directory {} is inside the run directory; a render never writes there",
@@ -507,8 +512,9 @@ pub fn document(root: &Path) -> Result<PathBuf> {
 }
 
 /// `$XDG_CACHE_HOME` when it is absolute (the XDG rule: a relative value is ignored), else
-/// `$HOME/.cache`.
-fn cache_root() -> Result<PathBuf> {
+/// `$HOME/.cache`; `None` with neither. The dash documents and the artifact previews live under
+/// it.
+pub fn cache_root() -> Option<PathBuf> {
     std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .filter(|p| p.is_absolute())
@@ -517,9 +523,6 @@ fn cache_root() -> Result<PathBuf> {
                 .map(PathBuf::from)
                 .filter(|p| p.is_absolute())
                 .map(|home| home.join(".cache"))
-        })
-        .ok_or_else(|| {
-            Error::usage("dash: no cache directory (set XDG_CACHE_HOME or HOME) for --document")
         })
 }
 
