@@ -23,14 +23,25 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 /// `{"fail": "before"}` returns `Err` before allocating a run, `{"panic": "before"}` panics
 /// there, `{"fail": "after"}` allocates and then returns `Err`, `{"hold": true}` allocates and
 /// waits for the gate, anything else allocates and completes, its result echoing the estimate
-/// the call named.
+/// the call named. `entered` counts the calls the server has begun handling: it asks
+/// `exclusive` once per call, synchronously and just before it claims the call's correlation id,
+/// so a test can wait until a request it sent holds its claim.
 #[derive(Default)]
 struct Double {
     allocated: AtomicUsize,
     gate: Arc<(Mutex<bool>, Condvar)>,
+    entered: AtomicUsize,
+    entering: tokio::sync::Notify,
 }
 
 impl Double {
+    /// Waits until the server has begun handling `n` calls.
+    async fn until_entered(&self, n: usize) {
+        while self.entered.load(Ordering::SeqCst) < n {
+            self.entering.notified().await;
+        }
+    }
+
     fn open_gate(&self) {
         let (open, wake) = &*self.gate;
         *open.lock().unwrap() = true;
@@ -50,6 +61,9 @@ impl Actions for Double {
     }
 
     fn exclusive(&self, _name: &str) -> bool {
+        self.entered.fetch_add(1, Ordering::SeqCst);
+        // A stored permit: the waiter may not be waiting yet.
+        self.entering.notify_one();
         true
     }
 
@@ -283,6 +297,10 @@ async fn a_request_cancelled_while_queued_keeps_its_id_with_no_run() {
     let holder = wire.act(json!({ "hold": true }), None, "holder").await;
     wire.progress("holder").await;
     let queued = wire.act(json!({}), Some("Y"), "queued").await;
+    // The server handles each request in its own task, so a later request can be handled first:
+    // wait until the queued request holds its claim before cancelling it and retrying, or the
+    // retry may claim the id first and wait behind the holder.
+    double.until_entered(2).await;
     wire.send(
         json!({ "jsonrpc": "2.0", "method": "notifications/cancelled",
                       "params": { "requestId": queued, "reason": "test" } }),
