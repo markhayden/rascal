@@ -777,6 +777,7 @@ installation that fails, or leaves no program, exits 74 and runs nothing. Off a 
   | `refusal-earlier-run.json`, `refusal-no-run.json`, `refusal-cancelled-before-allocation.json` | an id reused after its run ended; ids whose calls were cancelled before allocation, still refused with `run: null` |
   | `runs.json`, `runs-page-2.json`, `session.json` | the two pages of the runs list and the session (`allowed_dirs` the suite's two directories) |
   | `run-op-line.json`, `run-op-rasterize.json`, `run-op-feather.json` | Line → Rasterize → Feather, one operation call each, bound by reference, with previews |
+  | `estimate-op-feather.json` | an allowed estimate of that Feather, its Mask port bound by reference (the binding digests the reference's identity, 4.5): worst case 0, `ready`, the constant set in `x-rascal`, no file (the built-in defaults' identity) |
   | `run-remove-mask.json`, `run-op-feather-from-remove.json` | a task listing its Mask, and an operation bound to it |
   | `refusal-binding-wrong-type.json`, `-wrong-version.json`, `-wrong-frame.json`, `-unresolved.json` | each binding problem from a call (`wrong_frame`: `subtract` on Masks of two images) |
   | `refusal-binding-estimate-*.json` | the same four from `estimate`, their `bindings` equal to the call's |

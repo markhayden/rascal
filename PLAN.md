@@ -2438,7 +2438,9 @@ schema as table-manners' test does, now also `artifact-*` (`operations:artifact`
 and `import-*` (the controls' responses) and `bundle-*/invocation.json` (the bundle manifest),
 whose members are written and compared byte for byte beside it; the comparison walks
 subdirectories. `wrong_frame` comes from `subtract` on Masks of two images, the `many` index from
-`select` with a wrong-typed and an unresolved plane. The replay's results are
+`select` with a wrong-typed and an unresolved plane. `estimate-op-feather.json` (added at the
+coordinator's request before table-manners v0.4.0) is the allowed estimate of the Feather call,
+its Mask port bound by reference, made just before that call. The replay's results are
 `run-replay-line.json`, `-rasterize.json` and `-feather.json` (the plan named no files for them).
 Results whose arguments did not resolve keep a null invocation: `run-invalid.json` and the
 `run-path-*.json` refusals. `session.json` (the M11 set's) carries the suite's two allowed

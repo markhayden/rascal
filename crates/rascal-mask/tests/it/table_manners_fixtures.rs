@@ -1042,7 +1042,8 @@ fn control(client: &mut Client, name: &str, arguments: Value) -> Result<Value, V
     }
 }
 
-/// v0.4's set (task 10.14): the operations Line → Rasterize → Feather, a task's Mask bound by
+/// v0.4's set (task 10.14): the operations Line → Rasterize → Feather (and an allowed estimate
+/// of the Feather, its Mask bound by reference), a task's Mask bound by
 /// an operation, every binding refusal from a call and from `estimate` (an index in a `many`
 /// port, the released id accepted again), the artifact resource, export and import, a
 /// `rascal call` of an invocation, a bundle and its replay from another directory with the
@@ -1053,6 +1054,7 @@ fn v04_set(
     out: &mut BTreeMap<&'static str, Value>,
     raw: &mut BTreeMap<String, Vec<u8>>,
     sessions: &mut Vec<String>,
+    issued: &mut Vec<Value>,
 ) {
     let images = repo_root().join("fixtures/images");
     let floor = images.join("floor.png");
@@ -1078,6 +1080,17 @@ fn v04_set(
         json!({ "location": location, "image": image }),
     );
     let mask = made(&rasterized, "mask");
+    // An allowed estimate of an operation whose Mask port is bound by reference (4.5): its
+    // binding records the reference by identity, and the call it priced follows.
+    let estimated = estimate(
+        &mut client,
+        issued,
+        "feather",
+        json!({ "mask": mask, "sigma_px": 6 }),
+    );
+    assert_eq!(estimated["allowed"], true, "{estimated:#}");
+    assert_eq!(estimated["worst_case_usd"], 0.0);
+    out.insert("estimate-op-feather.json", estimated);
     let feathered = done(
         &mut client,
         "feather",
@@ -1451,7 +1464,7 @@ fn the_table_manners_fixtures_hold() {
         &mut sessions,
         &mut issued,
     );
-    v04_set(&dir, &mut out, &mut raw, &mut sessions);
+    v04_set(&dir, &mut out, &mut raw, &mut sessions, &mut issued);
 
     let runs: Vec<String> = std::fs::read_dir(dir.join("runs"))
         .unwrap()
