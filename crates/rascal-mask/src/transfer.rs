@@ -437,7 +437,20 @@ pub fn import(
             )));
         }
     };
-    let digest = contract::file_sha256(&bytes);
+    import_bytes(store, &bytes, declared.as_deref(), named, expect.as_deref())
+}
+
+/// [`import`] of bytes already read: `declared` the media type an inline request named,
+/// `named` what labels the errors, `expect` the hex digest the bytes must have. The bundle
+/// replay (PLAN.md 10.13) imports each artifact member this way, checked whole.
+pub fn import_bytes(
+    store: &Workspace,
+    bytes: &[u8],
+    declared: Option<&str>,
+    named: &str,
+    expect: Option<&str>,
+) -> Result<ImportResponse, Failure> {
+    let digest = contract::file_sha256(bytes);
     if let Some(expect) = expect
         && expect != digest
     {
@@ -445,7 +458,7 @@ pub fn import(
             "{named}: the bytes' sha256 is {digest}, not {expect}; nothing was imported"
         )));
     }
-    let kind = sniff(&bytes);
+    let kind = sniff(bytes);
     let media_type = match kind {
         Kind::Bundle => BUNDLE_MEDIA_TYPE,
         Kind::Location => JSON_MEDIA_TYPE,
@@ -469,11 +482,11 @@ pub fn import(
     let (id, already_present) = match kind {
         Kind::Bundle => {
             let imported = store
-                .import_mask_bytes(&bytes, named, named, None)
+                .import_mask_bytes(bytes, named, named, None)
                 .map_err(checked)?;
             (imported.id, imported.already_present)
         }
-        _ => import_location(store, named, &bytes)?,
+        _ => import_location(store, named, bytes)?,
     };
     Ok(ImportResponse {
         contract: contract::CONTRACT_VERSION.to_string(),

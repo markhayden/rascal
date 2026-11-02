@@ -1429,6 +1429,7 @@ dependencies = [
  "rascal-core",
  "rmcp",
  "serde_json",
+ "tar",
  "tokio",
 ]
 

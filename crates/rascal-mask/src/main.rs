@@ -179,25 +179,35 @@ enum Command {
     },
     /// Run one action from exactly the arguments an MCP call sends (table-manners 4.8): the same
     /// checks and run as `rascal serve`, with no session. Prints the result (or a refusal) on one
-    /// line; exits 0, 3, 64, 130 or 143 as a run does.
+    /// line; exits 0, 3, 64, 130 or 143 as a run does. With `--bundle`, replays an invocation
+    /// bundle (4.9), one result per line, stopping at the first step that does not complete.
     Call {
         /// The action: a shipped recipe's or an op's name (`rascal describe --json`).
-        action: String,
+        #[arg(required_unless_present = "bundle", conflicts_with = "bundle")]
+        action: Option<String>,
         /// The call's arguments, a JSON object: a file, or `-` for stdin. A result's
         /// `invocation.arguments`, with a `path` beside each image's `expect`, call it again.
-        #[arg(long, value_name = "FILE")]
-        arguments: PathBuf,
+        #[arg(
+            long,
+            value_name = "FILE",
+            required_unless_present = "bundle",
+            conflicts_with = "bundle"
+        )]
+        arguments: Option<PathBuf>,
+        /// An invocation bundle a host built (a path under an `--allow-dir`): replay its steps.
+        #[arg(long, value_name = "PATH")]
+        bundle: Option<PathBuf>,
         /// The configuration file (rascal.toml), as `rascal serve` takes it.
         #[arg(long)]
         config: Option<PathBuf>,
-        /// A directory whose files the arguments may name by path (repeatable; absolute and
-        /// existing). Without one every path is refused; inline images still work.
+        /// A directory whose files the arguments (or `--bundle`) may name by path (repeatable;
+        /// absolute and existing). Without one every path is refused; inline images still work.
         #[arg(long = "allow-dir", value_name = "ABS_DIR")]
         allow_dir: Vec<PathBuf>,
         /// The store references resolve in and operations commit to; `rascal serve`'s default.
         #[arg(long)]
         workspace: Option<PathBuf>,
-        /// Where the run goes; `rascal serve`'s default runs root.
+        /// Where the runs go; `rascal serve`'s default runs root.
         #[arg(long)]
         runs: Option<PathBuf>,
     },
@@ -922,18 +932,32 @@ fn main() {
         Command::Call {
             action,
             arguments,
+            bundle,
             config,
             allow_dir,
             workspace,
             runs,
-        } => call::call(&call::CallArgs {
-            action,
-            arguments,
-            config,
-            allow_dirs: allow_dir,
-            workspace,
-            runs,
-        }),
+        } => match (bundle, action, arguments) {
+            (Some(bundle), _, _) => call::replay(&call::BundleArgs {
+                bundle,
+                config,
+                allow_dirs: allow_dir,
+                workspace,
+                runs,
+            }),
+            (None, Some(action), Some(arguments)) => call::call(&call::CallArgs {
+                action,
+                arguments,
+                config,
+                allow_dirs: allow_dir,
+                workspace,
+                runs,
+            }),
+            _ => {
+                eprintln!("rascal call: give <action> --arguments <file>, or --bundle <path>");
+                exit::USAGE
+            }
+        },
         Command::Serve {
             workspace,
             config,

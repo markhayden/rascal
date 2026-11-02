@@ -16,6 +16,7 @@ pub mod export;
 pub mod frame;
 pub mod identity;
 pub mod image;
+pub mod invocation_bundle;
 pub mod journal;
 pub mod lab;
 pub mod location;

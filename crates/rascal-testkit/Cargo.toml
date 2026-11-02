@@ -13,6 +13,8 @@ image = { workspace = true }
 # The fake MCP server, built on the SDK the real one uses; the independent client uses none of it.
 rmcp = { workspace = true }
 serde_json = { workspace = true }
+# The invocation bundle writer: a host builds the ustar archive (PLAN.md 10.13).
+tar = { workspace = true }
 tokio = { workspace = true }
 
 [lints]

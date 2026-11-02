@@ -2343,19 +2343,36 @@ the identity the bundle named and the one replayed (a filler's output, say, diff
 artifacts is refused before anything runs, naming them. It prints one result per line (JSON
 Lines), stops at the first step that does not complete, and exits with that step's code.
 
+As built: the bounds are 256 MiB, 256 members, an 8 MiB `invocation.json` (it holds every
+step's result) and member names of at most 96 bytes of lowercase letters, digits, `-` and `.`.
+The reader checks the manifest against the contract's schema through
+`contract::schema_errors`, which resolves the crate's embedded schemas. It does not insist on the
+writer's canonical byte layout (only that `invocation.json` comes first): any well-formed bundle
+whose digests hold replays; the testkit's writer is the byte-stable one. Another tool's step is
+refused up front with the `reference_only` and `unportable` checks, so nothing is imported before
+a refusal. An image a step bound by reference (Rasterize's `image`) keeps its reference in the
+arguments, so the invocation stays the original's; its input member is imported into the store
+by file digest when the store lacks it. A rebinding by port matches an earlier step's original
+`artifacts.out` entry to the replayed one at the same position and port, and its report is a
+`replay:` note added to the printed result only (the run's `run.json` stays the run's own); the
+place of this report awaits the coordinator's confirmation against CONTRACT 4.9's wording. Artifact imports go through `transfer::import_bytes` (the `import` control's checks
+without its inline size limit). The idempotency test replays a one-step bundle twice into a
+fresh store (one `import_mask` record); in the chain the replayed steps make the exported
+artifacts first, so their imports are already present on the first pass.
+
 **Acceptance.**
-- [ ] A bundle of Line → Rasterize → Feather, written by the testkit's bundle writer from the
+- [x] A bundle of Line → Rasterize → Feather, written by the testkit's bundle writer from the
       results and `export`, replays from another directory into a fresh store with the original
       workspace deleted; each replayed `invocation` equals the bundle's and the final Mask has
       the original identity.
-- [ ] A tampered bundle (an artifact member's byte, an input's byte, a missing member, an extra
+- [x] A tampered bundle (an artifact member's byte, an input's byte, a missing member, an extra
       member, an oversized manifest) is refused with nothing imported and nothing run; a bundle
       with `unportable` or `reference_only` entries is refused naming them.
-- [ ] Two calls of `--bundle` on the same file are idempotent in the store (imports
+- [x] Two calls of `--bundle` on the same file are idempotent in the store (imports
       `already_present`).
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- call_bundle::`;
-`just check`.
+`just check`. Done 2026-11-01 (on `m10-operations`).
 
 **Dependencies.** 10.12, 10.10. **Files.** `crates/rascal-mask/src/call.rs`,
 `crates/rascal-core/src/invocation_bundle.rs` (new: the bounded reader),

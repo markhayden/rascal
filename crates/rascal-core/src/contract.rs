@@ -157,6 +157,46 @@ pub fn port(port: &crate::op::Port) -> table_manners::operations::Port {
     }
 }
 
+/// Resolves the contract's schema ids (`urn:table-manners:…`) from the schemas the
+/// `table-manners` crate embeds.
+struct Embedded;
+
+impl jsonschema::Retrieve for Embedded {
+    fn retrieve(
+        &self,
+        uri: &jsonschema::Uri<String>,
+    ) -> std::result::Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        let text = table_manners::SCHEMAS
+            .iter()
+            .find(|(id, _)| *id == uri.as_str())
+            .map(|(_, text)| *text)
+            .ok_or_else(|| format!("no contract schema {uri}"))?;
+        Ok(serde_json::from_str(text)?)
+    }
+}
+
+/// What makes `value` invalid against the contract's schema `id` (empty when it is valid); `Err`
+/// when the schema is not one the crate embeds or does not build.
+pub fn schema_errors(
+    id: &str,
+    value: &serde_json::Value,
+) -> std::result::Result<Vec<String>, String> {
+    let text = table_manners::SCHEMAS
+        .iter()
+        .find(|(i, _)| *i == id)
+        .map(|(_, text)| *text)
+        .ok_or_else(|| format!("no contract schema {id}"))?;
+    let schema: serde_json::Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    let validator = jsonschema::options()
+        .with_retriever(Embedded)
+        .build(&schema)
+        .map_err(|e| e.to_string())?;
+    Ok(validator
+        .iter_errors(value)
+        .map(|e| format!("{} at {}", e, e.instance_path()))
+        .collect())
+}
+
 /// The resource that reads an artifact by its contract identity (CONTRACT 3.4, 4.7).
 pub fn artifact_resource(identity: &str) -> String {
     format!("rascal://artifact/{identity}")

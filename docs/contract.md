@@ -272,6 +272,34 @@ are said on stderr and exit 64. So a result's `invocation.arguments`, with a `pa
 image's `expect`, are the file for `rascal call <invocation.action>`, and the result's
 `invocation` is the original's.
 
+**Bundle replay (4.9, task 10.13).** `rascal call --bundle <path> [--config] [--allow-dir
+<abs>]… [--workspace] [--runs]` replays an invocation bundle a host built (no tool builds one;
+the testkit's `invocation_bundle` writer builds them for the tests: byte-stable ustar,
+`invocation.json` first, the other members once each, sorted, every header fixed). The path
+follows the path rule. `rascal_core::invocation_bundle::read` checks the whole file before
+anything acts, bounded like the mask bundle reader: at most 256 MiB and 256 members, an
+`invocation.json` of at most 8 MiB as the first member, member names `inputs/<name>` or
+`artifacts/<name>` (lowercase letters, digits, `-` and `.`, at most 96 bytes), regular files
+only, each size checked against what remains. The manifest validates against
+`urn:table-manners:core:invocation-bundle`; every member it names is present and no other; each
+`artifacts/` member has its `sha256`, and each `inputs/` member its image's `file_sha256`, which
+its name repeats. Then, before anything runs, a step of another tool is refused naming it, and a
+step listing `reference_only` inputs or `unportable` artifacts is refused naming them (exit 64,
+nothing imported, nothing run). Each step in order: its `artifacts/` members are imported (the
+`import` control's checks, whole and idempotent: a second replay finds them `already_present`);
+its `inputs/` members are written into rascal's replay area,
+`$XDG_DATA_HOME/rascal/replay/<bundle digest>/`, which the path rule admits for the replay (it is
+rascal's own directory, not a caller's path); its invocation's arguments get a `path` beside each
+image's `expect` (an image bound by reference instead is imported into the store by its file
+digest when the store lacks it, so the reference binds); a reference to an earlier step's output
+(an identity that step's original result lists in `artifacts.out`) is bound to the replayed
+output at the same port and position, whatever its identity; and the step runs as `rascal call`
+runs it, with no session. Each result is printed on its own line (JSON Lines); where a binding
+changed, the printed result's `notes` gain `replay: <port> named the earlier step's <port>
+output <identity>; bound to the replayed <identity>` (the run's own `run.json` is the run's). The
+replay stops at the first step that does not complete and exits with its code; a refusal prints
+its refusal JSON and exits 64.
+
 ## `serve` (8.5)
 
 ```
