@@ -250,7 +250,27 @@ fn the_four_exit_codes() {
     let floor = floor();
     let floor = floor.to_str().unwrap();
 
-    // 3: a missing image.
+    // 3: a workspace that cannot be made (a file stands where it would go).
+    std::fs::write(scratch.join("not-a-dir"), "x").unwrap();
+    let out = rascal(&[
+        "run",
+        "rect",
+        floor,
+        "--bbox",
+        "0.2,0.2,0.4,0.5",
+        "--workspace",
+        &scratch.s("not-a-dir"),
+        "--out",
+        &scratch.s("a"),
+    ]);
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    // 64: a missing image (its flags do not resolve: the run is `invalid`).
     let out = rascal(&[
         "run",
         "rect",
@@ -258,11 +278,11 @@ fn the_four_exit_codes() {
         "--bbox",
         "0.2,0.2,0.4,0.5",
         "--out",
-        &scratch.s("a"),
+        &scratch.s("a2"),
     ]);
     assert_eq!(
         out.status.code(),
-        Some(3),
+        Some(64),
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );

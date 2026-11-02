@@ -181,8 +181,10 @@ pub fn fresh(dir: &Path) -> bool {
     }
 }
 
-/// Registers a run a signal may cancel, and returns it.
-pub fn begin(pending: Pending) -> Pending {
+/// Registers a run a signal may cancel, with the invocation its flags resolved to, and returns
+/// it: a run is registered only once it has one, so a cancelled `run.json` always records it.
+pub fn begin(mut pending: Pending, invocation: Invocation) -> Pending {
+    pending.invocation = Some(invocation);
     if let Ok(mut current) = CURRENT.lock() {
         *current = Some(pending.clone());
     }
@@ -242,7 +244,8 @@ fn from_workspace(
     if let Ok(lines) = rascal_core::journal::Journal::read(&workspace_dir.join("journal.jsonl")) {
         notes.extend(lines.into_iter().filter_map(|l| l.note));
     }
-    let Ok(ws) = rascal_core::workspace::Workspace::open(workspace_dir) else {
+    // Read only: a run that never made its workspace is not given one by its result.
+    let Ok(ws) = rascal_core::workspace::Workspace::open_read_only(workspace_dir) else {
         return (None, vec![], vec![], notes);
     };
     let records = ws.records().unwrap_or_default();
@@ -422,8 +425,10 @@ pub fn write(dir: &Path, result: &RunResult) -> rascal_core::error::Result<()> {
 /// starts: its id, action, directory, start time and input identity.
 pub fn pending_for(args: &crate::run::RunArgs, filler: Option<&str>) -> Pending {
     let started_ms = allocate_ms();
+    // Only regular files are read: a FIFO or a device named as an input would block the read.
     let digest_of = |p: &Option<PathBuf>| {
         p.as_ref()
+            .filter(|p| p.is_file())
             .and_then(|p| std::fs::read(p).ok())
             .map(|b| contract::file_sha256(&b))
     };

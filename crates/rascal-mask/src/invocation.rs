@@ -74,6 +74,7 @@ pub fn of_call(
 /// run's configuration (no session: no provider has answered anything).
 pub fn of_command(args: &RunArgs, filler: Option<&str>) -> Result<Invocation> {
     resolving(|| {
+        run::check_flags(args, &load_recipe(&args.recipe)?, filler.is_some())?;
         let action = run_json::action_of(&args.recipe);
         let arguments = command_arguments(args, filler)?;
         let state = ConfigState::read(args.config.as_deref());

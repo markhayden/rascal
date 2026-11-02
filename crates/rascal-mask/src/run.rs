@@ -122,12 +122,7 @@ pub fn declares_prompt(recipe: &Recipe) -> bool {
 /// (text) from `--prompt`; a declared input without its flag, or a flag without its input,
 /// is a usage error.
 pub fn run(args: &RunArgs) -> Result<RunReport> {
-    if args.prompt.is_some() && !declares_prompt(&load_recipe(&args.recipe)?) {
-        return Err(Error::usage(format!(
-            "recipe {} declares no inputs.prompt; --prompt does not apply (remove-prompt takes one)",
-            args.recipe
-        )));
-    }
+    check_flags(args, &load_recipe(&args.recipe)?, false)?;
     let Prepared { run, outcome, .. } = run_recipe(args)?;
     let mask_dir = match outcome.outputs.get("mask") {
         Some(Artifact::Mask(mask)) => Some(mask.path_in(&run.workspace.root.join("artifacts"))),
@@ -142,19 +137,19 @@ pub fn run(args: &RunArgs) -> Result<RunReport> {
     })
 }
 
-/// Binds the inputs and runs the recipe; `heal` continues from the outcome. The registry is
-/// built here: the shipped ops plus every configured pack's tools, journaling into the run's
-/// workspace (so the run directory exists before the recipe is validated). A pack that does not
-/// start is noted and leaves its tools out, so a recipe that needs none of them still runs and
-/// one that does fails with the pack's own error.
-pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
-    let config = args
-        .config
-        .as_deref()
-        .map(rascal_core::config::Config::read)
-        .transpose()?;
-    let mut recipe = load_recipe(&args.recipe)?;
-    if declares_prompt(&recipe) && args.prompt.is_none() {
+/// The checks a run's flags get against its recipe before anything is read or made: a `prompt`
+/// it declares is given, every declared input has its flag and every flag its input, and the
+/// recipe takes an image. A `run` (`filler` false) also refuses `--prompt` for a recipe that
+/// declares none; a `heal` passes it to the filler. The command line's invocation makes these
+/// checks first, so flags that do not apply never start a run.
+pub fn check_flags(args: &RunArgs, recipe: &Recipe, filler: bool) -> Result<()> {
+    if !filler && args.prompt.is_some() && !declares_prompt(recipe) {
+        return Err(Error::usage(format!(
+            "recipe {} declares no inputs.prompt; --prompt does not apply (remove-prompt takes one)",
+            args.recipe
+        )));
+    }
+    if declares_prompt(recipe) && args.prompt.is_none() {
         return Err(Error::usage(format!(
             "recipe {} needs inputs.prompt: give --prompt",
             recipe.name
@@ -191,6 +186,22 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
             recipe.name
         )));
     }
+    Ok(())
+}
+
+/// Binds the inputs and runs the recipe; `heal` continues from the outcome. The registry is
+/// built here: the shipped ops plus every configured pack's tools, journaling into the run's
+/// workspace (so the run directory exists before the recipe is validated). A pack that does not
+/// start is noted and leaves its tools out, so a recipe that needs none of them still runs and
+/// one that does fails with the pack's own error.
+pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
+    let config = args
+        .config
+        .as_deref()
+        .map(rascal_core::config::Config::read)
+        .transpose()?;
+    let mut recipe = load_recipe(&args.recipe)?;
+    check_flags(args, &recipe, true)?;
     let bbox = args.bbox.as_deref().map(Location::parse_bbox).transpose()?;
     if !args.image.is_file() {
         return Err(Error::io(

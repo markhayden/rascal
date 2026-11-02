@@ -13,20 +13,7 @@
   },
   "finished": "<time>",
   "images": {
-    "in": [
-      {
-        "image": {
-          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
-          "height": 320,
-          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
-          "projection": "flat",
-          "topology": "bounded",
-          "width": 480
-        },
-        "role": "source",
-        "slot": "image"
-      }
-    ],
+    "in": [],
     "out": []
   },
   "input_identity": "sha256:02ef9ca5896ae3eef09769d38fa6ff841f98c25759615593fafc5450051d19fc",

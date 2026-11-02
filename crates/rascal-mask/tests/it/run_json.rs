@@ -405,6 +405,61 @@ fn a_signal_cancels_the_run_and_says_so() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Flags that do not resolve end the run `invalid` (exit 64) before it starts, so no signal can
+/// cancel a run that has no invocation (4.8 allows a null one only on `invalid`). The image is a
+/// FIFO: it is no file, so the flags do not resolve, and a run that went on regardless would
+/// block reading it, a window in which a signal used to write `cancelled` with a null
+/// invocation. The command must end by itself; if it hangs, it is signalled and the assertions
+/// below say what it wrote.
+#[test]
+fn flags_that_do_not_resolve_never_start_a_run_a_signal_could_cancel() {
+    let dir = scratch("unresolved-signal");
+    let fifo = dir.join("pano.png");
+    let made = Command::new("mkfifo").arg(&fifo).status().unwrap();
+    assert!(made.success());
+    let slow = priced(&dir, "slow", None);
+    for command in ["run", "heal"] {
+        let run = dir.join(format!("run-{command}"));
+        let mut args = vec![command, "seam", fifo.to_str().unwrap()];
+        if command == "heal" {
+            args.extend(["--filler", "fake", "--no-dash", "--config"]);
+            args.push(slow.to_str().unwrap());
+        }
+        args.extend(["--out", run.to_str().unwrap()]);
+        let mut child = Command::new(env!("CARGO_BIN_EXE_rascal"))
+            .args(&args)
+            .env_remove("RASCAL_LOG")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let started = std::time::Instant::now();
+        let status = loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                break status;
+            }
+            if started.elapsed().as_secs() >= 20 {
+                let _ = Command::new("kill")
+                    .args(["-TERM", &child.id().to_string()])
+                    .status();
+                break child.wait().unwrap();
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        };
+        let r = run_json(&run);
+        assert_eq!(r["status"], "invalid", "{command}: {r:#}");
+        assert_eq!(r["invocation"], serde_json::Value::Null);
+        assert_eq!(status.code(), Some(64), "{command}");
+        // Nothing ran: the run directory holds its result and nothing else.
+        let entries: Vec<_> = std::fs::read_dir(&run)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(entries, ["run.json"], "{command}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Task 10.2: a command line's flags as the action's arguments: `--bbox` a contract location on
 /// the image (the one the run used), `--set` the `set` object with its values typed, `--strict`
 /// and `--projection` as given, and no path anywhere.

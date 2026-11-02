@@ -191,7 +191,10 @@ the matching action's arguments: the image by its reference, `--bbox`, `--locati
 `--stroke` as the contract locations the run used (a contract location file as given), `--set`
 as `set` with its values typed, `--prompt`, `--projection`, `--strict`, `--mask` and `--protect`
 (absolute), and `heal`'s filler; so a command-line run is callable through `serve` with a locator
-added to its image.
+added to its image. The flags resolve before the run starts and before the signal watcher is
+armed: flags that do not resolve end the command `invalid` at once (exit 64, `run.json` with a
+null invocation and nothing else in the run directory), so a SIGINT or SIGTERM can only cancel a
+run that records its invocation.
 
 ## `serve` (8.5)
 

@@ -1643,7 +1643,8 @@ projection the image ran in, so a replay never depends on the 2:1 guess; the con
 those of the recipe's steps whose op has sets (the recipe's, a filler's override, then `set`;
 `estimate::constants`), not the heal graph's fixed ones; a requirement whose name is a path (a
 filler command given by path) is recorded by its file name; a recipe file run by `rascal run` has
-no action and records `custom`; a command-line run whose flags do not resolve ends `invalid`.
+no action and records `custom`; a command-line run whose flags do not resolve ends `invalid`
+before it starts (exit 64), so a signal can only cancel a run that records its invocation.
 The split could not keep the invocation out of the first commit: the moment the pin moves, the
 v0.4 result schema rejects every completed `run.json` without one, and a stand-in was ruled out.
 So the first commit carries the pin, the shapes and the invocation on every result, and the

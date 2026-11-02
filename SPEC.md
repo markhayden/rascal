@@ -1141,7 +1141,8 @@ rascal corpus verify corpus.toml
 
 Exit codes: 0 ok; 1 the op reported `not_applicable` or `measured_nothing` under `--strict`; 3
 operational error (a filler failed, a pack died, IO, non-convergence, a preservation check, a
-result that failed validation); 64 usage error; 130 and 143 a `run` or `heal` cancelled by
+result that failed validation); 64 usage error (a `run` or `heal` whose flags do not resolve, a
+missing or unreadable image among them, is `invalid` and exits 64 before anything runs); 130 and 143 a `run` or `heal` cancelled by
 SIGINT or SIGTERM (table-manners 6, ADR 0020). `playground` returns Wafflery's own exit
 code, 69 when it is not installed or `WAFFLERY_BIN` is wrong, and 74 when an offered
 installation fails (`docs/contract.md`). A bad parameter (`invalid_args`) is a usage
