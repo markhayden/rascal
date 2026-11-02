@@ -52,6 +52,9 @@ pub struct Workspace {
     /// The identity index of the last generation [`Workspace::resolve`] read, rebuilt when the
     /// generation changes.
     index: std::sync::Mutex<Option<Arc<IdentityIndex>>>,
+    /// The digest of each stored image file the index has read, by the image's identity: the
+    /// files never change, so a new generation reads only the images it adds.
+    file_digests: std::sync::Mutex<std::collections::HashMap<String, String>>,
 }
 
 /// An artifact found by identity ([`Workspace::resolve`]): what the snapshot holds under it.
@@ -157,6 +160,7 @@ impl Workspace {
             root: root.to_path_buf(),
             fs,
             index: std::sync::Mutex::default(),
+            file_digests: std::sync::Mutex::default(),
         })
     }
 
@@ -173,6 +177,7 @@ impl Workspace {
             root: root.to_path_buf(),
             fs,
             index: std::sync::Mutex::default(),
+            file_digests: std::sync::Mutex::default(),
         };
         ws.sweep_staging();
         ws.refuse_missing_payloads()?;
@@ -194,6 +199,7 @@ impl Workspace {
             root: root.to_path_buf(),
             fs: Arc::new(RealFs),
             index: std::sync::Mutex::default(),
+            file_digests: std::sync::Mutex::default(),
         };
         ws.refuse_missing_payloads()?;
         Ok(ws)
@@ -398,6 +404,7 @@ impl Workspace {
                 },
             );
         }
+        let mut named: std::collections::HashSet<String> = std::collections::HashSet::new();
         for entry in &generation.records {
             let record = self.read_record(&entry.identity)?;
             if record.op != "import" {
@@ -416,12 +423,39 @@ impl Workspace {
                 .chain(record.envelope.artifacts.values().map(|a| &a.identity));
             for output in outputs {
                 if let Some(resolved) = images.get(output) {
+                    named.insert(output.clone());
                     add(
                         ArtifactType::Image,
                         &format!("sha256:{digest}"),
                         resolved.clone(),
                     );
                 }
+            }
+        }
+        // An image rascal made (a canvas, a crop, a rendering) is named by the PNG it wrote, as
+        // its reference names it (`contract::image_reference`).
+        let mut digests = self.file_digests.lock().unwrap_or_else(|e| e.into_inner());
+        for entry in generation
+            .artifacts
+            .iter()
+            .filter(|a| a.artifact_type == ArtifactType::Image && !named.contains(&a.identity))
+        {
+            let digest = match digests.get(&entry.identity) {
+                Some(digest) => digest.clone(),
+                None => {
+                    let path = self.root.join(&entry.path);
+                    let bytes = std::fs::read(&path).map_err(|e| Error::io(&path, e))?;
+                    let digest = crate::contract::file_sha256(&bytes);
+                    digests.insert(entry.identity.clone(), digest.clone());
+                    digest
+                }
+            };
+            if let Some(resolved) = images.get(&entry.identity) {
+                add(
+                    ArtifactType::Image,
+                    &format!("sha256:{digest}"),
+                    resolved.clone(),
+                );
             }
         }
         Ok(index)
@@ -738,59 +772,26 @@ impl Workspace {
         let span = tracing::info_span!("op", op = %manifest.name, step = %step_id, inputs = %serde_json::to_string(&input_identities).unwrap_or_default());
         let _entered = span.enter();
         let started = Instant::now();
-        let mut given = params.clone();
-        let constants = given.remove("constants");
-        let constants_name = constants
-            .as_ref()
-            .and_then(|c| c.as_str())
-            .map(str::to_string);
-        if let Some(name) = &constants_name
-            && !manifest.constants.iter().any(|k| k == name)
-        {
-            let envelope = self.failed_envelope(&manifest, format!("no constant set {name}"), 0);
-            self.journal_line(
-                step_id,
-                &manifest,
-                params,
-                input_identities,
-                BTreeMap::new(),
-                Some(envelope),
-                0,
-            )?;
-            return Err(Error::usage(format!(
-                "step {step_id}: {}: no constant set {name}",
-                manifest.name
-            )));
-        }
         // The selected (or default) constant set supplies the defaults the step did not give.
-        let selected = constants_name
-            .clone()
-            .or_else(|| manifest.constants.first().cloned());
-        if let Some(name) = &selected {
-            for (key, value) in op.constant_set(name) {
-                if manifest.param(&key).is_some() {
-                    given.entry(key).or_insert(value);
-                }
+        let (resolved, constants_name) = match op::resolve_step(op, params) {
+            Ok(resolution) => (resolution.params, resolution.named),
+            Err(op::Unresolved::NoSet(message)) => {
+                let envelope = self.failed_envelope(&manifest, message.clone(), 0);
+                self.journal_line(
+                    step_id,
+                    &manifest,
+                    params,
+                    input_identities,
+                    BTreeMap::new(),
+                    Some(envelope),
+                    0,
+                )?;
+                return Err(Error::usage(format!(
+                    "step {step_id}: {}: {message}",
+                    manifest.name
+                )));
             }
-        }
-        let resolved = match manifest.resolve_params(&given) {
-            Ok(mut resolved) => {
-                match constants {
-                    Some(c) => {
-                        resolved.insert("constants".to_string(), c);
-                    }
-                    None => {
-                        if let Some(first) = manifest.constants.first() {
-                            resolved.insert(
-                                "constants".to_string(),
-                                toml::Value::String(first.clone()),
-                            );
-                        }
-                    }
-                }
-                resolved
-            }
-            Err(message) => {
+            Err(op::Unresolved::Invalid(message)) => {
                 let envelope = self.failed_envelope(&manifest, message, 0);
                 self.journal_line(
                     step_id,

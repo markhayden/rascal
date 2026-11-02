@@ -311,7 +311,6 @@ pub fn finish(
     if let Ok(mut current) = CURRENT.lock() {
         *current = None;
     }
-    let finished = now_ms();
     let (input, used, found, mut notes) = from_workspace(workspace_dir);
     // The spend is the journal's, whatever the status (2.1, 4.5): a call that may have been
     // charged is never reported as zero; the part no answer settled is `spend.unresolved_usd`.
@@ -354,6 +353,60 @@ pub fn finish(
             locator: Locator::Path(absolute(path)),
         });
     }
+    let locations = Locations {
+        used: if pending.locations_used.is_empty() {
+            used
+        } else {
+            pending.locations_used.clone()
+        },
+        found,
+    };
+    let produced = Produced {
+        images: Images { taken, out },
+        // rascal lists the operations profile, so every result carries `artifacts` (4.7); a
+        // task's stay empty until tasks list their Masks (10.8).
+        artifacts: Artifacts {
+            taken: vec![],
+            out: vec![],
+        },
+        locations,
+        notes,
+        spent,
+    };
+    finish_with(
+        pending,
+        ended.status,
+        ended.error,
+        ended.cache,
+        body,
+        produced,
+    )
+    .map(|()| spent)
+}
+
+/// What a run produced beyond its header, for its `run.json`: the images, artifacts and
+/// locations it took and made (4.7, 11.1), its notes, and what it spent.
+pub struct Produced {
+    pub images: Images,
+    pub artifacts: Artifacts,
+    pub locations: Locations,
+    pub notes: Vec<String>,
+    pub spent: Spent,
+}
+
+/// Writes `run.json` into the run directory from its parts, atomically: the header from
+/// `pending` and the outcome, and what the run produced. A task's comes through [`finish`]; an
+/// operation's (`crate::operations`) directly.
+pub fn finish_with(
+    pending: &Pending,
+    status: Status,
+    error: Option<ErrorInfo>,
+    cache: Option<bool>,
+    body: serde_json::Map<String, Value>,
+    produced: Produced,
+) -> rascal_core::error::Result<()> {
+    let finished = now_ms();
+    let spent = produced.spent;
     let result = RunResult {
         contract: contract::CONTRACT_VERSION.to_string(),
         tool: Tool {
@@ -368,8 +421,8 @@ pub fn finish(
             client_run_id: pending.client_run_id.clone(),
             dir: Some(absolute(&pending.dir)),
         },
-        status: ended.status,
-        error: ended.error,
+        status,
+        error,
         started: rfc3339(pending.started_ms),
         finished: rfc3339(finished),
         duration_ms: u64::try_from(finished.saturating_sub(pending.started_ms)).unwrap_or(u64::MAX),
@@ -384,30 +437,18 @@ pub fn finish(
                 SpendBasis::Estimated
             },
         },
-        cache: match ended.cache {
+        cache: match cache {
             Some(true) => Cache::Hit,
             Some(false) => Cache::Miss,
             None => Cache::Off,
         },
-        images: Some(Images { taken, out }),
-        // rascal lists the operations profile, so every result carries `artifacts` (4.7),
-        // empty until operations run as runs (10.6) and tasks list their Masks (10.8).
-        artifacts: Some(Artifacts {
-            taken: vec![],
-            out: vec![],
-        }),
-        locations: Some(Locations {
-            used: if pending.locations_used.is_empty() {
-                used
-            } else {
-                pending.locations_used.clone()
-            },
-            found,
-        }),
-        notes,
+        images: Some(produced.images),
+        artifacts: Some(produced.artifacts),
+        locations: Some(produced.locations),
+        notes: produced.notes,
         body,
     };
-    write(&pending.dir, &result).map(|()| spent)
+    write(&pending.dir, &result)
 }
 
 /// A dollar amount as the contract writes it: at most six decimals (4.6), so a sum of prices

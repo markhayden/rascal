@@ -2,13 +2,16 @@
 //! [--allow-dir <abs>]...`: the MCP server over stdio. Nothing but the protocol goes to stdout;
 //! tracing goes to stderr (`RASCAL_LOG`). It starts in every configuration state (table-manners 3.1, 5): with no file,
 //! a file that does not exist or one that does not load, its actions say what is missing and a
-//! call that needs it is refused `not_ready`. With `[packs.*]` in the configuration, their tools
-//! are served too, journaling into the same workspace; a pack that does not start leaves its
-//! tools out and says why on stderr. The contract's action tools (one per shipped recipe, and
-//! `describe`) run each call in its own run directory under `--runs` and serve the runs as
-//! resources (table-manners; ADR 0020). A caller's path is read only inside the directories
-//! `--allow-dir` names, narrowed by `[serve] allow_dirs` (CONTRACT 5.2, `rascal_core::paths`);
-//! with none, every path is refused and inline images still work.
+//! call that needs it is refused `not_ready`. It serves one MCP tool per action of the
+//! description (the shipped recipes as tasks, the built-in ops as operations) plus `describe`
+//! and `estimate`, and nothing else (CONTRACT 5): every call is a run in its own run directory
+//! under `--runs`, the runs served as resources (ADR 0020). The workspace is the session's
+//! store (CONTRACT 3.4, 4.7): artifact references resolve there by identity, and an operation's
+//! outputs commit there. Each `[packs.*]` entry is started once at start to learn whether it
+//! starts (its readiness requirement, 12.2) and then stopped; a pack's tools are not served, and
+//! the segmenter is reached through `remove_prompt`. A caller's path is read only inside the
+//! directories `--allow-dir` names, narrowed by `[serve] allow_dirs` (CONTRACT 5.2,
+//! `rascal_core::paths`); with none, every path is refused and inline images still work.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -21,8 +24,9 @@ use rascal_core::workspace::Workspace;
 use rascal_mcp::server::Server;
 
 pub struct ServeArgs {
-    /// The op tools' workspace; the configuration's `[workspace] dir` (relative to the file),
-    /// else `$XDG_DATA_HOME/rascal/workspace`, by default.
+    /// The session's store, where references resolve and operations commit; the
+    /// configuration's `[workspace] dir` (relative to the file), else
+    /// `$XDG_DATA_HOME/rascal/workspace`, by default.
     pub workspace: Option<PathBuf>,
     pub config: Option<PathBuf>,
     pub concurrency: usize,
@@ -108,15 +112,22 @@ pub fn serve(args: &ServeArgs) -> Result<()> {
         .clone()
         .unwrap_or_else(|| default_workspace(&state));
     let workspace = Arc::new(Workspace::open(&workspace_dir)?);
-    let (registry, packs, failed_packs) =
-        crate::packs::registry_tolerant(config.as_ref(), &workspace, None)?;
-    let failed_packs: std::collections::BTreeMap<String, String> = failed_packs
-        .into_iter()
-        .map(|(name, error)| {
-            eprintln!("rascal serve: packs.{name} did not start, so its tools are absent: {error}");
-            (name, error.to_string())
-        })
-        .collect();
+    // Each pack is started once to learn whether it starts (its readiness requirement reads
+    // `invalid` when it does not, 12.2), then stopped: `serve` serves no pack tool.
+    let failed_packs: std::collections::BTreeMap<String, String> = {
+        let (_, packs, failed) =
+            crate::packs::registry_tolerant(config.as_ref(), &workspace, None)?;
+        drop(packs);
+        failed
+            .into_iter()
+            .map(|(name, error)| {
+                eprintln!(
+                    "rascal serve: packs.{name} did not start, so the actions that need it are not ready: {error}"
+                );
+                (name, error.to_string())
+            })
+            .collect()
+    };
     let actions = Arc::new(crate::actions::ContractActions {
         config_path: config
             .is_some()
@@ -133,27 +144,16 @@ pub fn serve(args: &ServeArgs) -> Result<()> {
         ledger: std::sync::Mutex::default(),
         session: crate::actions::Session::start(),
         issued: std::sync::Mutex::default(),
-        paths: paths.clone(),
-        store: workspace.clone(),
+        paths,
+        store: workspace,
+        ops: rascal_ops::registry()?,
     });
-    let server = Server::new(
-        workspace,
-        registry,
-        args.concurrency,
-        Some(Arc::new(|root: &std::path::Path| {
-            crate::dash::write(root, &root.join("dash.html"))
-        })),
-        &packs,
-    )?
-    .with_actions(actions)
-    .with_paths(paths);
+    let server = Server::new(actions, args.concurrency);
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .map_err(|e| Error::op("serve", format!("runtime: {e}")))?;
     let served = runtime.block_on(server.serve_stdio());
-    // The packs stop on this thread, after the runtime, so their escalation can block.
     drop(runtime);
-    drop(packs);
     served
 }

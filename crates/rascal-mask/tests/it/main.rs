@@ -23,6 +23,7 @@ mod lab_pairs;
 mod lab_run;
 mod measure_cli;
 mod no_provider_call;
+mod operations;
 mod ops_cli;
 mod packs;
 mod packs_real;

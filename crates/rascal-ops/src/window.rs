@@ -12,7 +12,8 @@ use rascal_core::frame::{Frame, FrameKind, FrameTable};
 use rascal_core::image::Image;
 use rascal_core::mask::Mask;
 use rascal_core::op::{
-    Context, Cost, CostTier, Inputs, Manifest, Op, Output, Param, ParamKind, Params, Port,
+    Context, Cost, CostTier, FrameMismatch, Framed, Inputs, Manifest, Op, Output, Param, ParamKind,
+    Params, Port,
 };
 
 /// The op.
@@ -34,6 +35,11 @@ fn context_default() -> f64 {
 impl Op for Window {
     fn group(&self) -> rascal_core::op::Group {
         rascal_core::op::Group::Prep
+    }
+
+    /// The image and the mask in one frame; the crop frame is the one it makes.
+    fn check_frames(&self, inputs: &[Framed<'_>]) -> Vec<FrameMismatch> {
+        rascal_core::op::same_frame(inputs)
     }
 
     fn manifest(&self) -> Manifest {

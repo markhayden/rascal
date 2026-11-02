@@ -271,25 +271,29 @@ fn estimate_and_import_are_held_to_the_rule() {
     }
     assert_eq!(listing(&dir.join("runs")), runs, "no run");
 
-    // workspace_import: inside imports; outside and missing are one invalid-params error.
-    let imported = client
-        .call(
-            "workspace_import",
-            serde_json::json!({ "path": s(&inside.join("pano.png")) }),
-        )
-        .unwrap();
-    assert!(!imported.is_error, "{imported:?}");
-    let mut messages = Vec::new();
+    // An operation's image port by path (task 10.6): inside runs; outside and missing are each
+    // an `invalid`/`input` run with the one refusal, and nothing outside enters the store.
+    let line = |client: &mut Client, path: &Path| {
+        client
+            .call(
+                "line",
+                serde_json::json!({ "image": { "path": s(path) }, "column": 0.5, "width_px": 8 }),
+            )
+            .unwrap()
+            .structured
+            .unwrap()
+    };
+    let ran = line(&mut client, &inside.join("pano.png"));
+    assert_eq!(ran["status"], "completed", "{ran:#}");
     for path in [dir.join("secret/pano.png"), dir.join("secret/missing.png")] {
-        match client.call("workspace_import", serde_json::json!({ "path": s(&path) })) {
-            Err(Failure::Rpc { code, message, .. }) => {
-                assert_eq!(code, -32602);
-                messages.push(message);
-            }
-            other => panic!("{other:?}"),
-        }
+        let result = line(&mut client, &path);
+        refused(&result, "image");
+        assert_eq!(
+            result["artifacts"]["in"],
+            serde_json::json!([]),
+            "{result:#}"
+        );
     }
-    assert_eq!(messages, vec![refusal("path"), refusal("path")]);
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -312,13 +316,15 @@ fn with_no_allowed_directory_every_path_is_refused_and_inline_runs() {
         .structured
         .unwrap();
     assert_eq!(result["status"], "completed", "{result:#}");
-    assert!(matches!(
-        client.call(
-            "workspace_import",
-            serde_json::json!({ "path": s(&dir.join("in/pano.png")) })
-        ),
-        Err(Failure::Rpc { code: -32602, .. })
-    ));
+    let line = client
+        .call(
+            "line",
+            serde_json::json!({ "image": { "path": s(&dir.join("in/pano.png")) }, "column": 0.5, "width_px": 8 }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    refused(&line, "image");
     client.close().unwrap();
     let out = start_and_end(&dir, &[]);
     assert_ne!(out.status.code(), Some(64), "{}", stderr(&out));
@@ -468,12 +474,20 @@ fn serve_writes_only_under_its_own_directories() {
         )
         .unwrap();
     assert_eq!(inline.structured.unwrap()["status"], "completed");
-    client
-        .call("workspace_import", serde_json::json!({ "path": path }))
-        .unwrap();
-    client
-        .call("workspace_dash", serde_json::json!({}))
-        .unwrap();
+    // An operation by path and inline: its outputs commit to the store, its previews go to its
+    // run directory.
+    for image in [
+        serde_json::json!({ "path": path }),
+        serde_json::json!({ "inline": { "media_type": "image/png", "data": data } }),
+    ] {
+        let line = client
+            .call(
+                "line",
+                serde_json::json!({ "image": image, "column": 0.5, "width_px": 8 }),
+            )
+            .unwrap();
+        assert_eq!(line.structured.unwrap()["status"], "completed");
+    }
     client.close().unwrap();
     let created: Vec<PathBuf> = listing(&dir)
         .into_iter()

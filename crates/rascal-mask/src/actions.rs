@@ -1,8 +1,10 @@
-//! The contract's action tools and run resources for `rascal serve` (table-manners 4, 5 and
-//! 10; ADR 0020): one tool per shipped recipe plus the reserved `describe` and `estimate` (the
-//! estimate of one exact call, `crate::estimate`), each action a `run` (or a `heal` when a
-//! filler is named) in its own run directory under the runs root, its images in by path or
-//! inline, its result the run's `run.json`; and the runs as resources.
+//! The contract's tools and run resources for `rascal serve` (table-manners 4, 5 and 10; ADR
+//! 0020): one tool per action of the description plus the reserved `describe` and `estimate`
+//! (the estimate of one exact call, `crate::estimate`), and nothing else. A task (a shipped
+//! recipe) runs as a `run` (or a `heal` when a filler is named) in its own run directory under
+//! the runs root, its images in by path or inline; an operation (a built-in op,
+//! `crate::operations`) runs on the session's store. Either's result is the run's `run.json`;
+//! the runs are resources.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -53,8 +55,10 @@ pub struct ContractActions {
     /// The directories callers' paths may name, fixed for the session (CONTRACT 5.2).
     pub paths: rascal_core::paths::PathRule,
     /// The session's store (CONTRACT 3.4, 4.7): `serve`'s workspace, where an artifact
-    /// reference resolves by identity (PLAN.md 10.3).
+    /// reference resolves by identity (PLAN.md 10.3) and an operation's outputs commit.
     pub store: Arc<Workspace>,
+    /// The built-in ops, each served as an operation (PLAN.md 10.6).
+    pub ops: rascal_core::registry::OpRegistry,
 }
 
 /// The Masks a call bound by reference, by argument, as bundles for its run.
@@ -167,7 +171,7 @@ fn valid_id(id: &str) -> bool {
             .is_some_and(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
 }
 
-fn image_in_schema(description: &str) -> Value {
+pub(crate) fn image_in_schema(description: &str) -> Value {
     json!({
         "description": description,
         "type": "object",
@@ -427,33 +431,7 @@ impl ContractActions {
         let resolved =
             match rascal_core::binding::bind_all(&self.store, &given).map_err(store_error)? {
                 Ok(resolved) => resolved,
-                Err(bindings) => {
-                    let text: Vec<String> = bindings
-                        .iter()
-                        .map(|b| {
-                            format!(
-                                "{}: {} ({})",
-                                b.port.as_deref().unwrap_or("artifact"),
-                                serde_json::to_value(b.problem)
-                                    .ok()
-                                    .and_then(|p| p.as_str().map(str::to_string))
-                                    .unwrap_or_default(),
-                                b.got
-                            )
-                        })
-                        .collect();
-                    let refusal = Refusal {
-                        reason: RefusalReason::Binding,
-                        run: None,
-                        requirements: None,
-                        error: None,
-                        bindings: Some(bindings),
-                    };
-                    return Err(CallError::refused(
-                        format!("the references do not bind: {}", text.join("; ")),
-                        serde_json::to_value(&refusal).unwrap_or(Value::Null),
-                    ));
-                }
+                Err(bindings) => return Err(crate::operations::binding_refusal(bindings)),
             };
         let mut args = args.clone();
         let mut bound = Bound::new();
@@ -789,8 +767,10 @@ impl ContractActions {
         }
     }
 
-    /// The run's `run.json` as the call's result, its images located as the caller asked.
-    fn result_of(
+    /// The run's `run.json` as the call's result, its images (`images.out`, and the previews in
+    /// `artifacts`) located as the caller asked; the image blocks, when asked, are those of
+    /// `images.out`, the previews among them.
+    pub(crate) fn result_of(
         &self,
         id: &str,
         args: &Map<String, Value>,
@@ -804,39 +784,50 @@ impl ContractActions {
             .get("return_images")
             .and_then(|v| v.as_str())
             .unwrap_or("path");
+        let blocks_asked = args.get("image_blocks").and_then(|v| v.as_bool()) == Some(true);
         let mut blocks = Vec::new();
+        let locate = |out: &mut Value, blocks: Option<&mut Vec<Vec<u8>>>| {
+            let Some(file) = out.get("path").and_then(|p| p.as_str()).map(PathBuf::from) else {
+                return;
+            };
+            let role = out["role"].as_str().unwrap_or("image").to_string();
+            let bytes = std::fs::read(&file).ok();
+            if let (Some(blocks), Some(bytes)) = (blocks, &bytes) {
+                blocks.push(bytes.clone());
+            }
+            if let Some(object) = out.as_object_mut() {
+                match how {
+                    "inline" => {
+                        object.remove("path");
+                        object.insert(
+                            "inline".into(),
+                            json!({ "media_type": "image/png", "data": rascal_core::panel::base64(bytes.as_deref().unwrap_or_default()) }),
+                        );
+                    }
+                    "resource" => {
+                        object.remove("path");
+                        object.insert(
+                            "resource".into(),
+                            Value::String(format!("rascal://run/{id}/images/{role}")),
+                        );
+                    }
+                    _ => {}
+                }
+            }
+        };
         if let Some(outs) = structured
             .pointer_mut("/images/out")
             .and_then(|o| o.as_array_mut())
         {
             for out in outs {
-                let Some(file) = out.get("path").and_then(|p| p.as_str()).map(PathBuf::from) else {
-                    continue;
-                };
-                let role = out["role"].as_str().unwrap_or("image").to_string();
-                let bytes = std::fs::read(&file).ok();
-                if args.get("image_blocks").and_then(|v| v.as_bool()) == Some(true)
-                    && let Some(bytes) = &bytes
-                {
-                    blocks.push(bytes.clone());
-                }
-                if let Some(object) = out.as_object_mut() {
-                    match how {
-                        "inline" => {
-                            object.remove("path");
-                            object.insert(
-                                "inline".into(),
-                                json!({ "media_type": "image/png", "data": rascal_core::panel::base64(bytes.as_deref().unwrap_or_default()) }),
-                            );
-                        }
-                        "resource" => {
-                            object.remove("path");
-                            object.insert(
-                                "resource".into(),
-                                Value::String(format!("rascal://run/{id}/images/{role}")),
-                            );
-                        }
-                        _ => {}
+                locate(out, blocks_asked.then_some(&mut blocks));
+            }
+        }
+        for list in ["/artifacts/in", "/artifacts/out"] {
+            if let Some(entries) = structured.pointer_mut(list).and_then(|o| o.as_array_mut()) {
+                for entry in entries {
+                    if let Some(preview) = entry.get_mut("preview").filter(|p| p.is_object()) {
+                        locate(preview, None);
                     }
                 }
             }
@@ -1010,14 +1001,14 @@ pub fn invalid_arguments(action: &str, error: &Error) -> CallError {
 /// What a run was asked as, written into its inputs directory when it is allocated, before any
 /// paid work (table-manners 4.3): the runs list reads it for a run still going.
 #[derive(serde::Serialize, serde::Deserialize)]
-struct Association {
-    action: String,
-    session_id: Option<String>,
-    client_run_id: Option<String>,
+pub(crate) struct Association {
+    pub(crate) action: String,
+    pub(crate) session_id: Option<String>,
+    pub(crate) client_run_id: Option<String>,
 }
 
 impl Association {
-    const FILE: &str = "association.json";
+    pub(crate) const FILE: &str = "association.json";
 }
 
 /// Sends a progress line for every op the run journals, until `done`.
@@ -1048,21 +1039,24 @@ impl Actions for ContractActions {
     fn tools(&self) -> Vec<Tool> {
         let mut tools = Vec::new();
         let description = self.description().unwrap_or(Value::Null);
-        // The tasks only: until operation calls are runs (PLAN.md 10.6), an operation's name is
-        // the op tool's, which keeps its envelope.
-        for action in description["actions"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter(|a| a["kind"] == "task")
-        {
+        // One tool per action, in the description's order (CONTRACT 5): a task's input is its
+        // params_schema with its image and location slots, an operation's its params_schema
+        // with its in-ports (4.7).
+        for action in description["actions"].as_array().into_iter().flatten() {
             let name = action["name"].as_str().unwrap_or_default().to_string();
+            let operation = action["kind"] == "operation";
             let text = format!(
-                "{} {} (table-manners action; the result is the run's run.json.)",
+                "{} {} (table-manners {}; the result is the run's run.json.)",
                 action["title"].as_str().unwrap_or_default(),
-                action["purpose"].as_str().unwrap_or_default()
+                action["purpose"].as_str().unwrap_or_default(),
+                if operation { "operation" } else { "action" },
             );
-            tools.push(Tool::new(name, text, Arc::new(Self::input_schema(action))));
+            let schema = if operation {
+                self.operation_schema(action)
+            } else {
+                Self::input_schema(action)
+            };
+            tools.push(Tool::new(name, text, Arc::new(schema)));
         }
         // `estimate` is reserved (table-manners 3, 4.5, 5): a tool, never an action. `action` is
         // a string, not an enum, so an unknown action reaches rascal's own check and its
@@ -1092,11 +1086,14 @@ impl Actions for ContractActions {
     }
 
     fn handles(&self, name: &str) -> bool {
-        name == "describe" || name == "estimate" || recipe_of(name).is_some()
+        name == "describe"
+            || name == "estimate"
+            || recipe_of(name).is_some()
+            || self.is_operation(name)
     }
 
     fn exclusive(&self, name: &str) -> bool {
-        recipe_of(name).is_some()
+        recipe_of(name).is_some() || self.is_operation(name)
     }
 
     fn call(
@@ -1129,6 +1126,11 @@ impl Actions for ContractActions {
                 is_error: false,
                 images: Vec::new(),
             });
+        }
+        if self.is_operation(name) {
+            // A built-in op reads no configuration: always ready (its readiness is `ready` with
+            // no requirement).
+            return self.call_operation(name, args, meta, progress, cancel);
         }
         let recipe = recipe_of(name).ok_or_else(|| format!("no action {name}"))?;
         self.ready_for(name, args)?;

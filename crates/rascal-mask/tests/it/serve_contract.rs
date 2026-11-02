@@ -68,7 +68,8 @@ impl jsonschema::Retrieve for Embedded {
 }
 
 /// Asserts `value` is valid against the contract's schema `id`; a result also carries
-/// `artifacts`, which an operations tool's results must (4.7), empty until 10.6.
+/// `artifacts`, which an operations tool's results must (4.7): a task's are empty until tasks
+/// list their Masks (10.8).
 fn valid(id: &str, value: &serde_json::Value) {
     if id == "urn:table-manners:core:result" {
         assert_eq!(
@@ -121,15 +122,13 @@ fn an_action_runs_with_progress_and_its_run_is_a_resource() {
         .into_iter()
         .map(|t| t.name)
         .collect();
-    for name in [
-        "seam",
-        "remove_prompt",
-        "describe",
-        "rasterize",
-        "workspace_import",
-    ] {
+    for name in ["seam", "remove_prompt", "describe", "estimate", "rasterize"] {
         assert!(names.iter().any(|n| n == name), "{name} in {names:?}");
     }
+    assert!(
+        !names.iter().any(|n| n.starts_with("workspace_")),
+        "{names:?}"
+    );
     let described = client.call("describe", serde_json::json!({})).unwrap();
     let described = described.structured.unwrap();
     assert_eq!(described["tool"]["name"], "rascal");

@@ -13,10 +13,12 @@ use rascal_mask::readiness::{self, Setup};
 mod actions;
 mod estimate;
 mod measure;
+mod operations;
 mod ops;
 mod packs;
 mod paste;
 mod playground;
+mod preview;
 mod render;
 mod run;
 mod run_json;
@@ -148,17 +150,18 @@ enum Command {
         #[arg(long)]
         strict: bool,
     },
-    /// The MCP server over stdio: every op as a tool over a workspace (SPEC "The MCP server").
+    /// The MCP server over stdio: the table-manners actions (the recipes as tasks, the ops as
+    /// operations) as tools (SPEC "The MCP server").
     Serve {
-        /// The workspace the op tools read and write; the configuration's `[workspace] dir`,
-        /// else `$XDG_DATA_HOME/rascal/workspace`, by default.
+        /// The session's store, where references resolve and operations commit; the
+        /// configuration's `[workspace] dir`, else `$XDG_DATA_HOME/rascal/workspace`, by default.
         #[arg(long)]
         workspace: Option<PathBuf>,
         /// The configuration file (rascal.toml): its fillers and packs. Without one, or with
         /// one that does not load, the server still starts and its actions say what is missing.
         #[arg(long)]
         config: Option<PathBuf>,
-        /// Calls that may run at once; each still commits in turn.
+        /// Runs that may go at once; each still commits in turn.
         #[arg(long, default_value_t = 1)]
         concurrency: usize,
         /// Where the contract's action runs go, one directory each (table-manners);

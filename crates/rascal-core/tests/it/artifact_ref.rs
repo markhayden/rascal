@@ -79,9 +79,11 @@ fn step(
 }
 
 /// What the store holds, by local id: the imported panorama, a bbox location on it, a Mask
-/// rasterized from it in the raw frame, and the seam steps' Mask windowed into a `crop:` frame.
+/// rasterized from it in the raw frame, the cut canvas (an image rascal made), and the seam
+/// steps' Mask windowed into a `crop:` frame.
 struct Held {
     image: String,
+    canvas: String,
     location: String,
     raw_mask: String,
     crop_mask: String,
@@ -141,6 +143,7 @@ fn store(dir: &Path) -> (Workspace, Held) {
         ws,
         Held {
             image,
+            canvas,
             location,
             raw_mask,
             crop_mask,
@@ -241,8 +244,11 @@ fn a_reference_validates_names_its_root_image_and_no_id() {
 fn a_store_resolves_by_identity_reopened_and_moved() {
     let dir = scratch("resolve");
     let (ws, held) = store(&dir.join("ws"));
+    // An image rascal made resolves by the digest of the PNG it wrote (task 10.6), as its
+    // reference names it.
     let refs: Vec<(ArtifactType, ArtifactRef, String)> = [
         (ArtifactType::Image, &held.image),
+        (ArtifactType::Image, &held.canvas),
         (ArtifactType::Location, &held.location),
         (ArtifactType::Mask, &held.raw_mask),
         (ArtifactType::Mask, &held.crop_mask),
@@ -256,7 +262,7 @@ fn a_store_resolves_by_identity_reopened_and_moved() {
         assert_eq!(found.artifact_type, *t);
     }
     // An identity the store does not hold, and a type that does not match, resolve to nothing.
-    let mask = &refs[2].1;
+    let mask = &refs[3].1;
     assert!(
         ws.resolve(ArtifactType::Location, &mask.identity)
             .unwrap()

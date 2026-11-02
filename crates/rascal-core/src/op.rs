@@ -589,8 +589,8 @@ impl Manifest {
 
     /// The schema of everything a call sets besides the ports: the parameters
     /// ([`Manifest::input_schema`]) and, for an op with constant sets, `constants`, an `enum` of
-    /// them whose default is the first. `serve`'s op tools and the description's operations
-    /// (CONTRACT 4.7) declare it alike.
+    /// them whose default is the first: the description's operations (CONTRACT 4.7) declare it, and
+    /// `serve`'s operation tools add their ports to it.
     pub fn params_schema(&self) -> serde_json::Value {
         let mut schema = self.input_schema.clone();
         if let Some(first) = self.constants.first()
@@ -1188,6 +1188,155 @@ pub trait Op: Send + Sync {
     fn constant_set(&self, _name: &str) -> Params {
         Params::new()
     }
+
+    /// The frames its inputs may be drawn in together, checked before a served call runs
+    /// (CONTRACT 4.7, `wrong_frame`): by default every input in one frame ([`same_frame`]).
+    /// `inputs` holds the inputs known, in port order (a call may give some by value, read only
+    /// once its run exists); an op whose inputs live in related frames (a parent and its crop)
+    /// states its own relation. The op's own validation stays as a second line.
+    fn check_frames(&self, inputs: &[Framed<'_>]) -> Vec<FrameMismatch> {
+        same_frame(inputs)
+    }
+}
+
+/// One input of an invocation as the frame check sees it ([`Op::check_frames`]): its port, its
+/// position in a `many` port, its type, and the frame it is drawn in (a plan's is the frame it
+/// was made for).
+#[derive(Debug, Clone, Copy)]
+pub struct Framed<'a> {
+    pub port: &'a str,
+    pub index: Option<usize>,
+    pub artifact_type: ArtifactType,
+    pub frame: &'a Frame,
+}
+
+impl Framed<'_> {
+    /// The input in words: its port, with its position in a `many` port.
+    pub fn label(&self) -> String {
+        match self.index {
+            Some(n) => format!("{}[{n}]", self.port),
+            None => self.port.to_string(),
+        }
+    }
+}
+
+/// An input whose frame the op cannot use with its other inputs (`wrong_frame`): its position
+/// in the slice [`Op::check_frames`] was given, and the frame the op needed it in, in words.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FrameMismatch {
+    pub at: usize,
+    pub wanted: String,
+}
+
+/// The default relation: every input in the frame of the first (by identity, so ids play no
+/// part); each other input is a mismatch.
+pub fn same_frame(inputs: &[Framed<'_>]) -> Vec<FrameMismatch> {
+    let Some(first) = inputs.first() else {
+        return Vec::new();
+    };
+    inputs
+        .iter()
+        .enumerate()
+        .skip(1)
+        .filter(|(_, input)| input.frame.identity != first.frame.identity)
+        .map(|(at, _)| FrameMismatch {
+            at,
+            wanted: format!("the frame of {}", first.label()),
+        })
+        .collect()
+}
+
+/// The relation of an op that takes a parent and an image derived from it: the derived input
+/// (`child`) in a frame of `kind` whose parent is the parent input's frame (`parent`), by
+/// identity. Inputs on other ports are not judged.
+pub fn derived_frame(
+    inputs: &[Framed<'_>],
+    parent: &str,
+    child: &str,
+    kind: crate::frame::FrameKind,
+) -> Vec<FrameMismatch> {
+    let Some(anchor) = inputs.iter().find(|i| i.port == parent) else {
+        return Vec::new();
+    };
+    let prefix = match kind {
+        crate::frame::FrameKind::Raw => "raw",
+        crate::frame::FrameKind::Cut => "cut",
+        crate::frame::FrameKind::Crop => "crop",
+    };
+    inputs
+        .iter()
+        .enumerate()
+        .filter(|(_, i)| i.port == child)
+        .filter(|(_, i)| {
+            i.frame.kind != kind
+                || i.frame.parent_identity.as_deref() != Some(anchor.frame.identity.as_str())
+        })
+        .map(|(at, _)| FrameMismatch {
+            at,
+            wanted: format!("a {prefix}: frame of the frame of {}", anchor.label()),
+        })
+        .collect()
+}
+
+/// The parameters a step runs with ([`resolve_step`]), and the constant set it named.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Resolution {
+    /// The resolved parameters, `constants` naming the set in force when the op has sets.
+    pub params: Params,
+    /// The constant set the step named, if it named one.
+    pub named: Option<String>,
+}
+
+/// Why a step's parameters do not resolve ([`resolve_step`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Unresolved {
+    /// It names a constant set the op does not have.
+    NoSet(String),
+    /// A parameter is unknown, missing, or not of its kind or within its bounds.
+    Invalid(String),
+}
+
+/// The parameters a step runs with: the named (or the default) constant set's values under the
+/// step's own, then the manifest's defaults, kinds and bounds checked, and `constants` naming the
+/// set in force. One function, so a run and a served operation's invocation (CONTRACT 4.8)
+/// resolve a call alike.
+pub fn resolve_step(op: &dyn Op, given: &Params) -> std::result::Result<Resolution, Unresolved> {
+    let manifest = op.manifest();
+    let mut given = given.clone();
+    let constants = given.remove("constants");
+    let named = constants
+        .as_ref()
+        .and_then(|c| c.as_str())
+        .map(str::to_string);
+    if let Some(name) = &named
+        && !manifest.constants.iter().any(|k| k == name)
+    {
+        return Err(Unresolved::NoSet(format!("no constant set {name}")));
+    }
+    let selected = named
+        .clone()
+        .or_else(|| manifest.constants.first().cloned());
+    if let Some(name) = &selected {
+        for (key, value) in op.constant_set(name) {
+            if manifest.param(&key).is_some() {
+                given.entry(key).or_insert(value);
+            }
+        }
+    }
+    let mut params = manifest
+        .resolve_params(&given)
+        .map_err(Unresolved::Invalid)?;
+    match constants {
+        Some(c) => {
+            params.insert("constants".to_string(), c);
+        }
+        None => {
+            if let Some(first) = manifest.constants.first() {
+                params.insert("constants".to_string(), toml::Value::String(first.clone()));
+            }
+        }
+    }
+    Ok(Resolution { params, named })
 }
 
 /// A port name as a regular expression literal (names are plain, but a dot or a bracket in

@@ -86,8 +86,8 @@ shares a name with a task or a reserved name. Each has:
   `rascal:Plan`), `required`, `many` (only `select`'s `plane` takes a list) and `purpose`. Port
   names are lowercase with underscores and never a parameter's name (a test holds every op to
   it);
-- `params_schema` the manifest's parameter schema (`Manifest::params_schema`, the one `serve`'s
-  op tools declare) with, for an op that has constant sets, `constants` as an `enum` of them whose
+- `params_schema` the manifest's parameter schema (`Manifest::params_schema`) with, for an op
+  that has constant sets, `constants` as an `enum` of them whose
   `default` is the first; no `max_spend_usd`;
 - `images: []` and `locations: []` (its image and location inputs are ports only); `outputs`
   the roles of the images its out-ports make (the port's name), `preview` when it makes a
@@ -101,9 +101,8 @@ shares a name with a task or a reserved name. Each has:
 (3.3), each at `schema_versions: [1]` with a purpose: `location` (`portable: "json"`, `preview:
 true`), `rascal:Mask` (`bundle`, `true`), and `rascal:BandProfile`, `rascal:Series` and
 `rascal:Plan` (`none`, `false`: they cannot leave their workspace yet, so a host labels them
-workspace-dependent). Until operation calls are runs (task 10.6), `serve`'s `tools/list` keeps the
-op tools of ADR 0015 under the operations' names, with their envelopes: the description and the
-tool list disagree on the milestone branch for one task.
+workspace-dependent). `serve`'s `tools/list` is exactly the description's actions plus
+`describe` and `estimate` (task 10.6; "Operations as runs" below).
 
 `vocabulary` is the core's object of word lists: `group` (`find`, `refine`, `prep`, `out`,
 `inspect`) and the images profile's four (`disposition`, `confidence` and `evidence` empty,
@@ -201,8 +200,8 @@ that still lists the mask. `locations.used` holds the location the run took in;
 `input_identity` is a SHA-256 over what was asked (the action, the recipe, the image's file
 digest, the location files, `--set`, the prompt, the filler), so equal requests have equal
 identities. `spend` and `cache` come from the fill (8.6). `artifacts` (4.7), which every result
-of an operations tool carries, is `{"in": [], "out": []}` on every result for now (task 10.4):
-operation runs fill it from task 10.6, and tasks list the Masks they make from task 10.8.
+of an operations tool carries, is `{"in": [], "out": []}` on a task's result until tasks list
+the Masks they make (task 10.8); an operation's run fills it ("Operations as runs" below).
 
 ### The invocation (4.8, task 10.2)
 
@@ -249,17 +248,19 @@ rascal serve [--workspace ws/] [--config rascal.toml] [--concurrency n] [--runs 
 
 `serve` starts in every configuration state (3.1, 5): with no `--config`, a file that does not
 exist or one that does not load (said once on stderr), its actions report what is missing and a
-call that needs it is refused `not_ready`. `--workspace` (the op tools' workspace) defaults to
+call that needs it is refused `not_ready`. `--workspace` (the session's store, where references
+resolve and operations commit) defaults to
 the configuration's `[workspace] dir`, relative to the file, else
 `$XDG_DATA_HOME/rascal/workspace` beside the runs root, so a host needs nothing but `serve` and,
-if it likes, `--config`. A pack that does not start no longer stops the server: its tools are
-absent, stderr says why, and its requirement reads `invalid`; a run started with such a pack
-notes it in its journal, and a recipe whose op nothing serves then fails with the pack's own
-error.
+if it likes, `--config`. `serve` starts each configured pack once to learn whether it starts and
+then stops it (it serves no pack tool): a pack that does not start does not stop the server,
+stderr says why, and its requirement reads `invalid`; a run started with such a pack notes it in
+its journal, and a recipe whose op nothing serves then fails with the pack's own error.
 
-Beside the op tools and the workspace tools (ADR 0015, unchanged), `serve` lists one MCP tool per
-task in the description (the operations are the op tools until task 10.6), `describe` and
-`estimate`; an action never shadows an op's name. A call runs the
+`serve` lists one MCP tool per action in the description, tasks and operations, then `estimate`
+and `describe`, and nothing else (5; task 10.6): the op tools, the pack tools and the
+`workspace_*` tools of ADR 0015, with rascal's own envelope as their result, are gone, with no
+shim. A task's call runs the
 recipe, through `heal` when `filler` is given, in its own run directory under `--runs`
 (`$XDG_DATA_HOME/rascal/runs`, else `~/.local/share/rascal/runs`), and its result is that run's
 `run.json` as `structuredContent`, with `isError` true for `invalid` and `error`. JSON-RPC errors
@@ -286,16 +287,15 @@ not ready, references that do not bind).
   as `allowed_dirs` (4.6, task 10.2: absolute, resolved, `[]` with none). MCP roots are not used:
   `serve` never sends `roots/list`.
   `rascal_core::paths::PathRule::admit` is the one check, for every caller path `serve` takes:
-  the image slots and `workspace_import`'s `path` (`mask` and `protect` are references, task
-  10.3, never paths). The path must be absolute and its canonical form (every symlink resolved,
+  the image slots of tasks and the image ports of operations (`mask` and `protect` are
+  references, task 10.3, never paths). The path must be absolute and its canonical form (every symlink resolved,
   the final component included) must exist, be a regular file and lie under an allowed directory
   component by component (`/a/bc` is not under `/a/b`); the file is then read through the canonical path. So a link inside
   pointing out is refused, and a link outside whose target is inside is read (the target is
   what is read). Every failure is one refusal with one text, `<slot>: this path is not readable
   here (only files inside the directories rascal serve allows; CONTRACT 5.2)`, which says
   nothing about whether the file exists or what it is: a run ends `invalid` with code `input`;
-  `estimate` is the `-32602` `invalid_arguments` refusal with code `input`; `workspace_import`
-  is a JSON-RPC invalid-params error. `serve` never writes at a caller's path: only under its
+  `estimate` is the `-32602` `invalid_arguments` refusal with code `input`. `serve` never writes at a caller's path: only under its
   runs root, its workspace and its cache. A check-then-read race (a symlink
   swapped between the check and the read) is outside what the rule guards: the caller is on the
   host's own stdio, and the rule exists to keep an agent from naming files such as a key. The
@@ -317,7 +317,8 @@ not ready, references that do not bind).
   is `rascal://artifact/<identity>` (served from task 10.7). No workspace id appears. The
   session's store is `serve`'s workspace (`--workspace`): a reference resolves there by identity
   (`Workspace::resolve`, from an index built once per generation; an image by the file digest
-  its `import` recorded), so a reopened or moved workspace resolves the same identities. After
+  its `import` recorded, or, for an image rascal made, the digest of the PNG it wrote, read once
+  per image), so a reopened or moved workspace resolves the same identities. After
   readiness and before any run, each reference is bound (`rascal_core::binding`): the type
   (another tool's type, an unknown one, one the argument does not take, or a `rascal:` type a
   tool other than rascal made is `wrong_type`), the version (`wrong_version`), then resolution
@@ -333,6 +334,52 @@ not ready, references that do not bind).
   that made it; the recipe then runs as before, and a Mask on another image is the run's
   `invalid`. Until the import tool (task 10.10), `rascal workspace import-mask <store>
   <bundle>` puts a Mask into the store.
+- **Operations as runs (4.7, task 10.6).** Each built-in op is an MCP tool of its name whose
+  input is its `params_schema` plus one property per in-port: an artifact reference, a non-empty
+  array of them for a `many` port (`select`'s `plane`), and for an `image` port also an image in
+  (`path` under the path rule or `inline`, optional `expect`, whose projection the import takes;
+  without it an exactly 2:1 image is equirectangular), for a `location` port also a location
+  (a table-manners location on the call's image or rascal's own in its frame, validated against
+  the call's first image, else against the root image an input in a raw frame was made on, and
+  registered in the store as `workspace import-location` does); `return_images` and
+  `image_blocks` as for a task. A missing required port, an empty `many` list and a value that is
+  no reference where only a reference goes are plain invalid params. Before allocation every
+  reference is bound as above, and the frames of the bound inputs are checked together with the
+  op's `Op::check_frames` (by default every input in the first's frame, by frame identity; `put`:
+  the canvas in the `cut:` frame of the image's frame and the plan made for that frame;
+  `unwindow`: the crop in a `crop:` frame of the image's; `measure`: the images and the mask in
+  one frame, the line in any; `invert`: one input; `window`: the default). Every problem goes in
+  one `binding` refusal, in port order and within a `many` port in the order given, with `index`
+  for an item of a `many` port, `wrong_frame`'s `expected` naming the frame wanted and `got` the
+  input's frame identity; no run, nothing spent, the `client_run_id` released. Readiness is
+  always `ready`. Then the run is allocated like a task's (the claim, the permit, progress with
+  the run's reference, cancellation, the association, `run.json` atomically and last); the limits
+  check only checks the arguments (an operation's worst case is 0; an estimate named in `_meta`
+  is `stale_estimate`, since this session issues none for an operation until task 10.9). Images
+  and locations given by value are registered in the store, and the frame check runs again over
+  every input (a mismatch is `invalid`/`usage`). The op runs with `Workspace::invoke_with` on the
+  store, step id the run's id, so its outputs commit there as one operation record and bind by
+  reference at once; nothing upstream reruns. The run directory holds the run's journal line
+  (`rascal://run/{id}/journal`), a copy of each image out and each preview, never a workspace.
+  The result: `ok` and `measured_nothing` are `completed`; `not_applicable` is `completed` with
+  the reason in `notes` and nothing out; `invalid_args` is `invalid`/`usage`; an operational
+  failure is `error` with its code; whatever stops the run before its invocation resolves is
+  `invalid`. `artifacts.in` lists each input (`preview: null`) and `artifacts.out` each output,
+  a `many` port once per item, each with its reference and, for `location` and `rascal:Mask`, a
+  preview: an image out with role `preview`, `preview-<output>.png` in the run directory, located
+  as `return_images` asks (`crate::preview::draw`: a Mask is `inspect`'s overlay on the image of
+  its frame when the store holds it, found through the records that made it, else its grey
+  rendering; a location is its rasterized outline drawn the same way on its image, or on a
+  plain canvas of its frame when the store holds none, or that image alone for a location with
+  no interior; deterministic). Images taken are in `images.in` (slot and role the port's name),
+  images made and every preview in `images.out` (an image out's role is its port's name, and its
+  identity is the file digest), locations taken in `locations.used` and made in
+  `locations.found`; `body` is `{"envelope": <the op's envelope>}`; `spend` is a measured zero.
+  The invocation's `arguments` are the parameters as the op ran them (the constant set's values
+  and the manifest's defaults applied, `constants` named), each reference as the store's, each
+  image as `{"expect": <reference>}`, each location as given; `effective` is `{model: null,
+  config_identity, x-rascal: {constants}}`; `requirements` is empty. `input_identity` digests the
+  op, its version, the resolved parameters and the inputs' identities.
 - **Progress.** With a progress token, every op the run journals is a notification
   (`step fan (fan): ok`), and a heartbeat goes at least every five seconds while it waits;
   `progress` is a counter that only increases and the words are in `message`, for people. From
@@ -595,5 +642,5 @@ contract's `MAPPING.md` can say so:
 | cancelling a call | the run stops before its next step | a filler call already in flight runs to its end, bounded by its timeout, and its price stays spent |
 | `view` | accepted, never emitted | as the contract says |
 
-The `rect` recipe's action is `mask_rect`, because `serve` already has a `rect` op tool.
+The `rect` recipe's action is `mask_rect`, because the `rect` op is an operation of that name.
 

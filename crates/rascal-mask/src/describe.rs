@@ -94,9 +94,9 @@ fn renders() -> Vec<Render> {
 /// What the segmenter's detection score is, in a location's `score_kind` (9.2).
 pub const SEGMENT_SCORE_KIND: &str = "owlv2-detection";
 
-/// A shipped recipe's name as an action name: lowercase with underscores (3). An action is an
-/// MCP tool beside the op tools in `serve`, so a recipe named like an op takes another name:
-/// the `rect` recipe (a feathered rectangle as a mask) is `mask_rect`, the `rect` op stays.
+/// A shipped recipe's name as an action name: lowercase with underscores (3). Every op is an
+/// operation of its own name, so a recipe named like an op takes another name: the `rect`
+/// recipe (a feathered rectangle as a mask) is `mask_rect`, the `rect` op stays.
 pub fn action_name(recipe: &str) -> String {
     match recipe {
         "rect" => "mask_rect".to_string(),

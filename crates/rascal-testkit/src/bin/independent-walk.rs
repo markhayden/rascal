@@ -1,7 +1,8 @@
-//! The independent client walking a `rascal serve` through the seam ops, for the acceptance
-//! script (G10): import an image, `cut`, `line`, `fan`, `profile`, `ramp`, `render grey`, read
-//! the rendering back, and print the mask's id so the shell can read the same workspace with
-//! the CLI. Exit 0 on success, 1 with the failure on stderr.
+//! The independent client walking a `rascal serve` through the seam operations, for the
+//! acceptance script (G10; task 10.6): `cut` on an image by path, then `line`, `fan`, `profile`,
+//! `ramp` and `render grey`, each bound to the references the call before returned, the
+//! rendering read back from its image out, and the mask's identity printed so the shell can
+//! find it in the same store with the CLI. Exit 0 on success, 1 with the failure on stderr.
 //!
 //!   independent-walk <rascal binary> <workspace> <image>
 
@@ -30,74 +31,79 @@ fn walk(binary: &str, workspace: &str, image: &str) -> Result<(), String> {
     command
         .args(["serve", "--workspace", workspace, "--allow-dir"])
         .arg(allowed);
+    // The runs go beside the store, never into it.
+    command.arg("--runs").arg(format!("{workspace}-runs"));
     let mut client = Client::start(&mut command).map_err(|e| format!("start: {e:?}"))?;
-    let id =
-        |result: rascal_testkit::mcp_client::CallResult, port: &str| -> Result<String, String> {
-            let structured = result.structured.ok_or("no structuredContent")?;
-            if result.is_error {
-                return Err(format!("{port}: {structured}"));
-            }
-            structured["artifacts"][port]["id"]
-                .as_str()
-                .map(str::to_string)
-                .ok_or_else(|| format!("no artifact {port} in {structured}"))
-        };
+    // A completed call's result.
     let call = |client: &mut Client, name: &str, args: serde_json::Value| {
-        client
+        let result = client
             .call(name, args)
-            .map_err(|e| format!("{name}: {e:?}"))
+            .map_err(|e| format!("{name}: {e:?}"))?;
+        let structured = result
+            .structured
+            .ok_or(format!("{name}: no structuredContent"))?;
+        if result.is_error || structured["status"] != "completed" {
+            return Err(format!("{name}: {structured}"));
+        }
+        Ok::<_, String>(structured)
     };
-    let imported = call(
-        &mut client,
-        "workspace_import",
-        serde_json::json!({ "path": image }),
-    )?;
-    let image_id = id(imported, "image")?;
+    // The reference an operation made on `port`.
+    let made = |result: &serde_json::Value, port: &str| -> Result<serde_json::Value, String> {
+        result["artifacts"]["out"]
+            .as_array()
+            .and_then(|out| out.iter().find(|e| e["port"] == port))
+            .map(|e| e["artifact"].clone())
+            .ok_or_else(|| format!("no artifact {port} in {result}"))
+    };
     let cut = call(
         &mut client,
         "cut",
-        serde_json::json!({ "image": image_id, "strip": 0.07 }),
+        serde_json::json!({ "image": { "path": image }, "strip": 0.07 }),
     )?;
-    let canvas = id(cut, "image")?;
+    let canvas = made(&cut, "image")?;
     let line = call(
         &mut client,
         "line",
         serde_json::json!({ "image": canvas, "column": 0.5, "width_px": 2.0 }),
     )?;
-    let line_id = id(line, "location")?;
     let fan = call(
         &mut client,
         "fan",
-        serde_json::json!({ "image": canvas, "line": line_id }),
+        serde_json::json!({ "image": canvas, "line": made(&line, "location")? }),
     )?;
-    let band = id(fan, "band")?;
-    let profile = call(&mut client, "profile", serde_json::json!({ "band": band }))?;
-    let band_mask = id(profile, "mask")?;
+    let profile = call(
+        &mut client,
+        "profile",
+        serde_json::json!({ "band": made(&fan, "band")? }),
+    )?;
     let ramp = call(
         &mut client,
         "ramp",
-        serde_json::json!({ "image": canvas, "mask": band_mask }),
+        serde_json::json!({ "image": canvas, "mask": made(&profile, "mask")? }),
     )?;
-    let mask = id(ramp, "mask")?;
+    let mask = made(&ramp, "mask")?;
     let rendered = call(
         &mut client,
         "render",
         serde_json::json!({ "mask": mask, "for": "grey" }),
     )?;
-    let rendering = id(rendered, "image")?;
-    let read = call(
-        &mut client,
-        "workspace_read",
-        serde_json::json!({ "id": rendering }),
-    )?;
-    if read.images.len() != 1 || read.images[0].0 != "image/png" {
-        return Err(format!(
-            "workspace_read returned {} image blocks",
-            read.images.len()
-        ));
+    let rendering = made(&rendered, "image")?;
+    let path = rendered["images"]["out"]
+        .as_array()
+        .and_then(|out| out.iter().find(|o| o["role"] == "image"))
+        .and_then(|o| o["path"].as_str())
+        .ok_or_else(|| format!("render returned no image by path: {rendered}"))?
+        .to_string();
+    let bytes = std::fs::read(&path).map_err(|e| format!("{path}: {e}"))?;
+    if !bytes.starts_with(b"\x89PNG") {
+        return Err(format!("{path} is not a PNG"));
     }
-    println!("mask: {mask}");
-    println!("rendering: {rendering} ({} bytes)", read.images[0].1.len());
+    println!("mask: {}", mask["identity"].as_str().unwrap_or_default());
+    println!(
+        "rendering: {} ({} bytes)",
+        rendering["identity"].as_str().unwrap_or_default(),
+        bytes.len()
+    );
     client.close().map_err(|e| e.to_string())?;
     Ok(())
 }

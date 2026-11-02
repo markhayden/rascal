@@ -1966,6 +1966,46 @@ port's name as `slot`, images it makes and every preview in `images.out`, locati
 `locations.used` and made in `locations.found` (4.7, 11.1); the native envelope goes in `body`
 (`{"envelope": …}`). `input_identity` is the operation record's input digest.
 
+As built: one commit (not split). `rascal_mcp::server::Server::new(actions, concurrency)`
+serves the binary's `Actions` and nothing else (a test reads `server.rs` for any op, registry,
+pack, workspace or envelope); `rascal_mcp::jsonrpc` keeps only what the server and the pack
+client share, so the envelope's tool-result shape and the error-class mapping went with the op
+tools. `tools/list` is the description's actions in its order, then `estimate` and `describe`.
+`serve` still starts each configured pack once at start, only to learn whether it starts (the
+segmenter's readiness requirement, 12.2), then stops it. An in-port value with an `identity` is a
+reference; an `image` port also takes an image in (its projection `expect`'s, else the 2:1 guess)
+and a `location` port a location, read against the call's first image, else against the root
+image (`on`) of an input in a raw frame; a missing required port, an empty `many` list and a
+malformed reference are plain invalid params. The binding refusal holds every problem of the
+call (type, version and resolution per reference, then `wrong_frame` over the bound ones) in
+port and item order. Values are read only once the run exists, so a refused path is
+`invalid`/`input`, and the frame check runs again over every input in the run (a mismatch
+`invalid`/`usage`); whatever stops the run before its invocation resolves is `invalid`, the one
+status 4.8 allows a null invocation. `Op::check_frames` defaults to `same_frame` (by frame
+identity); `op::derived_frame` gives `put` (the canvas in the `cut:` frame of the image's, the
+plan for the image's frame) and `unwindow` (the crop in a `crop:` frame of the image's); `measure`
+exempts its line; `invert` has one input; `window` states the default. `op::resolve_step` is the
+one parameter resolution (the constant set's values, the manifest's defaults, `constants` named)
+that `Workspace::invoke_with` and the invocation share, so `invocation.arguments` are the
+parameters as the op ran them and a replay passing them explicitly runs the same values;
+`effective` is `{model: null, config_identity, x-rascal: {constants}}`. The op's step id is the
+run's id; the run writes its own journal line (the store's journal has the same op line). An
+image out is copied into the run directory as `<output>.png`, role its port's name, and its
+identity is the digest of the PNG the store wrote; for such an image to bind again by
+reference, `Workspace::resolve` now also indexes every image rascal made by the digest of its
+stored PNG (each read once per image per process; an imported image keeps its import's digest).
+A preview is `preview-<output>.png`; `preview::draw` finds a Mask's or location's image through
+the records that made it (the producing record's outputs, then its inputs, nearest first), else
+the one imported image of its frame, and draws a location on a plain canvas of its frame when
+the store holds none, or the image alone for a location with no interior. `not_applicable`'s note
+is `<op>: not_applicable: <reason>`; `spend` is a measured zero. A call naming an estimate in
+`_meta` is `stale_estimate` until 10.9 issues estimates for operations. Under the testkit,
+`RASCAL_TESTKIT_OPERATION_DELAY_MS` holds an operation's run before its op runs (after its
+invocation resolves), so a test can cancel one queued and one running. The independent walk
+(`independent-walk`, the acceptance script) runs `cut` on the image by path and the seam
+operations by reference, and prints the mask's identity, which the script finds with
+`workspace list`.
+
 **CLI scenario.** Through the independent client: `line` on `{"image": {"path": …}, "column":
 0.5, "width_px": 24}` completes with a `location` out and its preview; `rasterize` on
 `{"location": <that reference>, "image": <the image's reference>}` completes with a `rascal:Mask`
@@ -1974,27 +2014,29 @@ Mask whose identity differs from the input's; `line` was not rerun (one `line` r
 store's journal).
 
 **Acceptance.**
-- [ ] `tools/list` equals the description's actions plus `describe`, `estimate` (and from 10.10
+- [x] `tools/list` equals the description's actions plus `describe`, `estimate` (and from 10.10
       `export` and `import`); no op, pack or `workspace_*` tool remains, and the server crate no
       longer knows ops.
-- [ ] Line → Rasterize → Feather runs through the independent client one call at a time; every
+- [x] Line → Rasterize → Feather runs through the independent client one call at a time; every
       `run.json` validates against v0.4 with `artifacts.in` and `artifacts.out`, a preview on every
       Mask and location out and none on another type, and the same images and locations in
       `images` and `locations`; the run resources and the runs list include them.
-- [ ] A `many` port (`select`'s planes) takes an array of references and lists each in
+- [x] A `many` port (`select`'s planes) takes an array of references and lists each in
       `artifacts.in` in order; a bad item is refused naming its `index`.
-- [ ] `wrong_frame`: `paste` given a mask drawn in a `crop:` frame and a base in the raw frame is
+- [x] `wrong_frame`: `paste` given a mask drawn in a `crop:` frame and a base in the raw frame is
       the `binding` refusal naming the port, with no run; each of the four problems from a call
       validates against `refusal.json` and releases its `client_run_id`.
-- [ ] An op's `not_applicable` (`rasterize` on a `view` location) completes with a note and no
+- [x] An op's `not_applicable` (`rasterize` on a `view` location) completes with a note and no
       out; an `invalid_args` is `invalid`/`usage`; cancellation while queued leaves no run and
       during the run a `cancelled` `run.json`.
-- [ ] The same artifact gives byte-identical previews in two runs.
-- [ ] `isolation.rs` and `serve.rs` (which drove the op tools) drive the operations instead,
+- [x] The same artifact gives byte-identical previews in two runs.
+- [x] `isolation.rs` and `serve.rs` (which drove the op tools) drive the operations instead,
       proving the same isolation and protocol properties.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- operations::
-serve:: serve_contract:: isolation::`; `cargo nextest run -p rascal-mcp --test it`; `just check`.
+serve:: serve_contract:: isolation::`; `cargo nextest run -p rascal-mcp --test it`; `cargo nextest run -p rascal-ops --test it -- frames::`;
+`cargo nextest run -p rascal-core --test it -- artifact_ref::`; `just check`. Done 2026-11-01 (branch
+`m10-operations`, built against table-manners `4dd1d2f`).
 
 **Dependencies.** 10.4. **Files.** `crates/rascal-mcp/src/server.rs` (the op, pack and workspace
 tools removed; the server serves `Actions` only), `crates/rascal-core/src/op.rs`

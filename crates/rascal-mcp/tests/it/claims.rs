@@ -9,8 +9,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
-use rascal_core::registry::OpRegistry;
-use rascal_core::workspace::{Cancel, Workspace};
+use rascal_core::workspace::Cancel;
 use rascal_mcp::server::{
     ActionResult, Actions, CallError, CallMeta, McpResource, McpResourceTemplate, McpTool,
     Progress, ResourceBody, Server,
@@ -171,14 +170,9 @@ impl Wire {
     }
 }
 
-/// A server over a fresh workspace with the double, and the client end of its pipe, initialized.
-async fn serve(name: &str, double: Arc<Double>) -> Wire {
-    let root = std::env::temp_dir().join(format!("rascal-claims-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    let workspace = Arc::new(Workspace::open(&root).unwrap());
-    let server = Server::new(workspace, OpRegistry::new(), 1, None, &[])
-        .unwrap()
-        .with_actions(double);
+/// A server over the double, and the client end of its pipe, initialized.
+async fn serve(double: Arc<Double>) -> Wire {
+    let server = Server::new(double, 1);
     let (client, server_end) = tokio::io::duplex(1 << 20);
     let (read, write) = tokio::io::split(server_end);
     tokio::spawn(async move {
@@ -220,7 +214,7 @@ fn reused(message: &Value) -> Value {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_request_refused_before_a_run_releases_its_id() {
     let double = Arc::new(Double::default());
-    let mut wire = serve("refused", double.clone()).await;
+    let mut wire = serve(double.clone()).await;
     let refused = wire.act(json!({ "fail": "before" }), Some("X"), "t1").await;
     let refused = wire.until(refused).await;
     // A plain invalid params error: no refusal data (no `reason`), since no contract refusal
@@ -252,7 +246,7 @@ async fn a_request_refused_before_a_run_releases_its_id() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_request_that_panics_before_a_run_releases_its_id() {
     let double = Arc::new(Double::default());
-    let mut wire = serve("panic", double.clone()).await;
+    let mut wire = serve(double.clone()).await;
     let panicked = wire
         .act(json!({ "panic": "before" }), Some("P"), "t1")
         .await;
@@ -269,7 +263,7 @@ async fn a_request_that_panics_before_a_run_releases_its_id() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_request_that_fails_after_allocation_keeps_its_id_with_its_run() {
     let double = Arc::new(Double::default());
-    let mut wire = serve("after", double.clone()).await;
+    let mut wire = serve(double.clone()).await;
     let failed = wire.act(json!({ "fail": "after" }), Some("A"), "t1").await;
     let failed = wire.until(failed).await;
     assert_eq!(failed["error"]["code"], -32602, "{failed:#}");
@@ -285,7 +279,7 @@ async fn a_request_that_fails_after_allocation_keeps_its_id_with_its_run() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_request_cancelled_while_queued_keeps_its_id_with_no_run() {
     let double = Arc::new(Double::default());
-    let mut wire = serve("queued", double.clone()).await;
+    let mut wire = serve(double.clone()).await;
     let holder = wire.act(json!({ "hold": true }), None, "holder").await;
     wire.progress("holder").await;
     let queued = wire.act(json!({}), Some("Y"), "queued").await;
@@ -312,7 +306,7 @@ async fn a_request_cancelled_while_queued_keeps_its_id_with_no_run() {
 #[tokio::test(flavor = "multi_thread")]
 async fn the_named_estimate_reaches_the_action() {
     let double = Arc::new(Double::default());
-    let mut wire = serve("estimate-meta", double.clone()).await;
+    let mut wire = serve(double.clone()).await;
     for named in [json!("sha256:abc"), json!(7)] {
         let call = wire
             .begin(

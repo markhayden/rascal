@@ -4,7 +4,8 @@
 //! Task 10.2 (table-manners 4.8): every one records its invocation as the matching action's
 //! arguments, null only on an `invalid` run whose arguments did not resolve.
 //! Task 10.4 (table-manners 4.7): rascal is an operations tool, so every result carries
-//! `artifacts`, empty until operations run (10.6) and tasks list their Masks (10.8).
+//! `artifacts`, a command-line run's empty until tasks list their Masks (10.8; an operation's are
+//! `tests/it/operations.rs`).
 #![cfg(feature = "testkit")]
 #![allow(clippy::unwrap_used)]
 
