@@ -1449,7 +1449,7 @@ shims). Artifacts cross by **reference** (type, schema version, identity, opaque
 they were made on, a resource), never by workspace id, and resolve by identity in the session's
 store, which is how a saved binding reopens after a restart or a workspace move. A Mask leaves and
 enters through the reserved `export` and `import` tools over 10.5's mask bundles (5.1). Every
-result records its `invocation`, `rascal call <action> --arguments <file>` runs it again, and
+result records its `invocation` (from 10.2), `rascal call <action> --arguments <file>` runs it again, and
 `rascal call --bundle` replays a host's invocation bundle (4.8, 4.9). And first, ahead of all of
 it: the path rule (5.2), since today `serve` reads any absolute path a caller names, which is a
 live gap on v0.3 as well.
@@ -1492,10 +1492,10 @@ chain **10.2 → 10.3 → 10.4 → 10.6** (the pin and shapes; references, the s
 refusal; operations in the description; an operation call is a run). After 10.4, **10.10** (export
 and import, in a new module) runs beside 10.6. After 10.6 four tracks: **A** 10.7 (the artifact
 resource, reopening after a restart and a move); **B** 10.8 (tasks list their Masks); **C** 10.9
-(estimates for operations); **D** 10.11 → 10.12 (the invocation, `rascal call`), then 10.13 (the
-bundle replay) once 10.10 is in. A and 10.10 live mostly in new modules (`artifact_resource.rs`,
+(estimates for operations); **D** 10.12 (`rascal call`; the invocation is 10.2's), then 10.13
+(the bundle replay) once 10.10 is in. A and 10.10 live mostly in new modules (`artifact_resource.rs`,
 `transfer.rs`) and run in parallel with anything; B, C and D all edit `actions.rs`, `estimate.rs`
-and `run_json.rs`, so they run in one session in the order 10.8, 10.9, 10.11 unless two sessions
+and `run_json.rs`, so they run in one session in the order 10.8, 10.9, 10.12 unless two sessions
 take care to merge 10.8 first. 10.14 (the end-to-end path, fixtures, ADR 0021, docs) waits for
 every track; 10.15 for 10.14, squint's v0.4 fixtures and the owner's release.
 
@@ -1503,12 +1503,12 @@ every track; 10.15 for 10.14, squint's v0.4 fixtures and the owner's release.
 green, conventional scope (`feat(mcp)`, `feat(core)`, `feat(mask)`, `test(mask)`, `docs`), the
 checklist in `tasks/todo.md` ticked in the task's own commit. Rollback checkpoints are annotated
 tags: `m10.1` on `main`'s merge of 10.1 (the path rule on v0.3, the one M10 change `main` carries
-before the release); on the milestone branch `m10.2` after 10.2 (a v0.4 rascal with no new
-behaviour), `m10.3` after 10.3, 10.4 and 10.6 (operations run, bound by reference), `m10.4` after
+before the release); on the milestone branch `m10.2` after 10.2 (a v0.4 rascal whose results
+carry their invocation), `m10.3` after 10.3, 10.4 and 10.6 (operations run, bound by reference), `m10.4` after
 10.7 to 10.10 (artifacts reopen by identity, tasks' Masks bind, estimates cover operations, Masks
-export and import), `m10.5` after 10.11 to 10.13 (the invocation and `rascal call`). A task group
+export and import), `m10.5` after 10.12 and 10.13 (`rascal call` and the bundle replay). A task group
 that goes wrong is reverted on the branch (rule 1, `git revert --no-commit` newest first: 10.13
-before 10.12 before 10.11; 10.9, 10.8 and 10.7 before 10.6; 10.6 before 10.4 before 10.3), or the
+before 10.12; 10.9, 10.8 and 10.7 before 10.6; 10.6 before 10.4 before 10.3), or the
 branch is reset to the last tag after a `rescue/` reference (rule 2). 10.1 on `main` is undone
 alone by rule 4 (revert its merge), which reopens the gap and is therefore a last resort. If v0.4
 changes under rascal before it is tagged, the affected task is amended forward on the branch; if
@@ -1530,8 +1530,9 @@ which may only take away: the allowed set is the overlap of the two trees (quest
 flag directory inside a configured one stays; a configured directory inside a flag one replaces
 it; anything else goes), with no `[serve] allow_dirs` the flags as given, `allow_dirs = []`
 allowing nothing, a configured directory that does not resolve allowing nothing (stderr names
-it), and a configuration that does not load narrowing nothing (the flags are the host's own
-grant, and `serve` starts in every configuration state; stderr says so).
+it), and a configuration that does not load allowing nothing (fail closed, the coordinator's
+review: what it would narrow is unknown; stderr says why, and `serve` still starts, its estimates
+working on inline images).
 With no `--allow-dir` every path is refused, closed by default; inline images keep working. The
 set is fixed for the session, printed on stderr at start (the v0.3 session schema has no field for
 it; question 2, settled), and from 10.2 shown as the session's `allowed_dirs`.
@@ -1612,13 +1613,26 @@ repository and the temporary directory allowed, for the tests), `bin/independent
 ### Task 10.2: The pin to v0.4 and the shapes
 
 **Description.** The pin moves to the v0.4 crate by path (above); `contract` is `0.4.0`
-everywhere. The shapes the v0.4 types force, with no new behaviour: every action (the seven
-recipe actions) carries `kind: "task"` and no `group`; `vocabulary` moves to the core's object
-with the images profile's four lists in it as before; `rascal://session` gains `allowed_dirs`
-(10.1's set, `[]` with no `--allow-dir`); every result carries `invocation`, which the built
-v0.4 schema allows to be `null` only on an `invalid` result (question 5, settled): 10.2 writes
-`null` there and, on every other result, the smallest invocation that schema accepts, built from
-the call as it arrived (10.11 fills it in as specified);
+everywhere. The shapes the v0.4 types force: every action (the seven recipe actions) carries
+`kind: "task"` and no `group`; `vocabulary` moves to the core's object with the images profile's
+four lists in it as before; `rascal://session` gains `allowed_dirs` (10.1's set, `[]` with no
+`--allow-dir`); and every result carries its real `invocation` (4.8), the old 10.11 folded in
+here (the coordinator's review: a stand-in would be a fabricated replay record, and the built
+v0.4 schema allows `null` only on an `invalid` result, question 5). Tasks and the command line
+are every result there is at this point; 10.3 and 10.6 extend the same function to what they add
+(references, operations). The invocation is `action`; `arguments` as resolved, with every
+default of the action's `params_schema` applied, each image as `{"expect": <image reference>}`
+with no `path` or `inline`, each location as given, `max_spend_usd` kept, and `return_images`
+and `image_blocks` left out; `effective` the estimate's object from the same function (12.5):
+`model`, `config_identity`, and `x-rascal` (the filler and its revision, paste and
+`fill_max_side`, and the constant sets in force by step); `requirements` the names of the
+readiness requirements the call used (12.2's `for_call`), never a value. It is `null` only on an
+`invalid` run whose arguments did not resolve. On the command line (`rascal run`, `heal`) the
+invocation is written as the matching action's arguments (the recipe's action name;
+`--location` and `--stroke` files as locations, `--set` as `set`), so a CLI run is callable
+through `serve` and `rascal call` alike. `mask` and `protect` are still paths to stored mask
+directories here; 10.3, the next task in the chain, makes them references, in the invocation as
+everywhere (the milestone branch merges nothing before 10.15).
 `profiles` stays `["images"]` until 10.4 adds `operations`. The description's text and
 `docs/contract.md` stop mentioning MCP roots (rascal never used them). `fixtures/table-manners/`
 and `fixtures/contract/describe.json` are regenerated at v0.4.
@@ -1630,15 +1644,25 @@ and `fixtures/contract/describe.json` are regenerated at v0.4.
       for a server started with no `--allow-dir`.
 - [ ] Every `run.json`, the runs pages, the estimates and the refusals validate against v0.4;
       `UPDATE_FIXTURES=1` regenerates `fixtures/table-manners/` and the check passes after.
+- [ ] Every fixture and every result in the suite has a non-null `invocation` validating against
+      v0.4, but an `invalid` run whose arguments did not parse, which has `null`.
+- [ ] The invocation names no path anywhere but `mask` and `protect` until 10.3 (a test walks it
+      for strings starting with `/`), and two calls on the same image given by path and inline
+      give equal invocations.
+- [ ] `invocation.effective` equals the estimate's `effective` for the same call; `requirements`
+      lists the credential's name and never its value (the sentinel search of 12.2).
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- describe::
-serve_contract:: run_json:: table_manners_fixtures::`; `scripts/test-checks.sh`; `just check`.
+serve_contract:: run_json:: table_manners_fixtures:: estimate::`; `scripts/test-checks.sh`;
+`just check`.
 
 **Dependencies.** 10.1; a table-manners checkout on branch `v0.4` with the v0.4 schemas and types.
 **Files.** `Cargo.toml`, `Cargo.lock`,
-`crates/rascal-mask/src/{describe,actions,run_json,estimate}.rs`,
-`crates/rascal-core/src/contract.rs`, `crates/rascal-mask/tests/it/{describe,serve_contract}.rs`,
-`fixtures/table-manners/`, `fixtures/contract/`, `docs/contract.md`. **Size.** S.
+`crates/rascal-mask/src/{describe,actions,run_json,estimate,run,heal}.rs`,
+`crates/rascal-mask/src/invocation.rs` (new), `crates/rascal-core/src/contract.rs`,
+`crates/rascal-mask/tests/it/{describe,serve_contract,run_json}.rs`, `fixtures/table-manners/`,
+`fixtures/contract/`, `docs/contract.md`. **Size.** M (split: the pin and shapes, then the
+invocation).
 
 ### Task 10.3: References, the store and the binding refusal
 
@@ -2085,36 +2109,12 @@ portable JSON), `crates/rascal-mask/tests/it/transfer.rs` (new), `portable_cli.r
 `docs/workspace.md`, `docs/export.md`, `docs/contract.md`, `docs/adr/0022-mask-bundles.md` (the
 MCP tools now exist). **Size.** M.
 
-### Task 10.11: The invocation on every result
+### Task 10.11: Folded into 10.2
 
-**Description.** Every result, tasks, operations, the command line and every status, carries
-`invocation` (4.8) in place of 10.2's smallest one: `action`; `arguments` as resolved, with every
-default of the action's `params_schema` applied, each image as `{"expect": <image reference>}`
-with no `path` or `inline`, each artifact (in-ports, `mask`, `protect`) as its reference, each
-location as given (a location given inline stays inline; a location port bound by reference stays
-a reference), `max_spend_usd` kept, and `return_images` and `image_blocks` left out; `effective`
-the estimate's object from the same function (12.5): `model`, `config_identity`, and `x-rascal`
-(the filler and its revision, paste and `fill_max_side`, and the constant sets in force by step);
-`requirements` the names of the readiness requirements the call used (12.2's `for_call`), never a
-value. It is `null` only on an `invalid` run whose arguments did not resolve. On the command line
-(`rascal run`, `heal`) the invocation is written as the matching action's arguments (the recipe's
-action name; `--location` and `--stroke` files as locations, `--set` as `set`), so a CLI run is
-callable through `serve` and `rascal call` alike.
-
-**Acceptance.**
-- [ ] Every fixture and every result in the suite has a non-null `invocation` validating against
-      v0.4, but an `invalid` run whose arguments did not parse, which has `null`.
-- [ ] The invocation names no path anywhere (a test walks it for strings starting with `/`), and
-      two calls on the same image given by path and inline give equal invocations.
-- [ ] `invocation.effective` equals the estimate's `effective` for the same call; `requirements`
-      lists the credential's name and never its value (the sentinel search of 12.2).
-
-**Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- run_json::
-serve_contract:: operations:: estimate::`; `just check`.
-
-**Dependencies.** 10.6. **Files.** `crates/rascal-mask/src/invocation.rs` (new),
-`run_json.rs`, `actions.rs`, `operations.rs`, `estimate.rs`, `run.rs`, `heal.rs`, tests
-`run_json.rs`, `serve_contract.rs`. **Size.** M.
+The invocation on every result is part of 10.2 (the coordinator's review, 2026-11-01): a v0.4
+result cannot carry a stand-in, so the real invocation lands with the pin. 10.3 writes `mask` and
+`protect` into it as references and 10.6 writes an operation's in-ports, each through 10.2's
+function. The number stays so the others keep theirs.
 
 ### Task 10.12: `rascal call`
 
@@ -2144,7 +2144,8 @@ the file for `rascal call <invocation.action>`.
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- call_cli::`;
 `just check`.
 
-**Dependencies.** 10.11. **Files.** `crates/rascal-mask/src/{main,call}.rs` (the second new),
+**Dependencies.** 10.2 (its `binding` refusal comes with 10.3, its `feather` scenario with
+10.6). **Files.** `crates/rascal-mask/src/{main,call}.rs` (the second new),
 `actions.rs` (a session-less entry), `crates/rascal-mask/tests/it/call_cli.rs` (new),
 `README.md`, SPEC "Commands", `docs/contract.md`. **Size.** S.
 

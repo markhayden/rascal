@@ -50,24 +50,32 @@ pub fn default_workspace(config: &ConfigState) -> PathBuf {
 
 /// The allowed directories (CONTRACT 5.2): each `--allow-dir` resolved (a relative, missing or
 /// non-directory one is a usage error, exit 64, before anything is served), narrowed by the
-/// configuration's `[serve] allow_dirs` when it loaded (a configuration that does not load
-/// narrows nothing: the flags are the host's own grant, and `serve` starts in every
-/// configuration state). The set and what was dropped go to stderr.
+/// configuration's `[serve] allow_dirs`. A configuration that does not load allows no caller
+/// path (fail closed: what it would narrow is unknown); `serve` still starts, and inline images
+/// still work. The set, and why anything was dropped, go to stderr.
 pub fn allowed(flags: &[PathBuf], state: &ConfigState) -> Result<PathRule> {
     let flags = paths::resolve_flags(flags)?;
-    let configured = state
-        .config()
-        .and_then(|c| c.serve.as_ref())
-        .and_then(|s| s.allow_dirs.as_ref())
-        .map(|dirs| {
-            let (resolved, dropped) = paths::resolve_configured(dirs);
-            for dir in dropped {
-                eprintln!(
-                    "rascal serve: serve.allow_dirs: {dir} is not a directory, so it allows nothing"
-                );
-            }
-            resolved
-        });
+    let configured = match state {
+        ConfigState::Invalid { .. } => {
+            eprintln!(
+                "rascal serve: the configuration does not load, so what its [serve] allow_dirs would allow is unknown and no caller path is allowed"
+            );
+            Some(Vec::new())
+        }
+        _ => state
+            .config()
+            .and_then(|c| c.serve.as_ref())
+            .and_then(|s| s.allow_dirs.as_ref())
+            .map(|dirs| {
+                let (resolved, dropped) = paths::resolve_configured(dirs);
+                for dir in dropped {
+                    eprintln!(
+                        "rascal serve: serve.allow_dirs: {dir} is not a directory, so it allows nothing"
+                    );
+                }
+                resolved
+            }),
+    };
     let allowed = paths::overlap(&flags, configured.as_deref());
     if allowed.is_empty() {
         eprintln!(
@@ -91,7 +99,7 @@ pub fn serve(args: &ServeArgs) -> Result<()> {
     let paths = allowed(&args.allow_dirs, &state)?;
     if let ConfigState::Invalid { reason, .. } = &state {
         eprintln!(
-            "rascal serve: the configuration does not load, so the actions that need it are not ready and its [serve] allow_dirs narrows nothing: {reason}"
+            "rascal serve: the configuration does not load, so the actions that need it are not ready: {reason}"
         );
     }
     let config = state.config().cloned();

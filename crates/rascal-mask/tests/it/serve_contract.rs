@@ -1317,10 +1317,13 @@ fn serve_starts_in_every_configuration_state() {
             assert_eq!(first["name"], "rascal.toml");
             assert_eq!(first["state"], remove_prompt, "{readiness:#}");
         }
+        // Inline, so the call runs in every state: a configuration that does not load allows
+        // no caller path (task 10.1).
+        let data = rascal_core::panel::base64(&std::fs::read(&pano).unwrap());
         let out = client
             .call(
                 "seam",
-                serde_json::json!({ "image": { "path": pano.to_str().unwrap() } }),
+                serde_json::json!({ "image": { "inline": { "media_type": "image/png", "data": data } } }),
             )
             .unwrap();
         let s = out.structured.unwrap();

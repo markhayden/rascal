@@ -821,8 +821,8 @@ each `--allow-dir` (repeatable; absolute and naming an existing directory, else 
 anything is answered) resolved once at start, narrowed by the configuration's `[serve]
 allow_dirs` to the overlap (where a configured directory and a flag directory overlap the deeper
 one is allowed; a configured directory under no flag, and `allow_dirs = []`, allow nothing; a
-configuration that does not load narrows nothing, the flags being the host's own grant). With no `--allow-dir` every caller path is
-refused and inline images still work. The set is fixed for the session and printed on stderr at
+configuration that does not load allows nothing, failing closed, and stderr says why). With no
+`--allow-dir` every caller path is refused and inline images still work. The set is fixed for the session and printed on stderr at
 start. One function, `rascal_core::paths::PathRule::admit`, checks every caller path on its
 canonical form (absolute, `.`, `..` and every symlink resolved, the final component included):
 it must exist, be the kind the slot takes (a regular file; a stored mask directory whose every

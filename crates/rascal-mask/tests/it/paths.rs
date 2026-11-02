@@ -393,14 +393,22 @@ fn the_configuration_narrows_to_the_overlap_and_never_widens() {
     assert!(with(&config("empty", &[])).is_empty());
     // A configured directory with no flag allows nothing.
     assert!(set(&["--config", s(&config("alone", &[&inside]))]).is_empty());
-    // A configuration that does not load narrows nothing: the flags stand.
+    // A configuration that does not load allows nothing (fail closed), and says why.
     let broken = dir.join("broken.toml");
     std::fs::write(
         &broken,
         "config_version = 1\n[serve]\nallow_dirs = [\"sub\"]\n",
     )
     .unwrap();
-    assert_eq!(with(&broken), vec![s(&inside)]);
+    assert!(with(&broken).is_empty());
+    let out = start_and_end(&dir, &["--allow-dir", s(&inside), "--config", s(&broken)]);
+    assert!(
+        stderr(&out).contains(
+            "the configuration does not load, so what its [serve] allow_dirs would allow is unknown and no caller path is allowed"
+        ),
+        "{}",
+        stderr(&out)
+    );
 
     // And the calls follow the set: with `in/sub` configured, `in/pano.png` is refused.
     let narrowed = config("calls", &[&sub]);

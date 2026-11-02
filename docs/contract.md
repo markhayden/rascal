@@ -188,9 +188,9 @@ not ready).
   directory overlap, the deeper one is allowed; a configured directory under no flag allows
   nothing; `allow_dirs = []` allows nothing; no `[serve] allow_dirs` leaves the flags as given; a
   configured directory that does not resolve allows nothing (stderr says so); a configuration
-  that does not load narrows nothing (the flags are the host's own grant, and `serve` starts in
-  every configuration state; stderr says so). With no `--allow-dir` every caller path is refused, closed by
-  default; inline images keep working. The set is fixed for the session and printed on stderr at
+  that does not load allows no caller path, failing closed since what it would narrow is unknown
+  (stderr says why; `serve` still starts, and `describe`, `estimate` and inline images work). With
+  no `--allow-dir` every caller path is refused, closed by default; inline images keep working. The set is fixed for the session and printed on stderr at
   start (`rascal serve: callers' paths are read only inside: …`); the v0.3 session resource has no
   field for it, so `rascal://session` shows it from v0.4 (`allowed_dirs`, task 10.2).
   `rascal_core::paths::PathRule::admit` is the one check, for every caller path `serve` takes:
