@@ -2135,28 +2135,43 @@ prints the file's path and digest; `echo '{"file": {"path": "<that path>"}}' | r
 --json - --workspace b/ --allow-dir <exports dir>` prints the same reference with
 `already_present: false`, and again `true`; the same with a PNG exits 64 with the refusal JSON.
 
+As built: an artifact type that is no type of rascal's (another tool's, an unknown name) is the
+`binding` refusal (`wrong_type`, `expected` the portable types), and `image` is
+`invalid_arguments` (`usage`: it travels as a file). A location has the JSON form only in an
+image's own frame and on an image file the store can name (`on`); one in a `crop:` or `cut:`
+frame is `input`, and rascal's `group` does not travel. Import tells a bundle from a location by
+its content; an inline `media_type` that contradicts it is `usage`, and a request's shape faults
+(unknown fields, a malformed `sha256` or base64, inline bytes over the limit) are `usage`. The
+export's `file.sha256` is plain hex, as the schema has it. `rascal import`'s `--allow-dir` is
+narrowed by `[serve] allow_dirs` like `serve`'s, and a refused path has the rule's one text. No
+core change was needed: `contract::location_out` and `Workspace::import_mask_bytes` already did
+the work. The tests are `tests/it/transfer.rs` (through `serve`) and `portable_cli.rs` (the
+commands), leaving `serve_contract.rs` to 10.6, which ran beside this task.
+
 **Acceptance.**
-- [ ] Through `serve`: a Mask exported, imported into an empty store (`already_present: false`),
+- [x] Through `serve`: a Mask exported, imported into an empty store (`already_present: false`),
       imported again (`true`), the reference equal throughout and the exported bytes equal to
       `workspace export-mask`'s; a location exported and imported inline; each output validating
       against v0.4.
-- [ ] Refusals, each validating against `refusal.json`: a PNG given as a mask bundle, a
+- [x] Refusals, each validating against `refusal.json`: a PNG given as a mask bundle, a
       `portable: none` export, an unresolved export (`binding`, `port: "artifact"`), a digest
       mismatch, a path outside the allowed directories (indistinguishable from a missing file).
-- [ ] Both answer while a slow run holds the permit; neither writes a run or touches the runs
+- [x] Both answer while a slow run holds the permit; neither writes a run or touches the runs
       list; export writes only under the export area.
-- [ ] The commands print the same documents as the tools and exit 0, or 64 with the refusal JSON.
+- [x] The commands print the same documents as the tools and exit 0, or 64 with the refusal JSON.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- transfer::
-portable_cli:: serve_contract::`; `just check`.
+portable_cli:: inspect::`; `just check`. Done 2026-11-01 (branch `m10-10.10-export`, built
+against table-manners `4dd1d2f`).
 
 **Dependencies.** 10.4 (and through it 10.3 and 10.1), 10.5. **Files.**
 `crates/rascal-mask/src/transfer.rs` (new), `main.rs` (`export --json`, `import --json`,
-`compat-export`), `export.rs`,
-`actions.rs` (the two tools), `crates/rascal-core/src/{bundle,contract}.rs` (a location's
-portable JSON), `crates/rascal-mask/tests/it/transfer.rs` (new), `portable_cli.rs`,
-`docs/workspace.md`, `docs/export.md`, `docs/contract.md`, `docs/adr/0022-mask-bundles.md` (the
-MCP tools now exist). **Size.** M.
+`compat-export`), `export.rs`, `actions.rs` (the two tools registered),
+`crates/rascal-mask/tests/it/transfer.rs` (new), `portable_cli.rs`, `inspect.rs` and
+`packs.rs` (the renamed compatibility export), `docs/workspace.md`, `docs/export.md`,
+`docs/contract.md`, `docs/tools.md`, `docs/architecture.md`, `docs/adr/0022-mask-bundles.md`
+(the MCP tools now exist), `docs/adr/0009-copied-schemas-compat-export.md` (the new name), SPEC,
+README. **Size.** M.
 
 ### Task 10.11: Folded into 10.2
 

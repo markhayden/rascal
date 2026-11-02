@@ -40,5 +40,6 @@ mod serve;
 mod serve_contract;
 mod table_manners_fixtures;
 mod tools_setup;
+mod transfer;
 mod walking_slice;
 mod workspace_cli;

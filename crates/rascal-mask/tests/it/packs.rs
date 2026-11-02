@@ -913,8 +913,7 @@ fn a_relocated_run_replays_with_the_pack_absent_and_no_call_made() {
     // before writing) and carries the polygon regions.
     let exported = dir.join("segment.json");
     let out = rascal(&[
-        "export",
-        "--compat",
+        "compat-export",
         run1.join("journal.jsonl").to_str().unwrap(),
         "--step",
         "segment",

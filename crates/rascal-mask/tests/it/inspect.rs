@@ -88,13 +88,12 @@ fn inspect_out_writes_the_overlay_the_chart_and_the_json() {
 }
 
 #[test]
-fn export_compat_validates_a_step_and_a_location_and_refuses_a_line() {
+fn compat_export_validates_a_step_and_a_location_and_refuses_a_line() {
     let dir = scratch("export");
     let (run, _) = rect_run(&dir);
     let out_file = dir.join("e.json");
     let out = rascal(&[
-        "export",
-        "--compat",
+        "compat-export",
         run.join("journal.jsonl").to_str().unwrap(),
         "--step",
         "rasterize",
@@ -112,8 +111,7 @@ fn export_compat_validates_a_step_and_a_location_and_refuses_a_line() {
     assert!(exported.get("artifacts").is_none());
     assert_eq!(exported["provenance"]["tool"], "rasterize");
     let out = rascal(&[
-        "export",
-        "--compat",
+        "compat-export",
         run.join("journal.jsonl").to_str().unwrap(),
         "--step",
         "nope",
@@ -128,8 +126,7 @@ fn export_compat_validates_a_step_and_a_location_and_refuses_a_line() {
     )
     .unwrap();
     let out = rascal(&[
-        "export",
-        "--compat",
+        "compat-export",
         "--location",
         loc.to_str().unwrap(),
         "--out",
@@ -149,8 +146,7 @@ fn export_compat_validates_a_step_and_a_location_and_refuses_a_line() {
     )
     .unwrap();
     let out = rascal(&[
-        "export",
-        "--compat",
+        "compat-export",
         "--location",
         loc.to_str().unwrap(),
         "--out",
@@ -158,15 +154,27 @@ fn export_compat_validates_a_step_and_a_location_and_refuses_a_line() {
     ]);
     assert_eq!(out.status.code(), Some(64));
     assert!(String::from_utf8_lossy(&out.stderr).contains("a line location has no copied form"));
+    // No fallback under the old name or flag (PLAN.md 10.10, question 9).
     let out = rascal(&[
         "export",
+        "--compat",
         run.join("journal.jsonl").to_str().unwrap(),
         "--step",
         "rasterize",
         "--out",
         out_file.to_str().unwrap(),
     ]);
-    assert_eq!(out.status.code(), Some(64), "without --compat");
+    assert_eq!(out.status.code(), Some(64), "the old form");
+    let out = rascal(&[
+        "compat-export",
+        "--compat",
+        run.join("journal.jsonl").to_str().unwrap(),
+        "--step",
+        "rasterize",
+        "--out",
+        out_file.to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(64), "the old flag");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

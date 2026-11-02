@@ -61,10 +61,10 @@ fn the_independent_client_imports_finds_masks_renders_and_reads_back() {
         assert!(names.contains(&w), "{w}");
     }
     // The ops, the five workspace tools, and the contract's actions (ADR 0020): one per shipped
-    // recipe, `estimate` and `describe`; no name twice.
+    // recipe, `estimate`, `describe`, `export` and `import`; no name twice.
     assert_eq!(
         names.len(),
-        catalogue.len() + 5 + 9,
+        catalogue.len() + 5 + 11,
         "no other tool: {names:?}"
     );
     let mut unique = names.clone();

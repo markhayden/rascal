@@ -75,9 +75,9 @@ lose the zones, the profile and the prescriptions and invent an identity (ADR 00
   Both versions are read before anything else, so the refusal says what to do: a newer bundle
   "made by a newer rascal (bundle version N); this rascal reads version 1: upgrade rascal", an
   older one "made by an older rascal (bundle version N) that this rascal no longer reads".
-- The MCP tools for export and import wait for the operations profile (table-manners v0.4's
-  reserved `export` and `import`, PLAN.md 10.10); the bundle does not presume its artifact
-  reference.
+- The MCP tools for export and import waited for the operations profile (table-manners v0.4's
+  reserved `export` and `import`); the bundle does not presume its artifact reference. They now
+  exist (PLAN.md 10.10, below).
 - Images are not bundled: a mask's frame is coordinates, not pixels, so the target needs the
   image only to apply the mask, and it imports the image by its own path. The manifest names that
   image (the nearest image in the root frame among the mask's inputs, through the records; none
@@ -90,3 +90,13 @@ lose the zones, the profile and the prescriptions and invent an identity (ADR 00
   every limit import reads within (above), so no rascal writes a bundle a rascal refuses; a version
   mismatch tells the person what to do (upgrade, or the format is gone); and a missing image is
   named with its remedy (above).
+
+## Note 2026-11-01: the MCP tools
+
+Task 10.10 serves the reserved `export` and `import` tools and `rascal export --json` /
+`rascal import --json` (CONTRACT 5.1) over this format unchanged: export writes a Mask's bundle,
+the same bytes `workspace export-mask` gives, into rascal's export area
+(`$XDG_DATA_HOME/rascal/exports/<identity with : as ->.mask.tar`, `application/x-tar`), never at
+a caller's path; import reads a bundle by path (under the path rule) or inline and runs every
+check above through `Workspace::import_mask_bytes`, answering with the Mask's artifact reference
+and `already_present`. `docs/contract.md` "Export and import" has the refusals.

@@ -174,6 +174,18 @@ table-manners location (its `image` reference must name the same file, ADR 0020)
 (the kind's rules, the seam rule) and registered like any location; the same file twice gives the
 same id. The file is read within 1 MiB; one that is not JSON, or not a location, is refused (64).
 
+**Through the contract** (CONTRACT 5.1, PLAN.md 10.10), `serve`'s reserved `export` and `import`
+tools, and `rascal export --json` and `rascal import --json`, which read the same request and
+print the same document, move the same two forms by artifact reference instead of by id. Export
+writes a Mask's bundle (the bytes `export-mask` gives) or a location's contract JSON into rascal's
+export area, `$XDG_DATA_HOME/rascal/exports/<identity with : as ->.mask.tar` or
+`.location.json`, never at a caller's path, and answers with the file's path, SHA-256, size and
+media type. Import takes a file by path (`serve`'s, or `rascal import`'s, `--allow-dir` rule) or
+its bytes inline, tells a bundle from a location by its content, checks it whole (a location
+against the image the store holds under its `image.file_sha256`) and answers with the reference
+and `already_present`. Wrong requests are refusals: on the command line, the refusal JSON on
+stdout and exit 64 (`docs/contract.md` "Export and import").
+
 ## Commands
 
 ```
@@ -183,6 +195,8 @@ rascal workspace repair ws/ [--json]
 rascal workspace export-mask ws/ mask-3 --out seam.mask.tar    # prints the identity and sha256:<the bundle's digest>
 rascal workspace import-mask ws2/ seam.mask.tar [--sha256 <digest>]   # prints the id, the frame and the identity
 rascal workspace import-location ws/ finding.json --image img-1  # prints the id, the frame and the identity
+rascal export --json <request.json | -> [--workspace ws/]          # the contract's export of a Mask or a location (below)
+rascal import --json <request.json | -> [--workspace ws/] [--allow-dir <abs>]...   # and its import
 rascal <op> --workspace ws/ --<port> <id> [--<param> <value>] [--constants <set>] [--strict]
 rascal run <recipe> <image> --out run/ [--workspace ws/]
 ```

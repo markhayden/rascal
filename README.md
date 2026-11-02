@@ -90,7 +90,9 @@ rascal render run/artifacts/<id> --for tinted --image img-3 --out seam-tinted.pn
 rascal paste base.png fill.png run/artifacts/<id> --mode poisson --out composite.png
 rascal ops list                                           # every op's manifest, as an agent sees it
 rascal inspect run/artifacts/<id> --json                  # or --out pages/ for the overlay and chart, --replay to rebuild
-rascal export --compat run/journal.jsonl --step rasterize --out e.json
+rascal compat-export run/journal.jsonl --step rasterize --out e.json   # the copied schemas' projection (ADR 0009)
+echo '{"artifact": <a Mask reference>}' | rascal export --json - --workspace ws/   # a Mask's bundle or a location's JSON into rascal's data directory (CONTRACT 5.1)
+echo '{"file": {"path": "/abs/in/seam.mask.tar"}}' | rascal import --json - --workspace ws2/ --allow-dir /abs/in   # back in, by reference
 rascal workspace export-mask run/ mask-6 --out seam.mask.tar   # a Mask as one hash-checked file (ADR 0022)
 rascal workspace import-mask ws/ seam.mask.tar                 # into another workspace, same identity; a PNG is refused
 rascal workspace import-location ws/ finding.json --image img-1   # a location as JSON, checked against the image
@@ -101,7 +103,8 @@ echo '{"action":"seam","arguments":{"image":{"path":"/abs/pano.png"},"filler":"h
 rascal playground                                         # open Wafflery, the shared program (separate)
 rascal serve [--config rascal.toml] [--allow-dir /abs/in]   # every op as an MCP tool over stdio, plus import/list/describe/read/dash,
                                                           # the table-manners actions (one per recipe) with run resources, and
-                                                          # `estimate`; starts with no flags at all, refusing only what a call needs.
+                                                          # `estimate`, `export` and `import`; starts with no flags at all,
+                                                          # refusing only what a call needs.
                                                           # A caller's path is read only inside an --allow-dir (repeatable;
                                                           # `[serve] allow_dirs` narrows them); with none, every path is refused
                                                           # and inline images still work

@@ -22,6 +22,7 @@ mod run;
 mod run_json;
 mod serve;
 mod tools;
+mod transfer;
 mod workspace_cmd;
 
 use std::collections::BTreeMap;
@@ -282,8 +283,43 @@ enum Command {
         #[arg(long)]
         frame_ancestor: Option<String>,
     },
-    /// Project a native envelope or a location onto the copied schemas (ADR 0009).
+    /// Write an artifact's portable form (a Mask's bundle, a location's JSON) into rascal's
+    /// data directory and print the file's path and digest (table-manners 5.1): the export
+    /// tool's request read, its document printed. Exit 0, or 64 with the refusal JSON on stdout.
     Export {
+        /// The request, `{"artifact": <artifact reference>}`, as a JSON file, or `-` for stdin.
+        #[arg(long = "json", value_name = "REQUEST")]
+        json: PathBuf,
+        /// The store the reference resolves in; `serve`'s default without it.
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// The configuration file (rascal.toml): its `[workspace] dir` is the default store.
+        #[arg(long)]
+        config: Option<PathBuf>,
+    },
+    /// Record an exported artifact (a mask bundle or a location JSON, by path or inline) in a
+    /// store and print its reference (table-manners 5.1): the import tool's request read, its
+    /// document printed. A path is read only inside --allow-dir (5.2). Exit 0, or 64 with the
+    /// refusal JSON on stdout.
+    Import {
+        /// The request, `{"file": {"path": …}}` or `{"inline": {"media_type", "data"}}` with an
+        /// optional `sha256`, as a JSON file, or `-` for stdin.
+        #[arg(long = "json", value_name = "REQUEST")]
+        json: PathBuf,
+        /// The store to record in; `serve`'s default without it.
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// The configuration file (rascal.toml): its `[workspace] dir` is the default store and
+        /// its `[serve] allow_dirs` narrows --allow-dir.
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// A directory the request's path may name (absolute, existing; repeatable). Without
+        /// one, every path is refused and inline bytes still work (CONTRACT 5.2).
+        #[arg(long = "allow-dir", value_name = "ABS_DIR")]
+        allow_dir: Vec<PathBuf>,
+    },
+    /// Project a native envelope or a location onto the copied schemas (ADR 0009).
+    CompatExport {
         /// The journal (journal.jsonl) to take the envelope from.
         journal: Option<PathBuf>,
         /// The step whose envelope to export.
@@ -292,9 +328,6 @@ enum Command {
         /// A location JSON file to export standalone instead of an envelope.
         #[arg(long)]
         location: Option<PathBuf>,
-        /// Validate against the copied schemas and write the projection.
-        #[arg(long)]
-        compat: bool,
         /// The file to write; overwritten if it exists.
         #[arg(long)]
         out: PathBuf,
@@ -583,6 +616,8 @@ const RESERVED: &[&str] = &[
     "render",
     "inspect",
     "export",
+    "import",
+    "compat-export",
     "paste",
     "measure",
     "fake-filler",
@@ -1123,18 +1158,40 @@ fn main() {
             }
         }
         Command::Export {
+            json,
+            workspace,
+            config,
+        } => transfer::command(
+            transfer::Direction::Export,
+            &json,
+            workspace.as_deref(),
+            config.as_deref(),
+            &[],
+        ),
+        Command::Import {
+            json,
+            workspace,
+            config,
+            allow_dir,
+        } => transfer::command(
+            transfer::Direction::Import,
+            &json,
+            workspace.as_deref(),
+            config.as_deref(),
+            &allow_dir,
+        ),
+        Command::CompatExport {
             journal,
             step,
             location,
-            compat,
             out,
-        } => match export::run(&journal, step.as_deref(), &location, compat, &out) {
+        } => match export::run(&journal, step.as_deref(), &location, &out) {
             Ok(path) => {
                 println!("{}", path.display());
                 exit::OK
             }
             Err(error) => {
-                eprintln!("rascal export: {error}");
+                eprintln!("rascal compat-export: {error}");
                 exit::code_for(&error)
             }
         },
