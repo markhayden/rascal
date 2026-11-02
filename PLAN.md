@@ -1808,18 +1808,32 @@ every document agrees with `profiles` before 10.6 fills them. This task changes 
 only: `tools/list` keeps today's op tools, whose names the actions now share, until 10.6 swaps
 them in one step (the description and `tools/list` disagree on the branch for one task).
 
+As built: operations follow the tasks, by group in pipeline order (`find`, `refine`, `prep`,
+`out`, `inspect`) and then by name. `title` is the op's name capitalized; `purpose` is the
+manifest's with "When to use: …" and "When not to use: …" appended (the op tool's text, without
+its output guidance). `params_schema` is the one `Manifest::params_schema` gives both this and
+`serve`'s op tools, so the op tools' `constants` gains the same `default`. `outputs.images`
+names each image out-port by its port name and adds `preview` when an out-port is a location or
+a Mask, since 4.7 lists every preview in `images.out` and 11.2 has `outputs` name every role
+returned. `duration.max_s` is a hundred times `cost.seconds`, at least 60 seconds. The pack
+client's ops take `find` (a pack's ops are finders and are never described). `rascal describe`
+without `--json` prints each action's kind and group. In `serve`, the action tools are the
+tasks only, so `tools/list` is unchanged until 10.6.
+
 **Acceptance.**
-- [ ] `rascal describe --json` (no configuration, and the M12 test configuration) validates
+- [x] `rascal describe --json` (no configuration, and the M12 test configuration) validates
       against v0.4 with `operations` in `profiles`: `ports` on every operation and on no task,
       `group` on every operation and in `vocabulary.group`, `artifact_types` with `bundle`, `json`
       and `none` types, with and without previews, and no `image`; no action name is reserved or
       repeated.
-- [ ] Each operation's `params_schema` accepts the manifest's documented defaults and rejects an
+- [x] Each operation's `params_schema` accepts the manifest's documented defaults and rejects an
       unknown parameter; its port names never clash with a parameter.
-- [ ] Every result validates with `artifacts` present and empty.
+- [x] Every result validates with `artifacts` present and empty.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- describe::
-run_json::`; `cargo nextest run -p rascal-ops --test it`; `just check`.
+run_json::`; `cargo nextest run -p rascal-ops --test it`; `just check`. Done 2026-11-01 (branch
+`m10-operations`, built against table-manners `4dd1d2f`, whose schemas and types are
+`d9e6058`'s).
 
 **Dependencies.** 10.3. **Files.** `crates/rascal-core/src/op.rs` (`Op::group`, `Group`),
 `crates/rascal-ops/src/*.rs` (each op's group), `crates/rascal-mask/src/{describe,run_json}.rs`,

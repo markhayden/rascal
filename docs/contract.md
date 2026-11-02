@@ -45,15 +45,18 @@ location: a split location leaves in parts with `straddles_wrap`, a `view` never
 ## The description (8.3)
 
 ```
-rascal describe                          # one line per action
+rascal describe                          # one line per action: name, kind (and group), title
 rascal describe --json [--config rascal.toml]
 ```
 
-The contract's description document: one action per shipped recipe (`seam`, `remove`,
+The contract's description document, an operations tool's (`profiles: ["images",
+"operations"]`, task 10.4): one `task` per shipped recipe, then one `operation` per built-in op
+(below), with the top-level `artifact_types` and the operations' groups in `vocabulary.group`.
+
+The tasks: one action per shipped recipe (`seam`, `remove`,
 `remove_prompt`, `repair`, `repair_area`, `protect`, and `mask_rect` for the `rect` recipe, so
-it does not take the `rect` op's name in `serve`), each `kind: "task"` (a whole job) with no
-`group` and no `ports` (v0.4, task 10.2: `profiles` is `["images"]`, so there are no operations
-and no `artifact_types`), with the image slots (role
+it does not take the `rect` op's name), each `kind: "task"` (a whole job) with no
+`group` and no `ports`, with the image slots (role
 `source`), the location slots and the kinds each takes, the text and mask inputs and the common
 arguments (`filler`, `set`, `projection`, `strict`) as `params_schema`, each with the default a
 call that leaves it out runs with where there is one (`strict: false`; `seam`'s projection
@@ -63,11 +66,48 @@ call that leaves it out runs with where there is one (`strict: false`; `seam`'s 
 two renders (3.2): `dash` (`kind: "server"`, `ready_timeout_s: 10`, `rascal dash {run.dir}
 --serve --port 0 --frame-ancestor {frame_ancestor}`) and `page` (`kind: "document"`, `rascal
 dash {run.dir} --document`), described in `docs/diagnostics.md`. Every action's `params_schema` declares
-`max_spend_usd` as `{"type": "number", "exclusiveMinimum": 0}`, since every action takes a filler
+`max_spend_usd` as `{"type": "number", "exclusiveMinimum": 0}`, since every task takes a filler
 and so may be paid. With `--config`, the configured fillers are the `filler` enum and a
-configured filler with a price makes an action `may_spend`. `vocabulary` is the core's object of
-word lists: the images profile's four (`disposition`, `confidence` and `evidence` empty,
-`score_kind` `["owlv2-detection"]`) and no `group`, since no action has one. `describe`,
+configured filler with a price makes a task `may_spend`.
+
+The operations (3, 4.7; `describe::operation`): each of the 24 ops of `rascal_ops::registry()`
+(SPEC "Operations", but `segment`, which a pack serves: a description is a local inspection and
+a pack's ops are known only by starting it, so pack operations are out of v0.4 for rascal). No op
+shares a name with a task or a reserved name. Each has:
+
+- `name` the op's, `title` the name capitalized, `purpose` the manifest's `purpose` followed by
+  "When to use: …" and "When not to use: …" from the manifest, `kind: "operation"`;
+- `group` the op's (`Op::group`, a required trait method, so no op can leave it out): `find`
+  (`line`, `rect`, `stroke`), `refine` (`rasterize`, `tighten`, `grow`, `shrink`, `close`,
+  `subtract`, `select`, `invert`, `fan`, `profile`, `feather`), `prep` (`cut`, `put`, `ramp`,
+  `apply`, `window`, `unwindow`), `out` (`render`, `paste`, `measure`) or `inspect` (`inspect`);
+- `ports` the manifest's inputs (`in`) and outputs (`out`), each with `name`, `type` (the
+  contract's: `image`, `location`, `rascal:Mask`, `rascal:BandProfile`, `rascal:Series`,
+  `rascal:Plan`), `required`, `many` (only `select`'s `plane` takes a list) and `purpose`. Port
+  names are lowercase with underscores and never a parameter's name (a test holds every op to
+  it);
+- `params_schema` the manifest's parameter schema (`Manifest::params_schema`, the one `serve`'s
+  op tools declare) with, for an op that has constant sets, `constants` as an `enum` of them whose
+  `default` is the first; no `max_spend_usd`;
+- `images: []` and `locations: []` (its image and location inputs are ports only); `outputs`
+  the roles of the images its out-ports make (the port's name), `preview` when it makes a
+  location or a Mask, and `locations: ["found"]` when it makes a location;
+- `cost: {"may_spend": false}`; `readiness` `ready` with no requirements in every configuration
+  state (a built-in op reads no configuration); `duration` `typical_s` the manifest's
+  `cost.seconds` and `max_s` a hundred times that, at least 60; `renders: []` (the dash reads a
+  task's run workspace; an operation's picture is its preview).
+
+`artifact_types` lists every type a port names but `image`, which the contract defines whole
+(3.3), each at `schema_versions: [1]` with a purpose: `location` (`portable: "json"`, `preview:
+true`), `rascal:Mask` (`bundle`, `true`), and `rascal:BandProfile`, `rascal:Series` and
+`rascal:Plan` (`none`, `false`: they cannot leave their workspace yet, so a host labels them
+workspace-dependent). Until operation calls are runs (task 10.6), `serve`'s `tools/list` keeps the
+op tools of ADR 0015 under the operations' names, with their envelopes: the description and the
+tool list disagree on the milestone branch for one task.
+
+`vocabulary` is the core's object of word lists: `group` (`find`, `refine`, `prep`, `out`,
+`inspect`) and the images profile's four (`disposition`, `confidence` and `evidence` empty,
+`score_kind` `["owlv2-detection"]`). `describe`,
 `estimate`, `export` and `import` are the contract's reserved names, tools and never actions
 (`describe::RESERVED`; `estimate` below; `export` and `import` arrive with task 10.10). The
 description does not use MCP roots: caller paths are governed by `--allow-dir` (8.5).
@@ -160,7 +200,9 @@ that still lists the mask. `locations.used` holds the location the run took in;
 `locations.found` the segmenter's boxes, with `score` and `score_kind: owlv2-detection`.
 `input_identity` is a SHA-256 over what was asked (the action, the recipe, the image's file
 digest, the location files, `--set`, the prompt, the filler), so equal requests have equal
-identities. `spend` and `cache` come from the fill (8.6).
+identities. `spend` and `cache` come from the fill (8.6). `artifacts` (4.7), which every result
+of an operations tool carries, is `{"in": [], "out": []}` on every result for now (task 10.4):
+operation runs fill it from task 10.6, and tasks list the Masks they make from task 10.8.
 
 ### The invocation (4.8, task 10.2)
 
@@ -216,7 +258,8 @@ notes it in its journal, and a recipe whose op nothing serves then fails with th
 error.
 
 Beside the op tools and the workspace tools (ADR 0015, unchanged), `serve` lists one MCP tool per
-action in the description, `describe` and `estimate`; an action never shadows an op's name. A call runs the
+task in the description (the operations are the op tools until task 10.6), `describe` and
+`estimate`; an action never shadows an op's name. A call runs the
 recipe, through `heal` when `filler` is given, in its own run directory under `--runs`
 (`$XDG_DATA_HOME/rascal/runs`, else `~/.local/share/rascal/runs`), and its result is that run's
 `run.json` as `structuredContent`, with `isError` true for `invalid` and `error`. JSON-RPC errors

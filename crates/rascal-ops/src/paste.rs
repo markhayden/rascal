@@ -32,6 +32,10 @@ const NAME: &str = "paste";
 pub const MODES: [&str; 3] = ["feather", "hard", "poisson"];
 
 impl Op for Paste {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Out
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

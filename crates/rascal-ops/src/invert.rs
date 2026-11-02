@@ -25,6 +25,10 @@ pub struct Invert;
 const NAME: &str = "invert";
 
 impl Op for Invert {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Refine
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

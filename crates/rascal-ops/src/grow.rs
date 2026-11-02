@@ -19,6 +19,10 @@ pub struct Grow;
 const NAME: &str = "grow";
 
 impl Op for Grow {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Refine
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

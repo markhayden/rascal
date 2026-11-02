@@ -1048,7 +1048,14 @@ impl Actions for ContractActions {
     fn tools(&self) -> Vec<Tool> {
         let mut tools = Vec::new();
         let description = self.description().unwrap_or(Value::Null);
-        for action in description["actions"].as_array().into_iter().flatten() {
+        // The tasks only: until operation calls are runs (PLAN.md 10.6), an operation's name is
+        // the op tool's, which keeps its envelope.
+        for action in description["actions"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|a| a["kind"] == "task")
+        {
             let name = action["name"].as_str().unwrap_or_default().to_string();
             let text = format!(
                 "{} {} (table-manners action; the result is the run's run.json.)",

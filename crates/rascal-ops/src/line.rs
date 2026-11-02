@@ -18,6 +18,10 @@ pub struct Line;
 const NAME: &str = "line";
 
 impl Op for Line {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Find
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

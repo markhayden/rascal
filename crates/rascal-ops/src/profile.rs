@@ -34,6 +34,10 @@ fn feather_ratio_default() -> f64 {
 }
 
 impl Op for Profile {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Refine
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

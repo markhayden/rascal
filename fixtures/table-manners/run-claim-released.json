@@ -1,5 +1,9 @@
 {
   "action": "seam",
+  "artifacts": {
+    "in": [],
+    "out": []
+  },
   "body": {
     "mask_dir": "/runs/run-1767225600055-1/artifacts/feeebc65d7c05a27dc313a563615ac04c0ca1215db675748064519d5bd87db8b.mask",
     "outcome": "ok",

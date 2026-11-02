@@ -40,6 +40,10 @@ fn default(key: &str) -> f64 {
 }
 
 impl Op for Ramp {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Prep
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

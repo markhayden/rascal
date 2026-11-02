@@ -1,5 +1,5 @@
 //! `run.json`: the contract's result header and rascal's body, written atomically and last into
-//! every run directory (table-manners 2 and 11.1; ADR 0020). `run` and `heal` call [`finish`]
+//! every run directory (table-manners 2, 4.7 and 11.1; ADR 0020). `run` and `heal` call [`finish`]
 //! with however far they got; a signal calls it through [`Pending`] with status `cancelled`.
 
 use std::path::{Path, PathBuf};
@@ -11,6 +11,7 @@ use rascal_core::contract::table_manners::images::{
     ImageOut, ImageReference, ImageTaken, Images, Location as TmLocation, Locations, Locator,
     Projection as TmProjection, Source, Topology as TmTopology,
 };
+use rascal_core::contract::table_manners::operations::Artifacts;
 use rascal_core::contract::table_manners::{
     Cache, ErrorCode, ErrorInfo, Invocation, Run, RunResult, Spend, SpendBasis, Status, Tool,
 };
@@ -389,7 +390,12 @@ pub fn finish(
             None => Cache::Off,
         },
         images: Some(Images { taken, out }),
-        artifacts: None,
+        // rascal lists the operations profile, so every result carries `artifacts` (4.7),
+        // empty until operations run as runs (10.6) and tasks list their Masks (10.8).
+        artifacts: Some(Artifacts {
+            taken: vec![],
+            out: vec![],
+        }),
         locations: Some(Locations {
             used: if pending.locations_used.is_empty() {
                 used

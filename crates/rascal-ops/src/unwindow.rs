@@ -18,6 +18,10 @@ pub struct Unwindow;
 const NAME: &str = "unwindow";
 
 impl Op for Unwindow {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Prep
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

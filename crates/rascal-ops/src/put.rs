@@ -19,6 +19,10 @@ pub struct Put;
 const NAME: &str = "put";
 
 impl Op for Put {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Prep
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

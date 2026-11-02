@@ -9,6 +9,10 @@
 //! Task 10.2: at v0.4, every action a `task` with no `group`, `vocabulary` the core's object
 //! with the images profile's four lists, no `artifact_types`, no reserved name among the actions,
 //! and the defaults a call runs with declared in `params_schema`.
+//! Task 10.4: an operations tool's description: `profiles` with `operations`, the 24 built-in ops
+//! as actions of kind `operation` with a `group` (in `vocabulary.group`) and typed `ports`, no
+//! image or location slot, no spend, ready, no renders; `artifact_types` without `image`; the
+//! table-manners fixture checks' rules (unique ports, declared types, the tool's prefix).
 #![allow(clippy::unwrap_used)]
 
 use std::path::{Path, PathBuf};
@@ -24,27 +28,89 @@ fn rascal(args: &[&str]) -> Output {
         .unwrap()
 }
 
+/// The seven recipe actions, each a `task`.
+const TASKS: [&str; 7] = [
+    "seam",
+    "remove",
+    "remove_prompt",
+    "repair",
+    "repair_area",
+    "protect",
+    "mask_rect",
+];
+
+/// The description's actions of one kind.
+fn of_kind<'a>(doc: &'a serde_json::Value, kind: &str) -> Vec<&'a serde_json::Value> {
+    doc["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|a| a["kind"] == kind)
+        .collect()
+}
+
 /// The v0.4 shapes every description has, whatever the configuration.
 fn assert_v04_shapes(doc: &serde_json::Value) {
     assert_eq!(doc["contract"], "0.4.0");
-    assert_eq!(doc["profiles"], serde_json::json!(["images"]));
-    // The core's word lists: the images profile's four, and no `group`, since no action has one.
+    assert_eq!(doc["profiles"], serde_json::json!(["images", "operations"]));
+    // The core's word lists: the operations' groups, and the images profile's four.
     assert_eq!(
         doc["vocabulary"],
-        serde_json::json!({ "disposition": [], "confidence": [], "evidence": [],
+        serde_json::json!({ "group": ["find", "refine", "prep", "out", "inspect"],
+                            "disposition": [], "confidence": [], "evidence": [],
                             "score_kind": ["owlv2-detection"] })
     );
-    // No operations, so no artifact types (3.3).
-    assert!(doc.get("artifact_types").is_none());
+    // Every type a port names but `image` (3.3): JSON, a bundle and the workspace-bound three.
+    let types: Vec<(&str, &str, bool)> = doc["artifact_types"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| {
+            assert_eq!(t["schema_versions"], serde_json::json!([1]), "{t}");
+            assert!(!t["purpose"].as_str().unwrap().is_empty(), "{t}");
+            (
+                t["type"].as_str().unwrap(),
+                t["portable"].as_str().unwrap(),
+                t["preview"].as_bool().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        types,
+        [
+            ("location", "json", true),
+            ("rascal:Mask", "bundle", true),
+            ("rascal:BandProfile", "none", false),
+            ("rascal:Series", "none", false),
+            ("rascal:Plan", "none", false),
+        ]
+    );
     let actions = doc["actions"].as_array().unwrap();
-    for action in actions {
+    let names: Vec<&str> = actions
+        .iter()
+        .map(|a| a["name"].as_str().unwrap())
+        .collect();
+    for (i, name) in names.iter().enumerate() {
+        // The reserved names are MCP tools, never actions (table-manners 3, 5); no name twice.
+        assert!(
+            !["describe", "estimate", "export", "import"].contains(name),
+            "{name}"
+        );
+        assert!(!names[..i].contains(name), "{name} is listed twice");
+    }
+    assert_eq!(actions.len(), TASKS.len() + 24);
+    let mut tasks: Vec<&str> = of_kind(doc, "task")
+        .iter()
+        .map(|a| a["name"].as_str().unwrap())
+        .collect();
+    tasks.sort_unstable();
+    let mut expected = TASKS;
+    expected.sort_unstable();
+    assert_eq!(tasks, expected);
+    assert_operations(doc);
+    for action in of_kind(doc, "task") {
         let name = action["name"].as_str().unwrap();
-        // The reserved names are MCP tools, never actions (table-manners 3, 5).
-        for reserved in ["describe", "estimate", "export", "import"] {
-            assert_ne!(name, reserved);
-        }
         // Every recipe action is a whole job: a task, in no group, with no ports.
-        assert_eq!(action["kind"], "task", "{name}");
         assert!(action.get("group").is_none(), "{name}");
         assert!(action.get("ports").is_none(), "{name}");
         // The defaults a call runs with are declared, so its invocation can apply them (4.8).
@@ -113,6 +179,139 @@ fn assert_v04_shapes(doc: &serde_json::Value) {
             assert_eq!(render["command"][0], doc["tool"]["name"], "{name}");
         }
     }
+}
+
+/// The 24 built-in ops as operations (task 10.4; table-manners 3, 4.7, 11.2), each against its
+/// manifest.
+fn assert_operations(doc: &serde_json::Value) {
+    let registry = rascal_ops::registry().unwrap();
+    let operations = of_kind(doc, "operation");
+    let mut names: Vec<&str> = operations
+        .iter()
+        .map(|a| a["name"].as_str().unwrap())
+        .collect();
+    names.sort_unstable();
+    assert_eq!(names, registry.names(), "every built-in op, and no pack's");
+    let types: Vec<&str> = doc["artifact_types"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["type"].as_str().unwrap())
+        .collect();
+    let groups = doc["vocabulary"]["group"].as_array().unwrap();
+    for action in operations {
+        let name = action["name"].as_str().unwrap();
+        let op = registry.get(name).unwrap();
+        let manifest = op.manifest();
+        assert_eq!(action["group"], op.group().name(), "{name}");
+        assert!(groups.contains(&action["group"]), "{name}");
+        // The name in words; the manifest's purpose with when to use it and when not.
+        let title = action["title"].as_str().unwrap();
+        assert_eq!(title.to_lowercase(), name, "{name}");
+        let purpose = action["purpose"].as_str().unwrap();
+        for text in [
+            &manifest.purpose,
+            &manifest.when_to_use,
+            &manifest.when_not_to_use,
+        ] {
+            assert!(purpose.contains(text.as_str()), "{name}: {purpose}");
+        }
+        // Ports only: no image or location slot (4.7, 11.2), no spend, no configuration read,
+        // no renders (an operation's picture is its preview).
+        assert_eq!(action["images"], serde_json::json!([]), "{name}");
+        assert_eq!(action["locations"], serde_json::json!([]), "{name}");
+        assert_eq!(action["renders"], serde_json::json!([]), "{name}");
+        assert_eq!(
+            action["cost"],
+            serde_json::json!({ "may_spend": false }),
+            "{name}"
+        );
+        assert_eq!(
+            action["readiness"],
+            serde_json::json!({ "state": "ready", "requirements": [] }),
+            "{name}"
+        );
+        assert_eq!(
+            action["duration"]["typical_s"], manifest.cost.seconds,
+            "{name}"
+        );
+        assert!(action["duration"]["max_s"].as_f64().unwrap() >= manifest.cost.seconds);
+        let properties = action["params_schema"]["properties"].as_object().unwrap();
+        assert!(!properties.contains_key("max_spend_usd"), "{name}");
+        // The ports are the manifest's, typed by the contract's names; each name is unique on
+        // its side, lowercase with underscores, and never a parameter's.
+        for (side, declared) in [("in", &manifest.inputs), ("out", &manifest.outputs)] {
+            let ports = action["ports"][side].as_array().unwrap();
+            assert_eq!(ports.len(), declared.len(), "{name} {side}");
+            for (i, (port, d)) in ports.iter().zip(declared.iter()).enumerate() {
+                let port_name = port["name"].as_str().unwrap();
+                assert_eq!(port_name, d.name, "{name}");
+                assert!(
+                    port_name
+                        .bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+                        && port_name.as_bytes()[0].is_ascii_lowercase(),
+                    "{name}: {port_name}"
+                );
+                assert!(
+                    !ports[..i].iter().any(|p| p["name"] == port["name"]),
+                    "{name}: two {side} ports named {port_name}"
+                );
+                assert!(
+                    !properties.contains_key(port_name),
+                    "{name}: port {port_name} clashes with a parameter"
+                );
+                let t = port["type"].as_str().unwrap();
+                assert_eq!(t, d.artifact_type.contract_type(), "{name}");
+                assert!(t == "image" || types.contains(&t), "{name}: {t}");
+                if let Some((prefix, _)) = t.split_once(':') {
+                    assert_eq!(prefix, doc["tool"]["name"], "{name}: {t}");
+                }
+                assert_eq!(port["required"], d.required, "{name}");
+                assert_eq!(port["many"].as_bool().unwrap_or(false), d.many, "{name}");
+                assert_eq!(port["purpose"], d.purpose.as_str(), "{name}");
+            }
+        }
+        // What it returns: the roles of the images its out-ports make, and a preview of every
+        // artifact whose type has one; `found` when it makes a location.
+        let out_types: Vec<&str> = manifest
+            .outputs
+            .iter()
+            .map(|p| p.artifact_type.contract_type())
+            .collect();
+        let mut roles: Vec<String> = manifest
+            .outputs
+            .iter()
+            .filter(|p| p.artifact_type.contract_type() == "image")
+            .map(|p| p.name.clone())
+            .collect();
+        if manifest.outputs.iter().any(|p| p.artifact_type.preview()) {
+            roles.push("preview".to_string());
+        }
+        assert_eq!(
+            action["outputs"]["images"],
+            serde_json::json!(roles),
+            "{name}"
+        );
+        assert_eq!(
+            action["outputs"]["locations"],
+            if out_types.contains(&"location") {
+                serde_json::json!(["found"])
+            } else {
+                serde_json::json!([])
+            },
+            "{name}"
+        );
+    }
+    // A finder's list: `select` takes the instances' planes as one many port.
+    let select = doc["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["name"] == "select")
+        .unwrap();
+    assert_eq!(select["ports"]["in"][0]["name"], "plane");
+    assert_eq!(select["ports"]["in"][0]["many"], true);
 }
 
 fn repo_root() -> PathBuf {
@@ -259,7 +458,7 @@ fn the_m11_configuration_describes_at_v04() {
     assert!(errors.is_empty(), "{errors:?}");
     assert_v04_shapes(&doc);
     let bin = env!("CARGO_BIN_EXE_rascal");
-    for action in doc["actions"].as_array().unwrap() {
+    for action in of_kind(&doc, "task") {
         assert_eq!(action["cost"]["may_spend"], true);
         // Command fillers read no key: the file, each filler and its program (one program for
         // both, named once), all there.
@@ -342,8 +541,9 @@ fn a_configured_filler_is_offered_and_may_spend_with_its_key_a_credential() {
             ]
         })
     );
-    // Every action lists the credential and the filler (each may heal with it).
-    for action in doc["actions"].as_array().unwrap() {
+    // Every task lists the credential and the filler (each may heal with it); an operation
+    // reads no configuration.
+    for action in of_kind(&doc, "task") {
         let requirements = action["readiness"]["requirements"].as_array().unwrap();
         for (kind, name) in [("credential", "EXAMPLE_KEY"), ("model", "fillers.remote")] {
             assert!(
@@ -357,7 +557,7 @@ fn a_configured_filler_is_offered_and_may_spend_with_its_key_a_credential() {
     // Set, it is present (found, not checked), and its value is never printed.
     let sentinel = "zq-sentinel-key-value-zq";
     let (doc, out) = describe(&[("EXAMPLE_KEY", sentinel)]);
-    for action in doc["actions"].as_array().unwrap() {
+    for action in of_kind(&doc, "task") {
         if action["name"] != "remove_prompt" {
             assert_eq!(action["readiness"]["state"], "ready", "{action:#}");
         }
@@ -397,8 +597,15 @@ fn a_configuration_file_that_is_missing_or_invalid_is_described_and_exits_0() {
         let errors = valid("urn:table-manners:core:description", &doc);
         assert!(errors.is_empty(), "{errors:?}");
         assert_v04_shapes(&doc);
-        // A file was given, so every action's default use reads it; it stands in the way.
-        for action in doc["actions"].as_array().unwrap() {
+        // A file was given, so every task's default use reads it; it stands in the way. An
+        // operation reads no configuration and stays ready.
+        for action in of_kind(&doc, "operation") {
+            assert_eq!(
+                action["readiness"],
+                serde_json::json!({ "state": "ready", "requirements": [] })
+            );
+        }
+        for action in of_kind(&doc, "task") {
             let config = &action["readiness"]["requirements"][0];
             assert_eq!(config["kind"], "config", "{action:#}");
             assert_eq!(config["name"], "rascal.toml");
@@ -429,4 +636,53 @@ fn a_configuration_file_that_is_missing_or_invalid_is_described_and_exits_0() {
         );
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 10.4 (table-manners 4.7): each operation's `params_schema` accepts the manifest's
+/// documented defaults (with the default constant set) and rejects an unknown parameter.
+#[test]
+fn each_operations_params_schema_takes_its_defaults_and_refuses_an_unknown_parameter() {
+    let out = rascal(&["describe", "--json"]);
+    assert_eq!(out.status.code(), Some(0));
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let registry = rascal_ops::registry().unwrap();
+    for action in of_kind(&doc, "operation") {
+        let name = action["name"].as_str().unwrap();
+        let manifest = registry.get(name).unwrap().manifest();
+        let schema = &action["params_schema"];
+        let validator = jsonschema::validator_for(schema).unwrap();
+        let mut defaults = serde_json::Map::new();
+        for param in &manifest.params {
+            if let Some(default) = &param.default {
+                defaults.insert(param.name.clone(), default.clone());
+            }
+        }
+        if let Some(first) = manifest.constants.first() {
+            assert_eq!(schema["properties"]["constants"]["default"], first.as_str());
+            defaults.insert("constants".to_string(), serde_json::json!(first));
+        }
+        // Every documented default is a value its own property takes.
+        for (param, value) in &defaults {
+            let property = jsonschema::validator_for(&schema["properties"][param]).unwrap();
+            assert!(property.is_valid(value), "{name}.{param}: {value}");
+        }
+        // With what a call must give besides (a required parameter has no default), the whole
+        // set validates, and an unknown parameter beside it never does.
+        let required: Vec<&str> = schema["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r.as_str().unwrap())
+            .collect();
+        if required.iter().all(|r| defaults.contains_key(*r)) {
+            let call = serde_json::Value::Object(defaults.clone());
+            assert!(validator.is_valid(&call), "{name}: {call}");
+        }
+        let mut unknown = defaults.clone();
+        unknown.insert("zq_unknown".to_string(), serde_json::json!(1));
+        assert!(
+            !validator.is_valid(&serde_json::Value::Object(unknown)),
+            "{name}"
+        );
+    }
 }

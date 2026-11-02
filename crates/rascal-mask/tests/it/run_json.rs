@@ -3,6 +3,8 @@
 //! schema; a failed heal keeps the mask it made; an `--out` that held something is not touched.
 //! Task 10.2 (table-manners 4.8): every one records its invocation as the matching action's
 //! arguments, null only on an `invalid` run whose arguments did not resolve.
+//! Task 10.4 (table-manners 4.7): rascal is an operations tool, so every result carries
+//! `artifacts`, empty until operations run (10.6) and tasks list their Masks (10.8).
 #![cfg(feature = "testkit")]
 #![allow(clippy::unwrap_used)]
 
@@ -65,6 +67,11 @@ fn run_json(dir: &Path) -> serde_json::Value {
         .collect();
     assert!(errors.is_empty(), "{errors:?}\n{value:#}");
     assert!(!dir.join(".run.json.tmp").exists());
+    assert_eq!(
+        value["artifacts"],
+        serde_json::json!({ "in": [], "out": [] }),
+        "{value:#}"
+    );
     value
 }
 

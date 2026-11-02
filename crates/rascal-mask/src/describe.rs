@@ -1,18 +1,22 @@
-//! The contract's description document (table-manners 3 and 11.2; ADR 0020): one action per
-//! shipped recipe, each of kind `task`, built from the recipes and the configuration, so a client
-//! that knows only the contract can form a call. `rascal describe --json` prints it; `serve`
-//! returns it from the `describe` tool.
+//! The contract's description document (table-manners 3, 3.3, 4.7 and 11.2; ADR 0020): one
+//! action of kind `task` per shipped recipe, built from the recipes and the configuration, and one
+//! of kind `operation` per built-in op, built from its manifest, so a client that knows only the
+//! contract can form a call. `rascal describe --json` prints it; `serve` returns it from the
+//! `describe` tool.
 
 use std::collections::BTreeMap;
 
+use rascal_core::artifact::ArtifactType;
 use rascal_core::contract::table_manners::images::{
     ImageSlot, Limits, LocationKind, LocationOutput, LocationSlot, Outputs,
 };
+use rascal_core::contract::table_manners::operations::Ports;
 use rascal_core::contract::table_manners::{
-    Action, ActionKind, Cost, DescribedTool, Description, Duration, Profile, Render, RenderKind,
-    SpendBasis, Vocabulary,
+    Action, ActionKind, Cost, DescribedTool, Description, Duration, Profile, Readiness,
+    ReadinessState, Render, RenderKind, SpendBasis, Vocabulary,
 };
 use rascal_core::error::Result;
+use rascal_core::op::{Group, Op};
 use rascal_core::recipe::{InputType, Recipe};
 use serde_json::{Value, json};
 
@@ -212,12 +216,108 @@ pub fn defaults(recipe: &str) -> Result<serde_json::Map<String, Value>> {
 /// The names the contract reserves for its own tools (3, 5): never an action's.
 pub const RESERVED: [&str; 4] = ["describe", "estimate", "export", "import"];
 
-/// The description for the shipped recipes under the configuration `setup` holds (its fillers
-/// name the spend and the keys; without one no filler is configured and nothing spends), each
-/// action's readiness its default use (3.1, [`readiness::for_call`]). It never fails on the
-/// configuration. Every action is a `task` with no `group` (the operations profile is not
-/// listed, so there are no operations and no artifact types); the [`RESERVED`] names are tools,
-/// never actions.
+/// The longest a built-in operation is expected to take, as a multiple of its manifest's
+/// `cost.seconds`, and at least [`OPERATION_MAX_S_FLOOR`] seconds: a large image takes many
+/// times the typical call.
+pub const OPERATION_MAX_S_FACTOR: f64 = 100.0;
+
+/// The least `duration.max_s` of an operation, in seconds.
+pub const OPERATION_MAX_S_FLOOR: f64 = 60.0;
+
+/// A built-in op as the contract's operation (4.7): its manifest's name, purpose (with when to
+/// use it and when not) and ports, typed by the contract's names; its group; its parameters with
+/// the constant sets ([`Manifest::params_schema`](rascal_core::op::Manifest::params_schema)); no
+/// image or location slot (its inputs are ports only), no spend, ready with no requirement (a
+/// built-in op reads no configuration) and no renders (its picture is its preview). `outputs`
+/// names the roles of the images its out-ports make, `preview` when it makes an artifact whose
+/// type has one, and `found` when it makes a location.
+fn operation(op: &dyn Op) -> Action {
+    let manifest = op.manifest();
+    let mut roles: Vec<String> = manifest
+        .outputs
+        .iter()
+        .filter(|p| p.artifact_type == ArtifactType::Image)
+        .map(|p| p.name.clone())
+        .collect();
+    if manifest.outputs.iter().any(|p| p.artifact_type.preview()) {
+        roles.push("preview".to_string());
+    }
+    let found = manifest
+        .outputs
+        .iter()
+        .any(|p| p.artifact_type == ArtifactType::Location);
+    let mut title = manifest.name.clone();
+    if let Some(first) = title.get_mut(..1) {
+        first.make_ascii_uppercase();
+    }
+    let seconds = manifest.cost.seconds;
+    Action {
+        name: manifest.name.clone(),
+        title,
+        kind: ActionKind::Operation,
+        group: Some(op.group().name().to_string()),
+        purpose: format!(
+            "{} When to use: {} When not to use: {}",
+            manifest.purpose, manifest.when_to_use, manifest.when_not_to_use
+        ),
+        params_schema: manifest.params_schema(),
+        images: Some(vec![]),
+        locations: Some(vec![]),
+        outputs: Some(Outputs {
+            images: roles,
+            locations: if found {
+                vec![LocationOutput::Found]
+            } else {
+                vec![]
+            },
+        }),
+        ports: Some(Ports {
+            inputs: manifest
+                .inputs
+                .iter()
+                .map(rascal_core::contract::port)
+                .collect(),
+            out: manifest
+                .outputs
+                .iter()
+                .map(rascal_core::contract::port)
+                .collect(),
+        }),
+        cost: Cost {
+            may_spend: false,
+            basis: None,
+        },
+        readiness: Readiness {
+            state: ReadinessState::Ready,
+            requirements: vec![],
+        },
+        duration: Duration {
+            typical_s: seconds,
+            max_s: (seconds * OPERATION_MAX_S_FACTOR).max(OPERATION_MAX_S_FLOOR),
+        },
+        renders: vec![],
+    }
+}
+
+/// The built-in ops as operations, by group (in [`Group::ALL`] order), then by name; never a
+/// pack's (a description is a local inspection, and a pack's ops are known only by starting it).
+fn operations() -> Result<Vec<Action>> {
+    let registry = rascal_ops::registry()?;
+    let mut ops: Vec<&dyn Op> = registry
+        .names()
+        .into_iter()
+        .filter_map(|name| registry.get(name))
+        .collect();
+    ops.sort_by_cached_key(|op| (op.group(), op.manifest().name));
+    Ok(ops.into_iter().map(operation).collect())
+}
+
+/// The description under the configuration `setup` holds (its fillers name the spend and the
+/// keys; without one no filler is configured and nothing spends): the shipped recipes as
+/// `task`s with no `group`, each one's readiness its default use (3.1, [`readiness::for_call`]),
+/// then the built-in ops as `operation`s ([`operation`]), with the operations profile's
+/// `artifact_types` and the groups in `vocabulary.group`. It never fails on the configuration;
+/// the [`RESERVED`] names are tools, never actions.
 pub fn description(setup: &Setup<'_>) -> Result<Description> {
     let config = setup.config.config();
     let fillers: Vec<String> = config
@@ -317,9 +417,10 @@ pub fn description(setup: &Setup<'_>) -> Result<Description> {
             renders: renders(),
         });
     }
+    actions.extend(operations()?);
     Ok(Description {
         contract: rascal_core::contract::CONTRACT_VERSION.to_string(),
-        profiles: vec![Profile::Images],
+        profiles: vec![Profile::Images, Profile::Operations],
         tool: DescribedTool {
             name: "rascal".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -327,13 +428,13 @@ pub fn description(setup: &Setup<'_>) -> Result<Description> {
         },
         actions,
         vocabulary: Some(Vocabulary {
-            group: None,
+            group: Some(Group::ALL.map(|g| g.name().to_string()).to_vec()),
             disposition: Some(vec![]),
             confidence: Some(vec![]),
             evidence: Some(vec![]),
             score_kind: Some(vec![SEGMENT_SCORE_KIND.to_string()]),
         }),
-        artifact_types: None,
+        artifact_types: Some(rascal_core::contract::artifact_types()),
         limits: Some(Limits {
             inline_bytes: INLINE_BYTES,
         }),

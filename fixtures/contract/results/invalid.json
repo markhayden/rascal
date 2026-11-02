@@ -1,5 +1,9 @@
 {
   "action": "remove",
+  "artifacts": {
+    "in": [],
+    "out": []
+  },
   "body": {
     "recipe": "remove"
   },

@@ -1,5 +1,9 @@
 {
   "action": "seam",
+  "artifacts": {
+    "in": [],
+    "out": []
+  },
   "body": {
     "filler": "fake",
     "outcome": "ok",

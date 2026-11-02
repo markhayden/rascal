@@ -32,6 +32,10 @@ fn context_default() -> f64 {
 }
 
 impl Op for Window {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Prep
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

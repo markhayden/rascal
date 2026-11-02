@@ -24,6 +24,10 @@ pub struct Subtract;
 const NAME: &str = "subtract";
 
 impl Op for Subtract {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Refine
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

@@ -17,6 +17,10 @@ pub struct Rect;
 const NAME: &str = "rect";
 
 impl Op for Rect {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Find
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

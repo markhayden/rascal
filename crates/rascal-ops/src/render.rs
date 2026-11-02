@@ -20,6 +20,10 @@ pub struct Render;
 const NAME: &str = "render";
 
 impl Op for Render {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Out
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

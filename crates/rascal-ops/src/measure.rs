@@ -56,6 +56,10 @@ fn constants() -> toml::Table {
 }
 
 impl Op for Measure {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Out
+    }
+
     fn manifest(&self) -> Manifest {
         let outputs = SERIES
             .iter()

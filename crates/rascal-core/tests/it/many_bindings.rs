@@ -46,6 +46,10 @@ fn manifest(name: &str, inputs: Vec<Port>, outputs: Vec<Port>) -> Manifest {
 struct Find;
 
 impl Op for Find {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Find
+    }
+
     fn manifest(&self) -> Manifest {
         let mut m = manifest(
             "find",
@@ -85,6 +89,10 @@ impl Op for Find {
 struct Gather;
 
 impl Op for Gather {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Refine
+    }
+
     fn manifest(&self) -> Manifest {
         manifest(
             "gather",
@@ -175,6 +183,10 @@ fn a_many_output_binds_to_a_many_input_by_prefix_and_expands_at_run_time() {
     // (the gather port is many, so make a recipe whose consumer port is single instead)
     struct One;
     impl Op for One {
+        fn group(&self) -> rascal_core::op::Group {
+            rascal_core::op::Group::Refine
+        }
+
         fn manifest(&self) -> Manifest {
             manifest(
                 "one",
@@ -240,6 +252,10 @@ fn an_optional_input_binds_only_an_optional_port_and_never_expands_into_a_single
     /// A consumer with a required `mask` port and an optional `extra` port.
     struct Consume;
     impl Op for Consume {
+        fn group(&self) -> rascal_core::op::Group {
+            rascal_core::op::Group::Refine
+        }
+
         fn manifest(&self) -> Manifest {
             let mut extra = port("extra", ArtifactType::Image, false);
             extra.required = false;

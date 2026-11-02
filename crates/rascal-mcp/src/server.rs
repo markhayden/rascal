@@ -517,11 +517,12 @@ impl Server {
     }
 }
 
-/// The tool schema of an op: its parameter schema plus one string property per input port,
-/// required when the port is.
+/// The tool schema of an op: its parameter schema (with `constants`,
+/// [`Manifest::params_schema`](rascal_core::op::Manifest::params_schema)) plus one string
+/// property per input port, required when the port is.
 fn tool_schema(manifest: &rascal_core::op::Manifest) -> serde_json::Map<String, serde_json::Value> {
     let mut schema = manifest
-        .input_schema
+        .params_schema()
         .as_object()
         .cloned()
         .unwrap_or_default();
@@ -554,12 +555,6 @@ fn tool_schema(manifest: &rascal_core::op::Manifest) -> serde_json::Map<String, 
         if port.required {
             required.push(serde_json::Value::String(port.name.clone()));
         }
-    }
-    if !manifest.constants.is_empty() {
-        properties.insert("constants".to_string(), serde_json::json!({
-            "type": "string", "enum": manifest.constants,
-            "description": format!("The constant set; the first is the default: {}", manifest.constants.join(", ")),
-        }));
     }
     schema.insert(
         "properties".to_string(),

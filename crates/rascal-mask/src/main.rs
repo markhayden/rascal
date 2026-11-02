@@ -1301,9 +1301,20 @@ fn describe_cmd(json: bool, config: Option<&std::path::Path>) -> rascal_core::er
         println!("{text}");
         return Ok(());
     }
+    let profiles: Vec<&str> = description
+        .profiles
+        .iter()
+        .map(|p| match p {
+            rascal_core::contract::table_manners::Profile::Images => "images",
+            rascal_core::contract::table_manners::Profile::Operations => "operations",
+        })
+        .collect();
     println!(
-        "{} {} (table-manners {}, profiles: images)",
-        description.tool.name, description.tool.version, description.contract
+        "{} {} (table-manners {}, profiles: {})",
+        description.tool.name,
+        description.tool.version,
+        description.contract,
+        profiles.join(", ")
     );
     for action in &description.actions {
         let ready = match action.readiness.state {
@@ -1321,7 +1332,16 @@ fn describe_cmd(json: bool, config: Option<&std::path::Path>) -> rascal_core::er
                 )
             ),
         };
-        println!("{:<14} {}{ready}", action.name, action.title);
+        let mut kind = match action.kind {
+            rascal_core::contract::table_manners::ActionKind::Task => "task",
+            rascal_core::contract::table_manners::ActionKind::Operation => "operation",
+            rascal_core::contract::table_manners::ActionKind::Utility => "utility",
+        }
+        .to_string();
+        if let Some(group) = &action.group {
+            kind = format!("{kind}, {group}");
+        }
+        println!("{:<14} {:<18} {}{ready}", action.name, kind, action.title);
     }
     Ok(())
 }

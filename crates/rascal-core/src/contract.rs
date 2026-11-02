@@ -118,6 +118,45 @@ pub fn image_reference(
     Ok(reference(&image, &frame, file))
 }
 
+/// The description's `artifact_types` (CONTRACT 3.3): every type of rascal's a port names, once,
+/// in [`ArtifactType::ALL`](crate::artifact::ArtifactType::ALL) order, each at schema version 1
+/// with how it leaves a workspace and whether rascal previews it. Never `image`, which the
+/// contract defines whole.
+pub fn artifact_types() -> Vec<table_manners::operations::ArtifactType> {
+    use crate::artifact::{ArtifactType, Portable, SCHEMA_VERSION};
+    use table_manners::operations::Portable as TmPortable;
+    ArtifactType::ALL
+        .into_iter()
+        .filter_map(|t| {
+            let portable = match t.portable() {
+                Portable::File => return None,
+                Portable::Json => TmPortable::Json,
+                Portable::Bundle => TmPortable::Bundle,
+                Portable::None => TmPortable::None,
+            };
+            Some(table_manners::operations::ArtifactType {
+                artifact_type: t.contract_type().to_string(),
+                schema_versions: vec![SCHEMA_VERSION],
+                purpose: t.purpose().to_string(),
+                portable,
+                preview: t.preview(),
+            })
+        })
+        .collect()
+}
+
+/// An op's port as the contract's (CONTRACT 4.7): its name, its contract type, whether it is
+/// required, whether it takes or makes a list, and its purpose.
+pub fn port(port: &crate::op::Port) -> table_manners::operations::Port {
+    table_manners::operations::Port {
+        name: port.name.clone(),
+        artifact_type: port.artifact_type.contract_type().to_string(),
+        required: port.required,
+        many: port.many,
+        purpose: port.purpose.clone(),
+    }
+}
+
 /// The resource that reads an artifact by its contract identity (CONTRACT 3.4, 4.7).
 pub fn artifact_resource(identity: &str) -> String {
     format!("rascal://artifact/{identity}")

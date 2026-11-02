@@ -67,8 +67,16 @@ impl jsonschema::Retrieve for Embedded {
     }
 }
 
-/// Asserts `value` is valid against the contract's schema `id`.
+/// Asserts `value` is valid against the contract's schema `id`; a result also carries
+/// `artifacts`, which an operations tool's results must (4.7), empty until 10.6.
 fn valid(id: &str, value: &serde_json::Value) {
+    if id == "urn:table-manners:core:result" {
+        assert_eq!(
+            value["artifacts"],
+            serde_json::json!({ "in": [], "out": [] }),
+            "{value:#}"
+        );
+    }
     let (_, text) = table_manners::SCHEMAS
         .iter()
         .find(|(i, _)| *i == id)
@@ -125,7 +133,10 @@ fn an_action_runs_with_progress_and_its_run_is_a_resource() {
     let described = client.call("describe", serde_json::json!({})).unwrap();
     let described = described.structured.unwrap();
     assert_eq!(described["tool"]["name"], "rascal");
-    assert_eq!(described["profiles"], serde_json::json!(["images"]));
+    assert_eq!(
+        described["profiles"],
+        serde_json::json!(["images", "operations"])
+    );
 
     let pano = repo_root().join("fixtures/images/step-pano.png");
     let id = client
@@ -1161,7 +1172,8 @@ fn estimate_is_a_reserved_tool_and_each_cap_agrees_with_the_description() {
     valid("urn:table-manners:core:description", &described);
     let actions = described["actions"].as_array().unwrap();
     assert!(!actions.iter().any(|a| a["name"] == "estimate"));
-    for action in actions {
+    // The tasks may spend; an operation never does, and declares no cap.
+    for action in actions.iter().filter(|a| a["kind"] == "task") {
         let name = action["name"].as_str().unwrap();
         let tool = tools.iter().find(|t| t.name == name).unwrap();
         let declared = &action["params_schema"]["properties"]["max_spend_usd"];

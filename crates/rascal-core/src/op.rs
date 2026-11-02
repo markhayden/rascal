@@ -587,6 +587,26 @@ impl Manifest {
         schema
     }
 
+    /// The schema of everything a call sets besides the ports: the parameters
+    /// ([`Manifest::input_schema`]) and, for an op with constant sets, `constants`, an `enum` of
+    /// them whose default is the first. `serve`'s op tools and the description's operations
+    /// (CONTRACT 4.7) declare it alike.
+    pub fn params_schema(&self) -> serde_json::Value {
+        let mut schema = self.input_schema.clone();
+        if let Some(first) = self.constants.first()
+            && let Some(properties) = schema.get_mut("properties").and_then(|p| p.as_object_mut())
+        {
+            properties.insert(
+                "constants".to_string(),
+                serde_json::json!({
+                    "type": "string", "enum": self.constants, "default": first,
+                    "description": format!("The constant set; the first is the default: {}", self.constants.join(", ")),
+                }),
+            );
+        }
+        schema
+    }
+
     /// The declared input port: by name, or for a many port by `<port>_<n>`.
     pub fn input(&self, name: &str) -> Option<&Port> {
         self.inputs
@@ -1109,10 +1129,51 @@ impl Output {
     }
 }
 
+/// Where an op sits in a pipeline (SPEC.md "Operations"): the description's `group` of the
+/// operation (CONTRACT 3), listed in `vocabulary.group`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Group {
+    /// Says where something is: a location from an image.
+    Find,
+    /// Makes or changes a mask, or the profile a mask is drawn from.
+    Refine,
+    /// Prepares the pixels: a canvas, a crop, a prescription applied.
+    Prep,
+    /// Makes what leaves: a rendering, a composite, measures.
+    Out,
+    /// Shows a mask to a person.
+    Inspect,
+}
+
+impl Group {
+    /// Every group, in pipeline order (the order of `vocabulary.group`).
+    pub const ALL: [Group; 5] = [
+        Group::Find,
+        Group::Refine,
+        Group::Prep,
+        Group::Out,
+        Group::Inspect,
+    ];
+
+    /// The group's word.
+    pub fn name(self) -> &'static str {
+        match self {
+            Group::Find => "find",
+            Group::Refine => "refine",
+            Group::Prep => "prep",
+            Group::Out => "out",
+            Group::Inspect => "inspect",
+        }
+    }
+}
+
 /// One operation.
 pub trait Op: Send + Sync {
     /// The manifest.
     fn manifest(&self) -> Manifest;
+
+    /// The op's group. Required, so no op can leave it out of the description.
+    fn group(&self) -> Group;
 
     /// Runs with validated inputs (every required port bound to an artifact of the declared
     /// type, frames agreeing) and resolved parameters (defaults filled, kinds and bounds

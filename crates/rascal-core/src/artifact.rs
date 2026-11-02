@@ -86,6 +86,35 @@ impl ArtifactType {
             ArtifactType::BandProfile | ArtifactType::Series | ArtifactType::Plan => Portable::None,
         }
     }
+
+    /// Whether rascal draws an artifact of the type as an image for people (CONTRACT 3.3, 4.7):
+    /// a location and a Mask, each over the image it was made on. An image is its own picture;
+    /// a band profile, a series and a plan have no preview.
+    pub fn preview(self) -> bool {
+        matches!(self, ArtifactType::Location | ArtifactType::Mask)
+    }
+
+    /// What an artifact of the type is, in a sentence for people (CONTRACT 3.3).
+    pub fn purpose(self) -> &'static str {
+        match self {
+            ArtifactType::Image => "An image: pixels in a frame, passed by path or inline.",
+            ArtifactType::Location => {
+                "Where something is in an image: a box, a polygon, a line, a stroke or the whole image."
+            }
+            ArtifactType::Mask => {
+                "A mask: what to change (core), how it fades (blend) and what to keep (protect), in the frame it was drawn in, with the band profile, sigmas and prescriptions it carries."
+            }
+            ArtifactType::BandProfile => {
+                "A band along a line: its half-width per row, wide on smooth surfaces and thin on detail, from which a mask is drawn."
+            }
+            ArtifactType::Series => {
+                "Values along a mask or a line, one per row or sample (widths, sigmas, measures)."
+            }
+            ArtifactType::Plan => {
+                "How a cut canvas maps back onto the image it was cut from: the strips and where each lies."
+            }
+        }
+    }
 }
 
 /// How an artifact of a type leaves the workspace it lives in (CONTRACT 3.3, and 10.1 for an

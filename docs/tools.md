@@ -3,7 +3,9 @@
 Every operation is a tool: one manifest, one envelope per invocation, callable as a subcommand,
 from a recipe step, and (from M3) over MCP with the same arguments. `rascal ops list` prints the
 catalogue; `rascal ops describe <op> [--json]` prints one manifest as a client sees it. From task
-1.9 a check proves every op is documented on this page.
+1.9 a check proves every op is documented on this page. From task 10.4 every op but `segment`
+is also an action of kind `operation` in the contract's description, with its group (the table's
+second column, `Op::group`) and its ports (`docs/contract.md`, "The description").
 
 ## The manifest
 
@@ -111,7 +113,8 @@ serves the contract's action tools, one per shipped recipe, and `describe`, with
 (table-manners, ADR 0020; `docs/contract.md`). It advertises one tool per op in the table
 above, named as the op, with ordinary arguments only: one string property per input port (an
 artifact id or identity in the workspace) plus the op's parameters by name, and `constants`
-when the op has sets. No argument is injected; ids resolve against the served workspace and
+when the op has sets (an `enum`, the first set its `default`; `Manifest::params_schema`, the
+schema the description's operations declare too). No argument is injected; ids resolve against the served workspace and
 nowhere else. Five workspace tools go with them: `workspace_import` (a path or base64 bytes in;
 the canonical Image and its `raw:` frame out; the path only inside a directory `--allow-dir`
 allows, else the one refusal of the path rule, `docs/contract.md`), `workspace_list` (by type), `workspace_describe`
