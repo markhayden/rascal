@@ -1,6 +1,12 @@
 # nextest (`just test`). Every test binary runs side by side, so the machine is busy; the tests
 # that assert wall-clock bounds (pack timeouts, graces, overlap, a bounded morphology) run alone,
 # with every thread to themselves, so load cannot make them miss.
+#
+# A test still running after 60 s is reported slow, and killed after 3 minutes, so a hang names
+# itself (Linux CI once ran `just check` for 18 minutes with no output).
+[profile.default]
+slow-timeout = { period = "60s", terminate-after = 3 }
+
 [[profile.default.overrides]]
 filter = 'test(/^packs::/) | test(/^tighten::.*bounded/)'
 threads-required = "num-cpus"
