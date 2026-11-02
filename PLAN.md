@@ -1637,31 +1637,46 @@ everywhere (the milestone branch merges nothing before 10.15).
 `docs/contract.md` stop mentioning MCP roots (rascal never used them). `fixtures/table-manners/`
 and `fixtures/contract/describe.json` are regenerated at v0.4.
 
+As built: the defaults applied are those `params_schema` now declares (`strict: false`, and
+`seam`'s `projection: "equirectangular"`, its recipe's), and `projection` is always named as the
+projection the image ran in, so a replay never depends on the 2:1 guess; the constant sets are
+those of the recipe's steps whose op has sets (the recipe's, a filler's override, then `set`;
+`estimate::constants`), not the heal graph's fixed ones; a requirement whose name is a path (a
+filler command given by path) is recorded by its file name; a recipe file run by `rascal run` has
+no action and records `custom`; a command-line run whose flags do not resolve ends `invalid`.
+The split could not keep the invocation out of the first commit: the moment the pin moves, the
+v0.4 result schema rejects every completed `run.json` without one, and a stand-in was ruled out.
+So the first commit carries the pin, the shapes and the invocation on every result, and the
+second adds the constant sets to the shared `effective` and the proofs (path and inline equal,
+the estimate's `effective` equal, the credential by name, a command-line invocation replayed
+through `serve`).
+
 **Acceptance.**
-- [ ] `rascal describe --json` validates against the v0.4 description schema: `kind: "task"` on
+- [x] `rascal describe --json` validates against the v0.4 description schema: `kind: "task"` on
       every action, `vocabulary` with the four lists, no `group`, no `artifact_types`.
-- [ ] `rascal://session` validates with `allowed_dirs` equal to 10.1's resolved set, and `[]`
+- [x] `rascal://session` validates with `allowed_dirs` equal to 10.1's resolved set, and `[]`
       for a server started with no `--allow-dir`.
-- [ ] Every `run.json`, the runs pages, the estimates and the refusals validate against v0.4;
+- [x] Every `run.json`, the runs pages, the estimates and the refusals validate against v0.4;
       `UPDATE_FIXTURES=1` regenerates `fixtures/table-manners/` and the check passes after.
-- [ ] Every fixture and every result in the suite has a non-null `invocation` validating against
+- [x] Every fixture and every result in the suite has a non-null `invocation` validating against
       v0.4, but an `invalid` run whose arguments did not parse, which has `null`.
-- [ ] The invocation names no path anywhere but `mask` and `protect` until 10.3 (a test walks it
+- [x] The invocation names no path anywhere but `mask` and `protect` until 10.3 (a test walks it
       for strings starting with `/`), and two calls on the same image given by path and inline
       give equal invocations.
-- [ ] `invocation.effective` equals the estimate's `effective` for the same call; `requirements`
+- [x] `invocation.effective` equals the estimate's `effective` for the same call; `requirements`
       lists the credential's name and never its value (the sentinel search of 12.2).
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- describe::
 serve_contract:: run_json:: table_manners_fixtures:: estimate::`; `scripts/test-checks.sh`;
-`just check`.
+`just check`. Done 2026-11-01 (branch `m10-operations`, built against table-manners `d9e6058`).
 
 **Dependencies.** 10.1; a table-manners checkout on branch `v0.4` with the v0.4 schemas and types.
 **Files.** `Cargo.toml`, `Cargo.lock`,
-`crates/rascal-mask/src/{describe,actions,run_json,estimate,run,heal}.rs`,
-`crates/rascal-mask/src/invocation.rs` (new), `crates/rascal-core/src/contract.rs`,
-`crates/rascal-mask/tests/it/{describe,serve_contract,run_json}.rs`, `fixtures/table-manners/`,
-`fixtures/contract/`, `docs/contract.md`. **Size.** M (split: the pin and shapes, then the
+`crates/rascal-mask/src/{describe,actions,run_json,estimate,main}.rs`,
+`crates/rascal-mask/src/invocation.rs` (new),
+`crates/rascal-mask/tests/it/{describe,serve_contract,run_json,paths,estimate,table_manners_fixtures}.rs`,
+`fixtures/table-manners/`, `fixtures/contract/`, `docs/contract.md`, SPEC, README,
+`docs/architecture.md`. **Size.** M (split: the pin and shapes, then the
 invocation).
 
 ### Task 10.3: References, the store and the binding refusal

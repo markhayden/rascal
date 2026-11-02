@@ -38,6 +38,11 @@
       "config_identity": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0003",
       "model": "fillers.hosted",
       "x-rascal": {
+        "constants": {
+          "band": "profile-v1",
+          "fan": "fan-v3",
+          "ramp": "ramp-v1"
+        },
         "filler": {
           "fill_max_side": null,
           "kind": "http",

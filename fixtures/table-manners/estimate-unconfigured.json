@@ -8,6 +8,11 @@
     "config_identity": "sha256:ecacf98c64387c1697e576e92ec3925051e7a4a8a16073ea901f59c5775f514d",
     "model": null,
     "x-rascal": {
+      "constants": {
+        "band": "profile-v1",
+        "fan": "fan-v3",
+        "ramp": "ramp-v1"
+      },
       "filler": null
     }
   },

@@ -176,7 +176,9 @@ directory, by another client or on another machine (`crates/rascal-mask/src/invo
   `max_spend_usd` is kept; `return_images` and `image_blocks` (delivery) are left out. `mask` and
   `protect` are still absolute paths to stored mask directories: task 10.3 makes them artifact
   references, and until then they are the one place an invocation names a path.
-- `effective`: the estimate's object, from the one function both use (`estimate::effective`).
+- `effective`: the estimate's object, from the one function both use (`estimate::effective`):
+  the model, the configuration's identity, and `x-rascal` with the filler and the constant sets
+  in force by step (see "Estimates"), so an estimate and the call it priced say the same.
 - `requirements`: the name of each readiness requirement the call used (its own readiness, 3.1),
   never a value; a filler program given by path is named by its file name (`rascal`), so no path
   is recorded.
@@ -385,7 +387,10 @@ the run does and prices the call with the function the limits check uses (`estim
   `config_identity` is the loaded file's identity, or the built-in defaults' when the call reads
   no configuration (with no file, or with one that is missing or invalid), null only when the
   call needs the configuration that is missing or invalid; `x-rascal` is `{"filler": {name,
-  kind: "http" | "command", revision, paste, fill_max_side}}` or `{"filler": null}`. The same
+  kind: "http" | "command", revision, paste, fill_max_side} | null, "constants": {<step>:
+  <set>}}`, the constant set in force at each recipe step whose op has sets: the recipe's, then
+  the named filler's `"<step>.constants"` override, then the call's `set`, a step naming none
+  running its op's first set (task 10.2; `estimate::constants`). The same
   function (`estimate::effective`) gives the run's `invocation.effective`, so an estimate and the
   call it priced name the same choices.
 - `readiness` (the call's own), `session` (one observation of the ledger, the document

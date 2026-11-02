@@ -1512,7 +1512,15 @@ fn the_session_marks_credentials_by_what_providers_answered() {
     let seam = |filler: &str| serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": filler });
 
     let out = client.call("seam", seam("good")).unwrap();
-    assert_eq!(out.structured.unwrap()["status"], "completed");
+    let r = out.structured.unwrap();
+    assert_eq!(r["status"], "completed");
+    // The call used the key: its invocation names the variable, never its value (4.8).
+    assert_eq!(
+        r["invocation"]["requirements"],
+        serde_json::json!(["rascal.toml", "fillers.good", "SERVE_GOOD_KEY"]),
+        "{r:#}"
+    );
+    assert!(!r.to_string().contains("the-right-key"));
     assert_eq!(credential_state(&mut client, "SERVE_GOOD_KEY"), "valid");
     assert_eq!(credential_state(&mut client, "SERVE_BAD_KEY"), "present");
 
@@ -1664,4 +1672,110 @@ fn rect_on(path: &Path) -> serde_json::Value {
         "parts": [{ "bbox": [0.1, 0.1, 0.3, 0.3] }],
         "straddles_wrap": false
     })
+}
+
+/// Task 10.2 (table-manners 4.5, 4.8): a call's invocation names what its estimate named, from
+/// the one function (`effective`, the filler and the constant sets in force by step: the
+/// recipe's, a filler's overrides, then the call's `set`); and one image given by path or by the
+/// same bytes inline records one invocation, since an image is its reference.
+#[test]
+fn the_invocation_is_the_estimates_and_the_images_not_its_locator() {
+    let dir = scratch("invocation-estimate");
+    let mut client = start(&dir);
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let data = rascal_core::panel::base64(&std::fs::read(&pano).unwrap());
+    let with = |image: serde_json::Value| {
+        serde_json::json!({ "image": image, "filler": "fake",
+                            "set": { "fan.constants": "fan-v2" } })
+    };
+    let by_path = with(serde_json::json!({ "path": pano.to_str().unwrap() }));
+    let inline = with(serde_json::json!({ "inline": { "media_type": "image/png", "data": data } }));
+    let estimate = client
+        .call(
+            "estimate",
+            serde_json::json!({ "action": "seam", "arguments": by_path }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    valid("urn:table-manners:core:estimate", &estimate);
+    let mut invocations = Vec::new();
+    for args in [by_path, inline] {
+        let r = client.call("seam", args).unwrap().structured.unwrap();
+        valid("urn:table-manners:core:result", &r);
+        assert_eq!(r["status"], "completed", "{r:#}");
+        invocations.push(r["invocation"].clone());
+    }
+    assert_eq!(invocations[0], invocations[1]);
+    assert_eq!(invocations[0]["effective"], estimate["effective"]);
+    assert_eq!(
+        estimate["effective"]["x-rascal"]["constants"],
+        serde_json::json!({ "fan": "fan-v2", "band": "profile-v1", "ramp": "ramp-v1" }),
+        "{estimate:#}"
+    );
+    assert_eq!(
+        invocations[0]["arguments"]["set"],
+        serde_json::json!({ "fan.constants": "fan-v2" })
+    );
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 10.2: a command-line run's invocation is a call: its arguments, with a locator added to
+/// the image, sent to `serve` make a run whose invocation is the same.
+#[test]
+fn a_command_line_invocation_replays_through_serve() {
+    let dir = scratch("cli-replay");
+    let image = repo_root().join("fixtures/images/chair-blob.png");
+    let chairs = repo_root().join("fixtures/locations/chairs.json");
+    let out = Command::new(env!("CARGO_BIN_EXE_rascal"))
+        .args([
+            "run",
+            "remove",
+            image.to_str().unwrap(),
+            "--location",
+            chairs.to_str().unwrap(),
+            "--set",
+            "grow.px=8",
+            "--out",
+            dir.join("cli").to_str().unwrap(),
+        ])
+        .env_remove("RASCAL_LOG")
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let cli: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("cli/run.json")).unwrap()).unwrap();
+    let invocation = cli["invocation"].clone();
+    let mut arguments = invocation["arguments"].clone();
+    arguments["image"]["path"] = serde_json::json!(image.to_str().unwrap());
+    let mut command = rascal_testkit::mcp_client::serve_command(env!("CARGO_BIN_EXE_rascal"));
+    command
+        .args([
+            "--workspace",
+            dir.join("ws").to_str().unwrap(),
+            "--runs",
+            dir.join("runs").to_str().unwrap(),
+        ])
+        .env_remove("RASCAL_LOG");
+    let mut client = Client::start(&mut command).unwrap();
+    let r = client
+        .call(invocation["action"].as_str().unwrap(), arguments)
+        .unwrap()
+        .structured
+        .unwrap();
+    valid("urn:table-manners:core:result", &r);
+    assert_eq!(r["status"], "completed", "{r:#}");
+    assert_eq!(r["invocation"], invocation);
+    assert_eq!(
+        r["images"]["out"][0]["image"],
+        cli["images"]["out"][0]["image"]
+    );
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
 }

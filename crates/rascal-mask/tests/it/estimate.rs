@@ -238,7 +238,9 @@ fn an_estimate_is_allowed_or_refused_for_cap_budget_or_readiness() {
     assert_eq!(
         allowed["effective"]["x-rascal"],
         serde_json::json!({ "filler": { "name": "hosted", "kind": "http", "revision": "hosted-1",
-                                        "paste": "feather", "fill_max_side": 512 } })
+                                        "paste": "feather", "fill_max_side": 512 },
+                            "constants": { "fan": "fan-v3", "band": "profile-v1",
+                                           "ramp": "ramp-v1" } })
     );
     let readiness = &allowed["readiness"];
     assert_eq!(readiness["state"], "ready");
@@ -261,7 +263,9 @@ fn an_estimate_is_allowed_or_refused_for_cap_budget_or_readiness() {
     assert_eq!(free["effective"]["model"], serde_json::Value::Null);
     assert_eq!(
         free["effective"]["x-rascal"],
-        serde_json::json!({ "filler": null })
+        serde_json::json!({ "filler": null,
+                            "constants": { "fan": "fan-v3", "band": "profile-v1",
+                                           "ramp": "ramp-v1" } })
     );
     assert_eq!(
         free["effective"]["config_identity"],

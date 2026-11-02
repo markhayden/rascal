@@ -7,7 +7,9 @@
 //!   no `path` or `inline`, each location as given, `max_spend_usd` kept, and the delivery
 //!   choices (`return_images`, `image_blocks`) left out. `mask` and `protect` are still paths to
 //!   stored mask directories (PLAN.md 10.3 makes them references).
-//! - `effective` is the estimate's object from the same function ([`estimate::effective`]).
+//! - `effective` is the estimate's object from the same function ([`estimate::effective`]): the
+//!   model, the configuration's identity, and `x-rascal` with the filler and the constant set in
+//!   force at each recipe step.
 //! - `requirements` names each readiness requirement the call used, by its name, a file or
 //!   program as its file name only; never a value.
 //!
@@ -81,6 +83,7 @@ pub fn of_command(args: &RunArgs, filler: Option<&str>) -> Result<Invocation> {
                 answers: &Default::default(),
                 failed_packs: &Default::default(),
             },
+            &args.recipe,
             &action,
             &arguments,
         )?;

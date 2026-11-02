@@ -8,6 +8,9 @@
     "config_identity": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0001",
     "model": null,
     "x-rascal": {
+      "constants": {
+        "feather": "feather-v1"
+      },
       "filler": null
     }
   },

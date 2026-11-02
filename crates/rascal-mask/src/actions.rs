@@ -423,7 +423,7 @@ impl ContractActions {
         named: Option<&Value>,
     ) -> rascal_core::error::Result<Reservation<'_>> {
         let action = describe::action_name(recipe);
-        let price = self.with_setup(|setup| estimate::price(setup, &action, args))?;
+        let price = self.with_setup(|setup| estimate::price(setup, recipe, &action, args))?;
         if let Some(named) = named {
             self.check_estimate(named, recipe, &action, args, &price)?;
         }
@@ -529,7 +529,7 @@ impl ContractActions {
         let recipe =
             recipe_of(action).ok_or_else(|| Error::usage(format!("action: no action {action}")))?;
         estimate::check_arguments(recipe, action, args, self.config.as_ref(), &self.paths)?;
-        let price = self.with_setup(|setup| estimate::price(setup, action, args))?;
+        let price = self.with_setup(|setup| estimate::price(setup, recipe, action, args))?;
         let bound = estimate::bind(
             recipe,
             action,
@@ -614,7 +614,8 @@ impl ContractActions {
         let prepared =
             estimate::check_arguments(recipe, &action, args, self.config.as_ref(), &self.paths)
                 .and_then(|()| {
-                    let price = self.with_setup(|setup| estimate::price(setup, &action, args))?;
+                    let price =
+                        self.with_setup(|setup| estimate::price(setup, recipe, &action, args))?;
                     invocation = Some(invocation::of_call(
                         recipe,
                         &action,
