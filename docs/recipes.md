@@ -83,7 +83,9 @@ SHA-256 and the dimensions), and rascal takes one shape per location, so a shape
 the reason (ADR 0020); `--stroke` binds a stroke location (either form) to `inputs.stroke`; `--protect` and `--mask` bind stored mask directories in the
 image's frame, or (for `protect`) in a frame derived from it that the workspace knows (frames
 carry sizes and projections, not images, so the check is on the frame chain: give the mask the
-run that made it). `--prompt` binds `inputs.prompt`, a `Text` input: not an artifact but a
+run that made it). Through `rascal serve` the same inputs take a Mask's artifact reference, not
+a path: the Mask is found by identity in the server's workspace and enters the run with its
+frame chain, so no workspace needs naming (`docs/contract.md`, task 10.3). `--prompt` binds `inputs.prompt`, a `Text` input: not an artifact but a
 string a step's parameter takes by naming it as its value (`prompt = "inputs.prompt"`); the
 run substitutes the text and the journal records the resolved value, and an optional text
 left out leaves the parameter to the op's default. Text binds string parameters only, never a

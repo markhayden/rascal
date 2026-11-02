@@ -13,8 +13,9 @@
 //! `{action, arguments, tool_version, config_identity, session_id}`, where `arguments` leaves
 //! out the delivery choices (`return_images`, `image_blocks`), each image slot's value is
 //! `{"file_sha256": …}` (a path read, inline bytes decoded; an `expect` verified as the call
-//! would, then dropped), each stored-mask input is `{"mask": <its identity>}`, and every other
-//! argument enters as sent.
+//! would, then dropped), each Mask reference is `{"mask": <its identity>}` (the Mask, wherever
+//! the reference was made; the estimate never reads the store), and every other argument enters
+//! as sent.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -27,7 +28,7 @@ use rascal_core::contract::table_manners::{
     Session as TmSession, Tool as TmTool,
 };
 use rascal_core::error::Result;
-use rascal_core::paths::{PathRule, Want};
+use rascal_core::paths::PathRule;
 use rascal_core::recipe::InputType;
 use serde_json::{Map, Value, json};
 
@@ -136,11 +137,7 @@ impl ImageIn {
 /// base64 within the inline limit. Its `expect` is checked by [`verify_expect`].
 pub fn image_in(slot: &str, value: &Value, paths: &PathRule) -> Result<ImageIn> {
     if let Some(path) = value.get("path").and_then(|p| p.as_str()) {
-        return Ok(ImageIn::Path(paths.admit(
-            slot,
-            Path::new(path),
-            Want::File,
-        )?));
+        return Ok(ImageIn::Path(paths.admit(slot, Path::new(path))?));
     }
     if let Some(inline) = value.get("inline") {
         let data = inline["data"].as_str().unwrap_or_default();
@@ -248,12 +245,7 @@ pub fn check_arguments(
                 }
             }
             k if is(&slots.masks, k) => {
-                let Some(path) = value.as_str() else {
-                    return Err(Error::usage(format!(
-                        "{k}: not a stored mask directory's path"
-                    )));
-                };
-                paths.admit(k, Path::new(path), Want::MaskDir)?;
+                rascal_core::binding::reference_in(k, value)?;
             }
             "filler" => {
                 if !value.is_string() {
@@ -516,7 +508,7 @@ pub struct Bound {
 }
 
 /// The binding of a call (module docs): `session_id` is none on the command line, so no server
-/// accepts it. Its images and masks are read through `paths`, as the call reads them.
+/// accepts it. Its images are read through `paths`, as the call reads them.
 pub fn bind(
     recipe: &str,
     action: &str,
@@ -539,12 +531,7 @@ pub fn bind(
             verify_expect(key, value, &image, &bytes)?;
             json!({ "file_sha256": rascal_core::contract::file_sha256(&bytes) })
         } else if slots.masks.contains(key) {
-            let path = value.as_str().unwrap_or_default();
-            let dir = paths.admit(key, Path::new(path), Want::MaskDir)?;
-            let mask = rascal_core::mask::Mask::read(&dir).map_err(|e| {
-                Error::usage(format!("{key}: {path} is not a stored rascal mask: {e}"))
-            })?;
-            json!({ "mask": mask.identity().as_str() })
+            json!({ "mask": rascal_core::binding::reference_in(key, value)?.identity })
         } else {
             value.clone()
         };

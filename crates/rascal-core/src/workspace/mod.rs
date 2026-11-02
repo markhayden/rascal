@@ -49,6 +49,30 @@ use crate::workspace::sync::{Fs, RealFs};
 pub struct Workspace {
     pub root: PathBuf,
     fs: Arc<dyn Fs>,
+    /// The identity index of the last generation [`Workspace::resolve`] read, rebuilt when the
+    /// generation changes.
+    index: std::sync::Mutex<Option<Arc<IdentityIndex>>>,
+}
+
+/// An artifact found by identity ([`Workspace::resolve`]): what the snapshot holds under it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Resolved {
+    pub artifact_type: ArtifactType,
+    /// The local id, for this workspace's own use; it never leaves in a reference.
+    pub id: String,
+    /// rascal's own identity of the artifact (an image's differs from its contract identity,
+    /// which is its file's digest).
+    pub identity: String,
+    /// The frame id the artifact is in (a plan's is its parent frame).
+    pub frame: String,
+}
+
+/// The artifacts of one generation by `(type, contract identity)`: built once per generation
+/// from the registry and, for images, the `import` records' file digests (CONTRACT 3.4, 8.1).
+#[derive(Debug, Default)]
+struct IdentityIndex {
+    generation: Option<u64>,
+    by_identity: std::collections::HashMap<(ArtifactType, String), Resolved>,
 }
 
 impl std::fmt::Debug for Workspace {
@@ -107,6 +131,14 @@ const IMAGE_PARAM: &str = "image";
 
 const DIRS: [&str; 5] = ["images", "artifacts", "ops", "registry", "staging"];
 
+/// A bundle's usage error, prefixed with what names the bundle.
+fn label(named: &str, error: Error) -> Error {
+    match error {
+        Error::Usage { message } => Error::usage(format!("{named}: {message}")),
+        other => other,
+    }
+}
+
 impl Workspace {
     /// Opens a workspace, creating the layout if the directory is new or empty. Abandoned
     /// staging directories (whose lock can be taken) are removed; a generation naming an
@@ -124,6 +156,7 @@ impl Workspace {
         Ok(Workspace {
             root: root.to_path_buf(),
             fs,
+            index: std::sync::Mutex::default(),
         })
     }
 
@@ -139,6 +172,7 @@ impl Workspace {
         let ws = Workspace {
             root: root.to_path_buf(),
             fs,
+            index: std::sync::Mutex::default(),
         };
         ws.sweep_staging();
         ws.refuse_missing_payloads()?;
@@ -159,6 +193,7 @@ impl Workspace {
         let ws = Workspace {
             root: root.to_path_buf(),
             fs: Arc::new(RealFs),
+            index: std::sync::Mutex::default(),
         };
         ws.refuse_missing_payloads()?;
         Ok(ws)
@@ -279,6 +314,117 @@ impl Workspace {
             "artifacts"
         };
         self.root.join(dir).join(&image.record.file)
+    }
+
+    // --- resolving by identity (CONTRACT 3.4, PLAN.md 10.3) ---------------------------------------
+
+    /// The artifact of type `artifact_type` whose contract identity is `identity`, in the current
+    /// generation: a Mask, band profile, series, location or plan by its own identity, an
+    /// `image` by the digest of the file its `import` recorded (`sha256:<file_sha256>`). Ids
+    /// play no part, so a reopened workspace, and one moved to another directory, resolve the
+    /// same identities. The lookup reads an index built once per generation.
+    pub fn resolve(&self, artifact_type: ArtifactType, identity: &str) -> Result<Option<Resolved>> {
+        let current = self.read_current()?;
+        let cached = self
+            .index
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .filter(|index| index.generation == current);
+        let index = match cached {
+            Some(index) => index,
+            None => {
+                let built = Arc::new(self.build_index(current)?);
+                *self.index.lock().unwrap_or_else(|e| e.into_inner()) = Some(built.clone());
+                built
+            }
+        };
+        Ok(index
+            .by_identity
+            .get(&(artifact_type, identity.to_string()))
+            .cloned())
+    }
+
+    fn build_index(&self, current: Option<u64>) -> Result<IdentityIndex> {
+        let generation = match current {
+            Some(n) => self.read_generation(n)?,
+            None => Generation::first(),
+        };
+        let mut index = IdentityIndex {
+            generation: current,
+            ..IdentityIndex::default()
+        };
+        let mut add = |artifact_type: ArtifactType, key: &str, resolved: Resolved| {
+            index
+                .by_identity
+                .entry((artifact_type, key.to_string()))
+                .or_insert(resolved);
+        };
+        let mut images = BTreeMap::new();
+        for entry in &generation.artifacts {
+            let resolved = Resolved {
+                artifact_type: entry.artifact_type,
+                id: entry.id.clone(),
+                identity: entry.identity.clone(),
+                frame: entry.frame.clone(),
+            };
+            if entry.artifact_type == ArtifactType::Image {
+                images.insert(entry.identity.clone(), resolved);
+            } else {
+                add(entry.artifact_type, &entry.identity, resolved);
+            }
+        }
+        for location in &generation.locations {
+            add(
+                ArtifactType::Location,
+                &location.identity,
+                Resolved {
+                    artifact_type: ArtifactType::Location,
+                    id: location.id.clone(),
+                    identity: location.identity.clone(),
+                    frame: location.location.frame().to_string(),
+                },
+            );
+        }
+        for plan in &generation.plans {
+            add(
+                ArtifactType::Plan,
+                &plan.identity,
+                Resolved {
+                    artifact_type: ArtifactType::Plan,
+                    id: plan.id.clone(),
+                    identity: plan.identity.clone(),
+                    frame: plan.plan.parent.clone(),
+                },
+            );
+        }
+        for entry in &generation.records {
+            let record = self.read_record(&entry.identity)?;
+            if record.op != "import" {
+                continue;
+            }
+            let Some(digest) = record
+                .params
+                .get(crate::contract::FILE_SHA256)
+                .and_then(|v| v.as_str())
+            else {
+                continue;
+            };
+            let outputs = record
+                .outputs
+                .values()
+                .chain(record.envelope.artifacts.values().map(|a| &a.identity));
+            for output in outputs {
+                if let Some(resolved) = images.get(output) {
+                    add(
+                        ArtifactType::Image,
+                        &format!("sha256:{digest}"),
+                        resolved.clone(),
+                    );
+                }
+            }
+        }
+        Ok(index)
     }
 
     // --- loading artifacts --------------------------------------------------------------------
@@ -1048,12 +1194,27 @@ impl Workspace {
     /// commit with the frames the workspace does not know. `expect_sha256`, when given, must be
     /// the file's digest (with or without `sha256:`). A mask already present publishes nothing.
     pub fn import_mask(&self, path: &Path, expect_sha256: Option<&str>) -> Result<ImportedMask> {
-        let label = |e: Error| match e {
-            Error::Usage { message } => Error::usage(format!("{}: {message}", path.display())),
-            other => other,
-        };
-        let bytes = crate::bundle::read_file(path).map_err(label)?;
-        let digest = crate::bundle::sha256(&bytes);
+        let named = path.display().to_string();
+        let bytes = crate::bundle::read_file(path).map_err(|e| label(&named, e))?;
+        let source = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        self.import_mask_bytes(&bytes, &named, source, expect_sha256)
+    }
+
+    /// [`Workspace::import_mask`] for a bundle already in memory: `named` labels its errors and
+    /// `source` names it in the record. `serve` brings a mask bound by reference into a run's
+    /// workspace this way, its frame chain with it (PLAN.md 10.3).
+    pub fn import_mask_bytes(
+        &self,
+        bytes: &[u8],
+        named: &str,
+        source: &str,
+        expect_sha256: Option<&str>,
+    ) -> Result<ImportedMask> {
+        let label = |e: Error| label(named, e);
+        let digest = crate::bundle::sha256(bytes);
         if let Some(expected) = expect_sha256 {
             let expected = expected.strip_prefix("sha256:").unwrap_or(expected);
             if digest.strip_prefix("sha256:") != Some(expected) {
@@ -1062,7 +1223,7 @@ impl Workspace {
                 ))));
             }
         }
-        let read = crate::bundle::read(&bytes).map_err(label)?;
+        let read = crate::bundle::read(bytes).map_err(label)?;
         let generation = self.snapshot()?;
         if let Some(existing) = generation.artifact(&read.mask.record.identity) {
             return Ok(ImportedMask {
@@ -1122,7 +1283,7 @@ impl Workspace {
         let frame = mask.record.frame.clone();
         let identity = mask.record.identity.clone();
         let mut params = serde_json::json!({
-            "source": path.file_name().and_then(|n| n.to_str()).unwrap_or_default(),
+            "source": source,
             "bundle_sha256": digest,
         });
         if let Some(image) = &read.manifest.image {

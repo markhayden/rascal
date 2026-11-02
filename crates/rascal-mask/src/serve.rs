@@ -134,6 +134,7 @@ pub fn serve(args: &ServeArgs) -> Result<()> {
         session: crate::actions::Session::start(),
         issued: std::sync::Mutex::default(),
         paths: paths.clone(),
+        store: workspace.clone(),
     });
     let server = Server::new(
         workspace,

@@ -5,8 +5,9 @@
 //! - `arguments` are the call's as resolved: every default the action's `params_schema` declares
 //!   applied, the projection the image ran in, each image as `{"expect": <image reference>}` with
 //!   no `path` or `inline`, each location as given, `max_spend_usd` kept, and the delivery
-//!   choices (`return_images`, `image_blocks`) left out. `mask` and `protect` are still paths to
-//!   stored mask directories (PLAN.md 10.3 makes them references).
+//!   choices (`return_images`, `image_blocks`) left out. `mask` and `protect` are Mask
+//!   references (CONTRACT 3.4): `serve` records the store's reference of the Mask it bound, and
+//!   the command line the reference of the stored mask directory it was given.
 //! - `effective` is the estimate's object from the same function ([`estimate::effective`]): the
 //!   model, the configuration's identity, and `x-rascal` with the filler and the constant set in
 //!   force at each recipe step.
@@ -20,19 +21,23 @@
 use std::path::Path;
 
 use rascal_core::Error;
+use rascal_core::artifact::{ArtifactType, SCHEMA_VERSION, TOOL};
 use rascal_core::config::ConfigState;
 use rascal_core::contract::table_manners::images::ImageReference;
+use rascal_core::contract::table_manners::operations::ArtifactRef;
 use rascal_core::contract::table_manners::{Invocation, Readiness, Status};
 use rascal_core::contract::{self, LocationMeta, location_out};
 use rascal_core::error::Result;
 use rascal_core::frame::{Frame, Projection};
 use rascal_core::image::Image;
 use rascal_core::location::Location;
+use rascal_core::mask::Mask;
 use rascal_core::paths::PathRule;
+use rascal_core::workspace::Workspace;
 use serde_json::{Map, Value, json};
 
 use crate::estimate::{self, DELIVERY, Price};
-use crate::run::{self, RunArgs};
+use crate::run::{self, MaskIn, RunArgs};
 use crate::run_json;
 use rascal_mask::describe;
 use rascal_mask::readiness::Setup;
@@ -70,7 +75,7 @@ pub fn of_call(
 /// The invocation of a `rascal run` or `heal` (with `filler`): the flags as the matching action's
 /// arguments (the image by its reference; `--bbox`, `--location` and `--stroke` as contract
 /// locations on it, a contract location file as given; `--set` as `set`; `--mask` and `--protect`
-/// as absolute paths), then [`record`], priced as `estimate::price` prices the call under the
+/// as Mask references), then [`record`], priced as `estimate::price` prices the call under the
 /// run's configuration (no session: no provider has answered anything).
 pub fn of_command(args: &RunArgs, filler: Option<&str>) -> Result<Invocation> {
     resolving(|| {
@@ -146,12 +151,66 @@ fn command_arguments(args: &RunArgs, filler: Option<&str>) -> Result<Map<String,
     if args.strict {
         arguments.insert("strict".to_string(), json!(true));
     }
-    for (slot, dir) in [("mask", &args.mask), ("protect", &args.protect)] {
-        if let Some(dir) = dir {
-            arguments.insert(slot.to_string(), json!(absolute(dir)));
+    for (slot, given) in [("mask", &args.mask), ("protect", &args.protect)] {
+        match given {
+            Some(MaskIn::Dir(dir)) => {
+                let reference = mask_reference(slot, dir, args.workspace.as_deref())?;
+                arguments.insert(
+                    slot.to_string(),
+                    serde_json::to_value(reference)
+                        .map_err(|e| Error::usage(format!("{slot}: {e}")))?,
+                );
+            }
+            Some(MaskIn::Bundle(_)) => {
+                return Err(Error::usage(format!(
+                    "{slot}: a command line names a stored mask directory"
+                )));
+            }
+            None => {}
         }
     }
     Ok(arguments)
+}
+
+/// The artifact reference (CONTRACT 3.4) of a stored mask directory a person named: the
+/// reference the workspace holding it gives (the one around the directory, `<ws>/artifacts/`,
+/// or `--workspace`), so a crop's frame and the image it was made on come with it; for a
+/// directory no workspace holds, built from the mask alone, which only a raw frame allows.
+fn mask_reference(slot: &str, dir: &Path, workspace: Option<&Path>) -> Result<ArtifactRef> {
+    let mask = Mask::read(dir).map_err(|e| {
+        Error::usage(format!(
+            "{slot}: {} is not a stored rascal mask: {e}",
+            dir.display()
+        ))
+    })?;
+    let identity = &mask.record.identity;
+    let around = dir
+        .parent()
+        .filter(|p| p.file_name().is_some_and(|n| n == "artifacts"))
+        .and_then(Path::parent);
+    for root in [around, workspace].into_iter().flatten() {
+        if let Ok(ws) = Workspace::open_read_only(root)
+            && ws.snapshot()?.artifact(identity).is_some()
+        {
+            return contract::artifact_ref(&ws, identity);
+        }
+    }
+    let frame = Frame::raw_of_id(&mask.record.frame).ok_or_else(|| {
+        Error::usage(format!(
+            "{slot}: {} is in frame {}, which only the workspace that made it knows (use --workspace from the run that made it)",
+            dir.display(),
+            mask.record.frame
+        ))
+    })?;
+    Ok(ArtifactRef {
+        artifact_type: ArtifactType::Mask.contract_type().to_string(),
+        schema_version: SCHEMA_VERSION,
+        tool: TOOL.to_string(),
+        identity: identity.clone(),
+        frame: Some(frame.identity),
+        on: None,
+        resource: contract::artifact_resource(identity),
+    })
 }
 
 /// The record from resolved arguments: delivery left out, the defaults applied, the projection

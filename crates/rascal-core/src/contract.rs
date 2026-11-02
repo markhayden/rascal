@@ -118,6 +118,121 @@ pub fn image_reference(
     Ok(reference(&image, &frame, file))
 }
 
+/// The resource that reads an artifact by its contract identity (CONTRACT 3.4, 4.7).
+pub fn artifact_resource(identity: &str) -> String {
+    format!("rascal://artifact/{identity}")
+}
+
+/// The artifact reference (CONTRACT 3.4) of an artifact the workspace holds, by local id or
+/// rascal's identity: its contract type and schema version 1; its identity, rascal's own (ADR
+/// 0016) except an image's, which is `sha256:` and its file digest (8.1); its frame as the
+/// frame's identity; `on`, the image at the root of its frame chain it was made on, when the
+/// workspace can tell; and its resource. No workspace id appears in it.
+pub fn artifact_ref(
+    workspace: &crate::workspace::Workspace,
+    id_or_identity: &str,
+) -> crate::error::Result<table_manners::operations::ArtifactRef> {
+    use crate::artifact::{ArtifactType, SCHEMA_VERSION, TOOL};
+    use crate::error::Error;
+    let generation = workspace.snapshot()?;
+    let (artifact_type, own, frame) = if let Some(plan) = generation.plan(id_or_identity) {
+        (
+            ArtifactType::Plan,
+            plan.identity.clone(),
+            plan.plan.parent.clone(),
+        )
+    } else if let Some(location) = generation.location(id_or_identity) {
+        (
+            ArtifactType::Location,
+            location.identity.clone(),
+            location.location.frame().to_string(),
+        )
+    } else if let Some(entry) = generation.artifact(id_or_identity) {
+        (
+            entry.artifact_type,
+            entry.identity.clone(),
+            entry.frame.clone(),
+        )
+    } else {
+        return Err(Error::usage(format!(
+            "{id_or_identity}: no such artifact in {}",
+            workspace.root.display()
+        )));
+    };
+    let table = crate::frame::FrameTable {
+        frames: generation.frames.clone(),
+    };
+    let chain = table.chain(&frame)?;
+    let (Some(frame), Some(root)) = (chain.first(), chain.last()) else {
+        return Err(Error::usage(format!("frame {frame} is unknown")));
+    };
+    let identity = if artifact_type == ArtifactType::Image {
+        format!("sha256:{}", image_reference(workspace, &own)?.file_sha256)
+    } else {
+        own.clone()
+    };
+    Ok(table_manners::operations::ArtifactRef {
+        artifact_type: artifact_type.contract_type().to_string(),
+        schema_version: SCHEMA_VERSION,
+        tool: TOOL.to_string(),
+        resource: artifact_resource(&identity),
+        identity,
+        frame: Some(frame.identity.clone()),
+        on: made_on(workspace, &generation, &own, root)?,
+    })
+}
+
+/// The image an artifact was made on, at the root of its frame chain: the one its records lead
+/// back to (`Workspace::mask_image`, which also reads what a bundle said), else the one image
+/// the workspace imported in that root frame. Its reference is the file digest with the root
+/// frame's size, projection and topology, and no pixel digest (8.2 makes it optional), so every
+/// store gives an artifact the same reference, whether it holds the image or only a bundle that
+/// names it. `None` when no single image is found.
+fn made_on(
+    workspace: &crate::workspace::Workspace,
+    generation: &crate::workspace::registry::Generation,
+    identity: &str,
+    root: &Frame,
+) -> crate::error::Result<Option<ImageReference>> {
+    use crate::artifact::ArtifactType;
+    let found = match workspace.mask_image(identity, &root.id)? {
+        Some(image) => Some(image),
+        None => {
+            let records = workspace.records()?;
+            let mut held = generation
+                .artifacts
+                .iter()
+                .filter(|a| a.artifact_type == ArtifactType::Image && a.frame == root.id)
+                .filter_map(|a| {
+                    import_file_sha256(&records, &a.identity).map(|file_sha256| {
+                        crate::bundle::MaskBundleImage {
+                            file_sha256,
+                            identity: a.identity.clone(),
+                        }
+                    })
+                })
+                .collect::<Vec<_>>();
+            held.sort_by(|a, b| a.file_sha256.cmp(&b.file_sha256));
+            held.dedup_by(|a, b| a.file_sha256 == b.file_sha256);
+            match held.len() {
+                1 => held.pop(),
+                _ => None,
+            }
+        }
+    };
+    let Some(image) = found else {
+        return Ok(None);
+    };
+    Ok(Some(ImageReference {
+        file_sha256: image.file_sha256,
+        width: root.width,
+        height: root.height,
+        projection: projection(root),
+        topology: topology(root),
+        pixel_sha256: None,
+    }))
+}
+
 /// The most vertices rascal's own polygon holds (its location schema is the copied envelope's,
 /// ADR 0009); a contract polygon with more is refused at the boundary, not resampled.
 pub const RASCAL_POLYGON_MAX: usize = 64;

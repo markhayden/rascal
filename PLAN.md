@@ -1730,25 +1730,44 @@ the one place today's actions take a native artifact: `protect`'s `mask` argumen
 hold is refused `binding`/`unresolved` with the import remedy and its `client_run_id` is accepted on
 the corrected retry.
 
+As built: `bind` returns what the store holds under the identity (`Workspace::Resolved`: type,
+local id, rascal's identity, frame), not a loaded artifact, and `bind_all` binds a call's
+references naming every problem; the caller loads or exports what it needs. A `rascal:` type a
+tool other than rascal made is `wrong_type` too. `on` is the root image's file digest with the
+root frame's size, projection and topology and no pixel digest, so every store gives an artifact
+the same reference (one holding the image and one holding only the bundle that names it agree).
+The Mask argument's `params_schema` writes the reference's shape out (the schema's id in
+`$comment`) instead of a `$ref`, since every tool's input schema must stand alone; its `type` is
+any type name, so a wrong one reaches the `wrong_type` refusal. The estimate checks a
+reference's shape and digests its identity without reading the store. With `mask` and `protect`
+no longer paths, the path rule's mask-directory kind goes (`PathRule::admit` admits regular
+files only). On the command line, `--mask` and `--protect` stay stored mask directories (a
+person's own paths); the invocation records each as the reference the workspace around it (or
+`--workspace`) gives, or, for a directory no workspace holds, one built from the mask, which a
+raw frame alone allows. No task takes two references, so "a call with two bad references names
+both" is proven on `bind_all`; a served call refuses each problem as its own entry, `port` the
+argument's name.
+
 **Acceptance.**
-- [ ] `artifact_ref` for an image, a location, a Mask in a raw frame and a Mask in a `crop:` frame
+- [x] `artifact_ref` for an image, a location, a Mask in a raw frame and a Mask in a `crop:` frame
       validates against `urn:table-manners:operations:artifact-ref`; the image's identity is
       `sha256:<file_sha256>`; `on` is the root image's reference; no id appears in any reference.
-- [ ] `Workspace::resolve` finds each type by identity; a workspace reopened (a restart) and a
+- [x] `Workspace::resolve` finds each type by identity; a workspace reopened (a restart) and a
       workspace directory moved and reopened resolve the same identities (the library half of the
       old 10.6).
-- [ ] A served `protect` call with the mask's reference runs and gives the same mask identity as
+- [x] A served `protect` call with the mask's reference runs and gives the same mask identity as
       M12's path form did on the same inputs; `wrong_type` (a location's reference, a reference of
       type `squint:Thing`), `wrong_version` (schema version 2) and `unresolved` (with its remedy)
       are each a `-32602` `binding` refusal validating against `refusal.json`, with no run
       directory and the `client_run_id` accepted on the retry; a call with two bad references
       names both.
-- [ ] A path where a reference is expected is `-32602` invalid params (the input schema rejects
+- [x] A path where a reference is expected is `-32602` invalid params (the input schema rejects
       it); an estimate's binding is unchanged for the same mask.
 
 **Verification.** `cargo nextest run -p rascal-core --test it -- artifact_ref:: workspace::`;
 `cargo nextest run -p rascal-mask --features testkit --test it -- binding:: serve_contract::
-estimate::`; `just check`.
+estimate::`; `just check`. Done 2026-11-01 (branch `m10-operations`, built against table-manners
+`d9e6058`).
 
 **Dependencies.** 10.2, 10.5. **Files.** `crates/rascal-core/src/{artifact,contract}.rs`,
 `crates/rascal-core/src/workspace/mod.rs` (`resolve`, the identity index),

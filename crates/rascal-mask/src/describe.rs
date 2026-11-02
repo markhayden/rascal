@@ -22,6 +22,32 @@ use crate::recipes::{SHIPPED, load_recipe};
 /// The largest inline image `serve` takes, in decoded bytes (11.2): 64 MiB.
 pub const INLINE_BYTES: u64 = 64 << 20;
 
+/// The contract's artifact reference schema (CONTRACT 3.4), which a Mask argument names.
+pub const ARTIFACT_REF: &str = "urn:table-manners:operations:artifact-ref";
+
+/// A Mask argument's schema: the shape of the contract's artifact reference ([`ARTIFACT_REF`],
+/// named in `$comment`), written out so the schema stands alone for a client that has no copy
+/// of the contract's. The type is any type name, not only `rascal:Mask`: one of the wrong type
+/// is the `binding` refusal (`wrong_type`), never a schema error.
+pub fn mask_reference_schema() -> Value {
+    json!({
+        "$comment": ARTIFACT_REF,
+        "description": "A rascal:Mask artifact reference (CONTRACT 3.4); it resolves by identity in this server's workspace (rascal serve --workspace).",
+        "type": "object",
+        "properties": {
+            "type": { "type": "string", "pattern": "^(image|location|[a-z][a-z0-9-]*:[A-Z][A-Za-z0-9]*)$" },
+            "schema_version": { "type": "integer", "minimum": 1 },
+            "tool": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+            "identity": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+            "frame": { "type": ["string", "null"], "minLength": 1 },
+            "on": { "type": "object", "description": "The image reference (CONTRACT 8) of the image it was made on." },
+            "resource": { "type": "string", "pattern": "^[a-z][a-z0-9+.-]*://artifact/" }
+        },
+        "required": ["type", "schema_version", "tool", "identity", "frame", "resource"],
+        "additionalProperties": false
+    })
+}
+
 /// The longest gap between progress notifications on a live run, in seconds (4.1).
 pub const PROGRESS_INTERVAL_S: u32 = 10;
 
@@ -246,11 +272,7 @@ pub fn description(setup: &Setup<'_>) -> Result<Description> {
                     }
                 }
                 InputType::Mask => {
-                    properties.insert(
-                        input.clone(),
-                        json!({ "type": "string",
-                                "description": "A stored rascal mask directory (an earlier run's `mask`), by absolute path." }),
-                    );
+                    properties.insert(input.clone(), mask_reference_schema());
                     if !optional {
                         required.push(input.clone());
                     }

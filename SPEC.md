@@ -314,6 +314,15 @@ produce the same identities; changing a referenced series under an unchanged loc
 the referencing mask's identity; import computes the pixel digest, the frame and then the image
 identity in that order; tests assert all three.
 
+Outside a workspace an artifact is named by its **artifact reference** (table-manners 3.4;
+PLAN.md 10.3): its contract type (`image`, `location`, `rascal:Mask`, `rascal:BandProfile`,
+`rascal:Series`, `rascal:Plan`), schema version 1, `tool: "rascal"`, its identity (an image's is
+`sha256:` and the digest of the file it was imported from), its frame's identity, `on` (the
+root image it was made on, by file digest and the root frame, when the workspace can tell) and
+`rascal://artifact/<identity>`. No id appears in one. A workspace resolves a reference by
+identity (`Workspace::resolve`, an index built once per generation), so a reopened or moved
+workspace resolves the same references.
+
 ### The mask record
 
 A directory, `<id>.mask/`, holding `mask.toml` and planes the size of the frame:
@@ -816,7 +825,8 @@ workspace by default; `--concurrency n` allows parallel calls, each still commit
 `estimate` never wait for a call.
 
 **The path rule** (CONTRACT 5.2, PLAN.md 10.1). `serve` reads a caller's path (an image slot,
-`mask`, `protect`, `workspace_import`'s `path`) only inside the directories the session allows:
+`workspace_import`'s `path`; `mask` and `protect` are artifact references, never paths) only
+inside the directories the session allows:
 each `--allow-dir` (repeatable; absolute and naming an existing directory, else exit 64 before
 anything is answered) resolved once at start, narrowed by the configuration's `[serve]
 allow_dirs` to the overlap (where a configured directory and a flag directory overlap the deeper
@@ -825,9 +835,8 @@ configuration that does not load allows nothing, failing closed, and stderr says
 `--allow-dir` every caller path is refused and inline images still work. The set is fixed for the session, printed on stderr at
 start and, from v0.4, listed as `rascal://session`'s `allowed_dirs`. One function, `rascal_core::paths::PathRule::admit`, checks every caller path on its
 canonical form (absolute, `.`, `..` and every symlink resolved, the final component included):
-it must exist, be the kind the slot takes (a regular file; a stored mask directory whose every
-entry also resolves inside) and lie under an allowed directory component by component, and it is
-read through the canonical path. Every refusal has one text, `<slot>: this path is not readable
+it must exist, be a regular file and lie under an allowed directory component by component, and
+it is read through the canonical path. Every refusal has one text, `<slot>: this path is not readable
 here (only files inside the directories rascal serve allows; CONTRACT 5.2)`, which says nothing
 about whether the file exists or what it is: a run ends `invalid` with code `input`, `estimate`
 is the `invalid_arguments` refusal with code `input`, and `workspace_import` a JSON-RPC
@@ -1058,11 +1067,11 @@ surface; this section is rascal's mapping onto it, built in milestone M8 (PLAN.m
 | images in: `path` or `inline`, optional `expect`; images out: role, reference, one locator | an implicit, journaled import; `images.out` with `source`, `mask`, `result` |
 | the result header and `run.json` | every `run` and `heal` writes it atomically and last; the body holds the envelope statuses, the outputs by role and the heal report |
 | `describe --json`, the `describe` tool, with no configuration too (v0.3) | one action per shipped recipe, each with its `readiness` (its default use: the mask alone unconfigured, healing with the configured fillers otherwise); `estimate` is a reserved tool beside `describe`, never an action |
-| `estimate` (v0.3): `{action, arguments}` in, `estimate.json` out, bound to the call | the same pricing as the limits check; the binding over the arguments (images by file digest, masks by identity, `return_images` and `image_blocks` left out), the version, the configuration's identity (the built-in defaults' with no file) and the session; `rascal estimate --json` with no session; a call naming the binding in `_meta["table-manners/estimate"]` is checked at the limits check and fails `stale_estimate` (invalid, spend 0) when it no longer matches or expired |
+| `estimate` (v0.3): `{action, arguments}` in, `estimate.json` out, bound to the call | the same pricing as the limits check; the binding over the arguments (images by file digest, Mask references by identity, `return_images` and `image_blocks` left out), the version, the configuration's identity (the built-in defaults' with no file) and the session; `rascal estimate --json` with no session; a call naming the binding in `_meta["table-manners/estimate"]` is checked at the limits check and fails `stale_estimate` (invalid, spend 0) when it no longer matches or expired |
 | `serve`: action tools, `isError` results, progress heartbeat, cancellation, run resources, the runs list, caps and budget | beside the op tools of ADR 0015, which keep their envelopes |
 | v0.2: the run's reference in `run.json`, the runs list and progress `_meta`; correlation ids and the `client_run_id_reused` refusal; reserve and settle; not sent, known and unresolved spend; `rascal://runs{?cursor}`; `rascal://session` | M11: the ids persisted at allocation, claimed when a call is accepted; the session a UUID per `serve` |
 | v0.3 (M12): per-action `readiness` and the `not_ready` refusal, `max_spend_usd` above zero on every action, the reserved `estimate` and estimate binding, `cap`, `budget`, `credential` and `stale_estimate`, claims released with no run, renders with `kind` | a configured filler's key is a `credential` requirement, `present` or `missing` by name and `valid` or `invalid` from the session's provider answers; `describe` and `serve` in every configuration state (`--config` the only way to choose one, `serve`'s `--workspace` optional), readiness by local inspection (config, fillers, credentials, programs, the segmenter pack, its model files, the models variable); a call that needs a missing or invalid requirement refused `not_ready` before any run, its `client_run_id` released; a provider's 401 or 403 `credential`, never retryable; the per-call cap `cap`, the session budget `budget`, a `max_spend_usd` above the configured cap `invalid` (`usage`); `dash --serve` URL-only and framed only for `--frame-ancestor`, `dash --document` one self-contained file; the contract's `fixtures/rascal/` generated by rascal's own test, and a test that `describe` and `estimate` make no provider call (tasks 12.1 to 12.9; `docs/contract.md`) |
-| v0.4 (M10, on the milestone branch): `kind` on every action, `vocabulary` the core's object, the reserved `export` and `import`, `allowed_dirs` in the session, the path rule with no MCP roots, `invocation` on every result | every recipe action a `task` with no `group`; `rascal://session` lists the resolved `--allow-dir` set (`[]` with none); every result's `invocation` is the call resolved (defaults applied, the projection named, images by reference with no locator, delivery left out, `effective` the estimate's object from one function, requirements by name), null only on an `invalid` run whose arguments did not resolve, and a command-line run's is the matching action's arguments (task 10.2; operations, references, export and import, `rascal call` follow in M10) |
+| v0.4 (M10, on the milestone branch): `kind` on every action, `vocabulary` the core's object, the reserved `export` and `import`, `allowed_dirs` in the session, the path rule with no MCP roots, `invocation` on every result | every recipe action a `task` with no `group`; `rascal://session` lists the resolved `--allow-dir` set (`[]` with none); every result's `invocation` is the call resolved (defaults applied, the projection named, images by reference with no locator, delivery left out, `effective` the estimate's object from one function, requirements by name), null only on an `invalid` run whose arguments did not resolve, and a command-line run's is the matching action's arguments (task 10.2); artifact references (type, schema version 1, tool, identity, the frame's identity, `on`, resource; never a workspace id) resolved by identity in `serve`'s workspace, the session's store, and the `binding` refusal (`wrong_type`, `wrong_version`, `unresolved` with a remedy; `-32602`, no run, the id released) before any run: `mask` and `protect` take a `rascal:Mask` reference, whose bundle the run imports with its frame chain (task 10.3; operations, export and import, `rascal call` follow in M10) |
 | exit codes 0, 3, 64, 130, 143; 1 under `--strict` | as before, plus the signals |
 | `playground` | hands off to Wafflery, the shared program (its launcher agreement, H1); no UI in rascal |
 

@@ -1569,8 +1569,7 @@ fn the_session_marks_credentials_by_what_providers_answered() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// The strings in `value` that start with `/`, by where they are, but under `mask` and
-/// `protect` (stored mask directories until 10.3).
+/// The strings in `value` that start with `/`, by where they are.
 fn paths_in(value: &serde_json::Value, at: &str, out: &mut Vec<String>) {
     match value {
         serde_json::Value::String(s) if s.starts_with('/') => out.push(format!("{at}: {s}")),
@@ -1581,9 +1580,6 @@ fn paths_in(value: &serde_json::Value, at: &str, out: &mut Vec<String>) {
         }
         serde_json::Value::Object(map) => {
             for (key, item) in map {
-                if at == "/arguments" && (key == "mask" || key == "protect") {
-                    continue;
-                }
                 paths_in(item, &format!("{at}/{key}"), out);
             }
         }

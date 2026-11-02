@@ -212,6 +212,20 @@ impl Frame {
         }
     }
 
+    /// The raw frame a raw frame id names (`raw:<W>x<H>:<projection>`), since a raw frame is
+    /// its size and projection alone; `None` for any other id.
+    pub fn raw_of_id(id: &str) -> Option<Frame> {
+        let (size, projection) = id.strip_prefix("raw:")?.split_once(':')?;
+        let (width, height) = size.split_once('x')?;
+        let projection = match projection {
+            "flat" => Projection::Flat,
+            "equirectangular" => Projection::Equirectangular,
+            _ => return None,
+        };
+        let frame = Frame::raw(width.parse().ok()?, height.parse().ok()?, projection);
+        (frame.id == id).then_some(frame)
+    }
+
     /// The `cut:` frame of a parent image under a plan. The canvas is `2s × H`, bounded, flat.
     /// `image_id` names the image on the command line; the identity is independent of it.
     pub fn cut(parent: &Frame, image_id: &str, plan: &Plan) -> Result<Frame> {

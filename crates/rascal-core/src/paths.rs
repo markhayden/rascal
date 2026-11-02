@@ -8,8 +8,8 @@
 //! With no `--allow-dir` the set is empty and every caller path is refused.
 //!
 //! A caller path is admitted when it is absolute and its canonical form (every symlink resolved,
-//! the final component included) exists, is of the kind the slot takes and lies under an allowed
-//! directory, component by component. It is then read through the canonical path, never the
+//! the final component included) exists, is a regular file and lies under an allowed directory,
+//! component by component. It is then read through the canonical path, never the
 //! given one. Every failure is the one refusal [`refusal`], whose text says nothing about the
 //! file: a missing file, a directory, a symlink out of the tree and a path outside it read the
 //! same. A check-then-read race (a symlink swapped between the check and the read) is outside
@@ -33,16 +33,6 @@ pub enum PathRule {
     Allowed(Vec<PathBuf>),
 }
 
-/// What a caller path must name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Want {
-    /// A regular file (an image).
-    File,
-    /// A stored mask directory, and every entry in it inside the allowed set too, since a mask
-    /// is read file by file from it.
-    MaskDir,
-}
-
 /// The one refusal of a caller path, the same whatever the file is.
 pub fn refusal(slot: &str) -> Error {
     Error::Input {
@@ -56,26 +46,24 @@ impl PathRule {
     /// The path a slot's value names, as the command reads it: for [`PathRule::Own`] the path
     /// as given (an image must be an absolute path to a file, as table-manners 10.1 asks); for
     /// [`PathRule::Allowed`] its canonical form, admitted, or [`refusal`].
-    pub fn admit(&self, slot: &str, given: &Path, want: Want) -> Result<PathBuf> {
+    pub fn admit(&self, slot: &str, given: &Path) -> Result<PathBuf> {
         match self {
             PathRule::Own => {
-                if want == Want::File {
-                    if !given.is_absolute() {
-                        return Err(Error::usage(format!(
-                            "{slot}: {} is not an absolute path (CONTRACT.md 10.1)",
-                            given.display()
-                        )));
-                    }
-                    if !given.is_file() {
-                        return Err(Error::usage(format!(
-                            "{slot}: {} is not a file",
-                            given.display()
-                        )));
-                    }
+                if !given.is_absolute() {
+                    return Err(Error::usage(format!(
+                        "{slot}: {} is not an absolute path (CONTRACT.md 10.1)",
+                        given.display()
+                    )));
+                }
+                if !given.is_file() {
+                    return Err(Error::usage(format!(
+                        "{slot}: {} is not a file",
+                        given.display()
+                    )));
                 }
                 Ok(given.to_path_buf())
             }
-            PathRule::Allowed(dirs) => admitted(given, want, dirs).ok_or_else(|| refusal(slot)),
+            PathRule::Allowed(dirs) => admitted(given, dirs).ok_or_else(|| refusal(slot)),
         }
     }
 
@@ -88,23 +76,16 @@ impl PathRule {
     }
 }
 
-/// The canonical path when it is admitted under `dirs`.
-fn admitted(given: &Path, want: Want, dirs: &[PathBuf]) -> Option<PathBuf> {
+/// The canonical path when it is admitted under `dirs`: a regular file inside.
+fn admitted(given: &Path, dirs: &[PathBuf]) -> Option<PathBuf> {
     if !given.is_absolute() {
         return None;
     }
     let canonical = inside(given, dirs)?;
-    let metadata = std::fs::metadata(&canonical).ok()?;
-    match want {
-        Want::File if metadata.is_file() => Some(canonical),
-        Want::MaskDir if metadata.is_dir() => {
-            for entry in std::fs::read_dir(&canonical).ok()? {
-                inside(&entry.ok()?.path(), dirs)?;
-            }
-            Some(canonical)
-        }
-        _ => None,
-    }
+    std::fs::metadata(&canonical)
+        .ok()?
+        .is_file()
+        .then_some(canonical)
 }
 
 /// The canonical form of `path` when it exists and lies under one of `dirs`.

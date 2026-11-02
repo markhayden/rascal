@@ -17,7 +17,7 @@ use rascal_core::contract::table_manners::{
     ErrorCode, Readiness, Refusal, RefusalReason, Requirement, RunState, RunSummary, RunsList,
     Session as TmSession, Tool as TmTool,
 };
-use rascal_core::workspace::Cancel;
+use rascal_core::workspace::{Cancel, Workspace};
 use rascal_mcp::server::{
     ActionResult, Actions, CallError, CallMeta, McpResource as Resource,
     McpResourceTemplate as ResourceTemplate, McpTool as Tool, Progress, ResourceBody,
@@ -52,7 +52,13 @@ pub struct ContractActions {
     pub issued: std::sync::Mutex<estimate::Issued>,
     /// The directories callers' paths may name, fixed for the session (CONTRACT 5.2).
     pub paths: rascal_core::paths::PathRule,
+    /// The session's store (CONTRACT 3.4, 4.7): `serve`'s workspace, where an artifact
+    /// reference resolves by identity (PLAN.md 10.3).
+    pub store: Arc<Workspace>,
 }
+
+/// The Masks a call bound by reference, by argument, as bundles for its run.
+type Bound = BTreeMap<String, run::MaskIn>;
 
 /// A serving session: one process's ledger, named by a random UUID (v4) when `serve` starts.
 /// rascal reads its configuration once, so a session lasts the process.
@@ -325,6 +331,7 @@ impl ContractActions {
         &self,
         recipe: &str,
         args: &Map<String, Value>,
+        bound: &Bound,
         out: &Path,
         inputs: &Path,
         cancel: Arc<Cancel>,
@@ -368,8 +375,8 @@ impl ContractActions {
             bbox: None,
             location,
             stroke,
-            protect: self.mask_dir(args, "protect")?,
-            mask: self.mask_dir(args, "mask")?,
+            protect: bound.get("protect").cloned(),
+            mask: bound.get("mask").cloned(),
             prompt: text("prompt"),
             config: self.config_path.clone(),
             workspace: None,
@@ -386,19 +393,81 @@ impl ContractActions {
         })
     }
 
-    /// A stored mask directory a call names, admitted: the run reads its canonical form.
-    fn mask_dir(
+    /// Binds a call's artifact references before any run (CONTRACT 4.7; PLAN.md 10.3): each
+    /// `mask` and `protect` argument must be a `rascal:Mask` reference (anything else, a path
+    /// among them, is plain invalid params) that resolves by identity in the store. References
+    /// that do not bind are the `binding` refusal naming every one, port being the argument's
+    /// name, which allocates nothing and releases the call's `client_run_id`. Bound, each is
+    /// replaced in the arguments by the store's own reference (what the invocation records) and
+    /// its Mask goes to the run as a bundle.
+    fn bind(
         &self,
+        recipe: &str,
         args: &Map<String, Value>,
-        slot: &str,
-    ) -> rascal_core::error::Result<Option<PathBuf>> {
-        args.get(slot)
-            .and_then(|v| v.as_str())
-            .map(|path| {
-                self.paths
-                    .admit(slot, Path::new(path), rascal_core::paths::Want::MaskDir)
+    ) -> Result<(Map<String, Value>, Bound), CallError> {
+        let slots = estimate::slots(recipe).map_err(|e| CallError::from(e.to_string()))?;
+        let mut references = Vec::new();
+        for slot in &slots.masks {
+            if let Some(value) = args.get(slot) {
+                let reference = rascal_core::binding::reference_in(slot, value)
+                    .map_err(|e| CallError::from(e.to_string()))?;
+                references.push((slot.clone(), reference));
+            }
+        }
+        let given: Vec<rascal_core::binding::Given<'_>> = references
+            .iter()
+            .map(|(slot, reference)| rascal_core::binding::Given {
+                port: slot,
+                index: None,
+                expected: rascal_core::artifact::ArtifactType::Mask,
+                reference,
             })
-            .transpose()
+            .collect();
+        let store_error = |e: Error| CallError::from(format!("the store: {e}"));
+        let resolved =
+            match rascal_core::binding::bind_all(&self.store, &given).map_err(store_error)? {
+                Ok(resolved) => resolved,
+                Err(bindings) => {
+                    let text: Vec<String> = bindings
+                        .iter()
+                        .map(|b| {
+                            format!(
+                                "{}: {} ({})",
+                                b.port.as_deref().unwrap_or("artifact"),
+                                serde_json::to_value(b.problem)
+                                    .ok()
+                                    .and_then(|p| p.as_str().map(str::to_string))
+                                    .unwrap_or_default(),
+                                b.got
+                            )
+                        })
+                        .collect();
+                    let refusal = Refusal {
+                        reason: RefusalReason::Binding,
+                        run: None,
+                        requirements: None,
+                        error: None,
+                        bindings: Some(bindings),
+                    };
+                    return Err(CallError::refused(
+                        format!("the references do not bind: {}", text.join("; ")),
+                        serde_json::to_value(&refusal).unwrap_or(Value::Null),
+                    ));
+                }
+            };
+        let mut args = args.clone();
+        let mut bound = Bound::new();
+        for ((slot, _), found) in references.iter().zip(resolved) {
+            let reference =
+                rascal_core::contract::artifact_ref(&self.store, &found.id).map_err(store_error)?;
+            args.insert(
+                slot.clone(),
+                serde_json::to_value(reference).map_err(|e| CallError::from(e.to_string()))?,
+            );
+            let bundle = self.store.export_mask(&found.id).map_err(store_error)?;
+            bound.insert(slot.clone(), run::MaskIn::Bundle(Arc::new(bundle)));
+        }
+        Ok((args, bound))
     }
 
     /// The ledger as it stands.
@@ -568,6 +637,7 @@ impl ContractActions {
         &self,
         recipe: &str,
         args: &Map<String, Value>,
+        bound: &Bound,
         meta: &CallMeta,
         progress: &(dyn Fn(Progress) + Send + Sync),
         cancel: Arc<Cancel>,
@@ -623,7 +693,7 @@ impl ContractActions {
                         &self.paths,
                         &price,
                     )?);
-                    self.run_args(recipe, args, &out, &inputs, cancel)
+                    self.run_args(recipe, args, bound, &out, &inputs, cancel)
                 })
                 .and_then(|run_args| {
                     self.reserve(recipe, args, meta.estimate.as_ref())
@@ -1055,8 +1125,9 @@ impl Actions for ContractActions {
         }
         let recipe = recipe_of(name).ok_or_else(|| format!("no action {name}"))?;
         self.ready_for(name, args)?;
+        let (args, bound) = self.bind(recipe, args)?;
         let result = self
-            .run_action(recipe, args, meta, progress, cancel)
+            .run_action(recipe, &args, &bound, meta, progress, cancel)
             .map_err(CallError::from)?;
         self.learn(&result.structured);
         Ok(result)

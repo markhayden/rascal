@@ -364,8 +364,51 @@
             "type": "string"
           },
           "protect": {
-            "description": "A stored rascal mask directory (an earlier run's `mask`), by absolute path.",
-            "type": "string"
+            "$comment": "urn:table-manners:operations:artifact-ref",
+            "additionalProperties": false,
+            "description": "A rascal:Mask artifact reference (CONTRACT 3.4); it resolves by identity in this server's workspace (rascal serve --workspace).",
+            "properties": {
+              "frame": {
+                "minLength": 1,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "identity": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "on": {
+                "description": "The image reference (CONTRACT 8) of the image it was made on.",
+                "type": "object"
+              },
+              "resource": {
+                "pattern": "^[a-z][a-z0-9+.-]*://artifact/",
+                "type": "string"
+              },
+              "schema_version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "tool": {
+                "pattern": "^[a-z][a-z0-9-]*$",
+                "type": "string"
+              },
+              "type": {
+                "pattern": "^(image|location|[a-z][a-z0-9-]*:[A-Z][A-Za-z0-9]*)$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "schema_version",
+              "tool",
+              "identity",
+              "frame",
+              "resource"
+            ],
+            "type": "object"
           },
           "set": {
             "additionalProperties": {
@@ -521,8 +564,51 @@
             "type": "string"
           },
           "protect": {
-            "description": "A stored rascal mask directory (an earlier run's `mask`), by absolute path.",
-            "type": "string"
+            "$comment": "urn:table-manners:operations:artifact-ref",
+            "additionalProperties": false,
+            "description": "A rascal:Mask artifact reference (CONTRACT 3.4); it resolves by identity in this server's workspace (rascal serve --workspace).",
+            "properties": {
+              "frame": {
+                "minLength": 1,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "identity": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "on": {
+                "description": "The image reference (CONTRACT 8) of the image it was made on.",
+                "type": "object"
+              },
+              "resource": {
+                "pattern": "^[a-z][a-z0-9+.-]*://artifact/",
+                "type": "string"
+              },
+              "schema_version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "tool": {
+                "pattern": "^[a-z][a-z0-9-]*$",
+                "type": "string"
+              },
+              "type": {
+                "pattern": "^(image|location|[a-z][a-z0-9-]*:[A-Z][A-Za-z0-9]*)$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "schema_version",
+              "tool",
+              "identity",
+              "frame",
+              "resource"
+            ],
+            "type": "object"
           },
           "set": {
             "additionalProperties": {
@@ -975,8 +1061,51 @@
             "type": "string"
           },
           "mask": {
-            "description": "A stored rascal mask directory (an earlier run's `mask`), by absolute path.",
-            "type": "string"
+            "$comment": "urn:table-manners:operations:artifact-ref",
+            "additionalProperties": false,
+            "description": "A rascal:Mask artifact reference (CONTRACT 3.4); it resolves by identity in this server's workspace (rascal serve --workspace).",
+            "properties": {
+              "frame": {
+                "minLength": 1,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "identity": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "on": {
+                "description": "The image reference (CONTRACT 8) of the image it was made on.",
+                "type": "object"
+              },
+              "resource": {
+                "pattern": "^[a-z][a-z0-9+.-]*://artifact/",
+                "type": "string"
+              },
+              "schema_version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "tool": {
+                "pattern": "^[a-z][a-z0-9-]*$",
+                "type": "string"
+              },
+              "type": {
+                "pattern": "^(image|location|[a-z][a-z0-9-]*:[A-Z][A-Za-z0-9]*)$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "schema_version",
+              "tool",
+              "identity",
+              "frame",
+              "resource"
+            ],
+            "type": "object"
           },
           "max_spend_usd": {
             "description": "Lower the per-call spend cap for this call (USD, above zero).",

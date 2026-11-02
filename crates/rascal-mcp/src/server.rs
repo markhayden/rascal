@@ -14,7 +14,7 @@ use rascal_core::artifact::Artifact;
 use rascal_core::error::Result;
 use rascal_core::image::Image;
 use rascal_core::op::{Inputs, Param, ParamKind, Params};
-use rascal_core::paths::{PathRule, Want};
+use rascal_core::paths::PathRule;
 use rascal_core::registry::OpRegistry;
 use rascal_core::workspace::Workspace;
 use rmcp::handler::server::ServerHandler;
@@ -353,9 +353,7 @@ impl Server {
                     args.get("base64").and_then(|v| v.as_str()),
                 ) {
                     (Some(path), None) => inner.workspace.import(
-                        &inner
-                            .paths
-                            .admit("path", std::path::Path::new(path), Want::File)?,
+                        &inner.paths.admit("path", std::path::Path::new(path))?,
                         projection,
                     )?,
                     (None, Some(data)) => {

@@ -174,8 +174,8 @@ directory, by another client or on another machine (`crates/rascal-mask/src/invo
   reference>}` with no `path` or `inline`: the reference of the file, the same one `images.in`
   names, so one image given by path or inline records one invocation. Each location is as given;
   `max_spend_usd` is kept; `return_images` and `image_blocks` (delivery) are left out. `mask` and
-  `protect` are still absolute paths to stored mask directories: task 10.3 makes them artifact
-  references, and until then they are the one place an invocation names a path.
+  `protect` are Mask references (3.4, task 10.3): the store's reference of the Mask `serve`
+  bound, so nothing in an invocation is a path.
 - `effective`: the estimate's object, from the one function both use (`estimate::effective`):
   the model, the configuration's identity, and `x-rascal` with the filler and the constant sets
   in force by step (see "Estimates"), so an estimate and the call it priced say the same.
@@ -190,7 +190,9 @@ resolved and then failed, was cancelled or was refused by the limits (`cap`, `bu
 the matching action's arguments: the image by its reference, `--bbox`, `--location` and
 `--stroke` as the contract locations the run used (a contract location file as given), `--set`
 as `set` with its values typed, `--prompt`, `--projection`, `--strict`, `--mask` and `--protect`
-(absolute), and `heal`'s filler; so a command-line run is callable through `serve` with a locator
+as the Mask references the stored directories have (the reference the workspace around the
+directory, or `--workspace`, gives; built from the mask alone for a raw frame no workspace
+holds), and `heal`'s filler; so a command-line run is callable through `serve` with a locator
 added to its image. The flags resolve before the run starts and before the signal watcher is
 armed: flags that do not resolve end the command `invalid` at once (exit 64, `run.json` with a
 null invocation and nothing else in the run directory), so a SIGINT or SIGTERM can only cancel a
@@ -219,7 +221,7 @@ recipe, through `heal` when `filler` is given, in its own run directory under `-
 (`$XDG_DATA_HOME/rascal/runs`, else `~/.local/share/rascal/runs`), and its result is that run's
 `run.json` as `structuredContent`, with `isError` true for `invalid` and `error`. JSON-RPC errors
 are left for failures before a run exists (an unknown tool, malformed arguments, a call that is
-not ready).
+not ready, references that do not bind).
 
 - **Images in.** `image` is `{ "path": "/abs/…" }` or `{ "inline": { "media_type", "data" } }`,
   each with an optional `expect` reference checked against the file (digest and dimensions; a
@@ -241,11 +243,10 @@ not ready).
   as `allowed_dirs` (4.6, task 10.2: absolute, resolved, `[]` with none). MCP roots are not used:
   `serve` never sends `roots/list`.
   `rascal_core::paths::PathRule::admit` is the one check, for every caller path `serve` takes:
-  the image slots, `mask` and `protect` (stored mask directories) and `workspace_import`'s
-  `path`. The path must be absolute and its canonical form (every symlink resolved, the final
-  component included) must exist, be a regular file (for a mask, a directory every entry of
-  which also resolves inside) and lie under an allowed directory component by component (`/a/bc`
-  is not under `/a/b`); the file is then read through the canonical path. So a link inside
+  the image slots and `workspace_import`'s `path` (`mask` and `protect` are references, task
+  10.3, never paths). The path must be absolute and its canonical form (every symlink resolved,
+  the final component included) must exist, be a regular file and lie under an allowed directory
+  component by component (`/a/bc` is not under `/a/b`); the file is then read through the canonical path. So a link inside
   pointing out is refused, and a link outside whose target is inside is read (the target is
   what is read). Every failure is one refusal with one text, `<slot>: this path is not readable
   here (only files inside the directories rascal serve allows; CONTRACT 5.2)`, which says
@@ -261,6 +262,34 @@ not ready).
   `resource` (`rascal://run/<id>/images/<role>`). `image_blocks: true` also sends each as an MCP
   image block.
 - **Locations in.** `location` and `stroke` take a table-manners location object (8.2).
+- **Artifact references and binding (3.4, 4.7, task 10.3).** `mask` (of `protect`) and
+  `protect` (of `remove` and `remove_prompt`) take a `rascal:Mask` artifact reference and
+  nothing else: `{type, schema_version, tool, identity, frame, on?, resource}`
+  (`rascal_core::contract::artifact_ref`). rascal's types are `image`, `location`,
+  `rascal:Mask`, `rascal:BandProfile`, `rascal:Series` and `rascal:Plan`, each at schema version
+  1; `identity` is the artifact's identity (ADR 0016), an image's being `sha256:` and its file
+  digest; `frame` is the frame's identity, never its id; `on` is the image at the root of the
+  frame chain it was made on, as its file digest with the root frame's size, projection and
+  topology and no pixel digest, so every store gives an artifact the same reference; `resource`
+  is `rascal://artifact/<identity>` (served from task 10.7). No workspace id appears. The
+  session's store is `serve`'s workspace (`--workspace`): a reference resolves there by identity
+  (`Workspace::resolve`, from an index built once per generation; an image by the file digest
+  its `import` recorded), so a reopened or moved workspace resolves the same identities. After
+  readiness and before any run, each reference is bound (`rascal_core::binding`): the type
+  (another tool's type, an unknown one, one the argument does not take, or a `rascal:` type a
+  tool other than rascal made is `wrong_type`), the version (`wrong_version`), then resolution
+  (`unresolved`, with a remedy: for a Mask "Import its bundle with the import tool (rascal
+  import), then call again."). References that do not bind are refused with `-32602` and
+  `data: {reason: "binding", run: null, bindings}`, one entry per reference in argument order,
+  `port` the argument's name, `expected` `rascal:Mask v1`, `got` the type and version or the
+  identity; like `not_ready` it writes no run, spends nothing and releases the call's
+  `client_run_id`. A value that is no reference (a path, a string, a missing field) is plain
+  invalid params (`-32602`, class `usage`). A bound Mask goes to the run as its bundle (10.5,
+  exported from the store in memory) and is imported into the run's workspace after the image,
+  with its frame chain, so a mask in a `cut:` or `crop:` frame needs no `--workspace` from the run
+  that made it; the recipe then runs as before, and a Mask on another image is the run's
+  `invalid`. Until the import tool (task 10.10), `rascal workspace import-mask <store>
+  <bundle>` puts a Mask into the store.
 - **Progress.** With a progress token, every op the run journals is a notification
   (`step fan (fan): ok`), and a heartbeat goes at least every five seconds while it waits;
   `progress` is a counter that only increases and the words are in `message`, for people. From
@@ -402,8 +431,9 @@ the run does and prices the call with the function the limits check uses (`estim
 - `binding`: the record identity (ADR 0016, kind `estimate`) of `{action, arguments,
   tool_version, config_identity, session_id}`, where `arguments` leaves out `return_images` and
   `image_blocks` (they only choose delivery), each image slot's value is `{"file_sha256": …}`
-  (a path read, inline bytes decoded; an `expect` verified, then dropped), each stored-mask input
-  (`mask`, `protect`) is `{"mask": <its identity>}`, and every other argument, `max_spend_usd`
+  (a path read, inline bytes decoded; an `expect` verified, then dropped), each Mask reference
+  (`mask`, `protect`) is `{"mask": <its identity>}` (the estimate checks the reference's shape
+  and never reads the store, so it does not bind it), and every other argument, `max_spend_usd`
   included, enters as sent. One call by path or by the same bytes inline binds once; any other
   argument, a byte of an image, the configuration, the session or the version binds anew.
 

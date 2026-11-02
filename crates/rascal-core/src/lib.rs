@@ -6,6 +6,7 @@
 //! (task 1.1) brought in a minimal form say which later task replaces them.
 
 pub mod artifact;
+pub mod binding;
 pub mod bundle;
 pub mod canonical;
 pub mod config;
