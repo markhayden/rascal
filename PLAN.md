@@ -2173,11 +2173,11 @@ configuration, `rascal estimate`), `docs/fillers.md` (`credential`), `docs/archi
 and an M12 amendment to ADR 0020 recording the decisions below.
 
 **Acceptance.**
-- [ ] table-manners' fixtures test (`cargo test --test fixtures` there) passes for
+- [x] table-manners' fixtures test (`cargo test --test fixtures` there) passes for
       `fixtures/rascal/`; rascal's own check passes without `UPDATE_FIXTURES`.
-- [ ] `no_provider_call.rs` passes and fails when an estimate is made to call the filler (checked
+- [x] `no_provider_call.rs` passes and fails when an estimate is made to call the filler (checked
       once by hand, recorded in the commit message).
-- [ ] The docs name v0.3 and no longer describe `needs_env`, the old `estimate` arguments or
+- [x] The docs name v0.3 and no longer describe `needs_env`, the old `estimate` arguments or
       `budget` for the per-call cap.
 
 **Verification.** `UPDATE_FIXTURES=1 cargo nextest run -p rascal-mask --features testkit --test

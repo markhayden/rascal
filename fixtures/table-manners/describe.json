@@ -41,6 +41,7 @@
             "enum": [
               "failing",
               "fake",
+              "hosted",
               "slow"
             ],
             "type": "string"
@@ -101,6 +102,17 @@
           {
             "kind": "model",
             "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.hosted",
+            "state": "present"
+          },
+          {
+            "kind": "credential",
+            "name": "RASCAL_FIXTURE_KEY",
+            "setup": "Set `RASCAL_FIXTURE_KEY` in the environment rascal is started with.",
             "state": "present"
           },
           {
@@ -173,6 +185,7 @@
             "enum": [
               "failing",
               "fake",
+              "hosted",
               "slow"
             ],
             "type": "string"
@@ -233,6 +246,17 @@
           {
             "kind": "model",
             "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.hosted",
+            "state": "present"
+          },
+          {
+            "kind": "credential",
+            "name": "RASCAL_FIXTURE_KEY",
+            "setup": "Set `RASCAL_FIXTURE_KEY` in the environment rascal is started with.",
             "state": "present"
           },
           {
@@ -315,6 +339,7 @@
             "enum": [
               "failing",
               "fake",
+              "hosted",
               "slow"
             ],
             "type": "string"
@@ -379,6 +404,17 @@
           {
             "kind": "model",
             "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.hosted",
+            "state": "present"
+          },
+          {
+            "kind": "credential",
+            "name": "RASCAL_FIXTURE_KEY",
+            "setup": "Set `RASCAL_FIXTURE_KEY` in the environment rascal is started with.",
             "state": "present"
           },
           {
@@ -453,6 +489,7 @@
             "enum": [
               "failing",
               "fake",
+              "hosted",
               "slow"
             ],
             "type": "string"
@@ -524,6 +561,17 @@
           {
             "kind": "model",
             "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.hosted",
+            "state": "present"
+          },
+          {
+            "kind": "credential",
+            "name": "RASCAL_FIXTURE_KEY",
+            "setup": "Set `RASCAL_FIXTURE_KEY` in the environment rascal is started with.",
             "state": "present"
           },
           {
@@ -610,6 +658,7 @@
             "enum": [
               "failing",
               "fake",
+              "hosted",
               "slow"
             ],
             "type": "string"
@@ -670,6 +719,17 @@
           {
             "kind": "model",
             "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.hosted",
+            "state": "present"
+          },
+          {
+            "kind": "credential",
+            "name": "RASCAL_FIXTURE_KEY",
+            "setup": "Set `RASCAL_FIXTURE_KEY` in the environment rascal is started with.",
             "state": "present"
           },
           {
@@ -751,6 +811,7 @@
             "enum": [
               "failing",
               "fake",
+              "hosted",
               "slow"
             ],
             "type": "string"
@@ -811,6 +872,17 @@
           {
             "kind": "model",
             "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.hosted",
+            "state": "present"
+          },
+          {
+            "kind": "credential",
+            "name": "RASCAL_FIXTURE_KEY",
+            "setup": "Set `RASCAL_FIXTURE_KEY` in the environment rascal is started with.",
             "state": "present"
           },
           {
@@ -883,6 +955,7 @@
             "enum": [
               "failing",
               "fake",
+              "hosted",
               "slow"
             ],
             "type": "string"
@@ -949,6 +1022,17 @@
           {
             "kind": "model",
             "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.hosted",
+            "state": "present"
+          },
+          {
+            "kind": "credential",
+            "name": "RASCAL_FIXTURE_KEY",
+            "setup": "Set `RASCAL_FIXTURE_KEY` in the environment rascal is started with.",
             "state": "present"
           },
           {

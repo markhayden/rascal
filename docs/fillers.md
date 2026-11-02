@@ -45,7 +45,9 @@ A fill is cached under a key over the request's bytes (the image, the mask, the 
 filler's name and `revision`, so one filler's pixels are never another's. A hit writes `fill from
 the cache` in the journal, and the run's `run.json` says `cache: hit` with spend 0; a call says
 `miss` with the filler's `spend_usd_per_call`. The limits refuse a call whose price would pass
-the cap or the session's budget before anything runs, as an `error` with code `budget`.
+the per-call cap (an `error` with code `cap`) or the session's budget (code `budget`) before any
+paid step, and `rascal estimate` or the `estimate` tool says so beforehand
+(`docs/contract.md`, "The fill cache, prices and limits" and "Estimates").
 
 Exactly one of `command` and `url`; `key_env` goes with `url`; `send_mask = true` on an
 image-input profile also sends the `grey` rendering as `mask`. `examples/rascal.toml` has both

@@ -1,11 +1,12 @@
 # table-manners: rascal's side of the shared contract
 
-rascal conforms to [table-manners](https://github.com/markhayden/table-manners) v0.2.0 (milestones
-M8 and M9 for v0.1.0, M11 for v0.2.0) and is moving to v0.3.0 in milestone M12, built against the
-v0.3 draft until it is published; the shared contract of the owner's tools (ADR 0020, decisions
-13 and 14): what an agent, a script or the playground sees from outside is the same for squint,
-rascal and the tools after them. The contract's text is the specification; this page is what
-rascal does under it (PLAN.md M8, M9 and M11).
+rascal conforms to [table-manners](https://github.com/markhayden/table-manners) v0.3 (milestones
+M8 and M9 for v0.1.0, M11 for v0.2.0, M12 for v0.3.0), built against the v0.3 draft on the M12
+branch until v0.3.0 is published, while `main` stays on v0.2.0 until that branch merges
+(PLAN.md 12.10); the shared contract of the owner's tools (ADR 0020, decisions 13 and 14): what
+an agent, a script or the playground sees from outside is the same for squint, rascal and the
+tools after them. The contract's text is the specification; this page is what rascal does under
+it (PLAN.md M8, M9, M11 and M12).
 
 ## The pin
 
@@ -377,10 +378,40 @@ installation that fails, or leaves no program, exits 74 and runs nothing. Off a 
 - **Fixtures.** `fixtures/contract/results/` holds one masked `run.json` per outcome from the
   command line and `fixtures/contract/describe.json` the description, both validated against the
   contract's schemas and compared in the test suite. `fixtures/table-manners/` is what the
-  contract repository's `fixtures/rascal/` takes (task 11.6): from `rascal serve` through the
-  independent client, the description, a run per status (an error with an unresolved charge
-  among them), two runs pages, the session and both reuse refusals, with machine values replaced
-  by stand-ins that stay valid; `tests/it/table_manners_fixtures.rs` regenerates and compares them.
+  contract repository's `fixtures/rascal/` takes (tasks 11.6 and 12.9): from `rascal serve` and
+  `rascal estimate` through the independent client, never written by hand.
+  `tests/it/table_manners_fixtures.rs` regenerates them under `UPDATE_FIXTURES=1` and otherwise
+  compares them file for file, holding each to the contract as the contract's own
+  `tests/fixtures.rs` does (the schema its name chooses, the contract version, the tool's name,
+  the crate's types, at most six decimals in every dollar amount). Machine values are replaced by
+  stand-ins that stay valid: paths under `/runs`, `/data` and `/work`, one time, session ids, run
+  ids, estimate bindings and configuration identities in their order (the built-in defaults'
+  identity is kept, being the same everywhere), the fake filler's address.
+
+  | file | what it shows |
+  |---|---|
+  | `describe.json` | configured (command fillers, an HTTP filler with its key set, a cap and a budget): every action but `remove_prompt` `ready` |
+  | `describe-unconfigured.json` | no `--config`: the mask-only actions `ready` with no requirements, `remove_prompt` `needs_setup` |
+  | `describe-credential-missing.json`, `-present.json`, `-valid.json`, `-invalid.json` | the HTTP filler's key unset; set (every action `ready`); after a 2xx; after a 401 |
+  | `estimate-allowed.json`, `estimate-refused-cap.json`, `estimate-refused-budget.json` | a paid `seam` call allowed; under its price (`max_spend_usd`); after a paid call left too little budget |
+  | `estimate-refused-readiness.json` | `remove_prompt` without its pack: `worst_case_usd` null |
+  | `estimate-unconfigured.json` | a mask-only call with no file: allowed at 0 under the built-in defaults' identity |
+  | `estimate-cli.json` | `rascal estimate --json`: `session_id` and `session` null |
+  | `run-completed.json`, `run-error-unresolved.json`, `run-invalid.json`, `run-cancelled.json` | a run per status, an unresolved charge among them |
+  | `run-stale-estimate-argument.json`, `-image.json`, `-session.json`, `-expired.json` | `stale_estimate`: another argument, a changed byte of the image, a server restarted under another configuration (for rascal one answer stands for another session and another configuration: a session reads its configuration once), a binding past its `expires` |
+  | `run-cap.json`, `run-budget.json`, `run-credential-rejected.json` | the per-call cap, the session budget, a 401 during the run |
+  | `run-claim-released.json` | the accepted retry under the id a `not_ready` refusal released |
+  | `refusal-not-ready.json` | a call naming the filler whose key is unset, refused before any run |
+  | `refusal-earlier-run.json`, `refusal-no-run.json`, `refusal-cancelled-before-allocation.json` | an id reused after its run ended; ids whose calls were cancelled before allocation, still refused with `run: null` |
+  | `runs.json`, `runs-page-2.json`, `session.json` | the two pages of the runs list and the session |
+- **No provider call.** `tests/it/no_provider_call.rs` proves `describe` and `estimate` make
+  none (table-manners 7): across every configuration state (none, a path naming no file, a file
+  that does not load, a loaded one) and credential state (missing, present, valid, invalid),
+  `describe` (the command line and the tool), `estimate` (the command line and the tool, allowed
+  and refused for the cap, the budget and readiness) and every `not_ready` refusal (the tool's,
+  and `rascal heal`'s exit 64) leave the recording fake HTTP filler with no request, the runs root
+  and the workspace unchanged, and, on the command line, the fake segmenter pack never started
+  (`serve` starts its configured packs when it starts, so its servers are configured without one).
 - **The cross-tool acceptance test, rascal's half.** A squint-shaped finding (a table-manners
   location with squint's `source`, `disposition` and `confidence`) masks exactly what rascal's own
   location does, and a finding on another image is refused
