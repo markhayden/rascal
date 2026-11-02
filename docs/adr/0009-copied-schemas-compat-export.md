@@ -15,9 +15,9 @@ bookkeeping (artifacts, identities, a mask zone) that the shared shape does not 
 recording origin, commit, version, licence and the SHA-256 of each file. The location
 definition embedded in the copied envelope schema is referenced from rascal's own location
 schema by `$ref`, which adds the `line` and `stroke` kinds. Native output follows
-`schemas/rascal/`. `rascal export --compat` projects a native envelope onto the copied
-envelope's fields, dropping native bookkeeping, and fails only on content the copied schema
-cannot express, naming it. A drift harness regenerates every boundary type's schema in tests
+`schemas/rascal/`. `rascal export --compat` (now `rascal compat-export`, note below) projects
+a native envelope onto the copied envelope's fields, dropping native bookkeeping, and fails only
+on content the copied schema cannot express, naming it. A drift harness regenerates every boundary type's schema in tests
 and compares it to the committed file.
 
 ## Alternatives
@@ -41,3 +41,9 @@ shape is shared with a copied schema that has none, in which case it is versione
 id** (the schema's `$id` ends in `-v<N>`, instances carry no version, and the record that
 embeds the instance carries its own). The location is the one such type in v1. The drift
 harness checks both forms and applies the closed and version checks to authored schemas too.
+
+## Note 2026-11-01: the command's name
+
+table-manners v0.4 reserves `rascal export` for the contract's export (CONTRACT 5.1), so the
+compatibility export is now `rascal compat-export` (PLAN.md 10.10, question 9), with no fallback
+under the old name or the old `--compat` flag. The decision above is otherwise unchanged.

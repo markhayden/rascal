@@ -1,7 +1,9 @@
 //! Task 10.5 from the command line: `rascal workspace export-mask`, `import-mask` and
 //! `import-location`. A seam mask made by `rascal run seam` leaves its run directory as a bundle
 //! and enters a fresh workspace with the same identity; a PNG is refused with exit 64 and
-//! nothing imported; a location file registers against a named image (ADR 0022).
+//! nothing imported; a location file registers against a named image (ADR 0022). And task
+//! 10.10's `rascal export --json` and `rascal import --json` (CONTRACT 5.1): the tools' documents
+//! on stdout, exit 0, or 64 with the refusal JSON on stdout.
 #![allow(clippy::unwrap_used)]
 
 use std::path::{Path, PathBuf};
@@ -479,4 +481,203 @@ fn a_mask_whose_image_is_missing_names_it_and_works_once_it_is_imported() {
     assert_eq!(masks.len(), 2, "the imported mask and window's");
     assert_eq!(masks[0]["id"], id.as_str());
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `rascal <args>` with `stdin` piped in and the data home `data`.
+fn piped(args: &[&str], stdin: &str, data: &Path) -> Output {
+    use std::io::Write;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rascal"))
+        .args(args)
+        .env("XDG_DATA_HOME", data)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(stdin.as_bytes())
+        .unwrap();
+    child.wait_with_output().unwrap()
+}
+
+fn document(out: &Output) -> serde_json::Value {
+    serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!(
+            "{e}: {}\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    })
+}
+
+#[test]
+fn export_and_import_json_move_a_mask_between_stores() {
+    let dir = std::fs::canonicalize(scratch("transfer")).unwrap();
+    let data = dir.join("data");
+    let a = dir.join("a");
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    ok(&["run", "seam", s(&pano), "--out", s(&a)]);
+    let store = rascal_core::workspace::Workspace::open(&a).unwrap();
+    let mask = last_mask(&a);
+    let reference = rascal_core::contract::artifact_ref(&store, &mask).unwrap();
+    drop(store);
+    let request = serde_json::json!({ "artifact": reference }).to_string();
+
+    let out = piped(
+        &["export", "--json", "-", "--workspace", s(&a)],
+        &request,
+        &data,
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let exported = document(&out);
+    let path = exported["file"]["path"].as_str().unwrap().to_string();
+    assert!(path.starts_with(s(&data.join("rascal/exports"))), "{path}");
+    let bytes = std::fs::read(&path).unwrap();
+    assert_eq!(
+        exported["file"]["sha256"],
+        rascal_core::contract::file_sha256(&bytes)
+    );
+    // From a file, the same document.
+    let file = dir.join("export.json");
+    std::fs::write(&file, &request).unwrap();
+    let again = rascal_with(&["export", "--json", s(&file), "--workspace", s(&a)], &data);
+    assert_eq!(document(&again), exported);
+
+    // Into a new store: new, then already present, the same reference.
+    let b = dir.join("b");
+    let import = serde_json::json!({ "file": { "path": path } }).to_string();
+    let exports = data.join("rascal/exports");
+    let args = [
+        "import",
+        "--json",
+        "-",
+        "--workspace",
+        s(&b),
+        "--allow-dir",
+        s(&exports),
+    ];
+    let first = piped(&args, &import, &data);
+    assert_eq!(
+        first.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let first = document(&first);
+    assert_eq!(first["already_present"], false);
+    assert_eq!(first["artifact"], exported["artifact"]);
+    let second = document(&piped(&args, &import, &data));
+    assert_eq!(second["already_present"], true);
+    assert_eq!(second["artifact"], exported["artifact"]);
+
+    // Without --allow-dir every path is refused: 64, the refusal on stdout.
+    let refused = piped(
+        &["import", "--json", "-", "--workspace", s(&b)],
+        &import,
+        &data,
+    );
+    assert_eq!(refused.status.code(), Some(64));
+    let refusal = document(&refused);
+    assert_eq!(refusal["reason"], "invalid_arguments");
+    assert_eq!(refusal["error"]["code"], "input");
+
+    // A PNG: 64, the refusal naming what it is, nothing recorded.
+    let before = std::fs::read_to_string(b.join("CURRENT")).unwrap();
+    let png = repo_root().join("fixtures/images/floor.png");
+    let canonical_png = std::fs::canonicalize(&png).unwrap();
+    let out = piped(
+        &[
+            "import",
+            "--json",
+            "-",
+            "--workspace",
+            s(&b),
+            "--allow-dir",
+            s(canonical_png.parent().unwrap()),
+        ],
+        &serde_json::json!({ "file": { "path": s(&canonical_png) } }).to_string(),
+        &data,
+    );
+    assert_eq!(out.status.code(), Some(64));
+    let refusal = document(&out);
+    assert_eq!(refusal["reason"], "invalid_arguments");
+    assert!(
+        refusal["error"]["reason"].as_str().unwrap().contains("PNG"),
+        "{refusal:#}"
+    );
+    assert_eq!(std::fs::read_to_string(b.join("CURRENT")).unwrap(), before);
+
+    // An unresolved export: the binding refusal, 64.
+    let empty = dir.join("empty");
+    let out = piped(
+        &["export", "--json", "-", "--workspace", s(&empty)],
+        &request,
+        &data,
+    );
+    assert_eq!(out.status.code(), Some(64));
+    let refusal = document(&out);
+    assert_eq!(refusal["reason"], "binding");
+    assert_eq!(refusal["bindings"][0]["port"], "artifact");
+    assert_eq!(refusal["bindings"][0]["problem"], "unresolved");
+
+    // A request that is not JSON: 64, a usage refusal.
+    let out = piped(&["export", "--json", "-", "--workspace", s(&a)], "{", &data);
+    assert_eq!(out.status.code(), Some(64));
+    assert_eq!(document(&out)["error"]["code"], "usage");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn import_json_names_the_image_a_location_needs() {
+    let dir = std::fs::canonicalize(scratch("needs-image")).unwrap();
+    let floor = repo_root().join("fixtures/images/floor.png");
+    let digest = rascal_core::contract::file_sha256(&std::fs::read(&floor).unwrap());
+    let location = contract_box(&floor, &digest, [0.1, 0.1, 0.4, 0.5]);
+    let inline = serde_json::json!({ "inline": {
+        "media_type": "application/json",
+        "data": rascal_testkit::fake_pack::base64_encode(location.as_bytes()),
+    }})
+    .to_string();
+    let ws = dir.join("ws");
+    let args = ["import", "--json", "-", "--workspace", s(&ws)];
+    let out = piped(&args, &inline, &dir.join("data"));
+    assert_eq!(out.status.code(), Some(64));
+    let reason = document(&out)["error"]["reason"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(reason.contains(&digest), "{reason}");
+    assert!(
+        reason.contains("pass that image to any action first"),
+        "{reason}"
+    );
+    // Once the store holds the image, the same request records the location.
+    ok(&["workspace", "import", s(&ws), s(&floor)]);
+    let out = piped(&args, &inline, &dir.join("data"));
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let imported = document(&out);
+    assert_eq!(imported["artifact"]["type"], "location");
+    assert_eq!(imported["artifact"]["on"]["file_sha256"], digest.as_str());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+fn rascal_with(args: &[&str], data: &Path) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_rascal"))
+        .args(args)
+        .env("XDG_DATA_HOME", data)
+        .output()
+        .unwrap()
 }

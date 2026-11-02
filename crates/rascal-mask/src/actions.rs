@@ -1,6 +1,7 @@
 //! The contract's tools and run resources for `rascal serve` (table-manners 4, 5 and 10; ADR
-//! 0020): one tool per action of the description plus the reserved `describe` and `estimate`
-//! (the estimate of one exact call, `crate::estimate`), and nothing else. A task (a shipped
+//! 0020): one tool per action of the description plus the reserved `describe`, `estimate` (the
+//! estimate of one exact call, `crate::estimate`) and the controls `export` and `import`
+//! (`crate::transfer`, 5.1), and nothing else. A task (a shipped
 //! recipe) runs as a `run` (or a `heal` when a filler is named) in its own run directory under
 //! the runs root, its images in by path or inline; an operation (a built-in op,
 //! `crate::operations`) runs on the session's store. Either's result is the run's `run.json`;
@@ -1075,6 +1076,8 @@ impl Actions for ContractActions {
             "The worst case one exact call would spend, the per-call cap, whether the limits would allow it now and a binding to send back with the call (table-manners estimate); runs nothing.",
             Arc::new(estimate.as_object().cloned().unwrap_or_default()),
         ));
+        // `export` and `import` are reserved controls (5.1): tools, never actions.
+        tools.extend(crate::transfer::tools());
         let mut empty = Map::new();
         empty.insert("type".into(), Value::String("object".into()));
         tools.push(Tool::new(
@@ -1088,6 +1091,7 @@ impl Actions for ContractActions {
     fn handles(&self, name: &str) -> bool {
         name == "describe"
             || name == "estimate"
+            || crate::transfer::handles(name)
             || recipe_of(name).is_some()
             || self.is_operation(name)
     }
@@ -1110,6 +1114,9 @@ impl Actions for ContractActions {
                 is_error: false,
                 images: Vec::new(),
             });
+        }
+        if crate::transfer::handles(name) {
+            return crate::transfer::call(name, args, &self.store, &self.paths);
         }
         if name == "estimate" {
             // What the input schema rejects is plain invalid params; any other wrong request

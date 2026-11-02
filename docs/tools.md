@@ -145,7 +145,7 @@ rasterized outline), images in `images.in` and `images.out` (previews included),
 and the run resources work as for a task (`docs/contract.md`).
 
 Runs are serial by default; `--concurrency n` lets `n` run at once, each still committing in
-turn; `describe` and `estimate` never wait for the permit. One request is one line of at most
+turn; `describe`, `estimate`, `export` and `import` never wait for the permit. One request is one line of at most
 256 MiB (a longer line is dropped by the transport and gets no answer), so an inline image fits
 any image rascal decodes. Tracing goes to stderr only, never to the protocol stream. The
 testkit's independent client (`crates/rascal-testkit/src/mcp_client.rs`), written against the

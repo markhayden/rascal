@@ -1,6 +1,7 @@
-//! `rascal export --compat <journal.jsonl> --step <id> --out <file>` and
-//! `rascal export --compat --location <l.json> --out <file>`: the projection onto the copied
-//! schemas, validated before it is written.
+//! `rascal compat-export <journal.jsonl> --step <id> --out <file>` and
+//! `rascal compat-export --location <l.json> --out <file>`: the projection onto the copied
+//! schemas (ADR 0009), validated before it is written. (`rascal export` is the contract's,
+//! `crate::transfer`.)
 
 use std::path::{Path, PathBuf};
 
@@ -28,30 +29,28 @@ pub fn run(
     journal: &Option<PathBuf>,
     step: Option<&str>,
     location: &Option<PathBuf>,
-    compat: bool,
     out: &Path,
 ) -> Result<PathBuf> {
-    if !compat {
-        return Err(Error::usage("export: the only form in v1 is --compat"));
-    }
     let schemas = schemas()?;
     let out = outdir::prepare(out, OutKind::File)?;
     let value = match (journal, location) {
         (Some(journal), None) => {
             let step =
-                step.ok_or_else(|| Error::usage("export: give --step <id> with a journal"))?;
+                step.ok_or_else(|| Error::usage("compat-export: give --step <id> with a journal"))?;
             let lines = Journal::read(journal)?;
             let line = lines
                 .iter()
                 .rev()
                 .find(|l| l.step.as_deref() == Some(step))
                 .ok_or_else(|| {
-                    Error::usage(format!("export: no step {step} in {}", journal.display()))
+                    Error::usage(format!(
+                        "compat-export: no step {step} in {}",
+                        journal.display()
+                    ))
                 })?;
-            let envelope = line
-                .envelope
-                .clone()
-                .ok_or_else(|| Error::usage(format!("export: step {step} has no envelope")))?;
+            let envelope = line.envelope.clone().ok_or_else(|| {
+                Error::usage(format!("compat-export: step {step} has no envelope"))
+            })?;
             // The journal's workspace, for the frames an image mapping needs.
             let frames = match journal.parent().and_then(|p| Workspace::open(p).ok()) {
                 Some(ws) => ws.frames()?,
@@ -71,7 +70,7 @@ pub fn run(
         }
         _ => {
             return Err(Error::usage(
-                "export: give a journal with --step, or --location",
+                "compat-export: give a journal with --step, or --location",
             ));
         }
     };

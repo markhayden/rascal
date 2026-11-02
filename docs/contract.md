@@ -108,7 +108,7 @@ workspace-dependent). `serve`'s `tools/list` is exactly the description's action
 `inspect`) and the images profile's four (`disposition`, `confidence` and `evidence` empty,
 `score_kind` `["owlv2-detection"]`). `describe`,
 `estimate`, `export` and `import` are the contract's reserved names, tools and never actions
-(`describe::RESERVED`; `estimate` below; `export` and `import` arrive with task 10.10). The
+(`describe::RESERVED`; `estimate` and the two controls `export` and `import` below). The
 description does not use MCP roots: caller paths are governed by `--allow-dir` (8.5).
 `fixtures/contract/describe.json` pins the document without a configuration. The
 `describe` MCP tool returns the same document (8.5).
@@ -287,20 +287,21 @@ not ready, references that do not bind).
   as `allowed_dirs` (4.6, task 10.2: absolute, resolved, `[]` with none). MCP roots are not used:
   `serve` never sends `roots/list`.
   `rascal_core::paths::PathRule::admit` is the one check, for every caller path `serve` takes:
-  the image slots of tasks and the image ports of operations (`mask` and `protect` are
-  references, task 10.3, never paths). The path must be absolute and its canonical form (every symlink resolved,
+  the image slots of tasks, the image ports of operations and the `import` tool's `file.path`
+  (`mask` and `protect` are references, task 10.3, never paths). The path must be absolute and its canonical form (every symlink resolved,
   the final component included) must exist, be a regular file and lie under an allowed directory
   component by component (`/a/bc` is not under `/a/b`); the file is then read through the canonical path. So a link inside
   pointing out is refused, and a link outside whose target is inside is read (the target is
   what is read). Every failure is one refusal with one text, `<slot>: this path is not readable
   here (only files inside the directories rascal serve allows; CONTRACT 5.2)`, which says
   nothing about whether the file exists or what it is: a run ends `invalid` with code `input`;
-  `estimate` is the `-32602` `invalid_arguments` refusal with code `input`. `serve` never writes at a caller's path: only under its
-  runs root, its workspace and its cache. A check-then-read race (a symlink
+  `estimate` and `import` give the `-32602` `invalid_arguments` refusal with code `input`.
+  `serve` never writes at a caller's path: only under its runs root, its workspace, its cache and
+  its export area. A check-then-read race (a symlink
   swapped between the check and the read) is outside what the rule guards: the caller is on the
   host's own stdio, and the rule exists to keep an agent from naming files such as a key. The
-  rule governs `serve` only: `rascal run`, `heal`, `estimate` and every other command take the
-  person's own paths.
+  rule governs `serve` and `rascal import` (which takes `--allow-dir` the same way, below): `rascal
+  run`, `heal`, `estimate` and every other command take the person's own paths.
 - **Images out.** `return_images` chooses the locator: `path` (the default), `inline`, or
   `resource` (`rascal://run/<id>/images/<role>`). `image_blocks: true` also sends each as an MCP
   image block.
@@ -332,8 +333,8 @@ not ready, references that do not bind).
   exported from the store in memory) and is imported into the run's workspace after the image,
   with its frame chain, so a mask in a `cut:` or `crop:` frame needs no `--workspace` from the run
   that made it; the recipe then runs as before, and a Mask on another image is the run's
-  `invalid`. Until the import tool (task 10.10), `rascal workspace import-mask <store>
-  <bundle>` puts a Mask into the store.
+  `invalid`. The `import` tool (below; task 10.10) puts a Mask into the store, as does
+  `rascal workspace import-mask <store> <bundle>`.
 - **Operations as runs (4.7, task 10.6).** Each built-in op is an MCP tool of its name whose
   input is its `params_schema` plus one property per in-port: an artifact reference, a non-empty
   array of them for a `many` port (`select`'s `plane`), and for an `image` port also an image in
@@ -397,7 +398,7 @@ not ready, references that do not bind).
   allocation, any refusal before a run) releases its id, so the corrected call retries under the
   same id; the release and the claim are one step under the same lock, and a run reference the
   action sent just before it ended reaches the claim first (v0.3, task 12.7). `describe` and
-  `estimate` are not runs and take no id.
+  `estimate`, `export` and `import` are not runs and take no id.
 - **Cancellation.** A call cancelled while it waits for the permit, or before its run is
   allocated (checked again once the permit is held), leaves no run. After allocation,
   `notifications/cancelled` sets the run's flag: the run stops before its next
@@ -405,7 +406,8 @@ not ready, references that do not bind).
   `run.json` as `cancelled` with `stopped_before`, and the call gets no result. A filler call
   already in flight runs to its end (its timeout bounds it).
 - **Reads never wait on a run.** A run holds the call permit (serial by default,
-  `--concurrency n` for more); `describe`, `estimate` and every resource read do not, so they
+  `--concurrency n` for more); `describe`, `estimate`, `export`, `import` and every resource
+  read do not, so they
   answer while a run is under way (task 9.3).
 - **Resources.** `rascal://runs{?cursor}` (the contract's runs list, newest first by start and id,
   50 a page; `next_cursor` is the last entry's run id, null on the last page, and
@@ -556,6 +558,62 @@ that names no estimate is checked against the limits alone.
 are null and the binding is made over a null session id, so no server accepts it; the budget is
 never the refusal (there is no ledger), the cap and readiness still are. It exits 0, or 64 on a
 bad request with the reason on stderr; without `--json` it prints one line.
+
+## Export and import (5.1, task 10.10)
+
+```
+export                                    # the reserved MCP tool: {"artifact": <reference>}
+import                                    # the reserved MCP tool: {"file": {"path"}} or {"inline": {"media_type", "data"}}, "sha256"?
+rascal export --json <request.json | -> [--workspace <store>] [--config rascal.toml]
+rascal import --json <request.json | -> [--workspace <store>] [--config rascal.toml] [--allow-dir <abs>]...
+```
+
+`serve` lists both in `tools/list` (a location and a Mask are portable, 3.3), never in the
+description's `actions`. They are controls, like `estimate`: no run, no `client_run_id`, never
+the call permit, so they answer while a run is under way; their failures are JSON-RPC errors.
+The commands read the same request from the file (or stdin for `-`), answer against
+`--workspace` (else the store `serve` would use for `--config`) and print the same document,
+exit 0; a refusal prints the refusal JSON on stdout (the reason on stderr) and exits 64; a
+failure of rascal's own (the store) exits 3. `crates/rascal-mask/src/transfer.rs` serves both.
+
+- **Export** binds the reference (port `artifact`, `rascal_core::binding`) and writes the
+  artifact's portable form into rascal's export area, `$XDG_DATA_HOME/rascal/exports/` (else
+  `~/.local/share/rascal/exports/`), outside every run directory and every store, at
+  `<identity with : as ->.mask.tar` for a `rascal:Mask` (its bundle, ADR 0022,
+  `application/x-tar`, the same bytes `rascal workspace export-mask` writes) or
+  `<…>.location.json` for a `location` (the contract's location JSON, 9, on the image the
+  reference's `on` names, `application/json`). The answer is the contract's
+  `export-response.json`: the store's reference, and `file` with the absolute path, the SHA-256
+  of the bytes (lowercase hex, no prefix), the size and the media type. The same artifact always
+  gives the same file with the same bytes; one already there with those bytes is left alone, and
+  any other is replaced whole (written beside it, then renamed). Only a location in an image's
+  own frame, on an image file the store can name, has the JSON form (a location in a `crop:` or
+  `cut:` frame is in coordinates no image file has); rascal's `group` (the parts of one shape
+  split at the wrap edge) does not travel.
+- **Import** takes a file by `path` under the path rule (8.5; `rascal import` takes
+  `--allow-dir` the same way, narrowed by `[serve] allow_dirs`, and with none refuses every path)
+  or its bytes `inline` (standard base64, up to `limits.inline_bytes`, 64 MiB). `sha256` (64
+  lowercase hex) is checked against the bytes first. What the file is comes from its content: a
+  tar is a mask bundle, imported through every check of 10.5 whole (`Workspace::import_mask_bytes`);
+  a JSON object is a contract location, checked against the image the store holds under its
+  `image.file_sha256` and recorded in that image's frame; an inline `media_type` that disagrees
+  with the content is refused. The answer is `import-response.json`: the reference of the
+  artifact now in the store and `already_present`, true when the store held the identity and
+  nothing new was recorded (import is idempotent).
+- **Refusals**, each `-32602` with `data` valid against `refusal.json`: a reference the store
+  does not hold, another tool's type, or a version rascal does not read is `binding` (`port:
+  "artifact"`, `unresolved` with the import remedy, `wrong_type`, `wrong_version`). Every other
+  wrong request is `invalid_arguments`, never retryable: code `usage` for the request's shape (an
+  unknown field, a value that is no reference, neither or both of `file` and `inline`, a
+  malformed `sha256` or base64, inline bytes over the limit, a `media_type` the content
+  contradicts), for a `portable: none` type (`rascal:Plan`, `rascal:Series`,
+  `rascal:BandProfile`, named) and for `image`, which travels as a file; code `input` for the
+  bytes (a digest mismatch; a PNG, a JPEG or anything else neither a bundle nor a location,
+  named, since a rendering of a Mask is never the Mask; a bundle 10.5 refuses, with its message;
+  a location on an image the store does not hold, naming the file digest and the remedy: pass
+  that image to any action first; an artifact whose export a bound would refuse) and for a path
+  the rule refuses, whose reason is the rule's one text, the same for a missing file and a path
+  outside the allowed directories. Nothing is recorded or written on a refusal.
 
 ## `rascal playground` (8.7, 9.5)
 

@@ -77,11 +77,11 @@ fn the_independent_client_runs_operations_and_the_cli_reads_the_store() {
             m["name"]
         );
     }
-    // The ops, one tool per shipped recipe, `estimate` and `describe`; no workspace tool and no
-    // name twice (CONTRACT 5).
+    // The ops, one tool per shipped recipe, `estimate`, `describe`, `export` and `import`; no
+    // workspace tool and no name twice (CONTRACT 5).
     assert_eq!(
         names.len(),
-        catalogue.len() + 7 + 2,
+        catalogue.len() + 7 + 4,
         "no other tool: {names:?}"
     );
     assert!(!names.iter().any(|n| n.starts_with("workspace_")));

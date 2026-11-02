@@ -214,7 +214,7 @@ fn tools_list_is_the_descriptions_actions_and_the_reserved_tools() {
     let mut client = start(&dir);
     let described = description(&mut client);
     let mut expected: Vec<String> = described.actions.iter().map(|a| a.name.clone()).collect();
-    expected.extend(["estimate".to_string(), "describe".to_string()]);
+    expected.extend(["estimate", "export", "import", "describe"].map(String::from));
     let tools = client.list_tools().unwrap();
     let names: Vec<String> = tools.iter().map(|t| t.name.clone()).collect();
     assert_eq!(names, expected);

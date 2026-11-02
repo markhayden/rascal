@@ -112,7 +112,7 @@ Each has an ADR. The interview of 2026-10-28 settled them; the reviews refined 5
 8. **Shared contracts by copied schema, exported on request.** `schemas/copied/` holds the
    manifest and envelope schemas unchanged (the location definition is embedded in the envelope
    schema and is referenced from rascal's location schema by `$ref`). Native output follows
-   `schemas/rascal/`. `rascal export --compat` projects a native envelope onto the copied
+   `schemas/rascal/`. `rascal compat-export` projects a native envelope onto the copied
    envelope's fields (native bookkeeping such as `artifacts` is dropped by the projection) and
    fails only on content the copied schema cannot express, naming it. No code dependency.
 9. **Crate names**: the binary crate is `rascal-mask` (command `rascal`); `rascal-core`,
@@ -804,7 +804,13 @@ rascal for a newer bundle, or that an older one is no longer read. An op given a
 whose image the workspace does not hold fails naming the image by file digest and the
 `rascal workspace import <ws> <path>` that fixes it; the same mask id applies once it is in. A location imports from a JSON file, rascal's own or a
 table-manners one, validated against a named image. A commit never rebinds a frame id to another
-identity.
+identity. Through the contract (CONTRACT 5.1, PLAN.md 10.10), the reserved `export` and `import`
+tools and `rascal export --json` / `rascal import --json` wrap the same bundles and the
+contract's location JSON: export binds an artifact reference in the store and writes the file
+into rascal's export area (`$XDG_DATA_HOME/rascal/exports/`, named by the identity, the same
+bytes every time), never at a caller's path; import reads a file under the path rule (or inline
+bytes), checks an optional SHA-256, records it whole or not at all, and answers with the
+reference and `already_present` (`docs/contract.md` "Export and import").
 
 ### The MCP server and client
 
@@ -814,7 +820,7 @@ does not load) and with a pack that does not start (stderr says why and the segm
 requirement reads `invalid`; `serve` starts each pack once for this and serves no pack tool);
 the workspace, the session's store, defaults to the configuration's `[workspace] dir`, else
 `$XDG_DATA_HOME/rascal/workspace`. It serves one MCP tool per action of the table-manners
-description and nothing else but `describe` and `estimate` (CONTRACT 5, PLAN.md 10.6): the
+description and nothing else but `describe`, `estimate`, `export` and `import` (CONTRACT 5, PLAN.md 10.6, 10.10): the
 shipped recipes as tasks and every built-in op as an **operation** of its name, whose input is
 its parameters plus one property per input port, an artifact reference (an array of them for a
 `many` port; an image port also takes an image by path or inline, a location port a location).
@@ -825,11 +831,12 @@ a call that does not bind is the `binding` refusal, `-32602`, no run), its op ru
 so its outputs commit there and bind by reference at once, and its result lists `artifacts.in`
 and `artifacts.out` with a preview of every Mask and location out. There are no op tools with
 rascal's envelope, no `workspace_*` tools and no pack tools (no shims). Runs are serial by
-default; `--concurrency n` allows parallel runs, each still committing in turn; `describe` and
-`estimate` never wait for a run.
+default; `--concurrency n` allows parallel runs, each still committing in turn; `describe`,
+`estimate`, `export` and `import` never wait for a run.
 
 **The path rule** (CONTRACT 5.2, PLAN.md 10.1). `serve` reads a caller's path (a task's image
-slot, an operation's image port; `mask` and `protect` are artifact references, never paths) only
+slot, an operation's image port, the `import` tool's `file.path`; `mask` and `protect` are
+artifact references, never paths) only
 inside the directories the session allows:
 each `--allow-dir` (repeatable; absolute and naming an existing directory, else exit 64 before
 anything is answered) resolved once at start, narrowed by the configuration's `[serve]
@@ -843,9 +850,10 @@ it must exist, be a regular file and lie under an allowed directory component by
 it is read through the canonical path. Every refusal has one text, `<slot>: this path is not readable
 here (only files inside the directories rascal serve allows; CONTRACT 5.2)`, which says nothing
 about whether the file exists or what it is: a run ends `invalid` with code `input`, and
-`estimate` is the `invalid_arguments` refusal with code `input`. `serve` writes only under its runs root, its workspace and its cache, never at a
-caller's path. The rule governs `serve` alone: `rascal run`, `heal`,
-`estimate` and every other command take the person's own paths.
+`estimate` and `import` give the `invalid_arguments` refusal with code `input`. `serve` writes
+only under its runs root, its workspace, its cache and its export area, never at a caller's
+path. The rule governs `serve` and `rascal import` (which takes `--allow-dir` the same way):
+`rascal run`, `heal`, `estimate` and every other command take the person's own paths.
 
 A
 standard MCP client with no knowledge of rascal can list tools, run a recipe's steps one by one
@@ -994,7 +1002,9 @@ hashes. No real photograph is ever committed.
 
 ### Compatibility export
 
-`rascal export --compat` takes a native envelope (from a journal line or an op's output) and
+`rascal compat-export` (named so since M10, task 10.10, which gave `rascal export` to the
+contract's export of a Mask or a location, CONTRACT 5.1; no fallback under the old name or the
+old `--compat` flag) takes a native envelope (from a journal line or an op's output) and
 **projects** it: it keeps `status`, `summary`, `measurements`, `regions`, `images`, `transforms`
 and `provenance`, and drops `artifacts` and every other native field, since that is rascal's
 bookkeeping and not content. It then fails, naming the item, on any content the copied schema
@@ -1075,7 +1085,7 @@ surface; this section is rascal's mapping onto it, built in milestone M8 (PLAN.m
 | `serve`: action tools, `isError` results, progress heartbeat, cancellation, run resources, the runs list, caps and budget | one tool per action and the reserved tools, nothing else (from v0.4, task 10.6) |
 | v0.2: the run's reference in `run.json`, the runs list and progress `_meta`; correlation ids and the `client_run_id_reused` refusal; reserve and settle; not sent, known and unresolved spend; `rascal://runs{?cursor}`; `rascal://session` | M11: the ids persisted at allocation, claimed when a call is accepted; the session a UUID per `serve` |
 | v0.3 (M12): per-action `readiness` and the `not_ready` refusal, `max_spend_usd` above zero on every action, the reserved `estimate` and estimate binding, `cap`, `budget`, `credential` and `stale_estimate`, claims released with no run, renders with `kind` | a configured filler's key is a `credential` requirement, `present` or `missing` by name and `valid` or `invalid` from the session's provider answers; `describe` and `serve` in every configuration state (`--config` the only way to choose one, `serve`'s `--workspace` optional), readiness by local inspection (config, fillers, credentials, programs, the segmenter pack, its model files, the models variable); a call that needs a missing or invalid requirement refused `not_ready` before any run, its `client_run_id` released; a provider's 401 or 403 `credential`, never retryable; the per-call cap `cap`, the session budget `budget`, a `max_spend_usd` above the configured cap `invalid` (`usage`); `dash --serve` URL-only and framed only for `--frame-ancestor`, `dash --document` one self-contained file; the contract's `fixtures/rascal/` generated by rascal's own test, and a test that `describe` and `estimate` make no provider call (tasks 12.1 to 12.9; `docs/contract.md`) |
-| v0.4 (M10, on the milestone branch): `kind` on every action, `vocabulary` the core's object, the reserved `export` and `import`, `allowed_dirs` in the session, the path rule with no MCP roots, `invocation` on every result; the operations profile: `artifact_types`, operations with `group` and `ports`, `artifacts` on every result | `profiles` `images` and `operations`; every recipe action a `task` with no `group`; every built-in op but `segment` (a pack's) an `operation` with its group (`find`, `refine`, `prep`, `out`, `inspect`, from `Op::group`, in `vocabulary.group`), its manifest's ports typed by the contract's names, its parameters and constant sets as `params_schema`, no image or location slot, free, `ready`, no renders; `artifact_types` `location` (`json`), `rascal:Mask` (`bundle`), `rascal:BandProfile`, `rascal:Series`, `rascal:Plan` (`none`), never `image`; `artifacts` on every result, a task's empty until task 10.8; `rascal://session` lists the resolved `--allow-dir` set (`[]` with none); every result's `invocation` is the call resolved (defaults applied, the projection named, images by reference with no locator, delivery left out, `effective` the estimate's object from one function, requirements by name), null only on an `invalid` run whose arguments did not resolve, and a command-line run's is the matching action's arguments (task 10.2); artifact references (type, schema version 1, tool, identity, the frame's identity, `on`, resource; never a workspace id) resolved by identity in `serve`'s workspace, the session's store, and the `binding` refusal (`wrong_type`, `wrong_version`, `unresolved` with a remedy; `-32602`, no run, the id released) before any run: `mask` and `protect` take a `rascal:Mask` reference, whose bundle the run imports with its frame chain (task 10.3); every operation an MCP tool whose input is its parameters plus its ports, each call a run on the store with the binding refusal before it (`wrong_frame` from `Op::check_frames`, `index` within a `many` port), `artifacts.in` and `artifacts.out` with a preview of every Mask and location out (also in `images.out`), the op's envelope as `body`, the op tools, pack tools and `workspace_*` tools gone (task 10.6; export and import, `rascal call` follow in M10) |
+| v0.4 (M10, on the milestone branch): `kind` on every action, `vocabulary` the core's object, the reserved `export` and `import`, `allowed_dirs` in the session, the path rule with no MCP roots, `invocation` on every result; the operations profile: `artifact_types`, operations with `group` and `ports`, `artifacts` on every result | `profiles` `images` and `operations`; every recipe action a `task` with no `group`; every built-in op but `segment` (a pack's) an `operation` with its group (`find`, `refine`, `prep`, `out`, `inspect`, from `Op::group`, in `vocabulary.group`), its manifest's ports typed by the contract's names, its parameters and constant sets as `params_schema`, no image or location slot, free, `ready`, no renders; `artifact_types` `location` (`json`), `rascal:Mask` (`bundle`), `rascal:BandProfile`, `rascal:Series`, `rascal:Plan` (`none`), never `image`; `artifacts` on every result, a task's empty until task 10.8; `rascal://session` lists the resolved `--allow-dir` set (`[]` with none); every result's `invocation` is the call resolved (defaults applied, the projection named, images by reference with no locator, delivery left out, `effective` the estimate's object from one function, requirements by name), null only on an `invalid` run whose arguments did not resolve, and a command-line run's is the matching action's arguments (task 10.2); artifact references (type, schema version 1, tool, identity, the frame's identity, `on`, resource; never a workspace id) resolved by identity in `serve`'s workspace, the session's store, and the `binding` refusal (`wrong_type`, `wrong_version`, `unresolved` with a remedy; `-32602`, no run, the id released) before any run: `mask` and `protect` take a `rascal:Mask` reference, whose bundle the run imports with its frame chain (task 10.3); every operation an MCP tool whose input is its parameters plus its ports, each call a run on the store with the binding refusal before it (`wrong_frame` from `Op::check_frames`, `index` within a `many` port), `artifacts.in` and `artifacts.out` with a preview of every Mask and location out (also in `images.out`), the op's envelope as `body`, the op tools, pack tools and `workspace_*` tools gone (task 10.6); the reserved `export` and `import` controls and `rascal export --json` / `rascal import --json` over the mask bundles and location JSON, export into rascal's export area by identity, import under the path rule and idempotent, refusals `binding` and `invalid_arguments` (task 10.10; `rascal call` follows in M10) |
 | exit codes 0, 3, 64, 130, 143; 1 under `--strict` | as before, plus the signals |
 | `playground` | hands off to Wafflery, the shared program (its launcher agreement, H1); no UI in rascal |
 
@@ -1136,7 +1146,9 @@ rascal inspect run/artifacts/<id> --out inspect/ [--replay] [--json]   # --json:
 rascal ops list [--json]                                   # every op's manifest as a client sees it
 rascal ops describe fan --json
 rascal dash run/ --out run/dash.html                        # the run page (Diagnostics); --document, --serve
-rascal export --compat run/journal.jsonl --step fan --out fan-envelope.json
+rascal compat-export run/journal.jsonl --step fan --out fan-envelope.json
+echo '{"artifact": <a Mask reference>}' | rascal export --json - --workspace ws/   # the bundle into rascal's data directory; prints its path and sha256
+echo '{"file": {"path": "/abs/in/seam.mask.tar"}}' | rascal import --json - --workspace ws2/ --allow-dir "$PWD/in"   # prints the reference and already_present
 rascal serve --workspace ws/ --config rascal.toml --allow-dir "$PWD/in"   # callers' paths only inside in/
 rascal workspace list ws/ [--type Mask]
 rascal workspace repair ws/
@@ -1162,7 +1174,7 @@ installation fails (`docs/contract.md`). A bad parameter (`invalid_args`) is a u
 error, 64, with or without `--strict`. Every `run` and `heal` whose run directory was new or
 empty writes `run.json` there, last and atomically, whatever the outcome (`docs/contract.md`). Three kinds of `--out`: a **run directory** (`run`,
 `heal`, `inspect --out`, `dash --out <dir>`) must be new or empty, else usage error 64; a
-**file destination** (`render`, `put`, `paste`, `export`, `workspace export-mask`, `dash --out <file>`) is written over an
+**file destination** (`render`, `put`, `paste`, `compat-export`, `workspace export-mask`, `dash --out <file>`) is written over an
 existing file, as `cp` would; a **lab directory** (`lab run --out`) is resumable: it must be new
 or hold a lab of the same matrix name, and anything else is usage error 64.
 
