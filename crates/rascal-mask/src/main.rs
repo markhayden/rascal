@@ -8,7 +8,9 @@ mod heal;
 mod inspect;
 mod lab_run;
 use rascal_mask::lab;
+use rascal_mask::readiness::{self, Setup};
 mod actions;
+mod estimate;
 mod measure;
 mod ops;
 mod packs;
@@ -147,10 +149,12 @@ enum Command {
     },
     /// The MCP server over stdio: every op as a tool over a workspace (SPEC "The MCP server").
     Serve {
-        /// The workspace the tools read and write.
+        /// The workspace the op tools read and write; the configuration's `[workspace] dir`,
+        /// else `$XDG_DATA_HOME/rascal/workspace`, by default.
         #[arg(long)]
-        workspace: PathBuf,
-        /// The configuration file (rascal.toml); checked, and used by later milestones' tools.
+        workspace: Option<PathBuf>,
+        /// The configuration file (rascal.toml): its fillers and packs. Without one, or with
+        /// one that does not load, the server still starts and its actions say what is missing.
         #[arg(long)]
         config: Option<PathBuf>,
         /// Calls that may run at once; each still commits in turn.
@@ -193,9 +197,24 @@ enum Command {
         /// Print the document as JSON (the contract's form); without it, one line per action.
         #[arg(long)]
         json: bool,
-        /// The configuration file (rascal.toml): its fillers name the spend and the keys.
+        /// The configuration file (rascal.toml): its fillers name the spend and the keys. A
+        /// file that is missing or does not load is described as such; describe never fails on it.
         #[arg(long)]
         config: Option<PathBuf>,
+    },
+    /// The estimate of one call (table-manners 4.5): what it would reserve, the per-call cap,
+    /// whether the cap and readiness allow it and its binding, with no session (so no server
+    /// accepts the binding). Runs nothing; exit 0, or 64 on a bad request.
+    Estimate {
+        /// Print the estimate as JSON (the contract's form); without it, one line.
+        #[arg(long)]
+        json: bool,
+        /// The configuration file (rascal.toml) the call would run under.
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// The request, `{"action": <name>, "arguments": {…}}` with exactly the call's
+        /// arguments, as a JSON file, or `-` for stdin.
+        request: PathBuf,
     },
     /// Open Wafflery, the shared program over the waffle tools (separate; rascal carries no
     /// UI): runs `wafflery --tool rascal` and keeps its exit code; 69 when it is not
@@ -236,17 +255,26 @@ enum Command {
         #[arg(required_unless_present = "panels")]
         root: Option<PathBuf>,
         /// Write the page here (overwritten).
-        #[arg(long, conflicts_with = "serve")]
+        #[arg(long, conflicts_with_all = ["serve", "document"])]
         out: Option<PathBuf>,
         /// List the registered panels, one per line, and exit.
-        #[arg(long, conflicts_with_all = ["out", "serve"])]
+        #[arg(long, conflicts_with_all = ["out", "serve", "document"])]
         panels: bool,
-        /// Serve the page on loopback and print the URL; each request rebuilds it.
+        /// The document render: write the page as one self-contained file under
+        /// `$XDG_CACHE_HOME/rascal/dash/`, outside the run, and print its absolute path.
+        #[arg(long, conflicts_with = "serve")]
+        document: bool,
+        /// The server render: serve the page on loopback, print the URL as the only stdout line,
+        /// and serve until stdin ends or SIGTERM (exit 0); each request rebuilds the page.
         #[arg(long)]
         serve: bool,
         /// The loopback port for --serve (0 picks a free one).
         #[arg(long, default_value_t = 0)]
         port: u16,
+        /// The one origin allowed to frame the page served by --serve (`http://` or `https://`,
+        /// a host, an optional port); without it, no page may frame it.
+        #[arg(long)]
+        frame_ancestor: Option<String>,
     },
     /// Project a native envelope or a location onto the copied schemas (ADR 0009).
     Export {
@@ -657,6 +685,12 @@ fn main() {
                 sets: set,
                 cancel: None,
             };
+            if args.replay.is_none()
+                && let Err(error) = ready_for(&args.recipe, args.config.as_deref(), None)
+            {
+                eprintln!("rascal run: {error}");
+                std::process::exit(exit::code_for(&error));
+            }
             let pending = run_json::begin(run_json::pending_for(&args, None));
             run_json::watch_signals();
             let result = run::run(&args);
@@ -753,6 +787,16 @@ fn main() {
                 replay,
                 cache: None,
             };
+            if args.replay.is_none()
+                && let Err(error) = ready_for(
+                    &args.run.recipe,
+                    args.run.config.as_deref(),
+                    Some(&args.filler),
+                )
+            {
+                eprintln!("rascal heal: {error}");
+                std::process::exit(exit::code_for(&error));
+            }
             let pending = run_json::begin(run_json::pending_for(&args.run, Some(&args.filler)));
             run_json::watch_signals();
             let result = heal::heal(&args);
@@ -970,6 +1014,18 @@ fn main() {
                 exit::code_for(&error)
             }
         },
+        Command::Estimate {
+            json,
+            config,
+            request,
+        } => match estimate_cmd(json, config.as_deref(), &request) {
+            Ok(()) => exit::OK,
+            Err(error) => {
+                eprintln!("rascal estimate: {error}");
+                // Every failure is the request's: an estimate reads nothing else that can fail.
+                exit::USAGE
+            }
+        },
         Command::Inspect {
             mask,
             json,
@@ -1023,22 +1079,34 @@ fn main() {
         Command::Dash {
             root,
             out,
+            document,
             serve,
             port,
+            frame_ancestor,
             panels,
         } => {
-            let result = match (root, out, serve) {
+            let result = match (root, out, document, serve) {
+                _ if frame_ancestor.is_some() && !serve => Err(Error::usage(
+                    "dash: --frame-ancestor belongs to --serve, the render a host frames",
+                )),
                 _ if panels => {
                     for name in dash::panels().names() {
                         println!("{name}");
                     }
                     Ok(())
                 }
-                (Some(root), Some(out), _) => {
+                (Some(root), Some(out), _, _) => {
                     dash::write(&root, &out).map(|p| println!("{}", p.display()))
                 }
-                (Some(root), None, true) => dash::serve(&root, port),
-                _ => Err(Error::usage("dash: give --out <file> or --serve")),
+                (Some(root), None, true, _) => {
+                    dash::document(&root).map(|p| println!("{}", p.display()))
+                }
+                (Some(root), None, false, true) => {
+                    dash::serve(&root, port, frame_ancestor.as_deref())
+                }
+                _ => Err(Error::usage(
+                    "dash: give --out <file>, --document or --serve",
+                )),
             };
             match result {
                 Ok(()) => exit::OK,
@@ -1212,9 +1280,15 @@ fn main() {
 }
 
 /// `rascal describe`: the contract's description document, as JSON or one line per action.
+/// It never fails on the configuration (table-manners 3.1): each action's readiness says what is
+/// missing.
 fn describe_cmd(json: bool, config: Option<&std::path::Path>) -> rascal_core::error::Result<()> {
-    let config = config.map(rascal_core::config::Config::read).transpose()?;
-    let description = rascal_mask::describe::description(config.as_ref())?;
+    let state = rascal_core::config::ConfigState::read(config);
+    let description = rascal_mask::describe::description(&Setup {
+        config: &state,
+        answers: &Default::default(),
+        failed_packs: &Default::default(),
+    })?;
     if json {
         let text = serde_json::to_string_pretty(&description)
             .map_err(|e| rascal_core::Error::usage(format!("description: {e}")))?;
@@ -1226,7 +1300,107 @@ fn describe_cmd(json: bool, config: Option<&std::path::Path>) -> rascal_core::er
         description.tool.name, description.tool.version, description.contract
     );
     for action in &description.actions {
-        println!("{:<14} {}", action.name, action.title);
+        let ready = match action.readiness.state {
+            rascal_core::contract::table_manners::ReadinessState::Ready => String::new(),
+            _ => format!(
+                " (needs setup: {})",
+                readiness::summary(
+                    &action
+                        .readiness
+                        .requirements
+                        .iter()
+                        .filter(|r| readiness::unmet(r))
+                        .cloned()
+                        .collect::<Vec<_>>()
+                )
+            ),
+        };
+        println!("{:<14} {}{ready}", action.name, action.title);
     }
     Ok(())
+}
+
+/// `rascal estimate [--json] [--config <path>] <request.json | ->` (table-manners 4.5): the
+/// estimate with no session.
+fn estimate_cmd(
+    json: bool,
+    config: Option<&std::path::Path>,
+    request: &std::path::Path,
+) -> rascal_core::error::Result<()> {
+    let text = if request == std::path::Path::new("-") {
+        let mut text = String::new();
+        std::io::Read::read_to_string(&mut std::io::stdin(), &mut text)
+            .map_err(|e| Error::io("<stdin>", e))?;
+        text
+    } else {
+        std::fs::read_to_string(request).map_err(|e| Error::io(request, e))?
+    };
+    let request: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| Error::usage(format!("the request is not JSON: {e}")))?;
+    let state = rascal_core::config::ConfigState::read(config);
+    let estimate = estimate::without_session(&state, &request)?;
+    if json {
+        let text = serde_json::to_string_pretty(&estimate)
+            .map_err(|e| Error::usage(format!("estimate: {e}")))?;
+        println!("{text}");
+        return Ok(());
+    }
+    let amount = |usd: Option<f64>| usd.map_or("none".to_string(), |u| format!("{u:.4} USD"));
+    let verdict = match estimate.refused {
+        None => "allowed".to_string(),
+        Some(refused) => format!(
+            "refused ({})",
+            serde_json::to_value(refused)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_string))
+                .unwrap_or_default()
+        ),
+    };
+    println!(
+        "{}: {verdict}, worst case {}, cap {}, binding {} (no session; expires {})",
+        estimate.action,
+        amount(estimate.worst_case_usd),
+        amount(estimate.cap_usd),
+        estimate.binding,
+        estimate.expires
+    );
+    Ok(())
+}
+
+/// The command line's readiness check for `run` and `heal` (table-manners 3.1): the same check
+/// `serve` makes, before the run directory exists. A call that needs a missing or invalid
+/// requirement is a usage error naming them. Under `--replay` the check is not made: a replay
+/// answers from a recorded run, so whether it needs the pack or the filler is known only as it
+/// runs.
+fn ready_for(
+    recipe: &str,
+    config: Option<&std::path::Path>,
+    filler: Option<&str>,
+) -> rascal_core::error::Result<()> {
+    let state = rascal_core::config::ConfigState::read(config);
+    let action = rascal_mask::describe::action_name(recipe);
+    let readiness = readiness::for_call(
+        &Setup {
+            config: &state,
+            answers: &Default::default(),
+            failed_packs: &Default::default(),
+        },
+        &action,
+        filler.map_or(readiness::Use::MaskOnly, readiness::Use::Filler),
+    );
+    let unmet: Vec<_> = readiness
+        .requirements
+        .iter()
+        .filter(|r| readiness::unmet(r))
+        .cloned()
+        .collect();
+    if unmet.is_empty() {
+        return Ok(());
+    }
+    let setups: Vec<String> = unmet.iter().filter_map(|r| r.setup.clone()).collect();
+    Err(rascal_core::Error::usage(format!(
+        "not ready: {}. {}",
+        readiness::summary(&unmet),
+        setups.join(" ")
+    )))
 }

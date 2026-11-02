@@ -1,13 +1,19 @@
-//! `rascal dash <run or workspace> [--out page.html | --serve]`: the run page, built from the
-//! journal and the operation records and nothing else (SPEC.md "Diagnostics"). It names every
-//! journal line (steps, repeated steps, `not_applicable` and failed invocations, notes, filler
-//! and pack calls) and nothing else, embeds every artifact the journal names as a `data:` URI,
-//! and says when the journal was rebuilt by repair.
+//! `rascal dash <run or workspace> [--out page.html | --document | --serve]`: the run page,
+//! built from the journal and the operation records and nothing else (SPEC.md "Diagnostics").
+//! It names every journal line (steps, repeated steps, `not_applicable` and failed invocations,
+//! notes, filler and pack calls) and nothing else, embeds every artifact the journal names as a
+//! `data:` URI, and says when the journal was rebuilt by repair.
+//!
+//! `--document` and `--serve` are the description's two renders (table-manners 3.2): a render
+//! opens the run read-only and never changes a byte of it.
 
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+
+use sha2::{Digest, Sha256};
 
 use rascal_core::Error;
 use rascal_core::artifact::Artifact;
@@ -355,9 +361,9 @@ fn status_name(status: Status) -> String {
         .to_string()
 }
 
-/// Builds the page for a run directory or workspace.
+/// Builds the page for a run directory or workspace, reading it and writing nothing there.
 pub fn build(root: &Path) -> Result<String> {
-    let ws = Workspace::open(root)?;
+    let ws = Workspace::open_read_only(root)?;
     let lines = match Journal::read(&ws.journal_path()) {
         Ok(lines) => lines,
         Err(Error::Io { source, .. }) if source.kind() == std::io::ErrorKind::NotFound => {
@@ -475,13 +481,177 @@ pub fn write(root: &Path, out: &Path) -> Result<PathBuf> {
     Ok(out)
 }
 
-/// Serves the page on loopback only, printing the URL, until the process ends. Each request
-/// rebuilds the page, so a running workspace can be watched.
-pub fn serve(root: &Path, port: u16) -> Result<()> {
+/// The document render (3.2): the page as one self-contained file at
+/// `$XDG_CACHE_HOME/rascal/dash/<run id>.html` (else `~/.cache/…`), outside the run directory,
+/// written whole (a temporary name, then a rename). Returns its absolute path.
+pub fn document(root: &Path) -> Result<PathBuf> {
+    let html = build(root)?;
+    let run = root.canonicalize().map_err(|e| Error::io(root, e))?;
+    let dir = cache_root()?.join("rascal").join("dash");
+    if resolved(&dir).starts_with(&run) {
+        return Err(Error::usage(format!(
+            "dash: the document's directory {} is inside the run directory; a render never writes there",
+            dir.display()
+        )));
+    }
+    std::fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
+    let id = run_id(&run);
+    let path = dir.join(format!("{id}.html"));
+    let tmp = dir.join(format!(".{id}.html.{}.tmp", std::process::id()));
+    std::fs::write(&tmp, html).map_err(|e| Error::io(&tmp, e))?;
+    std::fs::rename(&tmp, &path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        Error::io(&path, e)
+    })?;
+    Ok(path)
+}
+
+/// `$XDG_CACHE_HOME` when it is absolute (the XDG rule: a relative value is ignored), else
+/// `$HOME/.cache`.
+fn cache_root() -> Result<PathBuf> {
+    std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .filter(|p| p.is_absolute())
+                .map(|home| home.join(".cache"))
+        })
+        .ok_or_else(|| {
+            Error::usage("dash: no cache directory (set XDG_CACHE_HOME or HOME) for --document")
+        })
+}
+
+/// A path with its longest existing prefix resolved through symlinks, so it compares with a
+/// canonical path even before the rest of it exists.
+fn resolved(path: &Path) -> PathBuf {
+    let mut rest = Vec::new();
+    let mut head = path.to_path_buf();
+    loop {
+        if let Ok(real) = head.canonicalize() {
+            return rest.iter().rev().fold(real, |p, c| p.join(c));
+        }
+        match (head.file_name().map(|n| n.to_os_string()), head.parent()) {
+            (Some(name), Some(parent)) => {
+                rest.push(name);
+                head = parent.to_path_buf();
+            }
+            _ => return path.to_path_buf(),
+        }
+    }
+}
+
+/// The document's name: the run's id from its `run.json` (`run.id`) when it is a plain file
+/// name, else (a workspace, or a run directory without one) a digest of the directory's path.
+fn run_id(run: &Path) -> String {
+    let id = std::fs::read_to_string(run.join("run.json"))
+        .ok()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .and_then(|value| value.get("run")?.get("id")?.as_str().map(str::to_string))
+        .filter(|id| {
+            !id.is_empty()
+                && !id.starts_with('.')
+                && id
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        });
+    id.unwrap_or_else(|| {
+        let digest = Sha256::digest(run.as_os_str().as_encoded_bytes());
+        let hex: String = digest.iter().take(8).map(|b| format!("{b:02x}")).collect();
+        format!("dir-{hex}")
+    })
+}
+
+/// Checks a `--frame-ancestor` origin: `http://` or `https://`, a host and an optional port,
+/// nothing else (no path, query, user or space), so it is exactly one CSP source.
+fn origin(text: &str) -> std::result::Result<String, String> {
+    let bad = || {
+        format!("{text:?} is not an origin: give http:// or https://, a host and an optional port")
+    };
+    let authority = text
+        .strip_prefix("http://")
+        .or_else(|| text.strip_prefix("https://"))
+        .ok_or_else(bad)?;
+    let (host, port) = match authority.split_once(':') {
+        Some((host, port)) => (host, Some(port)),
+        None => (authority, None),
+    };
+    let host_ok = !host.is_empty()
+        && !host.starts_with(['.', '-'])
+        && !host.ends_with(['.', '-'])
+        && host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'));
+    let port_ok = port.is_none_or(|p| {
+        !p.is_empty()
+            && p.chars().all(|c| c.is_ascii_digit())
+            && p.parse::<u16>().is_ok_and(|n| n > 0)
+    });
+    if host_ok && port_ok {
+        Ok(text.to_string())
+    } else {
+        Err(bad())
+    }
+}
+
+/// The server render (3.2): serves the page on loopback only and prints its URL as the one
+/// line of stdout once listening, then serves until stdin reaches its end or SIGTERM arrives,
+/// and returns (exit 0). Each request rebuilds the page, so a running workspace can be watched.
+/// Every response carries `Content-Security-Policy: frame-ancestors <origin>` for the origin
+/// given, else `frame-ancestors 'none'`.
+pub fn serve(root: &Path, port: u16, frame_ancestor: Option<&str>) -> Result<()> {
+    let policy = match frame_ancestor {
+        Some(text) => format!(
+            "frame-ancestors {}",
+            origin(text).map_err(|e| Error::usage(format!("dash: --frame-ancestor {e}")))?
+        ),
+        None => "frame-ancestors 'none'".to_string(),
+    };
+    // A render opens the run read-only; a path that is not one fails here, before listening.
+    Workspace::open_read_only(root)?;
+    let (stop, stopped) = mpsc::channel::<()>();
+    // Registered before the URL is printed, so a host that signals right after reading it is
+    // still a clean exit.
+    watch_sigterm(stop.clone())?;
     let listener = TcpListener::bind(("127.0.0.1", port)).map_err(|e| Error::io(root, e))?;
     let addr = listener.local_addr().map_err(|e| Error::io(root, e))?;
-    println!("http://{addr}/");
-    let _ = std::io::stdout().flush();
+    {
+        let mut stdout = std::io::stdout().lock();
+        writeln!(stdout, "http://{addr}/").map_err(|e| Error::io(root, e))?;
+        stdout.flush().map_err(|e| Error::io(root, e))?;
+    }
+    // The host owns the process through its stdin: its end, however it comes, stops the page.
+    std::thread::spawn(move || {
+        let _ = std::io::copy(&mut std::io::stdin().lock(), &mut std::io::sink());
+        let _ = stop.send(());
+    });
+    let root = root.to_path_buf();
+    std::thread::spawn(move || accept(&listener, &root, &policy));
+    let _ = stopped.recv();
+    Ok(())
+}
+
+/// Sends on `stop` when the process receives SIGTERM.
+fn watch_sigterm(stop: mpsc::Sender<()>) -> Result<()> {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .build()
+        .map_err(|e| Error::op("dash", format!("the signal watcher: {e}")))?;
+    let mut term = {
+        let _entered = runtime.enter();
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .map_err(|e| Error::op("dash", format!("the signal watcher: {e}")))?
+    };
+    std::thread::spawn(move || {
+        runtime.block_on(term.recv());
+        let _ = stop.send(());
+    });
+    Ok(())
+}
+
+/// Answers one connection at a time with the page, until the process ends.
+fn accept(listener: &TcpListener, root: &Path, policy: &str) {
     for stream in listener.incoming() {
         let mut stream = match stream {
             Ok(s) => s,
@@ -504,13 +674,12 @@ pub fn serve(root: &Path, port: u16) -> Result<()> {
         };
         let _ = write!(
             stream,
-            "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Security-Policy: {policy}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
             body.len()
         );
         let _ = stream.write_all(body.as_bytes());
         let _ = stream.shutdown(std::net::Shutdown::Write);
     }
-    Ok(())
 }
 
 /// Reads until the blank line that ends an HTTP request head; false on EOF, an error or a head

@@ -1,5 +1,6 @@
 //! The contract's action tools and run resources for `rascal serve` (table-manners 4, 5 and
-//! 10; ADR 0020): one tool per shipped recipe plus `describe`, each a `run` (or a `heal` when a
+//! 10; ADR 0020): one tool per shipped recipe plus the reserved `describe` and `estimate` (the
+//! estimate of one exact call, `crate::estimate`), each action a `run` (or a `heal` when a
 //! filler is named) in its own run directory under the runs root, its images in by path or
 //! inline, its result the run's `run.json`; and the runs as resources.
 
@@ -8,32 +9,47 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use rascal_core::Error;
-use rascal_core::config::Config;
-use rascal_core::contract::table_manners::images::{ImageReference, Locator};
+use std::collections::BTreeMap;
+
+use rascal_core::config::{Config, ConfigState};
+use rascal_core::contract::table_manners::images::Locator;
 use rascal_core::contract::table_manners::{
-    RunState, RunSummary, RunsList, Session as TmSession, Tool as TmTool,
+    ErrorCode, Readiness, Refusal, RefusalReason, Requirement, RunState, RunSummary, RunsList,
+    Session as TmSession, Tool as TmTool,
 };
 use rascal_core::workspace::Cancel;
 use rascal_mcp::server::{
-    ActionResult, Actions, McpResource as Resource, McpResourceTemplate as ResourceTemplate,
-    McpTool as Tool, Progress, ResourceBody,
+    ActionResult, Actions, CallError, CallMeta, McpResource as Resource,
+    McpResourceTemplate as ResourceTemplate, McpTool as Tool, Progress, ResourceBody,
 };
 use serde_json::{Map, Value, json};
 
 use crate::run_json::{self, Ended, usd};
-use crate::{heal, run};
-use rascal_mask::describe::{self, INLINE_BYTES, recipe_of};
-use rascal_mask::filler::Spent;
+use crate::{estimate, heal, run};
+use rascal_mask::describe::{self, recipe_of};
+use rascal_mask::filler::{CALL_PREFIX, FillerCall, Spent};
+use rascal_mask::readiness::{self, Answer, Answers, Setup, Use};
 
 /// The contract's actions over the shipped recipes, with runs under `runs`.
 pub struct ContractActions {
+    /// The configuration file, when it loaded (runs read it again by path).
     pub config_path: Option<PathBuf>,
+    /// The loaded configuration, `config_state`'s when the file loaded.
     pub config: Option<Config>,
+    /// The configuration as read once at start, in whatever state (table-manners 3.1, 4.6).
+    pub config_state: ConfigState,
+    /// The packs that did not start, with the reason: their requirement reads `invalid`.
+    pub failed_packs: BTreeMap<String, String>,
+    /// What providers said about each credential in this session, by variable name: a fresh
+    /// session has none, so a key reads `present` until a real call settles it (3.1).
+    pub answers: std::sync::Mutex<Answers>,
     pub runs: PathBuf,
     /// What this server process has spent and holds for calls under way (table-manners 4.5).
     pub ledger: std::sync::Mutex<Ledger>,
     /// The serving session the ledger belongs to (table-manners 4.6).
     pub session: Session,
+    /// The estimates this session issued, for the calls that name them (table-manners 4.5).
+    pub issued: std::sync::Mutex<estimate::Issued>,
 }
 
 /// A serving session: one process's ledger, named by a random UUID (v4) when `serve` starts.
@@ -80,6 +96,7 @@ impl Reservation<'_> {
         let spent = spent.unwrap_or(Spent {
             usd: self.usd,
             unresolved_usd: self.usd,
+            measured: false,
         });
         self.apply(spent);
     }
@@ -100,18 +117,23 @@ impl Drop for Reservation<'_> {
             self.apply(Spent {
                 usd,
                 unresolved_usd: usd,
+                measured: false,
             });
         }
     }
 }
 
-/// The default runs root: `$XDG_DATA_HOME/rascal/runs`, else `~/.local/share/rascal/runs`.
-pub fn default_runs_root() -> PathBuf {
+/// The data home: `$XDG_DATA_HOME`, else `~/.local/share`.
+pub fn data_home() -> PathBuf {
     std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("rascal/runs")
+}
+
+/// The default runs root: `$XDG_DATA_HOME/rascal/runs`, else `~/.local/share/rascal/runs`.
+pub fn default_runs_root() -> PathBuf {
+    data_home().join("rascal/runs")
 }
 
 /// How many runs a page of `rascal://runs` holds (table-manners 4.3).
@@ -158,8 +180,74 @@ fn image_in_schema(description: &str) -> Value {
 
 impl ContractActions {
     fn description(&self) -> rascal_core::error::Result<Value> {
-        let d = describe::description(self.config.as_ref())?;
+        let d = self.with_setup(describe::description)?;
         serde_json::to_value(&d).map_err(|e| Error::usage(format!("description: {e}")))
+    }
+
+    /// Runs `f` with what readiness inspects in this session (the answers as they stand).
+    fn with_setup<R>(&self, f: impl FnOnce(&Setup<'_>) -> R) -> R {
+        let answers = self
+            .answers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        f(&Setup {
+            config: &self.config_state,
+            answers: &answers,
+            failed_packs: &self.failed_packs,
+        })
+    }
+
+    /// Keeps what providers said about credentials in a run that ended (3.1): from its filler
+    /// call records, a 2xx makes the filler's key `valid` and a 401 or 403 `invalid`; any other
+    /// answer, or a cache hit (no call), leaves it as it was.
+    fn learn(&self, result: &Value) {
+        let Some(config) = &self.config else {
+            return;
+        };
+        let Some(dir) = result.pointer("/run/dir").and_then(|d| d.as_str()) else {
+            return;
+        };
+        let Ok(lines) = rascal_core::journal::Journal::read(&Path::new(dir).join("journal.jsonl"))
+        else {
+            return;
+        };
+        let mut answers = self.answers.lock().unwrap_or_else(|e| e.into_inner());
+        for note in lines.iter().filter_map(|l| l.note.as_deref()) {
+            let Some(call) = note
+                .strip_prefix(CALL_PREFIX)
+                .and_then(|json| serde_json::from_str::<FillerCall>(json).ok())
+            else {
+                continue;
+            };
+            let Some(var) = config
+                .fillers
+                .get(&call.filler)
+                .and_then(|f| f.key_env.clone())
+            else {
+                continue;
+            };
+            match call.status {
+                200..=299 => {
+                    answers.insert(var, Answer::Valid);
+                }
+                401 | 403 => {
+                    answers.insert(var, Answer::Invalid);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Refuses a call that needs a requirement that is missing or invalid, before any run
+    /// (table-manners 3.1): the call's own readiness, for the filler its arguments name.
+    fn ready_for(&self, action: &str, args: &Map<String, Value>) -> Result<(), CallError> {
+        let filler = match args.get("filler").and_then(|v| v.as_str()) {
+            Some(name) => Use::Filler(name),
+            None => Use::MaskOnly,
+        };
+        let readiness = self.with_setup(|setup| readiness::for_call(setup, action, filler));
+        not_ready(action, &readiness).map_or(Ok(()), Err)
     }
 
     fn input_schema(action: &Value) -> Map<String, Value> {
@@ -205,70 +293,28 @@ impl ContractActions {
             "image_blocks".into(),
             json!({ "type": "boolean", "description": "Also send each returned image as an MCP image block." }),
         );
-        properties.insert(
-            "max_spend_usd".into(),
-            json!({ "type": "number", "minimum": 0, "description": "Lower the per-call spend cap for this call." }),
-        );
         schema.insert("properties".into(), Value::Object(properties));
         schema.insert("required".into(), Value::Array(required));
         schema
     }
 
     /// The image slot as a file the run can take: a path checked, or inline bytes written into
-    /// the run's input directory; the `expect` reference verified.
+    /// the run's input directory; the `expect` reference verified (`estimate::image_in`, as an
+    /// estimate reads it).
     fn image_file(&self, value: &Value, inputs: &Path) -> rascal_core::error::Result<PathBuf> {
-        let path = if let Some(path) = value.get("path").and_then(|p| p.as_str()) {
-            let path = PathBuf::from(path);
-            if !path.is_absolute() {
-                return Err(Error::usage(format!(
-                    "image: {} is not an absolute path (CONTRACT.md 10.1)",
-                    path.display()
-                )));
-            }
-            if !path.is_file() {
-                return Err(Error::usage(format!(
-                    "image: {} is not a file",
-                    path.display()
-                )));
-            }
-            path
-        } else if let Some(inline) = value.get("inline") {
-            let data = inline["data"].as_str().unwrap_or_default();
-            let bytes = rascal_mcp::jsonrpc::base64_decode(data)
-                .ok_or_else(|| Error::usage("image: inline data is not standard base64"))?;
-            if bytes.len() as u64 > INLINE_BYTES {
-                return Err(Error::usage(format!(
-                    "image: inline image of {} bytes is over the limit of {INLINE_BYTES}",
-                    bytes.len()
-                )));
-            }
-            let ext = match inline["media_type"].as_str() {
-                Some("image/jpeg") => "jpg",
-                _ => "png",
-            };
-            std::fs::create_dir_all(inputs).map_err(|e| Error::io(inputs, e))?;
-            let path = inputs.join(format!("image.{ext}"));
-            std::fs::write(&path, &bytes).map_err(|e| Error::io(&path, e))?;
-            path
-        } else {
-            return Err(Error::usage("image: give path or inline"));
-        };
-        if let Some(expect) = value.get("expect") {
-            let expect: ImageReference = serde_json::from_value(expect.clone()).map_err(|e| {
-                Error::usage(format!("image: expect is not an image reference: {e}"))
-            })?;
-            let bytes = std::fs::read(&path).map_err(|e| Error::io(&path, e))?;
-            let (width, height) = image::image_dimensions(&path)
-                .map_err(|e| Error::usage(format!("image: {}: {e}", path.display())))?;
-            let digest = rascal_core::contract::file_sha256(&bytes);
-            if digest != expect.file_sha256 || width != expect.width || height != expect.height {
-                return Err(Error::usage(format!(
-                    "image: the image is on another image than expected: file_sha256 {digest} ({width}x{height}), expected {} ({}x{})",
-                    expect.file_sha256, expect.width, expect.height
-                )));
+        let image = estimate::image_in("image", value)?;
+        if value.get("expect").is_some() {
+            estimate::verify_expect("image", value, &image, &image.bytes()?)?;
+        }
+        match image {
+            estimate::ImageIn::Path(path) => Ok(path),
+            estimate::ImageIn::Inline { bytes, ext } => {
+                std::fs::create_dir_all(inputs).map_err(|e| Error::io(inputs, e))?;
+                let path = inputs.join(format!("image.{ext}"));
+                std::fs::write(&path, &bytes).map_err(|e| Error::io(&path, e))?;
+                Ok(path)
             }
         }
-        Ok(path)
     }
 
     fn run_args(
@@ -279,6 +325,14 @@ impl ContractActions {
         inputs: &Path,
         cancel: Arc<Cancel>,
     ) -> rascal_core::error::Result<run::RunArgs> {
+        // The arguments, `max_spend_usd` among them, as an estimate checks them: the first step
+        // of the limits check's order (`reserve`).
+        estimate::check_arguments(
+            recipe,
+            &describe::action_name(recipe),
+            args,
+            self.config.as_ref(),
+        )?;
         let image = self.image_file(
             args.get("image")
                 .ok_or_else(|| Error::usage("image: required"))?,
@@ -336,44 +390,39 @@ impl ContractActions {
         })
     }
 
-    /// What a call to the filler costs at worst, and the limits that apply: the per-call cap
-    /// (the configuration's, lowered by `max_spend_usd`) and the session budget.
-    fn limits(&self, filler: Option<&str>, args: &Map<String, Value>, ledger: &Ledger) -> Limits {
-        let price = filler
-            .and_then(|f| self.config.as_ref()?.fillers.get(f)?.spend_usd_per_call)
-            .unwrap_or(0.0);
-        let configured = self
-            .config
-            .as_ref()
-            .and_then(|c| c.limits.clone())
-            .unwrap_or_default();
-        let asked = args.get("max_spend_usd").and_then(|v| v.as_f64());
-        let cap = match (configured.call_cap_usd, asked) {
-            (Some(c), Some(a)) => Some(c.min(a)),
-            (c, a) => c.or(a),
-        };
-        Limits {
-            worst_case_usd: price,
-            call_cap_usd: cap,
-            session_budget_usd: configured.session_budget_usd,
-            session_held_usd: ledger.spent_usd + ledger.reserved_usd,
-        }
-    }
-
     /// The ledger as it stands.
     fn ledger(&self) -> Ledger {
         *self.ledger.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// Checks the limits and reserves the call's worst case in one step under the ledger's
-    /// lock, so two calls never both pass against the same spend.
+    /// The limits check (table-manners 4.5, docs/contract.md): after allocation and before any
+    /// paid step, in a fixed order. The arguments first (`run_args`, `max_spend_usd` among
+    /// them: not above zero or above the configured cap is `invalid`/`usage`), then the
+    /// estimate the call names (`stale_estimate`), then the cap (the worst case over the
+    /// effective cap is `cap`), then the budget (a session that cannot hold it is `budget`), and
+    /// the reservation of the worst case in the same step under the ledger's lock, so two calls
+    /// never both pass against the same spend. The call is priced by `estimate::price`, as its
+    /// estimate is; a matching estimate is no reservation, so the cap and the budget are
+    /// checked as for any call.
     fn reserve(
         &self,
-        filler: Option<&str>,
+        recipe: &str,
         args: &Map<String, Value>,
+        named: Option<&Value>,
     ) -> rascal_core::error::Result<Reservation<'_>> {
+        let action = describe::action_name(recipe);
+        let price = self.with_setup(|setup| estimate::price(setup, &action, args))?;
+        if let Some(named) = named {
+            self.check_estimate(named, recipe, &action, args, &price)?;
+        }
         let mut ledger = self.ledger.lock().unwrap_or_else(|e| e.into_inner());
-        let limits = self.limits(filler, args, &ledger);
+        let held = self.held(&ledger);
+        let limits = estimate::Limits {
+            worst_case_usd: price.worst_case_usd.unwrap_or(0.0),
+            call_cap_usd: price.cap_usd,
+            session_budget_usd: held.budget_usd,
+            session_held_usd: held.held_usd,
+        };
         limits.check()?;
         ledger.reserved_usd += limits.worst_case_usd;
         Ok(Reservation {
@@ -383,15 +432,133 @@ impl ContractActions {
         })
     }
 
+    /// Checks the estimate a call names against the call as it arrived (table-manners 4.5): a
+    /// value that is not a binding, a binding this session never issued (another session's,
+    /// which for rascal is also any other configuration's, or the command line's), one that
+    /// differs from the call's recomputed binding (naming what changed) or one past its
+    /// `expires` is `stale_estimate`.
+    fn check_estimate(
+        &self,
+        named: &Value,
+        recipe: &str,
+        action: &str,
+        args: &Map<String, Value>,
+        price: &estimate::Price,
+    ) -> rascal_core::error::Result<()> {
+        let stale = |reason: String| Error::StaleEstimate { reason };
+        let Some(binding) = named
+            .as_str()
+            .filter(|b| rascal_core::identity::Identity::parse(b).is_some())
+        else {
+            return Err(stale(format!(
+                "the estimate named, {named}, is not a binding (sha256:<64 hex>)"
+            )));
+        };
+        let issued = self
+            .issued
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(binding)
+            .cloned();
+        let Some(issued) = issued else {
+            return Err(stale(format!(
+                "this session never issued the estimate {binding} (another session's, another configuration's or the command line's); ask this server for a new estimate"
+            )));
+        };
+        let bound = estimate::bind(
+            recipe,
+            action,
+            args,
+            price.config_identity.as_deref(),
+            Some(&self.session.id),
+            estimate::VERSION,
+        )?;
+        if bound.binding != binding {
+            return Err(stale(format!(
+                "the call differs from its estimate: {}; ask for a new estimate",
+                estimate::changed(recipe, &issued, action, &bound.parts)
+            )));
+        }
+        if run_json::now_ms() >= issued.expires_ms {
+            return Err(stale(format!(
+                "the estimate expired at {}; ask for a new estimate",
+                run_json::rfc3339(issued.expires_ms)
+            )));
+        }
+        Ok(())
+    }
+
+    /// The session budget and what the ledger holds against it.
+    fn held(&self, ledger: &Ledger) -> estimate::Held {
+        estimate::Held {
+            budget_usd: self.budget_usd(),
+            held_usd: ledger.spent_usd + ledger.reserved_usd,
+        }
+    }
+
+    /// The configured session budget, none when uncapped.
+    fn budget_usd(&self) -> Option<f64> {
+        self.config
+            .as_ref()
+            .and_then(|c| c.limits.as_ref())
+            .and_then(|l| l.session_budget_usd)
+    }
+
+    /// The estimate of one call (table-manners 4.5): its arguments checked as the run checks
+    /// them, priced as the limits check prices it, bound to this session, and the session
+    /// observed once for both the document and the budget check. It allocates, writes and
+    /// waits for nothing.
+    fn estimate(
+        &self,
+        action: &str,
+        args: &Map<String, Value>,
+    ) -> rascal_core::error::Result<Value> {
+        let recipe =
+            recipe_of(action).ok_or_else(|| Error::usage(format!("action: no action {action}")))?;
+        estimate::check_arguments(recipe, action, args, self.config.as_ref())?;
+        let price = self.with_setup(|setup| estimate::price(setup, action, args))?;
+        let bound = estimate::bind(
+            recipe,
+            action,
+            args,
+            price.config_identity.as_deref(),
+            Some(&self.session.id),
+            estimate::VERSION,
+        )?;
+        let ledger = self.ledger();
+        let expires_ms = run_json::now_ms() + estimate::ttl_ms();
+        self.issued
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .record(
+                &bound.binding,
+                estimate::IssuedEstimate {
+                    action: action.to_string(),
+                    expires_ms,
+                    parts: bound.parts.clone(),
+                },
+            );
+        let document = estimate::document(
+            action,
+            &bound,
+            price,
+            Some(self.held(&ledger)),
+            Some(self.session_view_of(&ledger)),
+            expires_ms,
+        );
+        serde_json::to_value(&document).map_err(|e| Error::usage(format!("estimate: {e}")))
+    }
+
     /// Runs one action to its `run.json`.
     fn run_action(
         &self,
         recipe: &str,
         args: &Map<String, Value>,
-        client_run_id: Option<&str>,
+        meta: &CallMeta,
         progress: &(dyn Fn(Progress) + Send + Sync),
         cancel: Arc<Cancel>,
     ) -> std::result::Result<ActionResult, String> {
+        let client_run_id = meta.client_run_id.as_deref();
         // A cancel that lands before allocation leaves no run (table-manners 4.2).
         if cancel.load(Ordering::SeqCst) {
             return Err("cancelled".to_string());
@@ -429,7 +596,7 @@ impl ContractActions {
         let prepared = self
             .run_args(recipe, args, &out, &inputs, cancel)
             .and_then(|run_args| {
-                self.reserve(filler.as_deref(), args)
+                self.reserve(recipe, args, meta.estimate.as_ref())
                     .map(|reservation| (run_args, reservation))
             });
         let (pending, ended, reservation) = match prepared {
@@ -582,12 +749,12 @@ impl ContractActions {
 
     /// The `rascal://session` observation: one copy of the ledger, taken under its lock.
     fn session_view(&self) -> TmSession {
-        let ledger = self.ledger();
-        let budget = self
-            .config
-            .as_ref()
-            .and_then(|c| c.limits.as_ref())
-            .and_then(|l| l.session_budget_usd);
+        self.session_view_of(&self.ledger())
+    }
+
+    /// The session observation for one copy of the ledger.
+    fn session_view_of(&self, ledger: &Ledger) -> TmSession {
+        let budget = self.budget_usd();
         TmSession {
             contract: rascal_core::contract::CONTRACT_VERSION.to_string(),
             tool: TmTool {
@@ -683,6 +850,53 @@ impl ContractActions {
     }
 }
 
+/// The `not_ready` refusal for a call whose readiness is not `ready`: a JSON-RPC `-32602` with
+/// `{reason: "not_ready", run: null, requirements}` naming exactly the missing or invalid
+/// requirements (`refusal.json`). None when the call is ready.
+pub fn not_ready(action: &str, readiness: &Readiness) -> Option<CallError> {
+    let unmet: Vec<Requirement> = readiness
+        .requirements
+        .iter()
+        .filter(|r| readiness::unmet(r))
+        .cloned()
+        .collect();
+    if unmet.is_empty() {
+        return None;
+    }
+    let refusal = Refusal {
+        reason: RefusalReason::NotReady,
+        run: None,
+        requirements: Some(unmet.clone()),
+        error: None,
+    };
+    Some(CallError::refused(
+        format!("{action} is not ready: {}", readiness::summary(&unmet)),
+        serde_json::to_value(&refusal).unwrap_or(Value::Null),
+    ))
+}
+
+/// The `invalid_arguments` refusal for an estimate's wrong request (table-manners 4.5): a
+/// JSON-RPC `-32602` with `{reason: "invalid_arguments", run: null, error}`, the error's code
+/// as the run would have given it (`input` for an image it cannot take, else `usage`), never
+/// retryable.
+pub fn invalid_arguments(action: &str, error: &Error) -> CallError {
+    let (_, mut info) = run_json::error_of(error);
+    if info.code != ErrorCode::Usage {
+        info.code = ErrorCode::Input;
+    }
+    info.retryable = false;
+    let refusal = Refusal {
+        reason: RefusalReason::InvalidArguments,
+        run: None,
+        requirements: None,
+        error: Some(info),
+    };
+    CallError::refused(
+        format!("estimate of {action}: {error}"),
+        serde_json::to_value(&refusal).unwrap_or(Value::Null),
+    )
+}
+
 /// What a run was asked as, written into its inputs directory when it is allocated, before any
 /// paid work (table-manners 4.3): the runs list reads it for a run still going.
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -733,24 +947,23 @@ impl Actions for ContractActions {
             );
             tools.push(Tool::new(name, text, Arc::new(Self::input_schema(action))));
         }
-        // `estimate` is in the description with its own schema.
-        if let Some(estimate) = description["actions"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .find(|a| a["name"] == "estimate")
-            && let Some(position) = tools.iter().position(|t| t.name == "estimate")
-        {
-            let schema = estimate["params_schema"]
-                .as_object()
-                .cloned()
-                .unwrap_or_default();
-            tools[position] = Tool::new(
-                "estimate",
-                estimate["purpose"].as_str().unwrap_or_default().to_string(),
-                Arc::new(schema),
-            );
-        }
+        // `estimate` is reserved (table-manners 3, 4.5, 5): a tool, never an action. `action` is
+        // a string, not an enum, so an unknown action reaches rascal's own check and its
+        // `invalid_arguments` refusal.
+        let estimate = json!({
+            "type": "object",
+            "properties": {
+                "action": { "type": "string", "description": "The action the call would run." },
+                "arguments": { "type": "object", "description": "Exactly the arguments the call would send, images included." }
+            },
+            "required": ["action", "arguments"],
+            "additionalProperties": false,
+        });
+        tools.push(Tool::new(
+            "estimate",
+            "The worst case one exact call would spend, the per-call cap, whether the limits would allow it now and a binding to send back with the call (table-manners estimate); runs nothing.",
+            Arc::new(estimate.as_object().cloned().unwrap_or_default()),
+        ));
         let mut empty = Map::new();
         empty.insert("type".into(), Value::String("object".into()));
         tools.push(Tool::new(
@@ -773,10 +986,10 @@ impl Actions for ContractActions {
         &self,
         name: &str,
         args: &Map<String, Value>,
-        client_run_id: Option<&str>,
+        meta: &CallMeta,
         progress: &(dyn Fn(Progress) + Send + Sync),
         cancel: Arc<Cancel>,
-    ) -> std::result::Result<ActionResult, String> {
+    ) -> std::result::Result<ActionResult, CallError> {
         if name == "describe" {
             return Ok(ActionResult {
                 structured: self.description().map_err(|e| e.to_string())?,
@@ -785,30 +998,28 @@ impl Actions for ContractActions {
             });
         }
         if name == "estimate" {
-            let action = args
-                .get("action")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default();
-            if recipe_of(action).is_none() {
-                return Err(format!("estimate: no action {action}"));
-            }
-            let filler = args.get("filler").and_then(|v| v.as_str());
-            let ledger = self.ledger();
-            let limits = self.limits(filler, args, &ledger);
+            // What the input schema rejects is plain invalid params; any other wrong request
+            // is the `invalid_arguments` refusal (table-manners 4.5).
+            let (action, arguments) = estimate::request(args).ok_or_else(|| {
+                CallError::from(
+                    "estimate: the arguments are {\"action\": <name>, \"arguments\": {…}}",
+                )
+            })?;
             return Ok(ActionResult {
-                structured: json!({
-                    "contract": rascal_core::contract::CONTRACT_VERSION,
-                    "action": action,
-                    "worst_case_usd": usd(limits.worst_case_usd),
-                    "call_cap_usd": limits.call_cap_usd.map(usd),
-                    "allowed": limits.check().is_ok(),
-                }),
+                structured: self
+                    .estimate(action, arguments)
+                    .map_err(|e| invalid_arguments(action, &e))?,
                 is_error: false,
                 images: Vec::new(),
             });
         }
         let recipe = recipe_of(name).ok_or_else(|| format!("no action {name}"))?;
-        self.run_action(recipe, args, client_run_id, progress, cancel)
+        self.ready_for(name, args)?;
+        let result = self
+            .run_action(recipe, args, meta, progress, cancel)
+            .map_err(CallError::from)?;
+        self.learn(&result.structured);
+        Ok(result)
     }
 
     fn resources(&self) -> Vec<Resource> {
@@ -897,42 +1108,5 @@ impl Actions for ContractActions {
                 })
             }
         }
-    }
-}
-
-/// The spend a call may make, and the limits it is held to (table-manners 4.5).
-struct Limits {
-    worst_case_usd: f64,
-    call_cap_usd: Option<f64>,
-    session_budget_usd: Option<f64>,
-    /// What the session has spent plus what calls under way hold.
-    session_held_usd: f64,
-}
-
-impl Limits {
-    /// Refuses a call whose worst case is over the cap or the budget left.
-    fn check(&self) -> rascal_core::error::Result<()> {
-        if let Some(cap) = self.call_cap_usd
-            && self.worst_case_usd > cap
-        {
-            return Err(Error::Budget {
-                reason: format!(
-                    "the call may spend {:.4} USD, over the per-call cap of {cap:.4}",
-                    self.worst_case_usd
-                ),
-            });
-        }
-        if let Some(budget) = self.session_budget_usd
-            && self.session_held_usd + self.worst_case_usd > budget
-        {
-            return Err(Error::Budget {
-                reason: format!(
-                    "the call may spend {:.4} USD; the session has {:.4} of {budget:.4} left",
-                    self.worst_case_usd,
-                    (budget - self.session_held_usd).max(0.0)
-                ),
-            });
-        }
-        Ok(())
     }
 }

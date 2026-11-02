@@ -504,3 +504,39 @@ fn a_commit_naming_a_frame_id_bound_to_another_identity_is_refused() {
     assert_eq!(ws.read_current().unwrap(), before, "nothing published");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// What a reader (the run page and its renders) opens: nothing created, nothing swept, and the
+/// missing-payload refusal kept.
+#[test]
+fn a_read_only_open_changes_nothing() {
+    let dir = scratch("read-only");
+    let missing = dir.join("absent");
+    assert!(Workspace::open_read_only(&missing).is_err());
+    assert!(!missing.exists(), "no directory is created");
+    let empty = dir.join("empty");
+    std::fs::create_dir_all(&empty).unwrap();
+    Workspace::open_read_only(&empty).unwrap();
+    assert_eq!(std::fs::read_dir(&empty).unwrap().count(), 0, "no layout");
+
+    let ws_dir = dir.join("ws");
+    let ws = Workspace::open(&ws_dir).unwrap();
+    let f = frame();
+    ws.add_canonical(canonical(&f), &f, "flat").unwrap();
+    let entry = ws.snapshot().unwrap().artifacts[0].clone();
+    drop(ws);
+    let abandoned = ws_dir.join("staging/old-token");
+    std::fs::create_dir_all(&abandoned).unwrap();
+    std::fs::write(abandoned.join("lock"), "").unwrap();
+    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(60);
+    std::fs::File::open(&abandoned)
+        .unwrap()
+        .set_modified(old)
+        .unwrap();
+    let read = Workspace::open_read_only(&ws_dir).unwrap();
+    assert!(read.load(&entry.identity).is_ok());
+    assert!(abandoned.exists(), "a reader sweeps nothing");
+    std::fs::remove_file(ws_dir.join(&entry.path)).unwrap();
+    let e = Workspace::open_read_only(&ws_dir).unwrap_err().to_string();
+    assert!(e.contains("workspace repair"), "{e}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

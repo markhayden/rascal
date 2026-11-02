@@ -1,0 +1,12 @@
+{
+  "reason": "not_ready",
+  "requirements": [
+    {
+      "kind": "credential",
+      "name": "RASCAL_FIXTURE_KEY",
+      "setup": "Set `RASCAL_FIXTURE_KEY` in the environment rascal is started with.",
+      "state": "missing"
+    }
+  ],
+  "run": null
+}

@@ -207,9 +207,11 @@ pub struct FillerCall {
 #[serde(rename_all = "snake_case")]
 pub enum Charge {
     /// Refused before the request left rascal: no key, the connection refused, the command
-    /// not started, or the authentication rejected (401, 403). Free.
+    /// not started. Free.
     NotSent,
-    /// The filler answered: a 2xx, or a command that exited 0. Charged at the price.
+    /// The filler answered: a 2xx, or a command that exited 0, charged at the price; or the
+    /// authentication rejected (401, 403), an answer that refused before any work, which
+    /// counts zero (table-manners 4.5; [`FillerCall::refused_before_work`]).
     Known,
     /// Sent with no answer that settles it: timed out, killed, a failure status, a non-zero
     /// exit. Counted at the price, as unresolved; never as zero.
@@ -243,18 +245,24 @@ pub const CALL_PREFIX: &str = "filler call: ";
 /// What a run's filler calls cost, from its journal notes.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Spent {
-    /// Every known and unresolved call at its price.
+    /// Every known and unresolved call at its price, an answer that refused before any work
+    /// at zero.
     pub usd: f64,
     /// The part of `usd` no answer settled.
     pub unresolved_usd: f64,
+    /// The total is a known zero, not read from a price (`spend.basis: measured`, table-manners
+    /// 4.5): at least one answer refused before any work, and no call counted at its price.
+    pub measured: bool,
 }
 
 /// The spend in a run's notes: each started call is settled by the call record that follows it
-/// (in order), at its price unless not sent; a started call with no record, or a record that
-/// does not parse, is unresolved.
+/// (in order), at its price unless not sent or refused before any work; a started call with no
+/// record, or a record that does not parse, is unresolved.
 pub fn spent(notes: &[String]) -> Spent {
     let mut open: std::collections::VecDeque<f64> = std::collections::VecDeque::new();
     let mut spent = Spent::default();
+    let mut answered_free = false;
+    let mut priced = false;
     for note in notes {
         if let Some(json) = note.strip_prefix(STARTED_PREFIX) {
             let price = serde_json::from_str::<CallStarted>(json)
@@ -263,12 +271,17 @@ pub fn spent(notes: &[String]) -> Spent {
             open.push_back(price);
         } else if let Some(json) = note.strip_prefix(CALL_PREFIX) {
             let price = open.pop_front().unwrap_or(0.0);
-            match serde_json::from_str::<FillerCall>(json).map(|c| c.charge) {
-                Ok(Charge::NotSent) => {}
-                Ok(Charge::Known) => spent.usd += price,
-                Ok(Charge::Unresolved) | Err(_) => {
+            match serde_json::from_str::<FillerCall>(json) {
+                Ok(call) if call.charge == Charge::NotSent => {}
+                Ok(call) if call.refused_before_work() => answered_free = true,
+                Ok(call) if call.charge == Charge::Known => {
+                    spent.usd += price;
+                    priced = true;
+                }
+                Ok(_) | Err(_) => {
                     spent.usd += price;
                     spent.unresolved_usd += price;
+                    priced = true;
                 }
             }
         }
@@ -276,11 +289,19 @@ pub fn spent(notes: &[String]) -> Spent {
     for price in open {
         spent.usd += price;
         spent.unresolved_usd += price;
+        priced = true;
     }
+    spent.measured = answered_free && !priced;
     spent
 }
 
 impl FillerCall {
+    /// An answer that refused before any work: the authentication rejected (HTTP 401, 403).
+    /// The call is known, and counts zero (table-manners 4.5).
+    pub fn refused_before_work(&self) -> bool {
+        self.charge == Charge::Known && matches!(self.status, 401 | 403)
+    }
+
     /// The journal note text: a fixed prefix and the record as JSON.
     pub fn note(&self) -> String {
         format!(
@@ -409,6 +430,10 @@ mod tests {
     }
 
     fn call(charge: Charge) -> String {
+        answered(charge, -1)
+    }
+
+    fn answered(charge: Charge, status: i64) -> String {
         FillerCall {
             filler: "f".into(),
             target: "t".into(),
@@ -417,11 +442,50 @@ mod tests {
             request_bytes: 1,
             response_bytes: 0,
             duration_ms: 0,
-            status: -1,
+            status,
             outcome: "x".into(),
             charge,
         }
         .note()
+    }
+
+    /// Table-manners 4.5: a 401 or 403 is an answer, so the call is known, not unsent; it
+    /// refused before any work, so it counts zero, and a known zero is `measured`.
+    #[test]
+    fn a_rejected_key_is_known_at_zero_and_measured() {
+        for status in [401, 403] {
+            let s = spent(&[started(0.04), answered(Charge::Known, status)]);
+            assert_eq!(
+                s,
+                Spent {
+                    usd: 0.0,
+                    unresolved_usd: 0.0,
+                    measured: true
+                },
+                "{status}"
+            );
+        }
+        // Unsent calls beside it are zero too, and certain.
+        let s = spent(&[
+            started(0.04),
+            call(Charge::NotSent),
+            started(0.04),
+            answered(Charge::Known, 401),
+        ]);
+        assert!(s.measured && s.usd == 0.0, "{s:?}");
+        // An amount read from a price is an estimate, whatever else the run did.
+        let s = spent(&[
+            started(0.04),
+            answered(Charge::Known, 401),
+            started(0.04),
+            answered(Charge::Known, 200),
+        ]);
+        assert!(!s.measured && (s.usd - 0.04).abs() < 1e-9, "{s:?}");
+        let s = spent(&[started(0.04), answered(Charge::Known, 401), started(0.04)]);
+        assert!(!s.measured, "{s:?}");
+        // A zero no answer settled (nothing called, or nothing sent) stays an estimate.
+        assert!(!spent(&[]).measured);
+        assert!(!spent(&[started(0.04), call(Charge::NotSent)]).measured);
     }
 
     #[test]
@@ -447,7 +511,8 @@ mod tests {
             s,
             Spent {
                 usd: 0.04,
-                unresolved_usd: 0.04
+                unresolved_usd: 0.04,
+                measured: false
             }
         );
         let s = spent(&[started(0.04), format!("{CALL_PREFIX}not json")]);
@@ -455,7 +520,8 @@ mod tests {
             s,
             Spent {
                 usd: 0.04,
-                unresolved_usd: 0.04
+                unresolved_usd: 0.04,
+                measured: false
             }
         );
         assert_eq!(spent(&[]), Spent::default());

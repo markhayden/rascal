@@ -1,0 +1,11 @@
+{
+  "about": "Where the segmenter pack reads its model files (rascal_tools.models.cache.models_dir) and where rascal's readiness looks for them (rascal_mask::readiness::models_dir): one table both test suites check. `env` is RASCAL_TOOLS_MODELS as the pack receives it (\"dir\": a directory, \"\": set and empty, null: unset); `beside` is whether models/ exists in the install directory; `expect` is the directory chosen: the variable's, the install's models/, or the default cache ~/.cache/rascal-tools.",
+  "cases": [
+    { "env": "dir", "beside": true, "expect": "env" },
+    { "env": "dir", "beside": false, "expect": "env" },
+    { "env": "", "beside": true, "expect": "beside" },
+    { "env": "", "beside": false, "expect": "cache" },
+    { "env": null, "beside": true, "expect": "beside" },
+    { "env": null, "beside": false, "expect": "cache" }
+  ]
+}

@@ -179,7 +179,14 @@ fn a_failed_call_keeps_its_spend_unresolved_and_an_unsent_one_is_free() {
             .iter()
             .any(|n| n.as_str().unwrap().contains("unresolved"))
     );
-    let missing = dir.join("no-such-filler");
+    // A program that is there (so the call is ready, task 12.2) but cannot start, its
+    // interpreter missing: not sent.
+    let missing = dir.join("not-a-program");
+    std::fs::write(&missing, b"#!/nonexistent/interpreter\n").unwrap();
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&missing, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
     let out = heal_with(
         &priced(&dir, "exact", Some(missing.to_str().unwrap())),
         &dir.join("unsent"),

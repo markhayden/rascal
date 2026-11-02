@@ -3,8 +3,7 @@
     {
       "cost": {
         "basis": "estimated",
-        "may_spend": true,
-        "needs_env": []
+        "may_spend": true
       },
       "duration": {
         "max_s": 120.0,
@@ -42,9 +41,15 @@
             "enum": [
               "failing",
               "fake",
+              "hosted",
               "slow"
             ],
             "type": "string"
+          },
+          "max_spend_usd": {
+            "description": "Lower the per-call spend cap for this call (USD, above zero).",
+            "exclusiveMinimum": 0,
+            "type": "number"
           },
           "projection": {
             "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
@@ -77,6 +82,47 @@
         "type": "object"
       },
       "purpose": "A feathered rectangle as a mask.",
+      "readiness": {
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.failing",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.hosted",
+            "state": "present"
+          },
+          {
+            "kind": "credential",
+            "name": "RASCAL_FIXTURE_KEY",
+            "setup": "Set `RASCAL_FIXTURE_KEY` in the environment rascal is started with.",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.slow",
+            "state": "present"
+          }
+        ],
+        "state": "ready"
+      },
       "renders": [
         {
           "command": [
@@ -85,9 +131,23 @@
             "{run.dir}",
             "--serve",
             "--port",
-            "0"
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
           ],
-          "name": "dash"
+          "kind": "server",
+          "name": "dash",
+          "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
         }
       ],
       "title": "Mask a rectangle"
@@ -95,8 +155,7 @@
     {
       "cost": {
         "basis": "estimated",
-        "may_spend": true,
-        "needs_env": []
+        "may_spend": true
       },
       "duration": {
         "max_s": 120.0,
@@ -126,9 +185,15 @@
             "enum": [
               "failing",
               "fake",
+              "hosted",
               "slow"
             ],
             "type": "string"
+          },
+          "max_spend_usd": {
+            "description": "Lower the per-call spend cap for this call (USD, above zero).",
+            "exclusiveMinimum": 0,
+            "type": "number"
           },
           "projection": {
             "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
@@ -161,6 +226,47 @@
         "type": "object"
       },
       "purpose": "Masks the wrap edge of a panorama (or any vertical line) as a band, wide on smooth surfaces and thin on detail, with a tone ramp across it; with a filler, heals it.",
+      "readiness": {
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.failing",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.hosted",
+            "state": "present"
+          },
+          {
+            "kind": "credential",
+            "name": "RASCAL_FIXTURE_KEY",
+            "setup": "Set `RASCAL_FIXTURE_KEY` in the environment rascal is started with.",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.slow",
+            "state": "present"
+          }
+        ],
+        "state": "ready"
+      },
       "renders": [
         {
           "command": [
@@ -169,9 +275,23 @@
             "{run.dir}",
             "--serve",
             "--port",
-            "0"
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
           ],
-          "name": "dash"
+          "kind": "server",
+          "name": "dash",
+          "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
         }
       ],
       "title": "Heal a seam"
@@ -179,8 +299,7 @@
     {
       "cost": {
         "basis": "estimated",
-        "may_spend": true,
-        "needs_env": []
+        "may_spend": true
       },
       "duration": {
         "max_s": 120.0,
@@ -220,9 +339,15 @@
             "enum": [
               "failing",
               "fake",
+              "hosted",
               "slow"
             ],
             "type": "string"
+          },
+          "max_spend_usd": {
+            "description": "Lower the per-call spend cap for this call (USD, above zero).",
+            "exclusiveMinimum": 0,
+            "type": "number"
           },
           "projection": {
             "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
@@ -259,6 +384,47 @@
         "type": "object"
       },
       "purpose": "Masks an object at a location with its shadow, kept off protected regions and feathered; with a filler, removes it.",
+      "readiness": {
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.failing",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.hosted",
+            "state": "present"
+          },
+          {
+            "kind": "credential",
+            "name": "RASCAL_FIXTURE_KEY",
+            "setup": "Set `RASCAL_FIXTURE_KEY` in the environment rascal is started with.",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.slow",
+            "state": "present"
+          }
+        ],
+        "state": "ready"
+      },
       "renders": [
         {
           "command": [
@@ -267,9 +433,23 @@
             "{run.dir}",
             "--serve",
             "--port",
-            "0"
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
           ],
-          "name": "dash"
+          "kind": "server",
+          "name": "dash",
+          "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
         }
       ],
       "title": "Remove an object"
@@ -277,8 +457,7 @@
     {
       "cost": {
         "basis": "estimated",
-        "may_spend": true,
-        "needs_env": []
+        "may_spend": true
       },
       "duration": {
         "max_s": 120.0,
@@ -310,9 +489,15 @@
             "enum": [
               "failing",
               "fake",
+              "hosted",
               "slow"
             ],
             "type": "string"
+          },
+          "max_spend_usd": {
+            "description": "Lower the per-call spend cap for this call (USD, above zero).",
+            "exclusiveMinimum": 0,
+            "type": "number"
           },
           "projection": {
             "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
@@ -356,6 +541,53 @@
         "type": "object"
       },
       "purpose": "Finds the objects a text prompt names with the segmenter pack and masks them as remove does; with a filler, removes them.",
+      "readiness": {
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.failing",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.hosted",
+            "state": "present"
+          },
+          {
+            "kind": "credential",
+            "name": "RASCAL_FIXTURE_KEY",
+            "setup": "Set `RASCAL_FIXTURE_KEY` in the environment rascal is started with.",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.slow",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "packs.rascal-tools",
+            "setup": "Run `rascal tools setup --bundle <bundle> --config <path>`.",
+            "state": "missing"
+          }
+        ],
+        "state": "needs_setup"
+      },
       "renders": [
         {
           "command": [
@@ -364,9 +596,23 @@
             "{run.dir}",
             "--serve",
             "--port",
-            "0"
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
           ],
-          "name": "dash"
+          "kind": "server",
+          "name": "dash",
+          "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
         }
       ],
       "title": "Remove what a prompt names"
@@ -374,8 +620,7 @@
     {
       "cost": {
         "basis": "estimated",
-        "may_spend": true,
-        "needs_env": []
+        "may_spend": true
       },
       "duration": {
         "max_s": 120.0,
@@ -413,9 +658,15 @@
             "enum": [
               "failing",
               "fake",
+              "hosted",
               "slow"
             ],
             "type": "string"
+          },
+          "max_spend_usd": {
+            "description": "Lower the per-call spend cap for this call (USD, above zero).",
+            "exclusiveMinimum": 0,
+            "type": "number"
           },
           "projection": {
             "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
@@ -448,6 +699,47 @@
         "type": "object"
       },
       "purpose": "Tightens a stroke drawn along a scratch or tear to the defect's edges and feathers it; with a filler, repairs it.",
+      "readiness": {
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.failing",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.hosted",
+            "state": "present"
+          },
+          {
+            "kind": "credential",
+            "name": "RASCAL_FIXTURE_KEY",
+            "setup": "Set `RASCAL_FIXTURE_KEY` in the environment rascal is started with.",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.slow",
+            "state": "present"
+          }
+        ],
+        "state": "ready"
+      },
       "renders": [
         {
           "command": [
@@ -456,9 +748,23 @@
             "{run.dir}",
             "--serve",
             "--port",
-            "0"
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
           ],
-          "name": "dash"
+          "kind": "server",
+          "name": "dash",
+          "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
         }
       ],
       "title": "Repair a scratch"
@@ -466,8 +772,7 @@
     {
       "cost": {
         "basis": "estimated",
-        "may_spend": true,
-        "needs_env": []
+        "may_spend": true
       },
       "duration": {
         "max_s": 120.0,
@@ -506,9 +811,15 @@
             "enum": [
               "failing",
               "fake",
+              "hosted",
               "slow"
             ],
             "type": "string"
+          },
+          "max_spend_usd": {
+            "description": "Lower the per-call spend cap for this call (USD, above zero).",
+            "exclusiveMinimum": 0,
+            "type": "number"
           },
           "projection": {
             "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
@@ -541,6 +852,47 @@
         "type": "object"
       },
       "purpose": "Masks a stain or spot as drawn, feathered; with a filler, repairs it.",
+      "readiness": {
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.failing",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.hosted",
+            "state": "present"
+          },
+          {
+            "kind": "credential",
+            "name": "RASCAL_FIXTURE_KEY",
+            "setup": "Set `RASCAL_FIXTURE_KEY` in the environment rascal is started with.",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.slow",
+            "state": "present"
+          }
+        ],
+        "state": "ready"
+      },
       "renders": [
         {
           "command": [
@@ -549,9 +901,23 @@
             "{run.dir}",
             "--serve",
             "--port",
-            "0"
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
           ],
-          "name": "dash"
+          "kind": "server",
+          "name": "dash",
+          "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
         }
       ],
       "title": "Repair a stain"
@@ -559,8 +925,7 @@
     {
       "cost": {
         "basis": "estimated",
-        "may_spend": true,
-        "needs_env": []
+        "may_spend": true
       },
       "duration": {
         "max_s": 120.0,
@@ -590,6 +955,7 @@
             "enum": [
               "failing",
               "fake",
+              "hosted",
               "slow"
             ],
             "type": "string"
@@ -597,6 +963,11 @@
           "mask": {
             "description": "A stored rascal mask directory (an earlier run's `mask`), by absolute path.",
             "type": "string"
+          },
+          "max_spend_usd": {
+            "description": "Lower the per-call spend cap for this call (USD, above zero).",
+            "exclusiveMinimum": 0,
+            "type": "number"
           },
           "projection": {
             "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
@@ -631,6 +1002,47 @@
         "type": "object"
       },
       "purpose": "Inverts an earlier mask so a second pass may change everything else.",
+      "readiness": {
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.failing",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.hosted",
+            "state": "present"
+          },
+          {
+            "kind": "credential",
+            "name": "RASCAL_FIXTURE_KEY",
+            "setup": "Set `RASCAL_FIXTURE_KEY` in the environment rascal is started with.",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.slow",
+            "state": "present"
+          }
+        ],
+        "state": "ready"
+      },
       "renders": [
         {
           "command": [
@@ -639,63 +1051,29 @@
             "{run.dir}",
             "--serve",
             "--port",
-            "0"
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
           ],
-          "name": "dash"
+          "kind": "server",
+          "name": "dash",
+          "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
         }
       ],
       "title": "Protect an earlier edit"
-    },
-    {
-      "cost": {
-        "may_spend": false,
-        "needs_env": []
-      },
-      "duration": {
-        "max_s": 1.0,
-        "typical_s": 0.1
-      },
-      "images": [],
-      "locations": [],
-      "name": "estimate",
-      "outputs": {
-        "images": [],
-        "locations": []
-      },
-      "params_schema": {
-        "additionalProperties": false,
-        "properties": {
-          "action": {
-            "enum": [
-              "mask_rect",
-              "seam",
-              "remove",
-              "remove_prompt",
-              "repair",
-              "repair_area",
-              "protect"
-            ],
-            "type": "string"
-          },
-          "filler": {
-            "type": "string"
-          },
-          "max_spend_usd": {
-            "minimum": 0,
-            "type": "number"
-          }
-        },
-        "required": [
-          "action"
-        ],
-        "type": "object"
-      },
-      "purpose": "The worst case a call to an action would spend with a filler, the per-call cap and the session budget left; runs nothing.",
-      "renders": [],
-      "title": "Estimate a call"
     }
   ],
-  "contract": "0.2.0",
+  "contract": "0.3.0",
   "limits": {
     "inline_bytes": 67108864
   },

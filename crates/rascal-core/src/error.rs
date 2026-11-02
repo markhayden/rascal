@@ -71,9 +71,20 @@ pub enum Error {
         step: String,
         message: String,
     },
-    /// The call would spend more than its cap or the session budget allows; nothing was run.
+    /// The call's worst case is over its effective per-call cap (the configured cap, lowered by
+    /// the call's `max_spend_usd`); nothing was run. Never retryable (table-manners 2.2).
+    #[error("cap: {reason}")]
+    Cap { reason: String },
+    /// The session budget cannot reserve the call's worst case; nothing was run. Never
+    /// retryable (table-manners 2.2).
     #[error("budget: {reason}")]
     Budget { reason: String },
+    /// The call named an estimate that no longer matches it (table-manners 4.5): one this
+    /// session never issued, one made for other arguments or images, or one past its
+    /// `expires`; nothing was run or reserved. Never retryable unchanged: the caller asks for a
+    /// new estimate. Exit 64.
+    #[error("stale estimate: {reason}")]
+    StaleEstimate { reason: String },
     /// The caller cancelled the run (a client's cancellation, a signal); the step it stopped
     /// before published nothing. A cancelled run is not an error to report: its result says
     /// `cancelled` (table-manners 4.2).
@@ -86,6 +97,11 @@ pub enum Error {
     /// location kind a later task implements. Exit 3.
     #[error("{op}: {message}")]
     Op { op: String, message: String },
+    /// A provider rejected a filler's credential (HTTP 401 or 403) during the run: never
+    /// retryable unchanged, since a person fixes the key first (table-manners 2.2). A key that
+    /// is not set never gets here: the call is refused `not_ready` before any run. Exit 3.
+    #[error("{reason}")]
+    Credential { filler: String, reason: String },
 }
 
 /// The core's result type.

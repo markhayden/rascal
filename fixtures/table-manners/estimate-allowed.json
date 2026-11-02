@@ -1,0 +1,63 @@
+{
+  "action": "seam",
+  "allowed": true,
+  "binding": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb0002",
+  "cap_usd": 0.1,
+  "contract": "0.3.0",
+  "effective": {
+    "config_identity": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0001",
+    "model": "fillers.hosted",
+    "x-rascal": {
+      "filler": {
+        "fill_max_side": null,
+        "kind": "http",
+        "name": "hosted",
+        "paste": "feather",
+        "revision": "hosted-1"
+      }
+    }
+  },
+  "expires": "2026-01-01T00:00:00.000Z",
+  "readiness": {
+    "requirements": [
+      {
+        "kind": "config",
+        "name": "rascal.toml",
+        "state": "present"
+      },
+      {
+        "kind": "model",
+        "name": "fillers.hosted",
+        "state": "present"
+      },
+      {
+        "kind": "credential",
+        "name": "RASCAL_FIXTURE_KEY",
+        "setup": "Set `RASCAL_FIXTURE_KEY` in the environment rascal is started with.",
+        "state": "present"
+      }
+    ],
+    "state": "ready"
+  },
+  "refused": null,
+  "session": {
+    "budget_usd": 0.05,
+    "contract": "0.3.0",
+    "id": "00000000-0000-4000-8000-000000000004",
+    "remaining_usd": 0.05,
+    "reserved_usd": 0.0,
+    "spent_usd": 0.0,
+    "started": "2026-01-01T00:00:00.000Z",
+    "tool": {
+      "name": "rascal",
+      "version": "0.1.1"
+    },
+    "unresolved_usd": 0.0
+  },
+  "session_id": "00000000-0000-4000-8000-000000000004",
+  "tool": {
+    "name": "rascal",
+    "version": "0.1.1"
+  },
+  "worst_case_usd": 0.04
+}

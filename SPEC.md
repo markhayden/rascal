@@ -799,8 +799,11 @@ identity.
 
 ### The MCP server and client
 
-**`rascal serve --workspace <dir>`** is an MCP server over stdio at protocol revision
-`2025-11-25`. It advertises one tool per op with the op's manifest and its input schema as the
+**`rascal serve [--workspace <dir>]`** is an MCP server over stdio at protocol revision
+`2025-11-25`. It starts in every configuration state (no `--config`, a missing file, one that
+does not load) and with a pack that does not start (its tools are absent and stderr says why);
+the workspace defaults to the configuration's `[workspace] dir`, else
+`$XDG_DATA_HOME/rascal/workspace`. It advertises one tool per op with the op's manifest and its input schema as the
 tool schema, with **ordinary arguments only**: artifact ids and parameters. No argument is
 injected; the server resolves ids against its own workspace. Workspace tools: `workspace_import`
 (a path or base64 image in; a canonical `Image` and its `raw:` frame out), `workspace_list`
@@ -992,9 +995,13 @@ whether or not anyone looks. The diagnostic surface reads the journal (and, afte
 rebuilt journal from the records) and nothing else, so it is optional and costs nothing when
 unused. Two forms:
 
-- **The run page.** `rascal dash <run directory or workspace> [--out page.html | --serve]`
-  writes a static page (images embedded, from a template authored here) or serves it on
-  loopback: a timing waterfall with one bar per step in journal order and the filler and pack
+- **The run page.** `rascal dash <run directory or workspace> [--out page.html | --document |
+  --serve [--frame-ancestor <origin>]]` writes a static page (images embedded, from a template
+  authored here), writes it as the contract's document render (one self-contained file under
+  `$XDG_CACHE_HOME/rascal/dash/`, its path the only stdout line), or serves it on loopback as the
+  contract's server render (the URL the only stdout line; framing allowed only to the one origin
+  given; exit 0 when stdin ends or on SIGTERM). A render reads the run and never changes it. The
+  page shows a timing waterfall with one bar per step in journal order and the filler and pack
   calls marked; every artifact as a thumbnail that opens at full size; for a band mask the
   rulers' per-row charts beside the strip they measured; the measures with their series; the
   envelope of every step; the resolved parameters and constant set versions. The page names every journal line (steps, repeated steps, `not_applicable` and failed
@@ -1013,7 +1020,8 @@ behind the tool.
 
 ## External interface (table-manners)
 
-rascal conforms to **table-manners** v0.1.0 and moves to v0.2.0 in milestone M11
+rascal conforms to **table-manners** v0.3 (milestone M12, after v0.2.0 in M11), pinned `=0.3.0`
+from crates.io (PLAN.md 12.10)
 (https://github.com/markhayden/table-manners; ADR 0020, decisions 13 and 14), the shared contract of the owner's tools: what an agent, a script or the
 playground sees from outside is the same for squint, rascal and the tools after them, so they
 chain in one pipeline without glue code. The contract's text is the specification of that
@@ -1026,9 +1034,11 @@ surface; this section is rascal's mapping onto it, built in milestone M8 (PLAN.m
 | location: `parts`, `straddles_wrap`, kinds `bbox`, `polygon` (256), `line`, `stroke`, `mask`, `whole_image`, `absent` (`reason`), `view` (input only) | converted to and from `Location` (the seam rule's `group` ↔ `parts`); a mask rendering crosses as the `mask` kind; `score`/`score_kind` from the segmenter |
 | images in: `path` or `inline`, optional `expect`; images out: role, reference, one locator | an implicit, journaled import; `images.out` with `source`, `mask`, `result` |
 | the result header and `run.json` | every `run` and `heal` writes it atomically and last; the body holds the envelope statuses, the outputs by role and the heal report |
-| `describe --json`, the `describe` tool | one action per shipped recipe, plus `estimate` |
+| `describe --json`, the `describe` tool, with no configuration too (v0.3) | one action per shipped recipe, each with its `readiness` (its default use: the mask alone unconfigured, healing with the configured fillers otherwise); `estimate` is a reserved tool beside `describe`, never an action |
+| `estimate` (v0.3): `{action, arguments}` in, `estimate.json` out, bound to the call | the same pricing as the limits check; the binding over the arguments (images by file digest, masks by identity, `return_images` and `image_blocks` left out), the version, the configuration's identity (the built-in defaults' with no file) and the session; `rascal estimate --json` with no session; a call naming the binding in `_meta["table-manners/estimate"]` is checked at the limits check and fails `stale_estimate` (invalid, spend 0) when it no longer matches or expired |
 | `serve`: action tools, `isError` results, progress heartbeat, cancellation, run resources, the runs list, caps and budget | beside the op tools of ADR 0015, which keep their envelopes |
 | v0.2: the run's reference in `run.json`, the runs list and progress `_meta`; correlation ids and the `client_run_id_reused` refusal; reserve and settle; not sent, known and unresolved spend; `rascal://runs{?cursor}`; `rascal://session` | M11: the ids persisted at allocation, claimed when a call is accepted; the session a UUID per `serve` |
+| v0.3 (M12): per-action `readiness` and the `not_ready` refusal, `max_spend_usd` above zero on every action, the reserved `estimate` and estimate binding, `cap`, `budget`, `credential` and `stale_estimate`, claims released with no run, renders with `kind` | a configured filler's key is a `credential` requirement, `present` or `missing` by name and `valid` or `invalid` from the session's provider answers; `describe` and `serve` in every configuration state (`--config` the only way to choose one, `serve`'s `--workspace` optional), readiness by local inspection (config, fillers, credentials, programs, the segmenter pack, its model files, the models variable); a call that needs a missing or invalid requirement refused `not_ready` before any run, its `client_run_id` released; a provider's 401 or 403 `credential`, never retryable; the per-call cap `cap`, the session budget `budget`, a `max_spend_usd` above the configured cap `invalid` (`usage`); `dash --serve` URL-only and framed only for `--frame-ancestor`, `dash --document` one self-contained file; the contract's `fixtures/rascal/` generated by rascal's own test, and a test that `describe` and `estimate` make no provider call (tasks 12.1 to 12.9; `docs/contract.md`) |
 | exit codes 0, 3, 64, 130, 143; 1 under `--strict` | as before, plus the signals |
 | `playground` | hands off to Wafflery, the shared program (its launcher agreement, H1); no UI in rascal |
 
@@ -1074,6 +1084,7 @@ uv run --frozen --offline --no-sync ruff check . && uv run --frozen --offline --
 # the binary
 rascal run seam pano.jpg --out run/
 rascal describe --json                         # the contract's description document (table-manners, M8)
+rascal estimate --json --config rascal.toml request.json   # one exact call's worst case and binding, no session (M12)
 rascal playground                              # run `wafflery --tool rascal`; 69 when not installed
 rascal run remove room.jpg --location chairs.json --out run/   # chairs.json: rascal's location or a table-manners one
 rascal run remove-prompt room.jpg --prompt "chair" --config rascal.toml --out run/   # segment through the pack
@@ -1087,7 +1098,7 @@ rascal measure --before a.png --after b.png --mask run/artifacts/<id> --json
 rascal inspect run/artifacts/<id> --out inspect/ [--replay] [--json]   # --json: the record, zone statistics, identity
 rascal ops list [--json]                                   # every op's manifest as a client sees it
 rascal ops describe fan --json
-rascal dash run/ --out run/dash.html                        # the run page (Diagnostics); --serve for loopback
+rascal dash run/ --out run/dash.html                        # the run page (Diagnostics); --document, --serve
 rascal export --compat run/journal.jsonl --step fan --out fan-envelope.json
 rascal serve --workspace ws/ --config rascal.toml
 rascal workspace list ws/ [--type Mask]

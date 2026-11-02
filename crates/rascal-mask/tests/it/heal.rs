@@ -373,7 +373,8 @@ fn continuity_falls_replay_needs_no_filler_and_no_dash_skips_the_page() {
             .is_some_and(|n| n.starts_with("filler call: "))),
         "no call was made"
     );
-    // Without --replay the missing filler is an operational error.
+    // Without --replay the missing filler program is not ready: refused before the run
+    // (task 12.2).
     let third = dir.join("third");
     let out = rascal(&[
         "heal",
@@ -386,7 +387,14 @@ fn continuity_falls_replay_needs_no_filler_and_no_dash_skips_the_page() {
         "--out",
         third.to_str().unwrap(),
     ]);
-    assert_eq!(out.status.code(), Some(3));
+    assert_eq!(out.status.code(), Some(64));
+    assert!(
+        String::from_utf8_lossy(&out.stderr)
+            .contains("not ready: dependency /nonexistent/filler missing"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(!third.exists(), "no run directory");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -715,5 +723,116 @@ fn a_replay_with_a_changed_request_or_another_filler_calls_the_filler() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(String::from_utf8_lossy(&out.stderr).contains("no journal there"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Heals `seam` through a hosted filler at `url` (key in `HEAL_CREDENTIAL_KEY`, set to `key`)
+/// and returns the exit code and the run's `run.json`.
+fn heal_hosted(
+    dir: &Path,
+    name: &str,
+    url: &str,
+    key: &str,
+    timeout_s: u64,
+) -> (i32, serde_json::Value) {
+    let config = dir.join(format!("{name}.toml"));
+    std::fs::write(
+        &config,
+        format!(
+            "config_version = 1\n[fillers.hosted]\nurl = \"{url}\"\nprofile = \"grey\"\nkey_env = \"HEAL_CREDENTIAL_KEY\"\ntimeout_s = {timeout_s}\nspend_usd_per_call = 0.04\n"
+        ),
+    )
+    .unwrap();
+    let run = dir.join(name);
+    let out = rascal_env(
+        &[
+            "heal",
+            "seam",
+            pano().to_str().unwrap(),
+            "--filler",
+            "hosted",
+            "--config",
+            config.to_str().unwrap(),
+            "--out",
+            run.to_str().unwrap(),
+            "--no-dash",
+        ],
+        &[("HEAL_CREDENTIAL_KEY", key)],
+    );
+    let result: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(run.join("run.json")).unwrap()).unwrap();
+    // (A one-letter stand-in key would match anything; only a real-looking one is searched.)
+    assert!(
+        key.len() < 8 || !String::from_utf8_lossy(&out.stderr).contains(key),
+        "the key is printed"
+    );
+    (out.status.code().unwrap(), result)
+}
+
+/// Task 12.3 (table-manners 2.2): a provider's 401 or 403 during the run is `credential`: an
+/// `error`, never retryable, a known call at zero (4.5: an answer, so not unsent; a known zero
+/// is `measured`), the mask kept in `images.out` (2.3); `rascal heal` exits 3. A 5xx stays a retryable `provider` and a timeout stays `timeout`.
+#[test]
+fn a_rejected_credential_is_credential_and_never_retryable() {
+    let dir = scratch("credential");
+    for status in [401u16, 403] {
+        let (url, seen) = rascal_testkit::fake_filler::spawn_rejecting(
+            Behaviour::Exact,
+            Some("the-right-key".to_string()),
+            status,
+        );
+        let (code, r) = heal_hosted(
+            &dir,
+            &format!("rejected-{status}"),
+            &url,
+            "zq-wrong-key-zq",
+            20,
+        );
+        assert_eq!(code, 3, "{r:#}");
+        assert_eq!(r["status"], "error", "{r:#}");
+        assert_eq!(r["error"]["code"], "credential", "{r:#}");
+        assert_eq!(r["error"]["retryable"], false);
+        assert!(
+            r["error"]["reason"]
+                .as_str()
+                .unwrap()
+                .contains(&format!("HTTP {status}")),
+            "{r:#}"
+        );
+        assert_eq!(r["spend"]["usd"], 0.0, "{r:#}");
+        assert_eq!(r["spend"]["unresolved_usd"], 0.0);
+        assert_eq!(r["spend"]["basis"], "measured", "{r:#}");
+        let call = r["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|n| n.as_str()?.strip_prefix("filler call: "))
+            .collect::<Vec<_>>();
+        assert_eq!(call.len(), 1, "{r:#}");
+        let call: serde_json::Value = serde_json::from_str(call[0]).unwrap();
+        assert_eq!(call["charge"], "known", "{call:#}");
+        assert_eq!(call["status"], status, "{call:#}");
+        let roles: Vec<&str> = r["images"]["out"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| o["role"].as_str().unwrap())
+            .collect();
+        assert!(roles.contains(&"mask"), "{r:#}");
+        assert_eq!(seen.lock().unwrap().len(), 1);
+        assert!(!r.to_string().contains("zq-wrong-key-zq"));
+    }
+    // A 5xx is the provider's, and retryable.
+    let (url, _) = spawn(Behaviour::Failing, Some("k".to_string()));
+    let (code, r) = heal_hosted(&dir, "failing", &url, "k", 20);
+    assert_eq!(code, 3);
+    assert_eq!(r["error"]["code"], "provider", "{r:#}");
+    assert_eq!(r["error"]["retryable"], true);
+    // No answer in time is a timeout.
+    let (url, _) = spawn(Behaviour::Slow, Some("k".to_string()));
+    let (code, r) = heal_hosted(&dir, "slow", &url, "k", 1);
+    assert_eq!(code, 3);
+    assert_eq!(r["error"]["code"], "timeout", "{r:#}");
+    assert_eq!(r["error"]["retryable"], true);
     let _ = std::fs::remove_dir_all(&dir);
 }

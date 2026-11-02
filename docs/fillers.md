@@ -37,7 +37,7 @@ dir = ".rascal/fills"          # keep every fill by its request, filler and revi
                                # request is answered from here and the filler is not called
 
 [limits]                       # rascal serve only
-call_cap_usd = 0.50            # the most one call may spend; a call may lower it (max_spend_usd)
+call_cap_usd = 0.50            # the most one call may spend; a call may lower it (max_spend_usd), never raise it
 session_budget_usd = 5.00      # the most one serve process may spend
 ```
 
@@ -45,7 +45,9 @@ A fill is cached under a key over the request's bytes (the image, the mask, the 
 filler's name and `revision`, so one filler's pixels are never another's. A hit writes `fill from
 the cache` in the journal, and the run's `run.json` says `cache: hit` with spend 0; a call says
 `miss` with the filler's `spend_usd_per_call`. The limits refuse a call whose price would pass
-the cap or the session's budget before anything runs, as an `error` with code `budget`.
+the per-call cap (an `error` with code `cap`) or the session's budget (code `budget`) before any
+paid step, and `rascal estimate` or the `estimate` tool says so beforehand
+(`docs/contract.md`, "The fill cache, prices and limits" and "Estimates").
 
 Exactly one of `command` and `url`; `key_env` goes with `url`; `send_mask = true` on an
 image-input profile also sends the `grey` rendering as `mask`. `examples/rascal.toml` has both
@@ -96,10 +98,14 @@ Every call is two journal notes. Before it, `filler call started: {…}` with th
 its price; after it, `filler call: {…}` with the entry's name, the command as configured
 (placeholders shown) or the URL, the request's dimensions and bytes, the answer's bytes, the
 duration, the exit code or HTTP status, the outcome, and `charge`: `not_sent`, `known` or
-`unresolved` (`docs/contract.md`, "The fill cache, prices and limits"). A run's spend is read from
+`unresolved` (`docs/contract.md`, "The fill cache, prices and limits"); a 401 or 403 is `known`
+and counts zero. A run's spend is read from
 these notes, so a failed, cancelled or interrupted run keeps what it may have been charged. The key is handed to the
-`Authorization` header and appears in no file, message or span; a wrong key is reported as the
-server's status, and an unset `key_env` as a usage error naming the variable.
+`Authorization` header and appears in no file, message or span. A key the server rejects (HTTP
+401 or 403) ends the run `credential`, never retryable (exit 3): the call is known (the
+provider answered) and counts zero, with `spend.basis: measured`; a key that is
+not set never reaches the filler, since the call is refused as not ready before its run
+(`docs/contract.md`, "Readiness").
 
 ## `heal`: the typed graph
 

@@ -94,11 +94,14 @@ rascal export --compat run/journal.jsonl --step rasterize --out e.json
 rascal workspace export-mask run/ mask-6 --out seam.mask.tar   # a Mask as one hash-checked file (ADR 0022)
 rascal workspace import-mask ws/ seam.mask.tar                 # into another workspace, same identity; a PNG is refused
 rascal workspace import-location ws/ finding.json --image img-1   # a location as JSON, checked against the image
-rascal dash run/ --out run/dash.html                     # the run page: timings, envelopes, every artifact; --serve for loopback
-rascal describe --json                                    # what rascal can run, in the shared contract's words
+rascal dash run/ --out run/dash.html                     # the run page: timings, envelopes, every artifact; --document, --serve
+rascal describe --json [--config rascal.toml]             # what rascal can run, in the shared contract's words; with no
+                                                          # configuration too, each action saying what it still needs
+echo '{"action":"seam","arguments":{"image":{"path":"/abs/pano.png"},"filler":"hosted"}}' | rascal estimate --json --config rascal.toml -   # what that exact call would spend, sending nothing
 rascal playground                                         # open Wafflery, the shared program (separate)
-rascal serve --workspace ws/                              # every op as an MCP tool over stdio, plus import/list/describe/read/dash,
-                                                          # and the table-manners actions (one per recipe) with run resources
+rascal serve [--config rascal.toml]                       # every op as an MCP tool over stdio, plus import/list/describe/read/dash,
+                                                          # the table-manners actions (one per recipe) with run resources, and
+                                                          # `estimate`; starts with no flags at all, refusing only what a call needs
 rascal tools call rascal-tools segment --config rascal.toml --workspace ws/ --image photo.png --prompt "the chair"   # a pack's tool from the shell
 rascal tools setup --bundle bundle-macos-arm64/ --into ~/rascal-tools   # the Python pack installed offline from its bundle
 rascal corpus verify corpus.toml --root ~/rascal/corpus                 # every image's file against its digest
@@ -125,7 +128,7 @@ exchange documents without translation; rascal is fully standalone and depends o
 
 ## Status
 
-Released: `v0.1.1` (2026-11-01: `tools setup` refuses links, special files and escaping paths in a bundle archive, bounds a download while it streams, and uses a fresh private scratch directory; the bundles workflow requires the models), after `v0.1.0` the same day, with the segmenter's model files as the `models-2026-10` release. M0 to M9 and M11 are merged (the scaffold, the core, the seam, MCP, the refinements, the Python pack with its segmenter and bundle, the lab, the Poisson paste and the release, the shared contract, spend and the launcher, its v0.2 pin), with M10's portable masks; the rest of M10 (operations) is open; the lab's rounds met success criterion 6 (`docs/results/seam-03.md`), and the seven criteria are recorded in [docs/architecture.md](docs/architecture.md#the-success-criteria-specmd-their-outcome-and-the-command-that-proves-each). The design is in [SPEC.md](SPEC.md), the build order
+Released: `v0.1.1` (2026-11-01: `tools setup` refuses links, special files and escaping paths in a bundle archive, bounds a download while it streams, and uses a fresh private scratch directory; the bundles workflow requires the models), after `v0.1.0` the same day, with the segmenter's model files as the `models-2026-10` release. M0 to M9 and M11 are merged (the scaffold, the core, the seam, MCP, the refinements, the Python pack with its segmenter and bundle, the lab, the Poisson paste and the release, the shared contract, spend and the launcher, its v0.2 pin), with M10's portable masks; M12 (table-manners v0.3: readiness with no configuration, bound estimates, the cap and the budget apart, `credential`, renders a host can embed) is built on its branch and waits for the contract's release; the rest of M10 (operations) is open; the lab's rounds met success criterion 6 (`docs/results/seam-03.md`), and the seven criteria are recorded in [docs/architecture.md](docs/architecture.md#the-success-criteria-specmd-their-outcome-and-the-command-that-proves-each). The design is in [SPEC.md](SPEC.md), the build order
 in [PLAN.md](PLAN.md), the decisions in [docs/adr/](docs/adr/README.md), and the current state
 of each part in [docs/architecture.md](docs/architecture.md#status).
 

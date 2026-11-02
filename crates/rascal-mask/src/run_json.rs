@@ -111,6 +111,8 @@ pub fn input_identity(parts: &Value) -> String {
 /// The contract's error for a rascal error (2.2): its status, code and whether to retry.
 pub fn error_of(error: &Error) -> (Status, ErrorInfo) {
     let (status, code, retryable) = match error {
+        // A provider's 401 or 403 during the run: a person fixes the key first (2.2).
+        Error::Credential { .. } => (Status::Error, ErrorCode::Credential, false),
         Error::Usage { .. } | Error::InvalidArgs { .. } | Error::Recipe { .. } => {
             let input = matches!(error, Error::Usage { message } if
                 message.contains("another image") || message.contains("not a table-manners") ||
@@ -126,6 +128,8 @@ pub fn error_of(error: &Error) -> (Status, ErrorInfo) {
             )
         }
         Error::Io { .. } => (Status::Error, ErrorCode::Io, true),
+        Error::StaleEstimate { .. } => (Status::Invalid, ErrorCode::StaleEstimate, false),
+        Error::Cap { .. } => (Status::Error, ErrorCode::Cap, false),
         Error::Budget { .. } => (Status::Error, ErrorCode::Budget, false),
         Error::Image { .. } => (Status::Invalid, ErrorCode::Input, false),
         other => {
@@ -142,18 +146,13 @@ pub fn error_of(error: &Error) -> (Status, ErrorInfo) {
             let provider = text.contains("HTTP ")
                 || text.contains("client:")
                 || text.contains("reading the body")
-                || text.contains("byte cap")
-                || text.contains("key_env");
+                || text.contains("byte cap");
             if timeout {
                 (Status::Error, ErrorCode::Timeout, true)
             } else if process {
                 (Status::Error, ErrorCode::ToolProcess, true)
             } else if provider {
-                (
-                    Status::Error,
-                    ErrorCode::Provider,
-                    !text.contains("key_env"),
-                )
+                (Status::Error, ErrorCode::Provider, true)
             } else {
                 (Status::Error, ErrorCode::Internal, false)
             }
@@ -370,7 +369,11 @@ pub fn finish(
         spend: Spend {
             usd: usd(spent.usd),
             unresolved_usd: usd(spent.unresolved_usd),
-            basis: SpendBasis::Estimated,
+            basis: if spent.measured {
+                SpendBasis::Measured
+            } else {
+                SpendBasis::Estimated
+            },
         },
         cache: match ended.cache {
             Some(true) => Cache::Hit,

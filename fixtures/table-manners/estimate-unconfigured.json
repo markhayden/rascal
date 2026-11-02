@@ -1,0 +1,40 @@
+{
+  "action": "seam",
+  "allowed": true,
+  "binding": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb0001",
+  "cap_usd": null,
+  "contract": "0.3.0",
+  "effective": {
+    "config_identity": "sha256:ecacf98c64387c1697e576e92ec3925051e7a4a8a16073ea901f59c5775f514d",
+    "model": null,
+    "x-rascal": {
+      "filler": null
+    }
+  },
+  "expires": "2026-01-01T00:00:00.000Z",
+  "readiness": {
+    "requirements": [],
+    "state": "ready"
+  },
+  "refused": null,
+  "session": {
+    "budget_usd": null,
+    "contract": "0.3.0",
+    "id": "00000000-0000-4000-8000-000000000002",
+    "remaining_usd": null,
+    "reserved_usd": 0.0,
+    "spent_usd": 0.0,
+    "started": "2026-01-01T00:00:00.000Z",
+    "tool": {
+      "name": "rascal",
+      "version": "0.1.1"
+    },
+    "unresolved_usd": 0.0
+  },
+  "session_id": "00000000-0000-4000-8000-000000000002",
+  "tool": {
+    "name": "rascal",
+    "version": "0.1.1"
+  },
+  "worst_case_usd": 0.0
+}

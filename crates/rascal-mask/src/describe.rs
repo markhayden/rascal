@@ -5,17 +5,17 @@
 
 use std::collections::BTreeMap;
 
-use rascal_core::config::Config;
 use rascal_core::contract::table_manners::images::{
     ImageSlot, Limits, LocationKind, LocationOutput, LocationSlot, Outputs, Vocabulary,
 };
 use rascal_core::contract::table_manners::{
-    Action, Cost, DescribedTool, Description, Duration, Profile, Render, SpendBasis,
+    Action, Cost, DescribedTool, Description, Duration, Profile, Render, RenderKind, SpendBasis,
 };
 use rascal_core::error::Result;
 use rascal_core::recipe::InputType;
 use serde_json::{Value, json};
 
+use crate::readiness::{self, Setup, Use};
 use crate::recipes::{SHIPPED, load_recipe};
 
 /// The largest inline image `serve` takes, in decoded bytes (11.2): 64 MiB.
@@ -23,6 +23,42 @@ pub const INLINE_BYTES: u64 = 64 << 20;
 
 /// The longest gap between progress notifications on a live run, in seconds (4.1).
 pub const PROGRESS_INTERVAL_S: u32 = 10;
+
+/// The longest a host waits for the dash render's URL line, in seconds (3.2).
+pub const DASH_READY_TIMEOUT_S: u32 = 10;
+
+/// Every action's renders (3.2), each running `rascal` itself (`tool.name`): `dash`, the page
+/// served on loopback for the host's origin to frame, and `page`, the same page as one
+/// self-contained file. `{run.dir}` and `{frame_ancestor}` are whole arguments.
+fn renders() -> Vec<Render> {
+    vec![
+        Render {
+            name: "dash".to_string(),
+            kind: RenderKind::Server,
+            ready_timeout_s: Some(DASH_READY_TIMEOUT_S),
+            command: [
+                "rascal",
+                "dash",
+                "{run.dir}",
+                "--serve",
+                "--port",
+                "0",
+                "--frame-ancestor",
+                "{frame_ancestor}",
+            ]
+            .map(str::to_string)
+            .to_vec(),
+        },
+        Render {
+            name: "page".to_string(),
+            kind: RenderKind::Document,
+            ready_timeout_s: None,
+            command: ["rascal", "dash", "{run.dir}", "--document"]
+                .map(str::to_string)
+                .to_vec(),
+        },
+    ]
+}
 
 /// What the segmenter's detection score is, in a location's `score_kind` (9.2).
 pub const SEGMENT_SCORE_KIND: &str = "owlv2-detection";
@@ -87,9 +123,19 @@ fn location_kinds(recipe: &str, slot: &str) -> Vec<LocationKind> {
     }
 }
 
-/// The description for the shipped recipes under `config` (its fillers name the spend and the
-/// keys; without one no filler is configured and nothing spends).
-pub fn description(config: Option<&Config>) -> Result<Description> {
+/// `max_spend_usd` as every action declares it (4.5): every action takes a filler, so every
+/// action may be paid, and a host can always pass its cap. A cap of zero is not a cap.
+pub fn max_spend_usd_schema() -> Value {
+    json!({ "type": "number", "exclusiveMinimum": 0,
+            "description": "Lower the per-call spend cap for this call (USD, above zero)." })
+}
+
+/// The description for the shipped recipes under the configuration `setup` holds (its fillers
+/// name the spend and the keys; without one no filler is configured and nothing spends), each
+/// action's readiness its default use (3.1, [`readiness::for_call`]). It never fails on the
+/// configuration. `estimate` is a reserved tool (3, 5), never one of the actions.
+pub fn description(setup: &Setup<'_>) -> Result<Description> {
+    let config = setup.config.config();
     let fillers: Vec<String> = config
         .map(|c| c.fillers.keys().cloned().collect())
         .unwrap_or_default();
@@ -100,16 +146,6 @@ pub fn description(config: Option<&Config>) -> Result<Description> {
             .values()
             .any(|f| f.spend_usd_per_call.is_some_and(|p| p > 0.0))
     });
-    let mut needs_env: Vec<String> = config
-        .map(|c| {
-            c.fillers
-                .values()
-                .filter_map(|f| f.key_env.clone())
-                .collect()
-        })
-        .unwrap_or_default();
-    needs_env.sort();
-    needs_env.dedup();
     let max_s = config
         .and_then(|c| c.fillers.values().map(|f| f.timeout_s).max())
         .unwrap_or(0)
@@ -134,6 +170,7 @@ pub fn description(config: Option<&Config>) -> Result<Description> {
                         input.clone()
                     },
                     required: !optional,
+                    many: false,
                 }),
                 InputType::Location => locations.push(LocationSlot {
                     slot: input.clone(),
@@ -190,6 +227,7 @@ pub fn description(config: Option<&Config>) -> Result<Description> {
             json!({ "type": "boolean",
                     "description": "Fail (exit 1) when the recipe stops at a step that is not applicable." }),
         );
+        properties.insert("max_spend_usd".to_string(), max_spend_usd_schema());
         let found = recipe.step.iter().any(|s| s.op == "segment");
         actions.push(Action {
             name: action_name(name),
@@ -214,52 +252,15 @@ pub fn description(config: Option<&Config>) -> Result<Description> {
             cost: Cost {
                 may_spend: remote,
                 basis: remote.then_some(SpendBasis::Estimated),
-                needs_env: needs_env.clone(),
             },
+            readiness: readiness::for_call(setup, &action_name(name), Use::Configured),
             duration: Duration {
                 typical_s: if found { 20.0 } else { 5.0 },
                 max_s,
             },
-            renders: vec![Render {
-                name: "dash".to_string(),
-                command: ["rascal", "dash", "{run.dir}", "--serve", "--port", "0"]
-                    .map(str::to_string)
-                    .to_vec(),
-            }],
+            renders: renders(),
         });
     }
-    actions.push(Action {
-        name: "estimate".to_string(),
-        title: "Estimate a call".to_string(),
-        purpose: "The worst case a call to an action would spend with a filler, the per-call cap and the session budget left; runs nothing.".to_string(),
-        params_schema: json!({
-            "type": "object",
-            "properties": {
-                "action": { "type": "string",
-                            "enum": actions.iter().map(|a| a.name.clone()).collect::<Vec<_>>() },
-                "filler": { "type": "string" },
-                "max_spend_usd": { "type": "number", "minimum": 0 }
-            },
-            "required": ["action"],
-            "additionalProperties": false,
-        }),
-        images: Some(vec![]),
-        locations: Some(vec![]),
-        outputs: Some(Outputs {
-            images: vec![],
-            locations: vec![],
-        }),
-        cost: Cost {
-            may_spend: false,
-            basis: None,
-            needs_env: vec![],
-        },
-        duration: Duration {
-            typical_s: 0.1,
-            max_s: 1.0,
-        },
-        renders: vec![],
-    });
     Ok(Description {
         contract: rascal_core::contract::CONTRACT_VERSION.to_string(),
         profiles: vec![Profile::Images],

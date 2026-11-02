@@ -374,22 +374,26 @@ fn a_cancelled_call_gets_no_result_and_its_run_says_cancelled() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// Task 8.6: `[limits]` hold `serve` to a per-call cap a call may only lower and a session
-/// budget; `estimate` says so before anything runs; a refused call is an `error` result with
-/// code `budget`.
-#[test]
-fn the_cap_and_the_budget_refuse_a_call_that_would_spend_too_much() {
-    let dir = scratch("budget");
-    let bin = env!("CARGO_BIN_EXE_rascal");
+/// `serve` under `[limits]` with one priced HTTP filler, `hosted` at 0.04 a call, served by the
+/// fake on loopback; returns the client and the requests the fake saw.
+fn limits_server(
+    dir: &Path,
+    limits: &str,
+) -> (
+    Client,
+    std::sync::Arc<std::sync::Mutex<Vec<rascal_testkit::fake_filler::Seen>>>,
+) {
+    let (url, seen) =
+        rascal_testkit::fake_filler::spawn(rascal_testkit::fake_filler::Behaviour::Exact, None);
     let config = dir.join("limits.toml");
     std::fs::write(
         &config,
         format!(
-            "config_version = 1\n[limits]\ncall_cap_usd = 0.10\nsession_budget_usd = 0.05\n[fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\nrevision = \"fake\"\nspend_usd_per_call = 0.04\n"
+            "config_version = 1\n[limits]\n{limits}\n[fillers.hosted]\nurl = {url:?}\nprofile = \"grey\"\nrevision = \"hosted\"\nspend_usd_per_call = 0.04\n"
         ),
     )
     .unwrap();
-    let mut command = Command::new(bin);
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
     command
         .args([
             "serve",
@@ -401,52 +405,144 @@ fn the_cap_and_the_budget_refuse_a_call_that_would_spend_too_much() {
             dir.join("runs").to_str().unwrap(),
         ])
         .env_remove("RASCAL_LOG");
-    let mut client = Client::start(&mut command).unwrap();
+    (Client::start(&mut command).unwrap(), seen)
+}
+
+/// A `seam` call healed by `hosted`, lowered to `max_spend_usd` when given; its result,
+/// validated.
+fn spend_call(client: &mut Client, max_spend_usd: Option<f64>) -> serde_json::Value {
     let pano = repo_root().join("fixtures/images/step-pano.png");
-    let estimate = client
-        .call(
+    let mut args =
+        serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "hosted" });
+    if let Some(asked) = max_spend_usd {
+        args["max_spend_usd"] = serde_json::json!(asked);
+    }
+    let out = client.call("seam", args).unwrap();
+    let s = out.structured.unwrap();
+    valid("urn:table-manners:core:result", &s);
+    assert_eq!(out.is_error, s["status"] != "completed", "{s:#}");
+    s
+}
+
+/// Asserts a call was refused at the limits check: the status and code, never retryable, zero
+/// spend, no request to the filler, and nothing left reserved in the session.
+fn assert_refused(
+    client: &mut Client,
+    seen: &std::sync::Mutex<Vec<rascal_testkit::fake_filler::Seen>>,
+    s: &serde_json::Value,
+    status: &str,
+    code: &str,
+    requests_before: usize,
+) {
+    assert_eq!(s["status"], status, "{s:#}");
+    assert_eq!(s["error"]["code"], code, "{s:#}");
+    assert_eq!(s["error"]["retryable"], false, "{s:#}");
+    assert_eq!(s["spend"]["usd"], 0.0, "{s:#}");
+    assert_eq!(seen.lock().unwrap().len(), requests_before, "{s:#}");
+    let ledger = session(client);
+    assert_eq!(ledger["reserved_usd"], 0.0, "{ledger:#}");
+}
+
+/// Task 12.4 (table-manners 2.2, 4.5): the per-call cap and the session budget fail apart. A
+/// `max_spend_usd` above the configured cap is a bad argument naming both amounts, never
+/// silently lowered; a worst case over the effective cap is `cap`; a session that cannot
+/// reserve it is `budget`. Each spends nothing and never reaches the filler.
+#[test]
+fn the_cap_and_the_budget_fail_with_their_own_codes() {
+    let dir = scratch("budget");
+    let (mut client, seen) = limits_server(&dir, "call_cap_usd = 0.10\nsession_budget_usd = 0.05");
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let estimate = |client: &mut Client, extra: serde_json::Value| {
+        let mut args = serde_json::json!({ "image": { "path": pano.to_str().unwrap() },
+                                           "filler": "hosted" });
+        args.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        client.call(
             "estimate",
-            serde_json::json!({ "action": "seam", "filler": "fake" }),
+            serde_json::json!({ "action": "seam", "arguments": args }),
         )
+    };
+    let before = estimate(&mut client, serde_json::json!({}))
         .unwrap()
         .structured
         .unwrap();
-    assert_eq!(estimate["worst_case_usd"], 0.04);
-    assert_eq!(estimate["allowed"], true);
-    // Lowered under the price: refused before anything runs.
-    let low = client
-        .call("seam", serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "fake", "max_spend_usd": 0.01 }))
-        .unwrap();
-    assert!(low.is_error);
-    let s = low.structured.unwrap();
-    assert_eq!(s["status"], "error");
-    assert_eq!(s["error"]["code"], "budget");
+    assert_eq!(before["worst_case_usd"], 0.04);
+    assert_eq!(before["cap_usd"], 0.10);
+    assert_eq!(before["allowed"], true);
+
+    // Above the configured cap: refused as an argument, naming both amounts.
+    let over = spend_call(&mut client, Some(0.2));
+    assert_refused(&mut client, &seen, &over, "invalid", "usage", 0);
+    let reason = over["error"]["reason"].as_str().unwrap();
+    assert!(
+        reason.contains("max_spend_usd") && reason.contains("0.2") && reason.contains("0.1"),
+        "{reason}"
+    );
+    assert!(matches!(
+        estimate(&mut client, serde_json::json!({ "max_spend_usd": 0.2 })),
+        Err(Failure::Rpc { .. })
+    ));
+
+    // Lowered under the price: the call's worst case is over its effective cap.
+    let low = spend_call(&mut client, Some(0.03));
+    assert_refused(&mut client, &seen, &low, "error", "cap", 0);
+    assert!(
+        low["error"]["reason"].as_str().unwrap().contains("cap"),
+        "{low:#}"
+    );
+
     // The first call fits the budget and spends 0.04; the second would go over 0.05.
-    let first = client
-        .call(
-            "seam",
-            serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "fake" }),
-        )
-        .unwrap();
-    assert_eq!(first.structured.unwrap()["spend"]["usd"], 0.04);
-    let after = client
-        .call(
-            "estimate",
-            serde_json::json!({ "action": "seam", "filler": "fake" }),
-        )
+    let first = spend_call(&mut client, None);
+    assert_eq!(first["status"], "completed", "{first:#}");
+    assert_eq!(first["spend"]["usd"], 0.04);
+    assert_eq!(seen.lock().unwrap().len(), 1);
+    let after = estimate(&mut client, serde_json::json!({}))
         .unwrap()
         .structured
         .unwrap();
     assert_eq!(after["allowed"], false);
-    let second = client
-        .call(
-            "seam",
-            serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "fake" }),
-        )
-        .unwrap();
-    assert_eq!(second.structured.unwrap()["error"]["code"], "budget");
+    let second = spend_call(&mut client, None);
+    assert_refused(&mut client, &seen, &second, "error", "budget", 1);
+    assert!(
+        second["error"]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("session"),
+        "{second:#}"
+    );
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 12.4: with no configured cap the caller's `max_spend_usd` is the cap.
+#[test]
+fn uncapped_the_callers_max_spend_is_the_cap() {
+    let dir = scratch("uncapped");
+    let (mut client, seen) = limits_server(&dir, "");
+    let low = spend_call(&mut client, Some(0.03));
+    assert_refused(&mut client, &seen, &low, "error", "cap", 0);
+    let enough = spend_call(&mut client, Some(0.05));
+    assert_eq!(enough["status"], "completed", "{enough:#}");
+    assert_eq!(enough["spend"]["usd"], 0.04);
+    assert_eq!(seen.lock().unwrap().len(), 1);
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Reads messages until a run's first step line: the journal is watched only once the limits
+/// check has passed, so its worst case is reserved by then ("run started" comes before it).
+fn wait_reserved(client: &mut Client) {
+    loop {
+        let message = client.next_message().unwrap();
+        if message["method"] == "notifications/progress"
+            && message["params"]["message"]
+                .as_str()
+                .is_some_and(|m| m.starts_with("step "))
+        {
+            return;
+        }
+    }
 }
 
 /// Reads messages until every id in `ids` has its response; returns them by id.
@@ -467,8 +563,9 @@ fn responses(
 }
 
 /// Task 9.2: the limits check and the reservation are one step. Under `--concurrency 2` with a
-/// budget for one call, two calls at once give one run and one refusal before any filler call;
-/// while a run is under way its worst case is held, and its end settles it into the spend.
+/// budget for one call, two calls at once give one run and one refusal (`budget`, task 12.4)
+/// before any filler call; while a run is under way its worst case is held, and its end settles
+/// it into the spend.
 #[test]
 fn concurrent_calls_reserve_the_budget_atomically() {
     let dir = scratch("reserve");
@@ -529,7 +626,7 @@ fn concurrent_calls_reserve_the_budget_atomically() {
         client
             .call(
                 "estimate",
-                serde_json::json!({ "action": "seam", "filler": "slow" }),
+                serde_json::json!({ "action": "seam", "arguments": call["arguments"] }),
             )
             .unwrap()
             .structured
@@ -570,13 +667,7 @@ fn concurrent_calls_reserve_the_budget_atomically() {
     let mut with_token = call.clone();
     with_token["_meta"] = serde_json::json!({ "progressToken": "r-1" });
     let a = client.begin("tools/call", with_token).unwrap();
-    // The run is under way once its first progress names it.
-    loop {
-        let message = client.next_message().unwrap();
-        if message["method"] == "notifications/progress" {
-            break;
-        }
-    }
+    wait_reserved(&mut client);
     let held = estimate(&mut client);
     assert_eq!(held["allowed"], true, "{held:#}");
     assert_eq!(session(&mut client)["reserved_usd"], 0.04);
@@ -642,7 +733,8 @@ fn reads_answer_while_a_run_holds_the_permit_and_the_run_is_listed() {
     let estimate = client
         .begin(
             "tools/call",
-            serde_json::json!({ "name": "estimate", "arguments": { "action": "seam", "filler": "slow" } }),
+            serde_json::json!({ "name": "estimate", "arguments": { "action": "seam",
+                "arguments": { "image": { "path": pano.to_str().unwrap() }, "filler": "slow" } } }),
         )
         .unwrap();
     let describe = client
@@ -713,12 +805,7 @@ fn the_session_is_one_observation_of_the_servers_ledger() {
             }),
         )
         .unwrap();
-    loop {
-        let message = client.next_message().unwrap();
-        if message["method"] == "notifications/progress" {
-            break;
-        }
-    }
+    wait_reserved(&mut client);
     let held = session(&mut client);
     assert_eq!(held["reserved_usd"], 0.04, "{held:#}");
     assert_eq!(held["id"], id.as_str());
@@ -1034,6 +1121,421 @@ fn every_tool_input_schema_stands_alone() {
             panic!("{}: {error}\n{:#}", tool.name, tool.input_schema);
         }
     }
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 12.1 (table-manners v0.3, 3 and 5): `estimate` is a reserved tool, listed beside
+/// `describe` but never an action; each action tool's input schema declares the same
+/// `max_spend_usd` as its `params_schema` in the description.
+#[test]
+fn estimate_is_a_reserved_tool_and_each_cap_agrees_with_the_description() {
+    let dir = scratch("reserved");
+    let mut client = start(&dir);
+    let tools = client.list_tools().unwrap();
+    for name in ["estimate", "describe"] {
+        assert!(tools.iter().any(|t| t.name == name), "{name}");
+    }
+    let described = client
+        .call("describe", serde_json::json!({}))
+        .unwrap()
+        .structured
+        .unwrap();
+    valid("urn:table-manners:core:description", &described);
+    let actions = described["actions"].as_array().unwrap();
+    assert!(!actions.iter().any(|a| a["name"] == "estimate"));
+    for action in actions {
+        let name = action["name"].as_str().unwrap();
+        let tool = tools.iter().find(|t| t.name == name).unwrap();
+        let declared = &action["params_schema"]["properties"]["max_spend_usd"];
+        assert_eq!(
+            declared,
+            &serde_json::json!({ "type": "number", "exclusiveMinimum": 0,
+                                 "description": "Lower the per-call spend cap for this call (USD, above zero)." })
+        );
+        assert_eq!(
+            &tool.input_schema["properties"]["max_spend_usd"], declared,
+            "{name}"
+        );
+    }
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 12.1 (table-manners 4.5): a cap of zero is not a cap; `max_spend_usd: 0` is a bad
+/// argument, refused in the run as `invalid`/`usage` with nothing spent.
+#[test]
+fn a_cap_of_zero_is_an_invalid_run_that_spends_nothing() {
+    let dir = scratch("zero-cap");
+    let mut client = start(&dir);
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    for asked in [serde_json::json!(0), serde_json::json!(-0.5)] {
+        let out = client
+            .call(
+                "seam",
+                serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "slow",
+                                    "max_spend_usd": asked }),
+            )
+            .unwrap();
+        assert!(out.is_error);
+        let s = out.structured.unwrap();
+        valid("urn:table-manners:core:result", &s);
+        assert_eq!(s["status"], "invalid", "{s:#}");
+        assert_eq!(s["error"]["code"], "usage");
+        assert!(
+            s["error"]["reason"]
+                .as_str()
+                .unwrap()
+                .contains("max_spend_usd"),
+            "{s:#}"
+        );
+        assert_eq!(s["spend"]["usd"], 0.0);
+    }
+    let ledger = session(&mut client);
+    assert_eq!(ledger["spent_usd"], 0.0, "{ledger:#}");
+    assert_eq!(ledger["reserved_usd"], 0.0);
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `rascal serve` with `args` and `env` (with `HOME` and `XDG_DATA_HOME` in `dir`, so nothing
+/// defaults into the real home).
+fn start_with(dir: &Path, args: &[&str], env: &[(&str, &str)]) -> Client {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
+    command
+        .arg("serve")
+        .args(args)
+        .env_remove("RASCAL_LOG")
+        .env_remove("RASCAL_TOOLS_MODELS")
+        .env("HOME", dir.join("home"))
+        .env("XDG_DATA_HOME", dir.join("data"));
+    for (name, value) in env {
+        command.env(name, value);
+    }
+    Client::start(&mut command).unwrap()
+}
+
+/// `rascal describe --json` under the same environment as [`start_with`].
+fn cli_describe(dir: &Path, config: Option<&Path>, env: &[(&str, &str)]) -> serde_json::Value {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
+    command
+        .args(["describe", "--json"])
+        .env_remove("RASCAL_LOG")
+        .env_remove("RASCAL_TOOLS_MODELS")
+        .env("HOME", dir.join("home"))
+        .env("XDG_DATA_HOME", dir.join("data"));
+    if let Some(config) = config {
+        command.args(["--config", config.to_str().unwrap()]);
+    }
+    for (name, value) in env {
+        command.env(name, value);
+    }
+    let out = command.output().unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    serde_json::from_slice(&out.stdout).unwrap()
+}
+
+fn readiness_of<'a>(description: &'a serde_json::Value, action: &str) -> &'a serde_json::Value {
+    &description["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["name"] == action)
+        .unwrap()["readiness"]
+}
+
+/// A `not_ready` refusal: `-32602` with refusal data valid against the contract.
+fn not_ready(failure: Failure) -> serde_json::Value {
+    let Failure::Rpc { code, data, .. } = failure else {
+        panic!("not a JSON-RPC error: {failure}");
+    };
+    assert_eq!(code, -32602);
+    let data = data.unwrap();
+    valid("urn:table-manners:core:refusal", &data);
+    assert_eq!(data["reason"], "not_ready", "{data:#}");
+    assert_eq!(data["run"], serde_json::Value::Null);
+    data
+}
+
+fn run_dirs(runs: &Path) -> Vec<String> {
+    std::fs::read_dir(runs)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .filter(|n| n.starts_with("run-"))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Task 12.2 (table-manners 3.1, 5): `serve` starts with nothing but `--runs`, with a
+/// configuration that does not load, and with a pack whose launcher is missing; its `describe`
+/// agrees with the command line's; a mask-only call completes in every state.
+#[test]
+fn serve_starts_in_every_configuration_state() {
+    let dir = scratch("states");
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let bad = dir.join("bad.toml");
+    std::fs::write(&bad, "config_version = 1\n[fillers\n").unwrap();
+    let no_launcher = dir.join("no-launcher.toml");
+    std::fs::write(
+        &no_launcher,
+        format!(
+            "config_version = 1\n[packs.segmenter]\ncommand = [{:?}, \"serve\"]\n",
+            dir.join("pack/.venv/bin/rascal-tools")
+                .display()
+                .to_string()
+        ),
+    )
+    .unwrap();
+    let runs = dir.join("runs");
+    for (config, remove_prompt) in [
+        (None, "missing"),
+        (Some(&bad), "invalid"),
+        (Some(&no_launcher), "missing"),
+    ] {
+        let mut args = vec!["--runs", runs.to_str().unwrap()];
+        if let Some(config) = config {
+            args.extend(["--config", config.to_str().unwrap()]);
+        }
+        let mut client = start_with(&dir, &args, &[]);
+        let described = client
+            .call("describe", serde_json::json!({}))
+            .unwrap()
+            .structured
+            .unwrap();
+        valid("urn:table-manners:core:description", &described);
+        assert_eq!(
+            described,
+            cli_describe(&dir, config.map(PathBuf::as_path), &[]),
+            "serve and the command line describe alike"
+        );
+        let readiness = readiness_of(&described, "remove_prompt");
+        assert_eq!(readiness["state"], "needs_setup");
+        let first = &readiness["requirements"][0];
+        if config == Some(&no_launcher) {
+            assert_eq!(first["state"], "present", "{readiness:#}");
+            assert_eq!(readiness["requirements"][1]["name"], "packs.segmenter");
+            assert_eq!(readiness["requirements"][1]["state"], remove_prompt);
+        } else {
+            assert_eq!(first["name"], "rascal.toml");
+            assert_eq!(first["state"], remove_prompt, "{readiness:#}");
+        }
+        let out = client
+            .call(
+                "seam",
+                serde_json::json!({ "image": { "path": pano.to_str().unwrap() } }),
+            )
+            .unwrap();
+        let s = out.structured.unwrap();
+        assert_eq!(s["status"], "completed", "{s:#}");
+        client.close().unwrap();
+    }
+    // Without --workspace the op tools' workspace is beside the default runs root.
+    assert!(dir.join("data/rascal/workspace").is_dir());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 12.2 (table-manners 3.1, 4.4): a call that needs what is missing is refused `not_ready`
+/// before any run, naming exactly that: no run directory, no runs entry, no request to the
+/// filler, and its correlation id free for the next request. No credential value appears in
+/// the description or the refusal.
+#[test]
+fn a_call_that_needs_what_is_missing_is_refused_not_ready() {
+    let dir = scratch("not-ready");
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let runs_dir = dir.join("runs");
+
+    // No configuration: a filler call needs it.
+    let mut client = start_with(&dir, &["--runs", runs_dir.to_str().unwrap()], &[]);
+    let call = |client: &mut Client, args: serde_json::Value, id: &str| {
+        client.request(
+            "tools/call",
+            serde_json::json!({ "name": "seam", "arguments": args,
+                                "_meta": { "table-manners/client_run_id": id } }),
+        )
+    };
+    let refused = not_ready(
+        call(
+            &mut client,
+            serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "fake" }),
+            "retry-1",
+        )
+        .unwrap_err(),
+    );
+    assert_eq!(
+        refused["requirements"],
+        serde_json::json!([{ "kind": "config", "name": "rascal.toml", "state": "missing",
+                             "setup": "Start rascal with `--config <path>` naming the filler." }])
+    );
+    assert!(run_dirs(&runs_dir).is_empty(), "no run directory");
+    assert!(runs(&mut client)["runs"].as_array().unwrap().is_empty());
+    // The id was released: the corrected call runs under it.
+    let done = call(
+        &mut client,
+        serde_json::json!({ "image": { "path": pano.to_str().unwrap() } }),
+        "retry-1",
+    )
+    .unwrap();
+    assert_eq!(done["structuredContent"]["status"], "completed");
+    assert_eq!(done["structuredContent"]["run"]["client_run_id"], "retry-1");
+    client.close().unwrap();
+
+    // A filler whose key is unset: refused naming the credential, and nothing is sent.
+    let (url, seen) =
+        rascal_testkit::fake_filler::spawn(rascal_testkit::fake_filler::Behaviour::Exact, None);
+    let config = dir.join("rascal.toml");
+    std::fs::write(
+        &config,
+        format!(
+            "config_version = 1\n[fillers.remote]\nurl = \"{url}\"\nprofile = \"grey\"\nkey_env = \"SERVE_UNSET_KEY\"\nspend_usd_per_call = 0.04\n[fillers.hosted]\nurl = \"{url}\"\nprofile = \"grey\"\nkey_env = \"SERVE_SET_KEY\"\n"
+        ),
+    )
+    .unwrap();
+    let sentinel = "zq-serve-sentinel-zq";
+    let runs_dir = dir.join("runs-2");
+    let mut client = start_with(
+        &dir,
+        &[
+            "--runs",
+            runs_dir.to_str().unwrap(),
+            "--config",
+            config.to_str().unwrap(),
+        ],
+        &[("SERVE_SET_KEY", sentinel)],
+    );
+    let described = client
+        .call("describe", serde_json::json!({}))
+        .unwrap()
+        .structured
+        .unwrap();
+    let refused = not_ready(
+        client
+            .call(
+                "seam",
+                serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "remote" }),
+            )
+            .unwrap_err(),
+    );
+    assert_eq!(
+        refused["requirements"],
+        serde_json::json!([{ "kind": "credential", "name": "SERVE_UNSET_KEY", "state": "missing",
+                             "setup": "Set `SERVE_UNSET_KEY` in the environment rascal is started with." }])
+    );
+    assert!(seen.lock().unwrap().is_empty(), "no request to the filler");
+    assert!(run_dirs(&runs_dir).is_empty());
+    assert!(!described.to_string().contains(sentinel));
+    assert!(!refused.to_string().contains(sentinel));
+    let ledger = session(&mut client);
+    assert_eq!(ledger["spent_usd"], 0.0);
+    assert_eq!(ledger["reserved_usd"], 0.0);
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The state of the credential `var` in `seam`'s readiness, from the server's `describe`.
+fn credential_state(client: &mut Client, var: &str) -> String {
+    let described = client
+        .call("describe", serde_json::json!({}))
+        .unwrap()
+        .structured
+        .unwrap();
+    valid("urn:table-manners:core:description", &described);
+    readiness_of(&described, "seam")["requirements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["kind"] == "credential" && r["name"] == var)
+        .unwrap()["state"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+/// Task 12.3 (table-manners 2.2, 3.1): the session keeps what providers said about each
+/// credential. A fresh session shows `present`; a 2xx makes the key `valid`; a 401 ends the run
+/// `error`/`credential`, never retryable, spending nothing, and makes it `invalid`; the next
+/// call with it is refused `not_ready` naming it, with no run and no request; a new session
+/// shows `present` again.
+#[test]
+fn the_session_marks_credentials_by_what_providers_answered() {
+    let dir = scratch("answers");
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let (url, seen) = rascal_testkit::fake_filler::spawn(
+        rascal_testkit::fake_filler::Behaviour::Exact,
+        Some("the-right-key".to_string()),
+    );
+    let config = dir.join("rascal.toml");
+    std::fs::write(
+        &config,
+        format!(
+            "config_version = 1\n[fillers.good]\nurl = \"{url}\"\nprofile = \"grey\"\nkey_env = \"SERVE_GOOD_KEY\"\nspend_usd_per_call = 0.04\n[fillers.bad]\nurl = \"{url}\"\nprofile = \"grey\"\nkey_env = \"SERVE_BAD_KEY\"\nspend_usd_per_call = 0.04\n"
+        ),
+    )
+    .unwrap();
+    let runs_dir = dir.join("runs");
+    let args = [
+        "--runs",
+        runs_dir.to_str().unwrap(),
+        "--config",
+        config.to_str().unwrap(),
+    ];
+    let env = [
+        ("SERVE_GOOD_KEY", "the-right-key"),
+        ("SERVE_BAD_KEY", "zq-wrong-key-zq"),
+    ];
+    let mut client = start_with(&dir, &args, &env);
+    assert_eq!(credential_state(&mut client, "SERVE_GOOD_KEY"), "present");
+    assert_eq!(credential_state(&mut client, "SERVE_BAD_KEY"), "present");
+    let seam = |filler: &str| serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": filler });
+
+    let out = client.call("seam", seam("good")).unwrap();
+    assert_eq!(out.structured.unwrap()["status"], "completed");
+    assert_eq!(credential_state(&mut client, "SERVE_GOOD_KEY"), "valid");
+    assert_eq!(credential_state(&mut client, "SERVE_BAD_KEY"), "present");
+
+    let out = client.call("seam", seam("bad")).unwrap();
+    assert!(out.is_error);
+    let r = out.structured.unwrap();
+    valid("urn:table-manners:core:result", &r);
+    assert_eq!(r["status"], "error", "{r:#}");
+    assert_eq!(r["error"]["code"], "credential");
+    assert_eq!(r["error"]["retryable"], false);
+    assert_eq!(r["spend"]["usd"], 0.0);
+    assert_eq!(r["spend"]["basis"], "measured", "{r:#}");
+    assert!(
+        r["images"]["out"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|o| o["role"] == "mask"),
+        "{r:#}"
+    );
+    assert!(!r.to_string().contains("zq-wrong-key-zq"));
+    assert_eq!(credential_state(&mut client, "SERVE_BAD_KEY"), "invalid");
+    assert_eq!(credential_state(&mut client, "SERVE_GOOD_KEY"), "valid");
+
+    // The next call with the rejected key is not sent.
+    let requests = seen.lock().unwrap().len();
+    let runs_before = run_dirs(&runs_dir).len();
+    let refused = not_ready(client.call("seam", seam("bad")).unwrap_err());
+    assert_eq!(
+        refused["requirements"],
+        serde_json::json!([{ "kind": "credential", "name": "SERVE_BAD_KEY", "state": "invalid",
+                             "setup": "A provider rejected `SERVE_BAD_KEY` in this session. Set a working key in the environment and restart rascal." }])
+    );
+    assert_eq!(seen.lock().unwrap().len(), requests, "no request");
+    assert_eq!(run_dirs(&runs_dir).len(), runs_before, "no run");
+    let ledger = session(&mut client);
+    assert_eq!(ledger["spent_usd"], 0.04, "{ledger:#}");
+    assert_eq!(ledger["reserved_usd"], 0.0);
+    client.close().unwrap();
+
+    // A new session has heard nothing yet.
+    let mut client = start_with(&dir, &args, &env);
+    assert_eq!(credential_state(&mut client, "SERVE_GOOD_KEY"), "present");
+    assert_eq!(credential_state(&mut client, "SERVE_BAD_KEY"), "present");
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }

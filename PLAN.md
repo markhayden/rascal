@@ -1354,8 +1354,9 @@ task is a branch merged on a green check; the checkpoint tags `m9`.
 ### Task 9.1: Spend survives the status
 
 **Description.** A filler call is *not sent* (refused before its request left rascal: no key,
-connection refused, the command could not start, authentication rejected with 401 or 403),
-*known* (the filler answered: a 2xx, or a command that exited 0), or *unresolved* (sent with no
+connection refused, the command could not start), *known* (the filler answered: a 2xx, or a
+command that exited 0; from M12, a 401 or 403 too, counting zero, table-manners v0.3 4.5), or
+*unresolved* (sent with no
 answer that settles it: timed out, killed, a failure status, a non-zero exit). The call record
 says which (`charge`) and what it costs (`spend_usd`: the entry's price unless not sent). `heal`
 notes `filler call started` before the call, so a run killed mid-call still shows it. A run's
@@ -1705,8 +1706,9 @@ one milestone branch, `m12-table-manners-v03`, cut from `main` after `m11`, with
 table-manners = { path = "../table-manners", version = "=0.3.0" }
 ```
 
-on a sibling checkout of table-manners at branch `v0.3`, at `a3e1507` or later (the commits that
-settled the questions this plan raised) (`scripts/check-contract.sh` already
+on a sibling checkout of table-manners at branch `v0.3`, at `e503a23` or later (the commits that
+settled the questions this plan raised, and Wafflery's three rulings folded in below at 12.5 and
+12.8) (`scripts/check-contract.sh` already
 reads the exact version of a path pin). Each task is a commit (or a short task branch
 `m12/<task>` merged into the milestone branch when tasks run in parallel) with `just check` green
 locally against that checkout; the commit message names the table-manners commit it was built
@@ -1762,14 +1764,14 @@ to `budget` until 12.4. `fixtures/table-manners/` and `fixtures/contract/describ
 regenerated at v0.3.
 
 **Acceptance.**
-- [ ] `rascal describe --json` with the M11 test configuration validates against the v0.3
+- [x] `rascal describe --json` with the M11 test configuration validates against the v0.3
       description schema: no `estimate` in `actions`, no `needs_env`, `readiness` on every action,
       the dash render with `kind` and `ready_timeout_s`, `max_spend_usd` with `exclusiveMinimum: 0`
       on every action; no action declares `many`.
-- [ ] `tools/list` still offers `estimate` and `describe`; each action tool's input schema has the
+- [x] `tools/list` still offers `estimate` and `describe`; each action tool's input schema has the
       same `max_spend_usd` as its `params_schema`.
-- [ ] A served call with `max_spend_usd: 0` ends `invalid`/`usage` with zero spend.
-- [ ] Every `run.json`, the runs pages, the session and the refusals validate against v0.3;
+- [x] A served call with `max_spend_usd: 0` ends `invalid`/`usage` with zero spend.
+- [x] Every `run.json`, the runs pages, the session and the refusals validate against v0.3;
       `UPDATE_FIXTURES=1` regenerates `fixtures/table-manners/` and the check passes after.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- describe::
@@ -1794,9 +1796,13 @@ keeps having no default lookup: the only way to choose a configuration is `--con
 optional (the config's `[workspace] dir`, else `$XDG_DATA_HOME/rascal/workspace`, beside the
 runs root's default), so a host needs nothing but `serve` and, if it likes, `--config`. In
 `serve`, a pack that does not start no longer stops the server: its tools are absent, stderr says
-why, and its requirement says so.
+why, and its requirement says so; a run started with such a pack notes it in its journal and
+leaves its tools out, so a mask-only call still runs and a recipe that needs the pack fails
+with the pack's own error.
 
-Readiness is one function, `readiness::for_call(state, action, filler, answers)` in a new module,
+Readiness is one function, `readiness::for_call(setup, action, use)` in a new module (`setup`
+holds the config state, the session's answers and the packs `serve` could not start; `use` is
+the call's one filler, none, or the description's default use),
 used by `describe` and later by the estimate and the limits check (the call's one filler, 3.1: an
 estimate's readiness is the call's own). In `describe` an action's readiness describes its
 **default use** (3.1: the action as configured now, its requirements naming every variable that
@@ -1827,14 +1833,14 @@ pack, sends a request or writes anything. Requirements, by kind:
   artifact the install's `artifacts.toml` names (the detector, its tokenizer, the segmenter's
   encoder and decoder), looked up exactly where the pack looks (`RASCAL_TOOLS_MODELS`
   when the pack entry passes it, else the install's `models/`, else the pack's default cache),
-  `present` when the file exists with the size the install's `bundle.toml` records, else
+  `present` when the file exists and is not empty (`bundle.toml` records digests, not sizes), else
   `missing` with the setup naming the directory looked in and `rascal-tools fetch`. Digests are
   not hashed here (749 MB on every `describe`; 3.1 allows `present` for an unchecked file); the
   pack still verifies them before use, and rascal does not see that check, so it never reports a
   file `valid` in v0.3.
 - `env`, for the non-secret variables rascal or a pack reads (3.1): each name a configured pack
   entry passes through (`[packs.*] env`, such as `RASCAL_TOOLS_MODELS`), on the actions that use
-  the pack, and each variable a command filler's entry passes; `present` when set. When unset it
+  the pack (a filler entry passes no variables of its own); `present` when set. When unset it
   is `missing` only if the action needs it (for the models directory: the files are not found by
   the pack's fallbacks either); otherwise it is omitted, since nothing stands in the way.
   Credentials stay `credential`, never `env`.
@@ -1851,7 +1857,8 @@ pack, a model file or a needed `env`), the call is a JSON-RPC `-32602` with refu
 those requirements. It allocates nothing, writes no run, spends nothing and releases its
 `client_run_id` (12.7). To carry it, `Actions::call`'s error becomes structured (`CallError {
 message, data }`) in place of a string. On the command line, `rascal run` and `heal` make the same
-check before creating the run directory and exit 64 naming the requirements. A mask-only call
+check before creating the run directory and exit 64 naming the requirements (not under
+`--replay`, which answers from a recorded run). A mask-only call
 needs nothing and runs in every config state.
 
 **CLI scenario.** `rascal describe --json` with no flags prints a valid description with
@@ -1860,24 +1867,24 @@ prints `invalid` with the parse error and exits 0; `rascal serve` with no flags 
 `initialize`, `describe` and a mask-only `seam` call.
 
 **Acceptance.**
-- [ ] `describe` exits 0 and validates with no configuration, a missing file and an invalid file;
+- [x] `describe` exits 0 and validates with no configuration, a missing file and an invalid file;
       the requirement states are as above; no credential value appears in any output (a test sets
       a key to a sentinel and searches stdout, stderr, the document and the refusal for it).
-- [ ] `serve` starts with no flags but `--runs`, with an invalid configuration, and with a pack
+- [x] `serve` starts with no flags but `--runs`, with an invalid configuration, and with a pack
       whose launcher is missing; its `describe` agrees with the CLI's; a mask-only call completes;
       a call naming a filler without configuration is refused `not_ready` naming `rascal.toml`,
       validating against `refusal.json`, with no run directory, no runs entry and its
       `client_run_id` accepted on the next request; a call naming a filler whose key is unset is
       refused `not_ready` naming the `credential`, with no request to the filler.
-- [ ] `remove_prompt`'s readiness follows an install: missing launcher, launcher without model
+- [x] `remove_prompt`'s readiness follows an install: missing launcher, launcher without model
       files, launcher with every file (`needs_setup`, `needs_setup`, `ready`), against a fake
-      install tree; the model directory resolution matches the pack's (a pytest case prints the
-      pack's resolved directory for the same environment and the Rust test compares); a pack entry
+      install tree; the model directory resolution matches the pack's (the pack's resolution and
+      rascal's both check one table, `fixtures/readiness/models-dir.json`); a pack entry
       passing `RASCAL_TOOLS_MODELS` lists it as `env` (`present` when set; `missing` when unset
       and the fallbacks hold no model files; absent when they do).
-- [ ] With a priced HTTP filler configured, every action lists its `credential` and `model`; with
+- [x] With a priced HTTP filler configured, every action lists its `credential` and `model`; with
       none, only `remove_prompt` has requirements.
-- [ ] Neither `describe` nor readiness starts a pack or makes a request (the fake pack's start
+- [x] Neither `describe` nor readiness starts a pack or makes a request (the fake pack's start
       marker is absent; the fake HTTP filler saw nothing).
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- describe::
@@ -1899,8 +1906,9 @@ for a provider's 401 or 403 during a run (today `provider`, retryable): status `
 `credential`, `retryable: false`, exit 3 on the command line. `credential` is only that (2.2): a
 key that is not set is refused `not_ready` before any run (12.2); if one still goes missing at the
 call (`filler/http.rs`, today a `usage`), that is an `internal` error, since 12.2's check should
-have caught it. Spend is unchanged: a rejection counts zero (rascal's 9.1 classes it not sent; the contract calls it a known answer
-that counts zero; the amount is the same and the reservation is released either way). The session
+have caught it. A rejection is a known call that counts zero (table-manners 4.5: the provider
+answered, refusing before any work), not a call not sent: its record says `charge: known`, the
+reservation is settled at zero, and the run's `spend.basis` is `measured`. The session
 keeps what providers said about each credential: `serve`'s `ContractActions` holds `answers`
 (`key_env` → `valid` | `invalid`), updated when a run ends from its filler call records (a 2xx →
 `valid`, a 401 or 403 → `invalid`, anything else leaves it as it was; a cache hit says nothing),
@@ -1909,12 +1917,12 @@ A later call whose filler's key is `invalid` in this session is refused `not_rea
 check, without sending (the process environment cannot change within a session).
 
 **Acceptance.**
-- [ ] Through the fake HTTP filler: a 401 and a 403 each end `error`/`credential`,
+- [x] Through the fake HTTP filler: a 401 and a 403 each end `error`/`credential`,
       `retryable: false`, spend 0, the mask kept in `images.out` (2.3); `rascal heal` exits 3.
-- [ ] After a 2xx the credential reads `valid` in `describe` and after a 401 `invalid`; a new
+- [x] After a 2xx the credential reads `valid` in `describe` and after a 401 `invalid`; a new
       `serve` shows `present` again; the next call after a 401 is refused `not_ready` naming the
       `invalid` credential, with no run and no request (the fake filler's `seen` unchanged).
-- [ ] `provider` stays retryable for a 5xx and a timeout stays `timeout`.
+- [x] `provider` stays retryable for a 5xx and a timeout stays `timeout`.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- fillers::
 heal:: serve_contract:: readiness::`; `just check`.
@@ -1936,12 +1944,12 @@ configured cap the caller's value is the cap. The order at the limits check (`ac
 the budget (requirements are checked before allocation, 12.2) and the reservation in the same step under the ledger's lock (9.2 unchanged).
 
 **Acceptance.**
-- [ ] With `call_cap_usd = 0.10` and a filler at 0.04: `max_spend_usd: 0.2` is `invalid`/`usage`;
+- [x] With `call_cap_usd = 0.10` and a filler at 0.04: `max_spend_usd: 0.2` is `invalid`/`usage`;
       `max_spend_usd: 0.03` is `error`/`cap`; with `session_budget_usd = 0.05` the second call is
       `error`/`budget`; each with zero spend, no filler call, and the ledger's `reserved_usd` back
       at 0.
-- [ ] Uncapped, `max_spend_usd: 0.03` gives `cap` and `0.05` runs.
-- [ ] The 9.2 race test still gives one run and one refusal, now `budget`.
+- [x] Uncapped, `max_spend_usd: 0.03` gives `cap` and `0.05` runs.
+- [x] The 9.2 race test still gives one run and one refusal, now `budget`.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it --
 serve_contract::`; `just check`.
@@ -1976,9 +1984,17 @@ function shared with the limits check so the two cannot disagree:
   filler that is not configured, or `remove_prompt` without its pack; `config_identity` is null
   there only when what is missing is the configuration itself (no file, or an invalid one).
 - `allowed` and `refused`: `readiness` when the call's readiness (12.2, for its filler) is not
-  `ready`, else `cap`, else `budget`, else allowed; an over-cap `max_spend_usd` or any other bad
-  argument is not an estimate but a JSON-RPC `-32602` naming the argument (an estimate is not a
-  run).
+  `ready`, else `cap`, else `budget`, else allowed. A call that is not ready is not an error: it
+  is an estimate refused for `readiness`. A wrong request is not an estimate (an estimate is not a
+  run), and is a JSON-RPC `-32602` in one of two forms (4.5, settled at table-manners `e503a23`):
+  arguments the `estimate` input schema rejects (no `action`, `arguments` not an object) are plain
+  invalid params with no refusal data (`action` is a string there, not an enum, so an unknown
+  action reaches rascal's own check); any other wrong request (an unknown action, an action's bad
+  argument, `max_spend_usd` above the configured cap or not above zero, an `expect` that does not
+  match its image) carries refusal data `{"reason": "invalid_arguments", "run": null, "error":
+  {"code": "usage" | "input", "retryable": false, "reason": …}}` (`refusal.json`), the code as
+  the run would have given it (`input` for an `expect` mismatch or an image rascal cannot take,
+  `usage` otherwise) and the reason naming the argument.
 - `readiness` (the call's own, 3.1), `session` (one atomic observation, the same function as
   `rascal://session`; null on the command line), `session_id` (null on the command line), and
   `expires`: one hour after the estimate (rascal's prices
@@ -1999,22 +2015,25 @@ prints an allowed estimate with `worst_case_usd` 0.04, a binding and `session: n
 image changed by a byte the binding changes.
 
 **Acceptance.**
-- [ ] Every estimate validates against `urn:table-manners:core:estimate`: allowed; refused for
+- [x] Every estimate validates against `urn:table-manners:core:estimate`: allowed; refused for
       `cap`, `budget` and `readiness`; a mask-only call with a configuration (`model` null, worst
       case 0, allowed), and the same with no file (`config_identity` the defaults' digest);
       `remove_prompt` with no file (`refused: "readiness"`, `worst_case_usd` and
       `config_identity` null).
-- [ ] The binding is stable for the same call (path or the same bytes inline give one binding,
+- [x] The binding is stable for the same call (path or the same bytes inline give one binding,
       and so do calls differing only in `return_images` or `image_blocks`), and changes with the
       image's bytes, any other argument, the configuration, the session and the version (the
       version through a unit test of the recipe).
-- [ ] `rascal estimate --json` prints an estimate with `session_id` and `session` null that
+- [x] `rascal estimate --json` prints an estimate with `session_id` and `session` null that
       validates; a served call carrying its binding fails `stale_estimate` (12.6).
-- [ ] `estimate` is in `tools/list` with the `{action, arguments}` schema, never in `actions`; it
+- [x] `estimate` is in `tools/list` with the `{action, arguments}` schema, never in `actions`; it
       answers while a run holds the permit; it leaves the runs root, the workspace's generation and
       the session's `reserved_usd` unchanged.
-- [ ] An unknown action, an action's bad argument, or `max_spend_usd` over the configured cap is a
-      JSON-RPC `-32602` naming it.
+- [x] An unknown action, an action's bad argument, or `max_spend_usd` over the configured cap is a
+      JSON-RPC `-32602` with `invalid_arguments` refusal data (code `usage`) naming it, and an
+      `expect` mismatch the same with code `input`, each validating against `refusal.json`;
+      `estimate` called without `action` is a plain `-32602` with no refusal data; a call that is
+      not ready is an estimate with `refused: "readiness"`, not an error.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- estimate::
 serve_contract::`; `just check`.
@@ -2039,13 +2058,13 @@ is checked against the limits alone, and a matching estimate is no reservation: 
 budget are checked again as in 12.4.
 
 **Acceptance.**
-- [ ] A call carrying its estimate's binding runs; the same call after a byte of its image
+- [x] A call carrying its estimate's binding runs; the same call after a byte of its image
       changed, with another argument, under a restarted server (a new session) or under a server
       with another configuration, and after the testkit expiry, each ends
       `invalid`/`stale_estimate` naming why, with no filler call and `reserved_usd` unchanged.
-- [ ] An allowed estimate followed by a call that the budget can no longer hold (another call
+- [x] An allowed estimate followed by a call that the budget can no longer hold (another call
       spent in between) ends `budget`, not `stale_estimate`.
-- [ ] The testkit client sends any `_meta`; a call with no estimate behaves as in 12.4.
+- [x] The testkit client sends any `_meta`; a call with no estimate behaves as in 12.4.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- estimate::
 serve_contract::`; `cargo nextest run -p rascal-mcp --test it`; `just check`.
@@ -2068,12 +2087,14 @@ outcome. The release and the claim are under the same lock, so a concurrent requ
 sees either the claim or nothing.
 
 **Acceptance.**
-- [ ] A request with id X that fails before a run (the testkit's actions double returns `Err`
-      before allocation) gets a plain `-32602` with no refusal data; a second request with X is
-      accepted and its run carries X.
-- [ ] A request with id Y cancelled while queued behind a slow run leaves no run; a retry with Y
+- [x] A request with id X that fails before a run (an actions double in `rascal-mcp`'s tests,
+      `tests/it/claims.rs`, returns `Err` or panics before allocation; the testkit cannot hold it,
+      since it does not depend on `rascal-mcp`) gets a plain `-32602` with no refusal data (only
+      rascal's `class`); a second request with X is accepted and its run carries X; a request
+      that fails after allocation keeps X with its run.
+- [x] A request with id Y cancelled while queued behind a slow run leaves no run; a retry with Y
       gets `client_run_id_reused` with `run: null`.
-- [ ] M11's reuse tests still pass (an id whose run ended is refused with that run).
+- [x] M11's reuse tests still pass (an id whose run ended is refused with that run).
 
 **Verification.** `cargo nextest run -p rascal-mcp --test it`; `cargo nextest run -p
 rascal-mask --features testkit --test it -- serve_contract::`; `just check`.
@@ -2092,22 +2113,29 @@ a person at a terminal keeps it open as before, and the docs note that `< /dev/n
 once); `--frame-ancestor <origin>` sends `Content-Security-Policy: frame-ancestors <origin>` on
 every response, the origin checked as `http://` or `https://`, a host and an optional port, no
 path (otherwise 64), and without the flag the page sends `frame-ancestors 'none'`. A document
-render is added: `rascal dash <run dir> --document` writes the page to
-`$XDG_CACHE_HOME/rascal/dash/<run id>.html` (a run directory is never written after its
-`run.json`; 3.2: a render never modifies the run directory), prints that absolute path as its
-only stdout line and exits 0. `{run.dir}` and `{frame_ancestor}` appear only as whole arguments
-(3.2). The description's
+render is added: `rascal dash <run dir> --document` writes ONE self-contained file (3.2, settled at
+table-manners `e503a23`): the page with every image inline as a `data:` URI and its styles and
+script inline, nothing it needs beside it, so a host reads that one file and nothing next to it.
+rascal chooses the path, outside the run directory: `$XDG_CACHE_HOME/rascal/dash/<run id>.html`
+(a run directory is never written after its `run.json`; 3.2: a render never modifies the run
+directory). It prints only that absolute path, as its one stdout line, and exits 0 once the file
+exists. `{run.dir}` and `{frame_ancestor}` appear only as whole arguments (3.2). Every render's
+`command[0]` is the tool's own name, `rascal` (the description's `tool.name`), and the host runs
+the same executable it serves, never another program or another install found on `PATH` (3.2,
+settled at `e503a23`); the renders below already do this, and rascal adds nothing for it. The description's
 renders become `{name: "dash", kind: "server", ready_timeout_s: 10, command: ["rascal", "dash",
 "{run.dir}", "--serve", "--port", "0", "--frame-ancestor", "{frame_ancestor}"]}` and `{name:
 "page", kind: "document", command: ["rascal", "dash", "{run.dir}", "--document"]}`.
 
 **Acceptance.**
-- [ ] Spawned with piped stdin, the server prints one URL line within the timeout and no other
+- [x] Spawned with piped stdin, the server prints one URL line within the timeout and no other
       stdout; a request gets the CSP header with the given origin; closing stdin ends it with exit
       0; SIGTERM ends it with exit 0; a bad origin exits 64 before listening.
-- [ ] `--document` prints one absolute path that exists and leaves the run directory's listing
-      unchanged.
-- [ ] The description's renders validate (server with `ready_timeout_s`, document without).
+- [x] `--document` prints one absolute path, and nothing else, to a file that exists outside the
+      run directory and leaves the run directory's listing unchanged; the file is self-contained
+      (no `src`, `href` or `url(` names anything but a `data:` URI or an in-page anchor).
+- [x] The description's renders validate (server with `ready_timeout_s`, document without), and
+      each render's `command[0]` is the description's `tool.name`.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- dash::
 describe::`; `just check`.
@@ -2147,11 +2175,11 @@ configuration, `rascal estimate`), `docs/fillers.md` (`credential`), `docs/archi
 and an M12 amendment to ADR 0020 recording the decisions below.
 
 **Acceptance.**
-- [ ] table-manners' fixtures test (`cargo test --test fixtures` there) passes for
+- [x] table-manners' fixtures test (`cargo test --test fixtures` there) passes for
       `fixtures/rascal/`; rascal's own check passes without `UPDATE_FIXTURES`.
-- [ ] `no_provider_call.rs` passes and fails when an estimate is made to call the filler (checked
+- [x] `no_provider_call.rs` passes and fails when an estimate is made to call the filler (checked
       once by hand, recorded in the commit message).
-- [ ] The docs name v0.3 and no longer describe `needs_env`, the old `estimate` arguments or
+- [x] The docs name v0.3 and no longer describe `needs_env`, the old `estimate` arguments or
       `budget` for the per-call cap.
 
 **Verification.** `UPDATE_FIXTURES=1 cargo nextest run -p rascal-mask --features testkit --test
@@ -2183,7 +2211,7 @@ into `main` by the checkpoint procedure.
 `Cargo.toml`, `Cargo.lock`, `PLAN.md`, `tasks/todo.md`. **Size.** XS.
 
 ### Checkpoint M12
-- [ ] Tasks 12.1 to 12.10 done, CI green on both platforms; tag `m12`.
+- [x] Tasks 12.1 to 12.10 done, CI green on both platforms; tag `m12` (2026-11-01, table-manners 0.3.0 from crates.io).
 
 ### Owner decisions for M12
 - No default configuration lookup: `--config <path>` is the only way to choose one, for

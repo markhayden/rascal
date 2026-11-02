@@ -47,6 +47,49 @@ pub struct ActionResult {
     pub images: Vec<Vec<u8>>,
 }
 
+/// A failure before a run exists (table-manners 5): sent as a JSON-RPC invalid-params error,
+/// with `data` when it is a refusal the contract names (`schemas/core/refusal.json`, such as
+/// `not_ready`), else with the usage class. Either releases the request's correlation id.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CallError {
+    pub message: String,
+    pub data: Option<serde_json::Value>,
+}
+
+impl CallError {
+    /// A refusal the contract names, `data` being its refusal object.
+    pub fn refused(message: impl Into<String>, data: serde_json::Value) -> CallError {
+        CallError {
+            message: message.into(),
+            data: Some(data),
+        }
+    }
+}
+
+impl From<String> for CallError {
+    fn from(message: String) -> CallError {
+        CallError {
+            message,
+            data: None,
+        }
+    }
+}
+
+impl From<&str> for CallError {
+    fn from(message: &str) -> CallError {
+        CallError::from(message.to_string())
+    }
+}
+
+/// What a call's request `_meta` carries for the action (table-manners 4.4, 4.5): its
+/// correlation id, already claimed, and the estimate it names, as sent (the action judges it,
+/// since by then a run exists). Both are none for a call that is not a run.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct CallMeta {
+    pub client_run_id: Option<String>,
+    pub estimate: Option<serde_json::Value>,
+}
+
 /// A resource's body: text with its media type, or bytes (sent as base64).
 pub enum ResourceBody {
     Text { mime: String, text: String },
@@ -65,19 +108,21 @@ pub trait Actions: Send + Sync {
     /// correlation id; a read (`describe`, `estimate`) does neither, so it answers while a run is
     /// under way.
     fn exclusive(&self, name: &str) -> bool;
-    /// Runs one. `client_run_id` is the caller's correlation id, already claimed (table-manners
-    /// 4.4); `progress` takes the run's reference at allocation, then a line about each step;
+    /// Runs one. `meta` holds the caller's correlation id, already claimed (table-manners 4.4),
+    /// and the estimate the call names (4.5); `progress` takes the run's reference at allocation, then a line about each step;
     /// `cancel` is set when the client cancels. `Err` is a failure before a run exists (a
-    /// JSON-RPC error); a run's own outcome, `invalid` and `error` included, is an
-    /// `ActionResult`. A cancelled run returns `Err`, and the server sends no result for it.
+    /// JSON-RPC error, carrying the refusal data when it is one the contract names, which
+    /// releases the correlation id when no run was allocated); a run's own outcome, `invalid`
+    /// and `error` included, is an `ActionResult`. A cancelled run returns `Err`, and the
+    /// server sends no result for it.
     fn call(
         &self,
         name: &str,
         args: &serde_json::Map<String, serde_json::Value>,
-        client_run_id: Option<&str>,
+        meta: &CallMeta,
         progress: &(dyn Fn(Progress) + Send + Sync),
         cancel: Arc<rascal_core::workspace::Cancel>,
-    ) -> std::result::Result<ActionResult, String>;
+    ) -> std::result::Result<ActionResult, CallError>;
     /// Fixed resources (`rascal://runs`).
     fn resources(&self) -> Vec<Resource>;
     /// Resource templates (`rascal://run/{id}/run.json`, …).
@@ -98,6 +143,9 @@ pub enum Progress {
 
 /// The request `_meta` key a caller's correlation id comes under (table-manners 4.4).
 pub const CLIENT_RUN_ID: &str = "table-manners/client_run_id";
+
+/// The request `_meta` key a caller names its estimate's binding under (table-manners 4.5).
+pub const ESTIMATE: &str = "table-manners/estimate";
 
 /// The notification `_meta` key the run's reference goes under (table-manners 4.1).
 pub const RUN_META: &str = "table-manners/run";
@@ -158,7 +206,8 @@ struct Inner {
     /// The contract's action tools and run resources, supplied by the binary.
     actions: Option<Arc<dyn Actions>>,
     /// The correlation ids claimed in this session, each with its run's reference once the run
-    /// is allocated (table-manners 4.4). A claim is never released.
+    /// is allocated (table-manners 4.4). A claim is released only when its request ends in a
+    /// JSON-RPC error while it still has no run; a request cancelled before allocation keeps it.
     claims: std::sync::Mutex<BTreeMap<String, Option<serde_json::Value>>>,
 }
 
@@ -850,7 +899,9 @@ impl Server {
     ) -> std::result::Result<CallToolResponse, ErrorData> {
         let exclusive = actions.exclusive(&name);
         // A run's correlation id is claimed before the permit wait, so duplicates queued
-        // together execute at most once; a claim outlives its request (table-manners 4.4).
+        // together execute at most once. The claim outlives its request once a run is
+        // allocated, or when the request is cancelled before allocation; a request that ends in
+        // a JSON-RPC error with no run releases it (table-manners 4.4, from v0.3).
         let client_run_id = match context.meta.get(CLIENT_RUN_ID) {
             _ if !exclusive => None,
             None | Some(serde_json::Value::Null) => None,
@@ -892,13 +943,20 @@ impl Server {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Progress>();
         let cancel = Arc::new(rascal_core::workspace::Cancel::new(false));
         let flag = cancel.clone();
-        let claimed = client_run_id.clone();
+        let meta = CallMeta {
+            client_run_id: client_run_id.clone(),
+            estimate: context
+                .meta
+                .get(ESTIMATE)
+                .filter(|v| exclusive && !v.is_null())
+                .cloned(),
+        };
         let mut task = tokio::task::spawn_blocking(move || {
             let _permit = permit;
             let send = move |progress: Progress| {
                 let _ = tx.send(progress);
             };
-            actions.call(&name, &args, claimed.as_deref(), &send, flag)
+            actions.call(&name, &args, &meta, &send, flag)
         });
         let started = std::time::Instant::now();
         let mut sent = 0.0_f64;
@@ -955,9 +1013,36 @@ impl Server {
                 }
             }
         };
-        let result = outcome
-            .map_err(|e| ErrorData::internal_error(format!("the call panicked: {e}"), None))?
-            .map_err(invalid)?;
+        // What the action sent just before it returned may still be queued: the run's reference
+        // reaches the claim before the claim is judged. Lines after the end are dropped.
+        while let Ok(progress) = rx.try_recv() {
+            if let Progress::Run(reference) = progress
+                && let Some(id) = &client_run_id
+            {
+                self.inner
+                    .claims
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .insert(id.clone(), Some(reference));
+            }
+        }
+        let result = match outcome {
+            Ok(Ok(result)) => result,
+            Ok(Err(error)) => {
+                self.release(client_run_id.as_deref());
+                return Err(match error.data {
+                    Some(data) => ErrorData::invalid_params(error.message, Some(data)),
+                    None => invalid(error.message),
+                });
+            }
+            Err(panicked) => {
+                self.release(client_run_id.as_deref());
+                return Err(ErrorData::internal_error(
+                    format!("the call panicked: {panicked}"),
+                    None,
+                ));
+            }
+        };
         let summary = result
             .structured
             .get("status")
@@ -975,6 +1060,21 @@ impl Server {
         call.structured_content = Some(result.structured);
         call.is_error = Some(result.is_error);
         Ok(call.into())
+    }
+}
+
+impl Server {
+    /// Releases the claim on a correlation id whose request ended in a JSON-RPC error, when it
+    /// still holds no run (table-manners 4.4): under the claims lock, so a concurrent request
+    /// with the id sees the claim or nothing. A claim with a run reference is kept.
+    fn release(&self, client_run_id: Option<&str>) {
+        let Some(id) = client_run_id else {
+            return;
+        };
+        let mut claims = self.inner.claims.lock().unwrap_or_else(|e| e.into_inner());
+        if matches!(claims.get(id), Some(None)) {
+            claims.remove(id);
+        }
     }
 }
 
