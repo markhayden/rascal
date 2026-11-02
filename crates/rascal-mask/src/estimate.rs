@@ -27,6 +27,7 @@ use rascal_core::contract::table_manners::{
     Session as TmSession, Tool as TmTool,
 };
 use rascal_core::error::Result;
+use rascal_core::paths::{PathRule, Want};
 use rascal_core::recipe::InputType;
 use serde_json::{Map, Value, json};
 
@@ -129,25 +130,16 @@ impl ImageIn {
     }
 }
 
-/// Reads an image slot's value as the call would (table-manners 10.1): an absolute path to a
-/// file, or standard base64 within the inline limit. Its `expect` is checked by
-/// [`verify_expect`].
-pub fn image_in(slot: &str, value: &Value) -> Result<ImageIn> {
+/// Reads an image slot's value as the call would (table-manners 10.1): a path the rule admits
+/// (CONTRACT 5.2; under `serve`, its canonical form inside an allowed directory), or standard
+/// base64 within the inline limit. Its `expect` is checked by [`verify_expect`].
+pub fn image_in(slot: &str, value: &Value, paths: &PathRule) -> Result<ImageIn> {
     if let Some(path) = value.get("path").and_then(|p| p.as_str()) {
-        let path = PathBuf::from(path);
-        if !path.is_absolute() {
-            return Err(Error::usage(format!(
-                "{slot}: {} is not an absolute path (CONTRACT.md 10.1)",
-                path.display()
-            )));
-        }
-        if !path.is_file() {
-            return Err(Error::usage(format!(
-                "{slot}: {} is not a file",
-                path.display()
-            )));
-        }
-        return Ok(ImageIn::Path(path));
+        return Ok(ImageIn::Path(paths.admit(
+            slot,
+            Path::new(path),
+            Want::File,
+        )?));
     }
     if let Some(inline) = value.get("inline") {
         let data = inline["data"].as_str().unwrap_or_default();
@@ -221,13 +213,15 @@ pub fn effective_cap(config: Option<&Config>, args: &Map<String, Value>) -> Resu
 /// Checks a call's arguments as the run reads them, without writing anything: the first step of
 /// the limits check, and an estimate's. `max_spend_usd` first, then every argument by name (one
 /// the action does not take is refused), then the inputs the recipe requires. A bad argument is
-/// `usage` naming it; an image that does not match its `expect` is `input`. What only a run can
-/// tell (a `set` parameter an op does not take, a location off its image) the run still checks.
+/// `usage` naming it; an image that does not match its `expect`, and a path the rule does not
+/// admit, are `input`. What only a run can tell (a `set` parameter an op does not take, a
+/// location off its image) the run still checks.
 pub fn check_arguments(
     recipe: &str,
     action: &str,
     args: &Map<String, Value>,
     config: Option<&Config>,
+    paths: &PathRule,
 ) -> Result<()> {
     effective_cap(config, args)?;
     let slots = slots(recipe)?;
@@ -235,7 +229,7 @@ pub fn check_arguments(
     for (key, value) in args {
         match key.as_str() {
             k if is(&slots.images, k) => {
-                let image = image_in(k, value)?;
+                let image = image_in(k, value, paths)?;
                 if value.get("expect").is_some() {
                     verify_expect(k, value, &image, &image.bytes()?)?;
                 }
@@ -253,11 +247,12 @@ pub fn check_arguments(
                 }
             }
             k if is(&slots.masks, k) => {
-                if !value.is_string() {
+                let Some(path) = value.as_str() else {
                     return Err(Error::usage(format!(
                         "{k}: not a stored mask directory's path"
                     )));
-                }
+                };
+                paths.admit(k, Path::new(path), Want::MaskDir)?;
             }
             "filler" => {
                 if !value.is_string() {
@@ -453,7 +448,7 @@ pub struct Bound {
 }
 
 /// The binding of a call (module docs): `session_id` is none on the command line, so no server
-/// accepts it.
+/// accepts it. Its images and masks are read through `paths`, as the call reads them.
 pub fn bind(
     recipe: &str,
     action: &str,
@@ -461,6 +456,7 @@ pub fn bind(
     config_identity: Option<&str>,
     session_id: Option<&str>,
     version: &str,
+    paths: &PathRule,
 ) -> Result<Bound> {
     let slots = slots(recipe)?;
     let mut arguments = Map::new();
@@ -470,13 +466,14 @@ pub fn bind(
             continue;
         }
         let entered = if slots.images.contains(key) {
-            let image = image_in(key, value)?;
+            let image = image_in(key, value, paths)?;
             let bytes = image.bytes()?;
             verify_expect(key, value, &image, &bytes)?;
             json!({ "file_sha256": rascal_core::contract::file_sha256(&bytes) })
         } else if slots.masks.contains(key) {
             let path = value.as_str().unwrap_or_default();
-            let mask = rascal_core::mask::Mask::read(Path::new(path)).map_err(|e| {
+            let dir = paths.admit(key, Path::new(path), Want::MaskDir)?;
+            let mask = rascal_core::mask::Mask::read(&dir).map_err(|e| {
                 Error::usage(format!("{key}: {path} is not a stored rascal mask: {e}"))
             })?;
             json!({ "mask": mask.identity().as_str() })
@@ -612,7 +609,7 @@ pub fn document(
 }
 
 /// An estimate with no session, as `rascal estimate --json` makes it: the cap and readiness
-/// apply, the budget never does (there is no ledger).
+/// apply, the budget never does (there is no ledger), and the paths are the person's own.
 pub fn without_session(state: &ConfigState, request: &Value) -> Result<Estimate> {
     let shape = request.as_object().and_then(self::request).ok_or_else(|| {
         Error::usage("the request is not {\"action\": <name>, \"arguments\": {…}}")
@@ -627,7 +624,7 @@ pub fn without_session(state: &ConfigState, request: &Value) -> Result<Estimate>
         answers: &answers,
         failed_packs: &failed,
     };
-    check_arguments(recipe, action, args, state.config())?;
+    check_arguments(recipe, action, args, state.config(), &PathRule::Own)?;
     let price = price(&setup, action, args)?;
     let bound = bind(
         recipe,
@@ -636,6 +633,7 @@ pub fn without_session(state: &ConfigState, request: &Value) -> Result<Estimate>
         price.config_identity.as_deref(),
         None,
         VERSION,
+        &PathRule::Own,
     )?;
     Ok(document(
         action,
@@ -665,7 +663,16 @@ mod tests {
         let args = json!({ "image": { "path": pano() }, "filler": "fake" });
         let args = args.as_object().unwrap();
         let at = |version: &str| {
-            bind("seam", "seam", args, Some("sha256:00"), Some("s"), version).unwrap()
+            bind(
+                "seam",
+                "seam",
+                args,
+                Some("sha256:00"),
+                Some("s"),
+                version,
+                &PathRule::Own,
+            )
+            .unwrap()
         };
         assert_eq!(at("0.1.1"), at("0.1.1"));
         assert_ne!(at("0.1.1").binding, at("0.1.2").binding);
@@ -678,8 +685,18 @@ mod tests {
         let plain = json!({ "image": { "path": pano() } });
         let delivered = json!({ "image": { "path": pano() }, "return_images": "resource",
                                 "image_blocks": true });
-        let bind_of =
-            |v: &Value| bind("seam", "seam", v.as_object().unwrap(), None, None, VERSION).unwrap();
+        let bind_of = |v: &Value| {
+            bind(
+                "seam",
+                "seam",
+                v.as_object().unwrap(),
+                None,
+                None,
+                VERSION,
+                &PathRule::Own,
+            )
+            .unwrap()
+        };
         assert_eq!(bind_of(&plain), bind_of(&delivered));
         let bytes = std::fs::read(pano()).unwrap();
         let digest = rascal_core::canonical::identity(

@@ -101,10 +101,9 @@ fn hosted_config(dir: &Path, url: &str, file: &str, revision: &str) -> PathBuf {
 /// `rascal serve` over the shared workspace and runs root, with `config` when given and
 /// exactly the variables in `env` (the key and the testkit's estimate lifetime otherwise unset).
 fn serve(dir: &Path, config: Option<&Path>, env: &[(&str, &str)]) -> Client {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
+    let mut command = rascal_testkit::mcp_client::serve_command(env!("CARGO_BIN_EXE_rascal"));
     command
         .args([
-            "serve",
             "--workspace",
             dir.join("ws").to_str().unwrap(),
             "--runs",

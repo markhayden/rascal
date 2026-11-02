@@ -14,6 +14,7 @@ use rascal_core::artifact::Artifact;
 use rascal_core::error::Result;
 use rascal_core::image::Image;
 use rascal_core::op::{Inputs, Param, ParamKind, Params};
+use rascal_core::paths::{PathRule, Want};
 use rascal_core::registry::OpRegistry;
 use rascal_core::workspace::Workspace;
 use rmcp::handler::server::ServerHandler;
@@ -209,6 +210,9 @@ struct Inner {
     /// is allocated (table-manners 4.4). A claim is released only when its request ends in a
     /// JSON-RPC error while it still has no run; a request cancelled before allocation keeps it.
     claims: std::sync::Mutex<BTreeMap<String, Option<serde_json::Value>>>,
+    /// The directories a caller's path may name (CONTRACT 5.2): none until the binary gives
+    /// them, so every path is refused by default.
+    paths: PathRule,
 }
 
 impl Server {
@@ -238,6 +242,7 @@ impl Server {
                 dash,
                 actions: None,
                 claims: std::sync::Mutex::default(),
+                paths: PathRule::Allowed(Vec::new()),
             }),
         })
     }
@@ -247,6 +252,15 @@ impl Server {
     pub fn with_actions(mut self, actions: Arc<dyn Actions>) -> Server {
         if let Some(inner) = Arc::get_mut(&mut self.inner) {
             inner.actions = Some(actions);
+        }
+        self
+    }
+
+    /// The server reading callers' paths by `paths` (CONTRACT 5.2; `rascal serve
+    /// --allow-dir`). Called on a new server, before it is shared.
+    pub fn with_paths(mut self, paths: PathRule) -> Server {
+        if let Some(inner) = Arc::get_mut(&mut self.inner) {
+            inner.paths = paths;
         }
         self
     }
@@ -338,9 +352,12 @@ impl Server {
                     args.get("path").and_then(|v| v.as_str()),
                     args.get("base64").and_then(|v| v.as_str()),
                 ) {
-                    (Some(path), None) => inner
-                        .workspace
-                        .import(std::path::Path::new(path), projection)?,
+                    (Some(path), None) => inner.workspace.import(
+                        &inner
+                            .paths
+                            .admit("path", std::path::Path::new(path), Want::File)?,
+                        projection,
+                    )?,
                     (None, Some(data)) => {
                         let bytes = jsonrpc::base64_decode(data)
                             .ok_or_else(|| Error::usage("base64 does not decode"))?;
@@ -563,7 +580,7 @@ fn workspace_tool_schema(name: &str) -> serde_json::Map<String, serde_json::Valu
         "workspace_import" => serde_json::json!({
             "type": "object", "additionalProperties": false,
             "properties": {
-                "path": { "type": "string", "description": "A JPEG or PNG file the server can read." },
+                "path": { "type": "string", "description": "An absolute path to a JPEG or PNG file inside a directory rascal serve allows (--allow-dir)." },
                 "base64": { "type": "string", "description": "JPEG or PNG bytes, base64." },
                 "projection": { "type": "string", "enum": ["flat", "equirectangular"], "description": "Without it an exactly 2:1 image is equirectangular." }
             }
@@ -799,7 +816,8 @@ impl ServerHandler for Server {
                     .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
                 Ok(jsonrpc::tool_result(json, &[]).into())
             }
-            Err(e @ Error::Usage { .. }) | Err(e @ Error::Recipe { .. }) => {
+            // A caller's mistake, a path the server does not read among them (CONTRACT 5.2).
+            Err(e @ (Error::Usage { .. } | Error::Recipe { .. } | Error::Input { .. })) => {
                 Err(invalid(e.to_string()))
             }
             Err(e) => Err(operational(&e)),

@@ -154,6 +154,7 @@ identities. `spend` and `cache` come from the fill (8.6).
 
 ```
 rascal serve [--workspace ws/] [--config rascal.toml] [--concurrency n] [--runs dir]
+             [--allow-dir /abs/dir]...
 ```
 
 `serve` starts in every configuration state (3.1, 5): with no `--config`, a file that does not
@@ -176,9 +177,39 @@ not ready).
 
 - **Images in.** `image` is `{ "path": "/abs/…" }` or `{ "inline": { "media_type", "data" } }`,
   each with an optional `expect` reference checked against the file (digest and dimensions; a
-  mismatch is `invalid` with code `input`). A path must be absolute; inline bytes are written to
+  mismatch is `invalid` with code `input`). A path is held to the path rule (below); inline bytes are written to
   the run's input directory (`<runs>/<id>.in/`) and imported like a file, journaled; the limit is
   the description's `limits.inline_bytes` (64 MiB).
+- **The path rule (5.2, task 10.1).** `serve` reads a caller's path only inside the directories
+  the session allows. Each `--allow-dir` (repeatable) must be absolute and name an existing
+  directory, else `serve` exits 64 naming the flag before it answers anything; each is resolved
+  once at start (`.`, `..`, every symlink). The configuration's `[serve] allow_dirs` (absolute)
+  narrows them to the overlap and never widens them: where a configured directory and a flag
+  directory overlap, the deeper one is allowed; a configured directory under no flag allows
+  nothing; `allow_dirs = []` allows nothing; no `[serve] allow_dirs` leaves the flags as given; a
+  configured directory that does not resolve allows nothing (stderr says so); a configuration
+  that does not load allows no caller path, failing closed since what it would narrow is unknown
+  (stderr says why; `serve` still starts, and `describe`, `estimate` and inline images work). With
+  no `--allow-dir` every caller path is refused, closed by default; inline images keep working. The set is fixed for the session and printed on stderr at
+  start (`rascal serve: callers' paths are read only inside: …`); the v0.3 session resource has no
+  field for it, so `rascal://session` shows it from v0.4 (`allowed_dirs`, task 10.2).
+  `rascal_core::paths::PathRule::admit` is the one check, for every caller path `serve` takes:
+  the image slots, `mask` and `protect` (stored mask directories) and `workspace_import`'s
+  `path`. The path must be absolute and its canonical form (every symlink resolved, the final
+  component included) must exist, be a regular file (for a mask, a directory every entry of
+  which also resolves inside) and lie under an allowed directory component by component (`/a/bc`
+  is not under `/a/b`); the file is then read through the canonical path. So a link inside
+  pointing out is refused, and a link outside whose target is inside is read (the target is
+  what is read). Every failure is one refusal with one text, `<slot>: this path is not readable
+  here (only files inside the directories rascal serve allows; CONTRACT 5.2)`, which says
+  nothing about whether the file exists or what it is: a run ends `invalid` with code `input`;
+  `estimate` is the `-32602` `invalid_arguments` refusal with code `input`; `workspace_import`
+  is a JSON-RPC invalid-params error. `serve` never writes at a caller's path: only under its
+  runs root, its workspace and its cache. A check-then-read race (a symlink
+  swapped between the check and the read) is outside what the rule guards: the caller is on the
+  host's own stdio, and the rule exists to keep an agent from naming files such as a key. The
+  rule governs `serve` only: `rascal run`, `heal`, `estimate` and every other command take the
+  person's own paths.
 - **Images out.** `return_images` chooses the locator: `path` (the default), `inline`, or
   `resource` (`rascal://run/<id>/images/<role>`). `image_blocks: true` also sends each as an MCP
   image block.

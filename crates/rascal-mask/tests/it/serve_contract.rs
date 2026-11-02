@@ -37,10 +37,9 @@ fn config(dir: &Path) -> PathBuf {
 }
 
 fn start(dir: &Path) -> Client {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
+    let mut command = rascal_testkit::mcp_client::serve_command(env!("CARGO_BIN_EXE_rascal"));
     command
         .args([
-            "serve",
             "--workspace",
             dir.join("ws").to_str().unwrap(),
             "--config",
@@ -393,10 +392,9 @@ fn limits_server(
         ),
     )
     .unwrap();
-    let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
+    let mut command = rascal_testkit::mcp_client::serve_command(env!("CARGO_BIN_EXE_rascal"));
     command
         .args([
-            "serve",
             "--workspace",
             dir.join("ws").to_str().unwrap(),
             "--config",
@@ -578,10 +576,9 @@ fn concurrent_calls_reserve_the_budget_atomically() {
         ),
     )
     .unwrap();
-    let mut command = Command::new(bin);
+    let mut command = rascal_testkit::mcp_client::serve_command(bin);
     command
         .args([
-            "serve",
             "--workspace",
             dir.join("ws").to_str().unwrap(),
             "--config",
@@ -649,10 +646,9 @@ fn concurrent_calls_reserve_the_budget_atomically() {
             .replace("session_budget_usd = 0.05", "session_budget_usd = 0.10"),
     )
     .unwrap();
-    let mut command = Command::new(bin);
+    let mut command = rascal_testkit::mcp_client::serve_command(bin);
     command
         .args([
-            "serve",
             "--workspace",
             dir.join("ws2").to_str().unwrap(),
             "--config",
@@ -1201,9 +1197,8 @@ fn a_cap_of_zero_is_an_invalid_run_that_spends_nothing() {
 /// `rascal serve` with `args` and `env` (with `HOME` and `XDG_DATA_HOME` in `dir`, so nothing
 /// defaults into the real home).
 fn start_with(dir: &Path, args: &[&str], env: &[(&str, &str)]) -> Client {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
+    let mut command = rascal_testkit::mcp_client::serve_command(env!("CARGO_BIN_EXE_rascal"));
     command
-        .arg("serve")
         .args(args)
         .env_remove("RASCAL_LOG")
         .env_remove("RASCAL_TOOLS_MODELS")
@@ -1322,10 +1317,13 @@ fn serve_starts_in_every_configuration_state() {
             assert_eq!(first["name"], "rascal.toml");
             assert_eq!(first["state"], remove_prompt, "{readiness:#}");
         }
+        // Inline, so the call runs in every state: a configuration that does not load allows
+        // no caller path (task 10.1).
+        let data = rascal_core::panel::base64(&std::fs::read(&pano).unwrap());
         let out = client
             .call(
                 "seam",
-                serde_json::json!({ "image": { "path": pano.to_str().unwrap() } }),
+                serde_json::json!({ "image": { "inline": { "media_type": "image/png", "data": data } } }),
             )
             .unwrap();
         let s = out.structured.unwrap();

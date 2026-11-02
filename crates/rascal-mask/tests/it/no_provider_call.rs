@@ -68,8 +68,15 @@ fn config(dir: &Path, file: &str, url: &str, more: &str) -> PathBuf {
 
 /// The arguments of every estimate made: mask-only, paid, paid under the price (the cap), and
 /// `remove_prompt` (not ready without its pack, or with no file).
+/// The image inline: estimates and refusals work in every configuration state, and inline
+/// bytes are no caller path (a configuration that does not load allows none, task 10.1).
+fn image() -> Value {
+    let bytes = std::fs::read(pano()).unwrap();
+    json!({ "inline": { "media_type": "image/png", "data": rascal_core::panel::base64(&bytes) } })
+}
+
 fn requests() -> Vec<(&'static str, Value)> {
-    let image = json!({ "path": pano().to_str().unwrap() });
+    let image = image();
     vec![
         ("seam", json!({ "image": image })),
         ("seam", json!({ "image": image, "filler": "hosted" })),
@@ -215,10 +222,9 @@ fn the_command_line_describes_and_estimates_without_a_provider_call() {
 
 /// `rascal serve` over `dir`'s workspace and runs root.
 fn serve(dir: &Path, config: Option<&Path>, key: Option<&str>) -> Client {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
+    let mut command = rascal_testkit::mcp_client::serve_command(env!("CARGO_BIN_EXE_rascal"));
     command
         .args([
-            "serve",
             "--workspace",
             dir.join("ws").to_str().unwrap(),
             "--runs",
@@ -259,7 +265,7 @@ fn the_server_describes_estimates_and_refuses_without_a_provider_call() {
     let dir = scratch("serve");
     let (url, seen) = spawn(Behaviour::Exact, Some(KEY.to_string()));
     let loaded = config(&dir, "rascal.toml", &url, "");
-    let paid = json!({ "image": { "path": pano().to_str().unwrap() }, "filler": "hosted" });
+    let paid = json!({ "image": image(), "filler": "hosted" });
     let mut answered = 0;
     for (state, config) in config_states(&dir, &loaded) {
         // Missing, present, valid (after a 2xx) and invalid (after a 401).
@@ -319,7 +325,7 @@ fn the_server_describes_estimates_and_refuses_without_a_provider_call() {
             not_ready(
                 &mut client,
                 "remove_prompt",
-                json!({ "image": { "path": pano().to_str().unwrap() }, "prompt": "a lamp" }),
+                json!({ "image": image(), "prompt": "a lamp" }),
                 &format!("no-call.{state}.{credential}.prompt"),
                 &what,
             );

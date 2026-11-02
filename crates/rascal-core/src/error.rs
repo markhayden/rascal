@@ -56,6 +56,10 @@ pub enum Error {
     /// directory that is not empty, an unknown recipe. Exit 64.
     #[error("{message}")]
     Usage { message: String },
+    /// A caller gave an input the call cannot take, whatever the arguments' shape: a path
+    /// `rascal serve` does not read (CONTRACT 5.2). The contract's `invalid`/`input`. Exit 64.
+    #[error("{message}")]
+    Input { message: String },
     /// An op's parameters failed validation: the `invalid_args` envelope that was journaled,
     /// kept so a server can return it as the result. Exit 64.
     #[error("step {step}: {op}: {}", envelope.reason.clone().unwrap_or_default())]

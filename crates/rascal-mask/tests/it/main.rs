@@ -26,6 +26,7 @@ mod ops_cli;
 mod packs;
 mod packs_real;
 mod paste_cli;
+mod paths;
 mod playground;
 mod portable_cli;
 mod readiness;

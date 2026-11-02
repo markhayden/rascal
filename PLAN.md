@@ -1449,7 +1449,7 @@ shims). Artifacts cross by **reference** (type, schema version, identity, opaque
 they were made on, a resource), never by workspace id, and resolve by identity in the session's
 store, which is how a saved binding reopens after a restart or a workspace move. A Mask leaves and
 enters through the reserved `export` and `import` tools over 10.5's mask bundles (5.1). Every
-result records its `invocation`, `rascal call <action> --arguments <file>` runs it again, and
+result records its `invocation` (from 10.2), `rascal call <action> --arguments <file>` runs it again, and
 `rascal call --bundle` replays a host's invocation bundle (4.8, 4.9). And first, ahead of all of
 it: the path rule (5.2), since today `serve` reads any absolute path a caller names, which is a
 live gap on v0.3 as well.
@@ -1481,9 +1481,9 @@ or Wafflery's v0.4 work except the tag itself.
 `rascal:BandProfile` (declared `portable: none`, so a host labels them workspace-dependent;
 PROPOSALS "Left for later than v0.4"). Operations served by a pack (`segment`): a description is
 a local inspection (3.1, 12.2) and a pack's tools are known only by starting it, so pack tools
-leave `serve` with the op tools and the segmenter stays reachable through `remove_prompt`; listing
-a pack's operations from its install needs the install to record the pack's manifests, a question
-for the coordinator below. Workspace ids in MCP arguments (CONTRACT 10.1 allows them):
+leave `serve` with the op tools and the segmenter stays reachable through `remove_prompt`; pack
+operations are out of v0.4 for rascal (question 6, settled), since listing them from an install
+would need the install to record the pack's manifests. Workspace ids in MCP arguments (CONTRACT 10.1 allows them):
 references are the one form, so the id-shaped arguments go with the tools that took them.
 
 **Order and parallel tracks.** 10.1 first, on `main`, alone: it touches the path handling and
@@ -1492,10 +1492,10 @@ chain **10.2 → 10.3 → 10.4 → 10.6** (the pin and shapes; references, the s
 refusal; operations in the description; an operation call is a run). After 10.4, **10.10** (export
 and import, in a new module) runs beside 10.6. After 10.6 four tracks: **A** 10.7 (the artifact
 resource, reopening after a restart and a move); **B** 10.8 (tasks list their Masks); **C** 10.9
-(estimates for operations); **D** 10.11 → 10.12 (the invocation, `rascal call`), then 10.13 (the
-bundle replay) once 10.10 is in. A and 10.10 live mostly in new modules (`artifact_resource.rs`,
+(estimates for operations); **D** 10.12 (`rascal call`; the invocation is 10.2's), then 10.13
+(the bundle replay) once 10.10 is in. A and 10.10 live mostly in new modules (`artifact_resource.rs`,
 `transfer.rs`) and run in parallel with anything; B, C and D all edit `actions.rs`, `estimate.rs`
-and `run_json.rs`, so they run in one session in the order 10.8, 10.9, 10.11 unless two sessions
+and `run_json.rs`, so they run in one session in the order 10.8, 10.9, 10.12 unless two sessions
 take care to merge 10.8 first. 10.14 (the end-to-end path, fixtures, ADR 0021, docs) waits for
 every track; 10.15 for 10.14, squint's v0.4 fixtures and the owner's release.
 
@@ -1503,12 +1503,12 @@ every track; 10.15 for 10.14, squint's v0.4 fixtures and the owner's release.
 green, conventional scope (`feat(mcp)`, `feat(core)`, `feat(mask)`, `test(mask)`, `docs`), the
 checklist in `tasks/todo.md` ticked in the task's own commit. Rollback checkpoints are annotated
 tags: `m10.1` on `main`'s merge of 10.1 (the path rule on v0.3, the one M10 change `main` carries
-before the release); on the milestone branch `m10.2` after 10.2 (a v0.4 rascal with no new
-behaviour), `m10.3` after 10.3, 10.4 and 10.6 (operations run, bound by reference), `m10.4` after
+before the release); on the milestone branch `m10.2` after 10.2 (a v0.4 rascal whose results
+carry their invocation), `m10.3` after 10.3, 10.4 and 10.6 (operations run, bound by reference), `m10.4` after
 10.7 to 10.10 (artifacts reopen by identity, tasks' Masks bind, estimates cover operations, Masks
-export and import), `m10.5` after 10.11 to 10.13 (the invocation and `rascal call`). A task group
+export and import), `m10.5` after 10.12 and 10.13 (`rascal call` and the bundle replay). A task group
 that goes wrong is reverted on the branch (rule 1, `git revert --no-commit` newest first: 10.13
-before 10.12 before 10.11; 10.9, 10.8 and 10.7 before 10.6; 10.6 before 10.4 before 10.3), or the
+before 10.12; 10.9, 10.8 and 10.7 before 10.6; 10.6 before 10.4 before 10.3), or the
 branch is reset to the last tag after a `rescue/` reference (rule 2). 10.1 on `main` is undone
 alone by rule 4 (revert its merge), which reopens the gap and is therefore a last resort. If v0.4
 changes under rascal before it is tagged, the affected task is amended forward on the branch; if
@@ -1519,30 +1519,41 @@ the published crate and the contract's `fixtures/rascal/` are external state and
 ### Task 10.1: The path rule
 
 **Description.** `serve` reads a caller's path only inside the directories the session allows
-(CONTRACT 5.2, 10.1; squint's rule, which rascal lacks: today `estimate::image_in` takes any
-absolute path that is a file, says "is not a file" otherwise, and `workspace_import` and the
-recipe actions' `mask` and `protect` arguments read any path at all). `rascal serve --allow-dir
+(CONTRACT 5.2, 10.1; squint's rule, which rascal lacked: before this task `estimate::image_in`
+took any absolute path that is a file, said "is not a file" otherwise, and `workspace_import` and
+the recipe actions' `mask` and `protect` arguments read any path at all). `rascal serve --allow-dir
 <abs>` is repeatable; each value must be absolute and name an existing directory, else `serve`
 exits 64 before it answers anything, naming the flag (it is the host's argv, not a caller's
-path). Each is resolved once at start (`std::fs::canonicalize`: `.`, `..` and every symlink), then
-narrowed by the configuration's new `[serve] allow_dirs` (absolute paths, resolved the same way),
-which may only take away: the allowed set is the intersection of the two trees (a flag directory
-inside a configured one stays; a configured directory inside a flag one replaces it; anything
-else goes), with no `[serve]` the flags as given, and `allow_dirs = []` allowing nothing. With no
-`--allow-dir` every path is refused; inline images keep working. The set is fixed for the session,
-printed on stderr at start, and from 10.2 shown as the session's `allowed_dirs`.
+path; question 3, settled). Each is resolved once at start (`std::fs::canonicalize`: `.`, `..`
+and every symlink), then narrowed by the configuration's new `[serve] allow_dirs` (absolute paths, resolved the same way),
+which may only take away: the allowed set is the overlap of the two trees (question 4, settled: a
+flag directory inside a configured one stays; a configured directory inside a flag one replaces
+it; anything else goes), with no `[serve] allow_dirs` the flags as given, `allow_dirs = []`
+allowing nothing, a configured directory that does not resolve allowing nothing (stderr names
+it), and a configuration that does not load allowing nothing (fail closed, the coordinator's
+review: what it would narrow is unknown; stderr says why, and `serve` still starts, its estimates
+working on inline images).
+With no `--allow-dir` every path is refused, closed by default; inline images keep working. The
+set is fixed for the session, printed on stderr at start (the v0.3 session schema has no field for
+it; question 2, settled), and from 10.2 shown as the session's `allowed_dirs`.
 
-One function, `paths::admit(slot, given, allowed) -> Result<PathBuf>` in a new module, is the
-only way a caller path is read: the path must be absolute, its canonical form must exist, be a
-regular file and lie under an allowed directory (a component-wise prefix of a canonical path, so
-`/a/bc` is not under `/a/b`); the file is then read through the canonical path, never the given
-one. Every failure is one refusal with one text, `<slot>: this path is not readable here (only
-files inside the directories rascal serve allows; CONTRACT 5.2)`, which names neither the path's
+One function, `rascal_core::paths::PathRule::admit(slot, given, want) -> Result<PathBuf>` in a
+new module (in the core, so the MCP server holds the same rule for `workspace_import`; a
+person's own command line is `PathRule::Own`, which takes any path), is the only way a caller
+path is read: the path must be absolute, its canonical form (every symlink resolved, the final
+component included) must exist, be a regular file (for `mask` and `protect`, a stored mask
+directory every entry of which also resolves inside) and lie under an allowed directory (a
+component-wise prefix of a canonical path, so `/a/bc` is not under `/a/b`); the file is then read
+through the canonical path, never the given one. So a symlink inside pointing out is refused and
+a symlink outside whose target is inside is read: the rule is on what is read. Every failure is
+one refusal with one text, `<slot>: this path is not readable here (only files inside the
+directories rascal serve allows; CONTRACT 5.2)`, which names neither the path's
 existence nor its kind, so a missing file, a directory, a symlink out of the tree and a path
-outside it are indistinguishable. In a run it is `invalid` with code `input` (today such paths are
-`usage`); in `estimate` it is the `invalid_arguments` refusal with code `input`; in
-`workspace_import` (until 10.6 removes it) its usual error. The rule covers every caller path
-`serve` takes: image slots, `mask` and `protect` (stored mask directories until 10.3 makes them
+outside it are indistinguishable. In a run it is `invalid` with code `input` (before, such paths
+were `usage`); in `estimate` it is the `invalid_arguments` refusal with code `input`; in
+`workspace_import` (until 10.6 removes it) a JSON-RPC invalid-params error. It is a new core
+error, `Error::Input` (exit 64 on the command line, `invalid`/`input` in the contract). The rule
+covers every caller path `serve` takes: image slots, `mask` and `protect` (stored mask directories until 10.3 makes them
 references) and `workspace_import`. It governs `serve` only: `rascal run`, `heal` and every other
 command keep taking the person's own paths (5.2); `rascal call` and `rascal import` take the flag
 in 10.12 and 10.10. Writes are audited: `serve` writes only under its runs root, its workspace and
@@ -1553,8 +1564,9 @@ keep an agent from naming files like a key) and is recorded as such in `docs/con
 
 This builds on v0.3.0 and is mergeable alone: the session resource's schema is closed at v0.3, so
 `allowed_dirs` waits for 10.2; nothing else in the v0.3 shapes changes. Closing paths by default
-breaks any host that passes paths today without `--allow-dir` (Wafflery's v0.3 client), so the
-merge is coordinated (question 1 below).
+breaks any host that passes paths today without `--allow-dir` (Wafflery's v0.3 client); the
+coordinator settled that 10.1 lands now, closed by default, and Wafflery passes `--allow-dir`
+(question 1).
 
 **CLI scenario.** `rascal serve --runs r/ --allow-dir "$PWD/in"` answers a `seam` call with
 `{"image": {"path": "$PWD/in/pano.png"}}` as before; the same call with `/etc/hosts`, with
@@ -1562,44 +1574,65 @@ merge is coordinated (question 1 below).
 each ends `invalid`/`input` with the same reason; `rascal serve --allow-dir in` (relative) exits 64.
 
 **Acceptance.**
-- [ ] With `--allow-dir D`: a file in D (and in a subdirectory, and through a symlink that stays
+- [x] With `--allow-dir D`: a file in D (and in a subdirectory, and through a symlink that stays
       inside D) runs; a path outside D, a `..` escape, a symlink inside D to a file outside, a
       missing file inside D, a missing file outside, a directory, and a relative path each end
       `invalid`/`input` with byte-identical reasons and no import into the workspace.
-- [ ] With no `--allow-dir` every path is refused the same way, and an inline image still runs.
-- [ ] `[serve] allow_dirs` narrows (a flag directory outside it allows nothing; a configured
+- [x] With no `--allow-dir` every path is refused the same way, and an inline image still runs.
+- [x] `[serve] allow_dirs` narrows (a flag directory outside it allows nothing; a configured
       subdirectory of a flag directory is the only one allowed; `[]` allows nothing) and never
       widens (a configured directory with no flag allows nothing).
-- [ ] A relative `--allow-dir`, one that does not exist and one that is a file each exit 64 naming
+- [x] A relative `--allow-dir`, one that does not exist and one that is a file each exit 64 naming
       the flag, before `initialize` is answered.
-- [ ] `estimate` with a refused path is `-32602` with `invalid_arguments`, code `input`, the same
+- [x] `estimate` with a refused path is `-32602` with `invalid_arguments`, code `input`, the same
       reason; `workspace_import` and the `mask` and `protect` arguments are held to the rule.
-- [ ] After a session of calls (images out by path, inline inputs, the dash render), every file
+- [x] After a session of calls (images out by path, inline inputs, the dash render), every file
       `serve` created lies under its runs root, workspace or cache.
-- [ ] `rascal run` and `heal` still take any path the person names.
+- [x] `rascal run` and `heal` still take any path the person names.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- paths::
-serve_contract:: estimate::`; `cargo nextest run -p rascal-core --test it -- config::`; `just
-check`.
+serve_contract:: estimate::`; `cargo nextest run -p rascal-core --test it -- config::`; `cargo
+nextest run -p rascal-core --lib -- paths::`; `just check`. Done 2026-11-01 (branch
+`m10-allow-dir`).
 
 **Dependencies.** M12 (`m12`, `main` at `a80b023`); table-manners `=0.3.0`. **Files.**
-`crates/rascal-mask/src/paths.rs` (new), `estimate.rs` (`image_in` through `admit`),
-`actions.rs` (`mask`, `protect`, the allowed set in `ContractActions`), `serve.rs`, `main.rs`
-(`--allow-dir`), `crates/rascal-core/src/config.rs` (`ServeConfig { allow_dirs }`),
-`crates/rascal-mcp/src/server.rs` (`workspace_import` through a path guard the server is given),
-`crates/rascal-testkit/src/mcp_client.rs` (spawning `serve` with `--allow-dir` by default),
-`crates/rascal-mask/tests/it/paths.rs` (new), `serve_contract.rs`, `estimate.rs`,
-`docs/contract.md` ("serve": the path rule), `docs/tools.md`, SPEC "The MCP server and client"
-and "Commands", README. **Size.** M.
+`crates/rascal-core/src/paths.rs` (new: `PathRule`, `admit`, the refusal, the flags and the
+overlap), `error.rs` (`Error::Input`), `config.rs` (`ServeConfig { allow_dirs }`),
+`schema_drift.rs`, `crates/rascal-mask/src/estimate.rs` (`image_in` through `admit`),
+`actions.rs` (`mask`, `protect`, the rule in `ContractActions`), `serve.rs` (the set resolved,
+narrowed and printed), `main.rs` (`--allow-dir`), `run_json.rs` and `exit.rs` (`Error::Input`),
+`crates/rascal-mcp/src/server.rs` (`workspace_import` through the rule the server is given,
+none by default), `crates/rascal-testkit/src/mcp_client.rs` (`serve_command`: `serve` with the
+repository and the temporary directory allowed, for the tests), `bin/independent-walk.rs`,
+`crates/rascal-mask/tests/it/paths.rs` (new), the suites that start `serve`,
+`crates/rascal-core/tests/it/config.rs`, `schemas/rascal/config-v1.json`,
+`fixtures/schemas/config-v1/full.json`, `docs/contract.md` ("serve": the path rule),
+`docs/tools.md`, `docs/fillers.md`, `docs/architecture.md`, SPEC "The MCP server and client" and
+"Commands", README. **Size.** M.
 
 ### Task 10.2: The pin to v0.4 and the shapes
 
 **Description.** The pin moves to the v0.4 crate by path (above); `contract` is `0.4.0`
-everywhere. The shapes the v0.4 types force, with no new behaviour: every action (the seven
-recipe actions) carries `kind: "task"` and no `group`; `vocabulary` moves to the core's object
-with the images profile's four lists in it as before; `rascal://session` gains `allowed_dirs`
-(10.1's set, `[]` with no `--allow-dir`); every result carries `invocation`, `null` for now
-(filled in 10.11; the schema allows null, and nothing outside the branch reads it before then);
+everywhere. The shapes the v0.4 types force: every action (the seven recipe actions) carries
+`kind: "task"` and no `group`; `vocabulary` moves to the core's object with the images profile's
+four lists in it as before; `rascal://session` gains `allowed_dirs` (10.1's set, `[]` with no
+`--allow-dir`); and every result carries its real `invocation` (4.8), the old 10.11 folded in
+here (the coordinator's review: a stand-in would be a fabricated replay record, and the built
+v0.4 schema allows `null` only on an `invalid` result, question 5). Tasks and the command line
+are every result there is at this point; 10.3 and 10.6 extend the same function to what they add
+(references, operations). The invocation is `action`; `arguments` as resolved, with every
+default of the action's `params_schema` applied, each image as `{"expect": <image reference>}`
+with no `path` or `inline`, each location as given, `max_spend_usd` kept, and `return_images`
+and `image_blocks` left out; `effective` the estimate's object from the same function (12.5):
+`model`, `config_identity`, and `x-rascal` (the filler and its revision, paste and
+`fill_max_side`, and the constant sets in force by step); `requirements` the names of the
+readiness requirements the call used (12.2's `for_call`), never a value. It is `null` only on an
+`invalid` run whose arguments did not resolve. On the command line (`rascal run`, `heal`) the
+invocation is written as the matching action's arguments (the recipe's action name;
+`--location` and `--stroke` files as locations, `--set` as `set`), so a CLI run is callable
+through `serve` and `rascal call` alike. `mask` and `protect` are still paths to stored mask
+directories here; 10.3, the next task in the chain, makes them references, in the invocation as
+everywhere (the milestone branch merges nothing before 10.15).
 `profiles` stays `["images"]` until 10.4 adds `operations`. The description's text and
 `docs/contract.md` stop mentioning MCP roots (rascal never used them). `fixtures/table-manners/`
 and `fixtures/contract/describe.json` are regenerated at v0.4.
@@ -1611,15 +1644,25 @@ and `fixtures/contract/describe.json` are regenerated at v0.4.
       for a server started with no `--allow-dir`.
 - [ ] Every `run.json`, the runs pages, the estimates and the refusals validate against v0.4;
       `UPDATE_FIXTURES=1` regenerates `fixtures/table-manners/` and the check passes after.
+- [ ] Every fixture and every result in the suite has a non-null `invocation` validating against
+      v0.4, but an `invalid` run whose arguments did not parse, which has `null`.
+- [ ] The invocation names no path anywhere but `mask` and `protect` until 10.3 (a test walks it
+      for strings starting with `/`), and two calls on the same image given by path and inline
+      give equal invocations.
+- [ ] `invocation.effective` equals the estimate's `effective` for the same call; `requirements`
+      lists the credential's name and never its value (the sentinel search of 12.2).
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- describe::
-serve_contract:: run_json:: table_manners_fixtures::`; `scripts/test-checks.sh`; `just check`.
+serve_contract:: run_json:: table_manners_fixtures:: estimate::`; `scripts/test-checks.sh`;
+`just check`.
 
 **Dependencies.** 10.1; a table-manners checkout on branch `v0.4` with the v0.4 schemas and types.
 **Files.** `Cargo.toml`, `Cargo.lock`,
-`crates/rascal-mask/src/{describe,actions,run_json,estimate}.rs`,
-`crates/rascal-core/src/contract.rs`, `crates/rascal-mask/tests/it/{describe,serve_contract}.rs`,
-`fixtures/table-manners/`, `fixtures/contract/`, `docs/contract.md`. **Size.** S.
+`crates/rascal-mask/src/{describe,actions,run_json,estimate,run,heal}.rs`,
+`crates/rascal-mask/src/invocation.rs` (new), `crates/rascal-core/src/contract.rs`,
+`crates/rascal-mask/tests/it/{describe,serve_contract,run_json}.rs`, `fixtures/table-manners/`,
+`fixtures/contract/`, `docs/contract.md`. **Size.** M (split: the pin and shapes, then the
+invocation).
 
 ### Task 10.3: References, the store and the binding refusal
 
@@ -1637,8 +1680,9 @@ the one place today's actions take a native artifact: `protect`'s `mask` argumen
   identity is `sha256:<file_sha256>` (3.4; rascal's own image identity stays internal); `frame` is
   the artifact's frame identity (`sha256:<hex>`; null for no type rascal has today, since every
   type is framed); `on` is the image reference (8) of the image at the root of the frame chain when
-  the workspace holds one, else left out; `resource` is `rascal://artifact/<identity>` (served from
-  10.7). Workspace ids never appear.
+  the workspace holds one, else left out; `resource` is `rascal://artifact/<identity>`, carried on
+  every reference as the built v0.4 schema has it (question 5; served from 10.7). Workspace ids
+  never appear.
 - **The store.** The session's store is `serve`'s workspace (`--workspace`, its default
   unchanged). `Workspace::resolve(type, identity)` finds an artifact by identity in the current
   generation (an index built from the registry once per generation, not a scan per call); an
@@ -1717,8 +1761,9 @@ becomes an operations tool's: `profiles: ["images", "operations"]`, top-level `a
   `locations: []`), `outputs` naming the roles of the images its out-ports make and `locations:
   ["found"]` when an out-port is a `location`;
 - `cost: {"may_spend": false}`, `readiness` `ready` with no requirements (a built-in op reads no
-  configuration), `duration` from the manifest's `cost.seconds`, and no `renders` (the dash reads a
-  task's run workspace; an operation's picture is its preview).
+  configuration), `duration` from the manifest's `cost.seconds`, and `renders: []` (the built
+  v0.4 schema's form, question 5; the dash reads a task's run workspace; an operation's picture
+  is its preview).
 
 The seven recipe actions stay `kind: "task"` with no group. `artifact_types` lists `location`
 (`portable: "json"`, `preview: true`), `rascal:Mask` (`bundle`, `true`), `rascal:BandProfile`,
@@ -1923,7 +1968,8 @@ The preview is 10.6's `preview::draw`, written once into rascal's cache
 located by path on stdio. Both templates are in the description's `resources`. A read of an
 identity the store does not hold (or of `/preview` for a type without one) fails with refusal
 data `{"reason": "binding", "run": null, "bindings": [{"port": null, "problem": "unresolved",
-"expected": …, "got": <identity>, "remedy": …}]}`. Reads never wait for the permit (4.5).
+"expected": …, "got": <identity>, "remedy": …}]}` under JSON-RPC `-32602`, like every refusal
+(question 10, settled). Reads never wait for the permit (4.5).
 
 This is the old 10.6, persistence and relocation, end to end: a host stores references, restarts
 `serve`, and reads and binds them again; after the workspace directory moves, the host starts
@@ -2030,9 +2076,10 @@ JSON-RPC errors, and on the command line a refusal exits 64 with the refusal JSO
   (`input`) naming what it is: a rendering is never a Mask (5.1). A refused path says nothing
   about the file.
 - Both are in `tools/list` exactly when a type is portable (always, for rascal) and are listed in
-  the description's text (`docs/contract.md`), not in `actions`. `rascal export` keeps its
-  `--compat` mode beside `--json` (exactly one of the two; question 9). The commands take
-  `--workspace` (the store, `serve`'s default) and `--config`.
+  the description's text (`docs/contract.md`), not in `actions`. The contract takes `rascal
+  export` (question 9, settled): today's compatibility export becomes `rascal compat-export`,
+  with no fallback under the old name or flag, and SPEC, README and `docs/export.md` follow.
+  The commands take `--workspace` (the store, `serve`'s default) and `--config`.
 
 **CLI scenario.** `echo '{"artifact": <mask ref>}' | rascal export --json - --workspace a/`
 prints the file's path and digest; `echo '{"file": {"path": "<that path>"}}' | rascal import
@@ -2055,42 +2102,19 @@ prints the file's path and digest; `echo '{"file": {"path": "<that path>"}}' | r
 portable_cli:: serve_contract::`; `just check`.
 
 **Dependencies.** 10.4 (and through it 10.3 and 10.1), 10.5. **Files.**
-`crates/rascal-mask/src/transfer.rs` (new), `main.rs` (`export --json`, `import --json`),
+`crates/rascal-mask/src/transfer.rs` (new), `main.rs` (`export --json`, `import --json`,
+`compat-export`), `export.rs`,
 `actions.rs` (the two tools), `crates/rascal-core/src/{bundle,contract}.rs` (a location's
 portable JSON), `crates/rascal-mask/tests/it/transfer.rs` (new), `portable_cli.rs`,
 `docs/workspace.md`, `docs/export.md`, `docs/contract.md`, `docs/adr/0022-mask-bundles.md` (the
 MCP tools now exist). **Size.** M.
 
-### Task 10.11: The invocation on every result
+### Task 10.11: Folded into 10.2
 
-**Description.** Every result, tasks, operations, the command line and every status, carries
-`invocation` (4.8) in place of 10.2's `null`: `action`; `arguments` as resolved, with every
-default of the action's `params_schema` applied, each image as `{"expect": <image reference>}`
-with no `path` or `inline`, each artifact (in-ports, `mask`, `protect`) as its reference, each
-location as given (a location given inline stays inline; a location port bound by reference stays
-a reference), `max_spend_usd` kept, and `return_images` and `image_blocks` left out; `effective`
-the estimate's object from the same function (12.5): `model`, `config_identity`, and `x-rascal`
-(the filler and its revision, paste and `fill_max_side`, and the constant sets in force by step);
-`requirements` the names of the readiness requirements the call used (12.2's `for_call`), never a
-value. It is `null` only on an `invalid` run whose arguments did not resolve. On the command line
-(`rascal run`, `heal`) the invocation is written as the matching action's arguments (the recipe's
-action name; `--location` and `--stroke` files as locations, `--set` as `set`), so a CLI run is
-callable through `serve` and `rascal call` alike.
-
-**Acceptance.**
-- [ ] Every fixture and every result in the suite has a non-null `invocation` validating against
-      v0.4, but an `invalid` run whose arguments did not parse, which has `null`.
-- [ ] The invocation names no path anywhere (a test walks it for strings starting with `/`), and
-      two calls on the same image given by path and inline give equal invocations.
-- [ ] `invocation.effective` equals the estimate's `effective` for the same call; `requirements`
-      lists the credential's name and never its value (the sentinel search of 12.2).
-
-**Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- run_json::
-serve_contract:: operations:: estimate::`; `just check`.
-
-**Dependencies.** 10.6. **Files.** `crates/rascal-mask/src/invocation.rs` (new),
-`run_json.rs`, `actions.rs`, `operations.rs`, `estimate.rs`, `run.rs`, `heal.rs`, tests
-`run_json.rs`, `serve_contract.rs`. **Size.** M.
+The invocation on every result is part of 10.2 (the coordinator's review, 2026-11-01): a v0.4
+result cannot carry a stand-in, so the real invocation lands with the pin. 10.3 writes `mask` and
+`protect` into it as references and 10.6 writes an operation's in-ports, each through 10.2's
+function. The number stays so the others keep theirs.
 
 ### Task 10.12: `rascal call`
 
@@ -2120,7 +2144,8 @@ the file for `rascal call <invocation.action>`.
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- call_cli::`;
 `just check`.
 
-**Dependencies.** 10.11. **Files.** `crates/rascal-mask/src/{main,call}.rs` (the second new),
+**Dependencies.** 10.2 (its `binding` refusal comes with 10.3, its `feather` scenario with
+10.6). **Files.** `crates/rascal-mask/src/{main,call}.rs` (the second new),
 `actions.rs` (a session-less entry), `crates/rascal-mask/tests/it/call_cli.rs` (new),
 `README.md`, SPEC "Commands", `docs/contract.md`. **Size.** S.
 
@@ -2132,14 +2157,14 @@ The reader is bounded as 10.5's is (256 MiB, a member count, a manifest size, pl
 each size checked against what remains) and checks the whole file before acting: the manifest
 against `urn:table-manners:core:invocation-bundle`, every member it names present and no other,
 each `artifacts/` member's `sha256` and each `inputs/` member's `file_sha256`. Then for each step
-in order: a step of another tool is refused (exit 64, naming the step; question 11); each
+in order: a step of another tool is refused (exit 64, naming the step; question 11, settled); each
 artifact member is imported into the store (10.10's import, so it is checked whole); each input
 member is copied into rascal's own replay area (`$XDG_DATA_HOME/rascal/replay/<bundle digest>/`,
 a directory rascal owns, so it is not a caller path); the step is called with its
 `invocation.arguments` plus a `path` on each image, as 10.12 does. A later step that names an
-earlier step's output by reference resolves because the earlier replayed step published it with
-the same identity; when it did not (a step whose output differs, such as a filler's), the later
-step's binding refusal says so. A step that lists `reference_only` inputs or `unportable`
+earlier step's output binds to that step's replayed output by port, whatever its identity
+(CONTRACT 4.9 at `d9e6058`; question 12, settled), and its result reports the change: the port,
+the identity the bundle named and the one replayed (a filler's output, say, differs). A step that lists `reference_only` inputs or `unportable`
 artifacts is refused before anything runs, naming them. It prints one result per line (JSON
 Lines), stops at the first step that does not complete, and exits with that step's code.
 
@@ -2252,10 +2277,10 @@ into `main` by the checkpoint procedure.
 
 ### Owner decisions for M10
 - The path rule ships ahead of v0.4 on `=0.3.0` and is closed by default (no `--allow-dir`, no
-  path), as v0.4 requires; hosts that pass paths add `--allow-dir`. Recommended, assumed (question
-  1 to the coordinator).
-- The configuration narrows the allowed directories with `[serve] allow_dirs`, intersecting trees.
-  Recommended, assumed.
+  path), as v0.4 requires; hosts that pass paths add `--allow-dir`. Settled (question 1): 10.1
+  lands now; Wafflery passes `--allow-dir`.
+- The configuration narrows the allowed directories with `[serve] allow_dirs`, to the overlap of
+  the trees. Settled (question 4).
 - References are the only form of a native artifact over MCP: workspace ids and mask paths leave
   the MCP surface. Recommended, assumed.
 - The session's store is `serve`'s workspace; operation runs commit into it, and tasks keep their
@@ -2263,54 +2288,66 @@ into `main` by the checkpoint procedure.
   assumed.
 - Previews for `rascal:Mask` (an overlay on its image, else its grey rendering) and `location` (its
   outline on its image); none for BandProfile, Series and Plan. Recommended, assumed.
-- Operations declare no renders; their preview is their picture. Recommended, assumed.
-- Pack operations (`segment`) are not served in M10 (question 6). Recommended, assumed.
+- Operations declare `renders: []`; their preview is their picture. Settled (question 5).
+- Pack operations (`segment`) are not served in M10. Settled (question 6): out of v0.4.
 - Exports go to `$XDG_DATA_HOME/rascal/exports/`, previews to `$XDG_CACHE_HOME/rascal/previews/`,
   bundle replays to `$XDG_DATA_HOME/rascal/replay/`. Recommended, assumed.
 
 ### Questions for the coordinator (M10)
 
-Raised about the v0.4 draft (`b1ae034`); the plan assumes the recommendation in each until the
-coordinator settles it.
+Raised about the v0.4 draft (`b1ae034`); the coordinator settled every one on 2026-11-01, and
+each ruling is folded into the task it governs.
 
 1. 10.1 ships the path rule on `=0.3.0`, closed by default. Any host passing paths without
    `--allow-dir` (Wafflery's v0.3 client) then gets `invalid`/`input`. May 10.1 merge to `main`
    before Wafflery passes `--allow-dir`, or should the two land together? Recommended: together.
+   **Ruling:** land 10.1 now, closed by default; Wafflery will pass `--allow-dir`.
 2. On v0.3 the session schema is closed, so `allowed_dirs` is printed on stderr only until 10.2.
-   Acceptable? Recommended: yes.
+   Acceptable? Recommended: yes. **Ruling:** yes, stderr until 10.2.
 3. A `--allow-dir` that is relative, missing or not a directory: the contract is silent. rascal
    exits 64 at start naming the flag. Confirm, or should it be dropped with a warning?
+   **Ruling:** exit 64.
 4. "Narrowed by the configuration, which may only take away": rascal intersects the trees (a
    configured subdirectory of a flag directory replaces it). Confirm, versus keeping only flag
-   directories that are themselves listed.
+   directories that are themselves listed. **Ruling:** the overlap.
 5. The v0.4 schemas, types and examples are not at `b1ae034`. 10.2 assumes `invocation` may be
    `null` in the schema (filled in 10.11), that `resource` and `on` in the artifact reference are
    optional or required as the text's example marks them, and that an action may omit `renders`.
+   **Ruling:** as the built v0.4 schemas have it: `invocation` is `null` only on an `invalid`
+   result; artifact references carry `resource`; operations declare `renders: []`.
 6. Pack operations: a description is a local inspection and a pack's tools are known only by
    starting it, so `segment` cannot be described without the install recording the pack's
    manifests. Leave pack operations out of v0.4 for rascal (planned), or have `tools setup` record
-   the manifests so `describe` lists them?
+   the manifests so `describe` lists them? **Ruling:** pack operations stay out of v0.4.
 7. A task's artifact argument (`protect`'s `mask`): 4.7 defines the `binding` refusal for an
    operation's ports. rascal uses it for task arguments too, with `port` the argument's name.
-   Confirm.
+   Confirm. **Ruling:** yes: the binding covers a task's artifact arguments, `port` the
+   argument's name.
 8. "A task lists each native artifact it produced": rascal lists the recipe's outputs (the Mask),
-   not intermediates such as a `fan`'s BandProfile. Confirm.
+   not intermediates such as a `fan`'s BandProfile. Confirm. **Ruling:** outputs only.
 9. `rascal export` already exists as the compatibility export (`--compat`). 5.1 reserves
    `<tool> export --json`. rascal keeps one subcommand with two exclusive modes. Acceptable, or
-   rename the compatibility export?
+   rename the compatibility export? **Ruling:** the contract takes `rascal export`; the
+   compatibility export becomes `rascal compat-export`, with no fallback.
 10. A missed artifact read carries the `binding` refusal data; which JSON-RPC code: `-32602` like
-    every refusal (planned), or MCP's resource-not-found `-32002`?
+    every refusal (planned), or MCP's resource-not-found `-32002`? **Ruling:** `-32602`, with
+    the binding data.
 11. `rascal call --bundle` on a bundle holding another tool's step: refuse it (planned) or skip
     it? And the output of a multi-step replay: one result per line (planned), stopping at the
-    first step that does not complete, with that step's exit code?
+    first step that does not complete, with that step's exit code? **Ruling:** refuse another
+    tool's step; one result per line; stop at the first step that does not complete, with its
+    exit code.
 12. A bundle chain whose later step names an earlier step's image output (not an artifact) by
     reference: the replay maps it only when the replayed output has the same file digest, which a
     filler's output does not. Is that the intended limit (only the call repeats, 4.9), and should
-    `inputs` then carry such intermediates?
+    `inputs` then carry such intermediates? **Ruling:** a replayed step naming an earlier
+    step's output binds to the replayed output by port and reports the change (CONTRACT 4.9 at
+    `d9e6058`).
 13. For `location`, the identity is each tool's recipe (unlike `image`), so squint and rascal give
-    the same location different identities. Intended?
+    the same location different identities. Intended? **Ruling:** yes.
 14. An `image` port given an artifact reference with no locator: rascal resolves it by file digest
     in its store (planned). Confirm the contract means this, beside the image-in forms.
+    **Ruling:** yes.
 
 ## Milestone M11: Table manners v0.2
 

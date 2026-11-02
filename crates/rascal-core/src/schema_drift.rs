@@ -329,6 +329,7 @@ pub const COMPONENTS: &[&str] = &[
     "WorkspaceConfig",
     "CacheConfig",
     "LimitsConfig",
+    "ServeConfig",
     "CorpusConfig",
     "CorpusImage",
     "Group",

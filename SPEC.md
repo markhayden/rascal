@@ -799,7 +799,7 @@ identity.
 
 ### The MCP server and client
 
-**`rascal serve [--workspace <dir>]`** is an MCP server over stdio at protocol revision
+**`rascal serve [--workspace <dir>] [--allow-dir <abs>]...`** is an MCP server over stdio at protocol revision
 `2025-11-25`. It starts in every configuration state (no `--config`, a missing file, one that
 does not load) and with a pack that does not start (its tools are absent and stderr says why);
 the workspace defaults to the configuration's `[workspace] dir`, else
@@ -813,7 +813,29 @@ is `invalid_args`). Results are the envelope as `structuredContent` plus image c
 exactly the count and order of `images`. Errors map: validation to `invalid_args` in the
 envelope; operational failure to a JSON-RPC error carrying the error class. Calls are serial per
 workspace by default; `--concurrency n` allows parallel calls, each still committing in turn; `describe` and
-`estimate` never wait for a call. A
+`estimate` never wait for a call.
+
+**The path rule** (CONTRACT 5.2, PLAN.md 10.1). `serve` reads a caller's path (an image slot,
+`mask`, `protect`, `workspace_import`'s `path`) only inside the directories the session allows:
+each `--allow-dir` (repeatable; absolute and naming an existing directory, else exit 64 before
+anything is answered) resolved once at start, narrowed by the configuration's `[serve]
+allow_dirs` to the overlap (where a configured directory and a flag directory overlap the deeper
+one is allowed; a configured directory under no flag, and `allow_dirs = []`, allow nothing; a
+configuration that does not load allows nothing, failing closed, and stderr says why). With no
+`--allow-dir` every caller path is refused and inline images still work. The set is fixed for the session and printed on stderr at
+start. One function, `rascal_core::paths::PathRule::admit`, checks every caller path on its
+canonical form (absolute, `.`, `..` and every symlink resolved, the final component included):
+it must exist, be the kind the slot takes (a regular file; a stored mask directory whose every
+entry also resolves inside) and lie under an allowed directory component by component, and it is
+read through the canonical path. Every refusal has one text, `<slot>: this path is not readable
+here (only files inside the directories rascal serve allows; CONTRACT 5.2)`, which says nothing
+about whether the file exists or what it is: a run ends `invalid` with code `input`, `estimate`
+is the `invalid_arguments` refusal with code `input`, and `workspace_import` a JSON-RPC
+invalid-params error. `serve` writes only under its runs root, its workspace and its cache, never at a
+caller's path. The rule governs `serve` alone: `rascal run`, `heal`,
+`estimate` and every other command take the person's own paths.
+
+A
 standard MCP client with no knowledge of rascal can import an image, list tools, run a recipe's
 steps one by one and read the result; the testkit's independently written minimal client proves
 it.
@@ -1100,7 +1122,7 @@ rascal ops list [--json]                                   # every op's manifest
 rascal ops describe fan --json
 rascal dash run/ --out run/dash.html                        # the run page (Diagnostics); --document, --serve
 rascal export --compat run/journal.jsonl --step fan --out fan-envelope.json
-rascal serve --workspace ws/ --config rascal.toml
+rascal serve --workspace ws/ --config rascal.toml --allow-dir "$PWD/in"   # callers' paths only inside in/
 rascal workspace list ws/ [--type Mask]
 rascal workspace repair ws/
 rascal workspace export-mask ws/ mask-3 --out seam.mask.tar       # prints the identity and sha256:<the bundle's digest>

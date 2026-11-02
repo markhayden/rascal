@@ -97,3 +97,30 @@ fn a_loaded_file_is_identified_by_what_it_configures_not_its_layout() {
     assert_ne!(sa.identity(), ConfigState::read(Some(&b)).identity());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Task 10.1: `[serve] allow_dirs` takes absolute directories; a relative one does not check.
+/// Unset, there is no `[serve]` in the identity, so earlier files keep theirs.
+#[test]
+fn serve_allow_dirs_are_absolute() {
+    let config = Config::parse(
+        "config_version = 1\n[serve]\nallow_dirs = [\"/srv/in\", \"/srv/more\"]\n",
+        "t",
+    )
+    .unwrap();
+    assert_eq!(
+        config.serve.unwrap().allow_dirs.unwrap(),
+        vec!["/srv/in".to_string(), "/srv/more".to_string()]
+    );
+    let empty = Config::parse("config_version = 1\n[serve]\nallow_dirs = []\n", "t").unwrap();
+    assert_eq!(empty.serve.unwrap().allow_dirs, Some(Vec::new()));
+    let error = Config::parse("config_version = 1\n[serve]\nallow_dirs = [\"in\"]\n", "t")
+        .unwrap_err()
+        .to_string();
+    assert_eq!(error, "t: serve.allow_dirs: in is not an absolute path");
+    assert_eq!(
+        Config::parse("config_version = 1\n", "t")
+            .unwrap()
+            .identity(),
+        Config::builtin().identity()
+    );
+}

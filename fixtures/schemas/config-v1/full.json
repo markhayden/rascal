@@ -60,5 +60,10 @@
   "limits": {
     "call_cap_usd": 0.5,
     "session_budget_usd": 5.0
+  },
+  "serve": {
+    "allow_dirs": [
+      "/srv/images"
+    ]
   }
 }
