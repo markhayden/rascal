@@ -702,6 +702,7 @@ impl ContractActions {
                     images_in: Vec::new(),
                     locations_used: Vec::new(),
                     invocation,
+                    notes: meta.notes.clone(),
                 };
                 (pending, run_json::ended_with(recipe, &error), None)
             }
@@ -713,6 +714,7 @@ impl ContractActions {
                 pending.started_ms = started_ms;
                 pending.session_id = self.session_id();
                 pending.client_run_id = client_run_id.map(str::to_string);
+                pending.notes = meta.notes.clone();
                 let done = AtomicBool::new(false);
                 let journal = out.join("journal.jsonl");
                 let ended = std::thread::scope(|scope| {

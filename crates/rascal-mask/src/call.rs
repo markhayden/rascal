@@ -21,8 +21,9 @@
 //! input members copied into rascal's replay area (`$XDG_DATA_HOME/rascal/replay/<bundle
 //! digest>/`, which the path rule admits for the replay), its invocation's arguments called with
 //! a `path` beside each image's `expect`, and a reference to an earlier step's output bound to
-//! that step's replayed output by port. One result per line; it stops at the first step that
-//! does not complete, with that step's exit code.
+//! that step's replayed output by port, reported in that step's result (its `notes`, in its
+//! `run.json`). One result per line; it stops at the first step that does not complete, with
+//! that step's exit code.
 
 use std::collections::BTreeMap;
 use std::io::Read;
@@ -99,7 +100,7 @@ pub fn call(args: &CallArgs) -> i32 {
 /// the refusal. Returns the exit code. Shared with the bundle replay (PLAN.md 10.13), which
 /// prints one line per step.
 pub fn run(actions: &ContractActions, action: &str, arguments: &Map<String, Value>) -> i32 {
-    match outcome(actions, action, arguments) {
+    match outcome(actions, action, arguments, Vec::new()) {
         Outcome::Result(result) => {
             println!("{result}");
             exit_of(&result)
@@ -122,8 +123,14 @@ pub enum Outcome {
     Failed(String),
 }
 
-/// Calls `action` as `serve` would, with no session, cancelled by SIGINT or SIGTERM.
-pub fn outcome(actions: &ContractActions, action: &str, arguments: &Map<String, Value>) -> Outcome {
+/// Calls `action` as `serve` would, with no session, cancelled by SIGINT or SIGTERM; `notes`
+/// go into its result, in its `run.json`, before the run's own.
+pub fn outcome(
+    actions: &ContractActions,
+    action: &str,
+    arguments: &Map<String, Value>,
+    notes: Vec<String>,
+) -> Outcome {
     if !actions.is_action(action) {
         return Outcome::Failed(format!(
             "no action {action} (rascal describe --json lists them; describe, estimate, export and import are tools, not actions)"
@@ -139,7 +146,11 @@ pub fn outcome(actions: &ContractActions, action: &str, arguments: &Map<String, 
         }
         Progress::Line(line) => eprintln!("rascal call {action}: {line}"),
     };
-    match actions.call(action, arguments, &CallMeta::default(), &progress, cancel) {
+    let meta = CallMeta {
+        notes,
+        ..CallMeta::default()
+    };
+    match actions.call(action, arguments, &meta, &progress, cancel) {
         Ok(result) => Outcome::Result(result.structured),
         Err(CallError {
             data: Some(data), ..
@@ -321,11 +332,10 @@ pub fn replay(args: &BundleArgs) -> i32 {
             }
         }
         let rebound = rebind(&mut arguments, &replayed);
-        match outcome(&actions, action, &arguments) {
-            Outcome::Result(mut result) => {
-                if let Some(notes) = result["notes"].as_array_mut() {
-                    notes.extend(rebound.into_iter().map(Value::String));
-                }
+        // The report of each rebound reference goes into the step's own result, written
+        // into its run.json with it (CONTRACT 4.9: reported, not an error).
+        match outcome(&actions, action, &arguments, rebound) {
+            Outcome::Result(result) => {
                 println!("{result}");
                 if result["status"] != "completed" {
                     return exit_of(&result);

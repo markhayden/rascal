@@ -2353,9 +2353,12 @@ refused up front with the `reference_only` and `unportable` checks, so nothing i
 a refusal. An image a step bound by reference (Rasterize's `image`) keeps its reference in the
 arguments, so the invocation stays the original's; its input member is imported into the store
 by file digest when the store lacks it. A rebinding by port matches an earlier step's original
-`artifacts.out` entry to the replayed one at the same position and port, and its report is a
-`replay:` note added to the printed result only (the run's `run.json` stays the run's own); the
-place of this report awaits the coordinator's confirmation against CONTRACT 4.9's wording. Artifact imports go through `transfer::import_bytes` (the `import` control's checks
+`artifacts.out` entry to the replayed one at the same position and port. Its report (CONTRACT
+4.9 says only that the replay reports each such change and that it is not an error; the
+coordinator's ruling fixed the place) is a `replay:` note in the rebound step's own result,
+handed to the run through `CallMeta::notes` and `Pending::notes` before it runs, so it is in the
+run's `run.json` and the printed line is that file's document (a test asserts each printed line
+equals its run's `run.json`). Artifact imports go through `transfer::import_bytes` (the `import` control's checks
 without its inline size limit). The idempotency test replays a one-step bundle twice into a
 fresh store (one `import_mask` record); in the chain the replayed steps make the exported
 artifacts first, so their imports are already present on the first pass.

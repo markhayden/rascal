@@ -637,6 +637,7 @@ impl ContractActions {
             images_in: Vec::new(),
             locations_used: Vec::new(),
             invocation: None,
+            notes: meta.notes.clone(),
         };
         let mut account = Account::default();
         let outcome = self.operate(

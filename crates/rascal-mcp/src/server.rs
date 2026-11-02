@@ -84,11 +84,16 @@ impl From<&str> for CallError {
 
 /// What a call's request `_meta` carries for the action (table-manners 4.4, 4.5): its
 /// correlation id, already claimed, and the estimate it names, as sent (the action judges it,
-/// since by then a run exists). Both are none for a call that is not a run.
+/// since by then a run exists). Both are none for a call that is not a run. A caller outside
+/// `serve` (the bundle replay) may also hand the run notes for its result.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct CallMeta {
     pub client_run_id: Option<String>,
     pub estimate: Option<serde_json::Value>,
+    /// Notes the caller adds to the run's result, written into its `run.json` with the run's
+    /// own: the bundle replay's report of a reference it rebound (CONTRACT 4.9). The server
+    /// never sends any.
+    pub notes: Vec<String>,
 }
 
 /// A resource's body: text with its media type, or bytes (sent as base64).
@@ -404,6 +409,7 @@ impl Server {
                 .get(ESTIMATE)
                 .filter(|v| exclusive && !v.is_null())
                 .cloned(),
+            notes: Vec::new(),
         };
         let mut task = tokio::task::spawn_blocking(move || {
             let _permit = permit;

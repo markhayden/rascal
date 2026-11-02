@@ -88,6 +88,9 @@ pub struct Pending {
     /// What the call resolved to (4.8, `crate::invocation`); none only when its arguments did
     /// not resolve, which ends the run `invalid`.
     pub invocation: Option<Invocation>,
+    /// Notes known before the run, which its result carries first (the bundle replay's report
+    /// of a rebound reference, CONTRACT 4.9).
+    pub notes: Vec<String>,
 }
 
 /// The run a signal would cancel, if any.
@@ -531,7 +534,12 @@ pub fn finish_with(
         images: Some(produced.images),
         artifacts: Some(produced.artifacts),
         locations: Some(produced.locations),
-        notes: produced.notes,
+        notes: pending
+            .notes
+            .iter()
+            .cloned()
+            .chain(produced.notes)
+            .collect(),
         body,
     };
     write(&pending.dir, &result)
@@ -597,6 +605,7 @@ pub fn pending_for(args: &crate::run::RunArgs, filler: Option<&str>) -> Pending 
         images_in: Vec::new(),
         locations_used: Vec::new(),
         invocation: None,
+        notes: Vec::new(),
     }
 }
 

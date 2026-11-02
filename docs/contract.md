@@ -294,9 +294,12 @@ image's `expect` (an image bound by reference instead is imported into the store
 digest when the store lacks it, so the reference binds); a reference to an earlier step's output
 (an identity that step's original result lists in `artifacts.out`) is bound to the replayed
 output at the same port and position, whatever its identity; and the step runs as `rascal call`
-runs it, with no session. Each result is printed on its own line (JSON Lines); where a binding
-changed, the printed result's `notes` gain `replay: <port> named the earlier step's <port>
-output <identity>; bound to the replayed <identity>` (the run's own `run.json` is the run's). The
+runs it, with no session. Each result is printed on its own line (JSON Lines). Where a binding
+changed, the step's result reports it (4.9: reported, not an error): the replay knows the
+rebinding before it runs the step, so the note `replay: <argument> named the earlier step's
+<port> output <identity>; bound to the replayed <identity>` goes into the run's `notes` before
+the run's own and is written into its `run.json` (through `CallMeta::notes`), and the printed
+line is that file's document. The
 replay stops at the first step that does not complete and exits with its code; a refusal prints
 its refusal JSON and exits 64.
 

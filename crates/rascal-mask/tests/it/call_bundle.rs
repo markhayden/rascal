@@ -346,7 +346,7 @@ fn a_bundle_artifact_is_imported_once() {
 }
 
 /// A later step naming an earlier step's output binds to that step's replayed output by port,
-/// whatever its identity, and its result says what changed.
+/// whatever its identity, and its result says what changed, in its run.json as printed.
 #[test]
 fn a_later_step_binds_to_the_replayed_output_by_port() {
     let dir = scratch("rebind");
@@ -389,5 +389,12 @@ fn a_later_step_binds_to_the_replayed_output_by_port() {
             .any(|n| n.contains("mask") && n.contains(&named) && n.contains(&real)),
         "{notes:?}"
     );
+    // The report is in the run's own run.json: every printed line is its run's file.
+    for line in &printed {
+        let file = PathBuf::from(line["run"]["dir"].as_str().unwrap()).join("run.json");
+        let written: Value =
+            serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        assert_eq!(&written, line, "{}", file.display());
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
