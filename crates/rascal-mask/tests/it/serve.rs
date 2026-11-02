@@ -22,9 +22,9 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 fn serve(ws: &Path) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
+    let mut command = rascal_testkit::mcp_client::serve_command(env!("CARGO_BIN_EXE_rascal"));
     command
-        .args(["serve", "--workspace", ws.to_str().unwrap()])
+        .args(["--workspace", ws.to_str().unwrap()])
         .env_remove("RASCAL_LOG");
     command
 }
@@ -211,9 +211,19 @@ fn the_independent_client_imports_finds_masks_renders_and_reads_back() {
         "workspace_import",
         serde_json::json!({ "path": "/nonexistent/photo.png" }),
     ) {
-        Err(Failure::Rpc { code, data, .. }) => {
-            assert_eq!(code, -32603);
-            assert_eq!(data.unwrap()["class"], "io");
+        // A path outside the allowed directories (it does not exist, which the refusal does not
+        // say) is the path rule's invalid params (CONTRACT 5.2, task 10.1).
+        Err(Failure::Rpc {
+            code,
+            message,
+            data,
+        }) => {
+            assert_eq!(code, -32602);
+            assert_eq!(data.unwrap()["class"], "usage");
+            assert_eq!(
+                message,
+                "path: this path is not readable here (only files inside the directories rascal serve allows; CONTRACT 5.2)"
+            );
         }
         other => panic!("{other:?}"),
     }

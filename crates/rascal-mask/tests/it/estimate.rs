@@ -60,10 +60,9 @@ fn serve(dir: &Path, config: Option<&Path>, key: bool) -> Client {
 
 /// [`serve`] with more of the environment set.
 fn serve_with(dir: &Path, config: Option<&Path>, key: bool, env: &[(&str, &str)]) -> Client {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
+    let mut command = rascal_testkit::mcp_client::serve_command(env!("CARGO_BIN_EXE_rascal"));
     command
         .args([
-            "serve",
             "--workspace",
             dir.join("ws").to_str().unwrap(),
             "--runs",

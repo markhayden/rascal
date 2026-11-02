@@ -17,6 +17,7 @@ pub const USAGE: i32 = 64;
 pub fn code_for(error: &Error) -> i32 {
     match error {
         Error::Usage { .. }
+        | Error::Input { .. }
         | Error::InvalidArgs { .. }
         | Error::Recipe { .. }
         | Error::StaleEstimate { .. } => USAGE,

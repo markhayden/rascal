@@ -52,6 +52,20 @@ pub struct Config {
     /// Spend limits for `serve` (table-manners 4.5).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limits: Option<LimitsConfig>,
+    /// What `serve` lets callers name (CONTRACT 5.2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub serve: Option<ServeConfig>,
+}
+
+/// `[serve]`: `allow_dirs` narrows the directories `rascal serve --allow-dir` allows, never
+/// widens them (PLAN.md 10.1): where a listed directory and a flag directory overlap the deeper
+/// one is allowed, a listed directory under no flag allows nothing, and `[]` allows nothing.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ServeConfig {
+    /// Absolute directories; unset, the flags stand as given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allow_dirs: Option<Vec<String>>,
 }
 
 /// `[cache]`: where fills are kept.
@@ -107,6 +121,15 @@ impl Config {
                 {
                     return Err(Error::usage(format!(
                         "{origin}: limits.{what} must be 0 or more, got {v}"
+                    )));
+                }
+            }
+        }
+        if let Some(dirs) = config.serve.as_ref().and_then(|s| s.allow_dirs.as_ref()) {
+            for dir in dirs {
+                if !Path::new(dir).is_absolute() {
+                    return Err(Error::usage(format!(
+                        "{origin}: serve.allow_dirs: {dir} is not an absolute path"
                     )));
                 }
             }

@@ -29,7 +29,7 @@ timeout_s = 180
 max_side = 2048                           # the heal graph windows to it
 ```
 
-Two sections beside the fillers (ADR 0020, `docs/contract.md`):
+Three sections beside the fillers (ADR 0020, `docs/contract.md`):
 
 ```toml
 [cache]
@@ -39,6 +39,9 @@ dir = ".rascal/fills"          # keep every fill by its request, filler and revi
 [limits]                       # rascal serve only
 call_cap_usd = 0.50            # the most one call may spend; a call may lower it (max_spend_usd), never raise it
 session_budget_usd = 5.00      # the most one serve process may spend
+
+[serve]                        # rascal serve only
+allow_dirs = ["/srv/images"]   # narrows --allow-dir to the overlap, never widens it; [] allows nothing
 ```
 
 A fill is cached under a key over the request's bytes (the image, the mask, the prompt) with the

@@ -127,6 +127,7 @@ pub fn error_of(error: &Error) -> (Status, ErrorInfo) {
                 false,
             )
         }
+        Error::Input { .. } => (Status::Invalid, ErrorCode::Input, false),
         Error::Io { .. } => (Status::Error, ErrorCode::Io, true),
         Error::StaleEstimate { .. } => (Status::Invalid, ErrorCode::StaleEstimate, false),
         Error::Cap { .. } => (Status::Error, ErrorCode::Cap, false),

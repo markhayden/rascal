@@ -234,6 +234,23 @@
       ],
       "type": "object"
     },
+    "ServeConfig": {
+      "additionalProperties": false,
+      "description": "`[serve]`: `allow_dirs` narrows the directories `rascal serve --allow-dir` allows, never\nwidens them (PLAN.md 10.1): where a listed directory and a flag directory overlap the deeper\none is allowed, a listed directory under no flag allows nothing, and `[]` allows nothing.",
+      "properties": {
+        "allow_dirs": {
+          "description": "Absolute directories; unset, the flags stand as given.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "WorkspaceConfig": {
       "additionalProperties": false,
       "description": "Where runs keep their workspace when `--workspace` is not given.",
@@ -304,6 +321,17 @@
       },
       "description": "The tool packs by name.",
       "type": "object"
+    },
+    "serve": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ServeConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "What `serve` lets callers name (CONTRACT 5.2)."
     },
     "workspace": {
       "anyOf": [

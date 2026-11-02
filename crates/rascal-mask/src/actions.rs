@@ -50,6 +50,8 @@ pub struct ContractActions {
     pub session: Session,
     /// The estimates this session issued, for the calls that name them (table-manners 4.5).
     pub issued: std::sync::Mutex<estimate::Issued>,
+    /// The directories callers' paths may name, fixed for the session (CONTRACT 5.2).
+    pub paths: rascal_core::paths::PathRule,
 }
 
 /// A serving session: one process's ledger, named by a random UUID (v4) when `serve` starts.
@@ -298,11 +300,11 @@ impl ContractActions {
         schema
     }
 
-    /// The image slot as a file the run can take: a path checked, or inline bytes written into
-    /// the run's input directory; the `expect` reference verified (`estimate::image_in`, as an
-    /// estimate reads it).
+    /// The image slot as a file the run can take: a path admitted (its canonical form), or
+    /// inline bytes written into the run's input directory; the `expect` reference verified
+    /// (`estimate::image_in`, as an estimate reads it).
     fn image_file(&self, value: &Value, inputs: &Path) -> rascal_core::error::Result<PathBuf> {
-        let image = estimate::image_in("image", value)?;
+        let image = estimate::image_in("image", value, &self.paths)?;
         if value.get("expect").is_some() {
             estimate::verify_expect("image", value, &image, &image.bytes()?)?;
         }
@@ -332,6 +334,7 @@ impl ContractActions {
             &describe::action_name(recipe),
             args,
             self.config.as_ref(),
+            &self.paths,
         )?;
         let image = self.image_file(
             args.get("image")
@@ -372,8 +375,8 @@ impl ContractActions {
             bbox: None,
             location,
             stroke,
-            protect: text("protect").map(PathBuf::from),
-            mask: text("mask").map(PathBuf::from),
+            protect: self.mask_dir(args, "protect")?,
+            mask: self.mask_dir(args, "mask")?,
             prompt: text("prompt"),
             config: self.config_path.clone(),
             workspace: None,
@@ -388,6 +391,21 @@ impl ContractActions {
             sets,
             cancel: Some(cancel),
         })
+    }
+
+    /// A stored mask directory a call names, admitted: the run reads its canonical form.
+    fn mask_dir(
+        &self,
+        args: &Map<String, Value>,
+        slot: &str,
+    ) -> rascal_core::error::Result<Option<PathBuf>> {
+        args.get(slot)
+            .and_then(|v| v.as_str())
+            .map(|path| {
+                self.paths
+                    .admit(slot, Path::new(path), rascal_core::paths::Want::MaskDir)
+            })
+            .transpose()
     }
 
     /// The ledger as it stands.
@@ -472,6 +490,7 @@ impl ContractActions {
             price.config_identity.as_deref(),
             Some(&self.session.id),
             estimate::VERSION,
+            &self.paths,
         )?;
         if bound.binding != binding {
             return Err(stale(format!(
@@ -515,7 +534,7 @@ impl ContractActions {
     ) -> rascal_core::error::Result<Value> {
         let recipe =
             recipe_of(action).ok_or_else(|| Error::usage(format!("action: no action {action}")))?;
-        estimate::check_arguments(recipe, action, args, self.config.as_ref())?;
+        estimate::check_arguments(recipe, action, args, self.config.as_ref(), &self.paths)?;
         let price = self.with_setup(|setup| estimate::price(setup, action, args))?;
         let bound = estimate::bind(
             recipe,
@@ -524,6 +543,7 @@ impl ContractActions {
             price.config_identity.as_deref(),
             Some(&self.session.id),
             estimate::VERSION,
+            &self.paths,
         )?;
         let ledger = self.ledger();
         let expires_ms = run_json::now_ms() + estimate::ttl_ms();

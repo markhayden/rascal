@@ -215,10 +215,9 @@ fn the_command_line_describes_and_estimates_without_a_provider_call() {
 
 /// `rascal serve` over `dir`'s workspace and runs root.
 fn serve(dir: &Path, config: Option<&Path>, key: Option<&str>) -> Client {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
+    let mut command = rascal_testkit::mcp_client::serve_command(env!("CARGO_BIN_EXE_rascal"));
     command
         .args([
-            "serve",
             "--workspace",
             dir.join("ws").to_str().unwrap(),
             "--runs",

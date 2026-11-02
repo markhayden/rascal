@@ -164,6 +164,11 @@ enum Command {
         /// `$XDG_DATA_HOME/rascal/runs` by default.
         #[arg(long)]
         runs: Option<PathBuf>,
+        /// A directory whose files callers may name by path (repeatable; absolute and
+        /// existing, else exit 64). `[serve] allow_dirs` narrows them. Without one, every
+        /// caller path is refused and inline images still work (CONTRACT 5.2).
+        #[arg(long = "allow-dir", value_name = "ABS_DIR")]
+        allow_dir: Vec<PathBuf>,
     },
     /// The configured tool packs: list their tools, or call one from the shell.
     Tools {
@@ -856,11 +861,13 @@ fn main() {
             config,
             concurrency,
             runs,
+            allow_dir,
         } => match serve::serve(&serve::ServeArgs {
             workspace,
             config,
             concurrency,
             runs,
+            allow_dirs: allow_dir,
         }) {
             Ok(()) => exit::OK,
             Err(error) => {

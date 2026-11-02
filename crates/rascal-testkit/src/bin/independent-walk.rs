@@ -22,8 +22,14 @@ fn main() {
 }
 
 fn walk(binary: &str, workspace: &str, image: &str) -> Result<(), String> {
+    // The image's directory is the one a caller's path may name (CONTRACT 5.2).
+    let allowed = std::path::Path::new(image)
+        .parent()
+        .ok_or("the image has no directory")?;
     let mut command = Command::new(binary);
-    command.args(["serve", "--workspace", workspace]);
+    command
+        .args(["serve", "--workspace", workspace, "--allow-dir"])
+        .arg(allowed);
     let mut client = Client::start(&mut command).map_err(|e| format!("start: {e:?}"))?;
     let id =
         |result: rascal_testkit::mcp_client::CallResult, port: &str| -> Result<String, String> {

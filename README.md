@@ -99,9 +99,12 @@ rascal describe --json [--config rascal.toml]             # what rascal can run,
                                                           # configuration too, each action saying what it still needs
 echo '{"action":"seam","arguments":{"image":{"path":"/abs/pano.png"},"filler":"hosted"}}' | rascal estimate --json --config rascal.toml -   # what that exact call would spend, sending nothing
 rascal playground                                         # open Wafflery, the shared program (separate)
-rascal serve [--config rascal.toml]                       # every op as an MCP tool over stdio, plus import/list/describe/read/dash,
+rascal serve [--config rascal.toml] [--allow-dir /abs/in]   # every op as an MCP tool over stdio, plus import/list/describe/read/dash,
                                                           # the table-manners actions (one per recipe) with run resources, and
-                                                          # `estimate`; starts with no flags at all, refusing only what a call needs
+                                                          # `estimate`; starts with no flags at all, refusing only what a call needs.
+                                                          # A caller's path is read only inside an --allow-dir (repeatable;
+                                                          # `[serve] allow_dirs` narrows them); with none, every path is refused
+                                                          # and inline images still work
 rascal tools call rascal-tools segment --config rascal.toml --workspace ws/ --image photo.png --prompt "the chair"   # a pack's tool from the shell
 rascal tools setup --bundle bundle-macos-arm64/ --into ~/rascal-tools   # the Python pack installed offline from its bundle
 rascal corpus verify corpus.toml --root ~/rascal/corpus                 # every image's file against its digest
