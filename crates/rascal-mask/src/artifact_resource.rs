@@ -177,6 +177,18 @@ fn cached_preview(
     Ok(Some((path, out)))
 }
 
+/// Seeds the cache with the preview of `identity` a run drew (PLAN.md 10.8), unless one is there:
+/// a task's Mask, drawn in its run's workspace on its image, so the resource gives the same
+/// bytes as the run's result.
+pub fn seed(identity: &str, bytes: &[u8]) -> Result<()> {
+    let dir = previews_dir()?;
+    let path = dir.join(format!("{}.png", identity.replace(':', "-")));
+    if path.is_file() {
+        return Ok(());
+    }
+    write_once(&dir, &path, bytes)
+}
+
 /// `$XDG_CACHE_HOME/rascal/previews` (else `~/.cache/…`).
 fn previews_dir() -> Result<PathBuf> {
     crate::dash::cache_root()

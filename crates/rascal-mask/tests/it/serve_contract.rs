@@ -47,6 +47,7 @@ fn start(dir: &Path) -> Client {
             "--runs",
             dir.join("runs").to_str().unwrap(),
         ])
+        .env("XDG_CACHE_HOME", dir.join("cache"))
         .env_remove("RASCAL_LOG");
     Client::start(&mut command).unwrap()
 }
@@ -68,15 +69,24 @@ impl jsonschema::Retrieve for Embedded {
 }
 
 /// Asserts `value` is valid against the contract's schema `id`; a result also carries
-/// `artifacts`, which an operations tool's results must (4.7): a task's are empty until tasks
-/// list their Masks (10.8).
+/// `artifacts`, which an operations tool's results must (4.7): a task lists at most its one
+/// Mask out (`port: "mask"`, with a preview, 10.8) and in only `mask` and `protect` (an
+/// operation's result, whose body is its envelope, lists its ports).
 fn valid(id: &str, value: &serde_json::Value) {
-    if id == "urn:table-manners:core:result" {
-        assert_eq!(
-            value["artifacts"],
-            serde_json::json!({ "in": [], "out": [] }),
-            "{value:#}"
-        );
+    if id == "urn:table-manners:core:result" && value["body"].get("envelope").is_none() {
+        let out = value["artifacts"]["out"].as_array().unwrap();
+        assert!(out.len() <= 1, "{value:#}");
+        for entry in out {
+            assert_eq!(entry["port"], "mask", "{value:#}");
+            assert_eq!(entry["artifact"]["type"], "rascal:Mask", "{value:#}");
+            assert!(entry["preview"].is_object(), "{value:#}");
+        }
+        for entry in value["artifacts"]["in"].as_array().unwrap() {
+            assert!(
+                entry["port"] == "mask" || entry["port"] == "protect",
+                "{value:#}"
+            );
+        }
     }
     let (_, text) = table_manners::SCHEMAS
         .iter()
@@ -187,14 +197,14 @@ fn an_action_runs_with_progress_and_its_run_is_a_resource() {
             .iter()
             .any(|n| n["params"]["message"].as_str().unwrap().contains("(fan)"))
     );
-    // Image blocks were asked for: the mask and the result.
+    // Image blocks were asked for: the mask, the result and the Mask's preview (10.8).
     let blocks: Vec<&serde_json::Value> = result["content"]
         .as_array()
         .unwrap()
         .iter()
         .filter(|b| b["type"] == "image")
         .collect();
-    assert_eq!(blocks.len(), 2);
+    assert_eq!(blocks.len(), 3);
 
     // The run as resources.
     let runs: serde_json::Value = serde_json::from_str(
@@ -1783,6 +1793,230 @@ fn a_command_line_invocation_replays_through_serve() {
         r["images"]["out"][0]["image"],
         cli["images"]["out"][0]["image"]
     );
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 10.8 (CONTRACT 4.7): the Mask a task made, from its `artifacts.out` (`port: "mask"`),
+/// with a preview that is also in `images.out`.
+fn task_mask(r: &serde_json::Value) -> serde_json::Value {
+    let out = r["artifacts"]["out"].as_array().unwrap();
+    assert_eq!(out.len(), 1, "{r:#}");
+    let entry = &out[0];
+    assert_eq!(entry["port"], "mask");
+    assert_eq!(entry["artifact"]["type"], "rascal:Mask");
+    let preview = &entry["preview"];
+    assert_eq!(preview["role"], "preview");
+    assert!(
+        r["images"]["out"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|o| o == preview),
+        "the preview is in images.out: {r:#}"
+    );
+    entry["artifact"].clone()
+}
+
+/// A feather bound to `mask` completes in the same session.
+fn feather_binds(client: &mut Client, mask: &serde_json::Value) {
+    let r = client
+        .call(
+            "feather",
+            serde_json::json!({ "mask": mask, "sigma_px": 6 }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    assert_eq!(r["status"], "completed", "{r:#}");
+    assert_eq!(r["artifacts"]["in"][0]["artifact"], *mask);
+}
+
+fn chairs() -> serde_json::Value {
+    serde_json::from_str(
+        &std::fs::read_to_string(repo_root().join("fixtures/locations/chairs.json")).unwrap(),
+    )
+    .unwrap()
+}
+
+/// Task 10.8: a served `remove` lists its Mask with a preview, the reference binds an operation
+/// in the same session, and a `protect` argument is listed in `artifacts.in`.
+#[test]
+fn a_served_task_lists_its_mask_and_the_mask_binds() {
+    let dir = scratch("task-mask");
+    let mut client = start(&dir);
+    let image = repo_root().join("fixtures/images/chair-blob.png");
+    let args =
+        serde_json::json!({ "image": { "path": image.to_str().unwrap() }, "location": chairs() });
+    let r = client.call("remove", args).unwrap().structured.unwrap();
+    valid("urn:table-manners:core:result", &r);
+    assert_eq!(r["status"], "completed", "{r:#}");
+    assert_eq!(r["artifacts"]["in"], serde_json::json!([]));
+    let mask = task_mask(&r);
+    feather_binds(&mut client, &mask);
+    // The same Mask as a protect: listed in, with no preview.
+    let protected = client
+        .call(
+            "remove",
+            serde_json::json!({ "image": { "path": image.to_str().unwrap() },
+                                "location": chairs(), "protect": mask }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    valid("urn:table-manners:core:result", &protected);
+    assert_eq!(protected["status"], "completed", "{protected:#}");
+    assert_eq!(
+        protected["artifacts"]["in"],
+        serde_json::json!([{ "port": "protect", "artifact": mask, "preview": null }])
+    );
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 10.8: a heal whose filler fails ends `error` and still lists its Mask, which binds.
+#[test]
+fn a_failed_heal_still_lists_its_mask_and_it_binds() {
+    let dir = scratch("failed-heal-mask");
+    let mut client = start(&dir);
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let r = client
+        .call(
+            "seam",
+            serde_json::json!({ "image": { "path": pano.to_str().unwrap() }, "filler": "failing" }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    valid("urn:table-manners:core:result", &r);
+    assert_eq!(r["status"], "error", "{r:#}");
+    let mask = task_mask(&r);
+    feather_binds(&mut client, &mask);
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 10.8: two identical `seam` calls publish one Mask into the store: one import record.
+#[test]
+fn two_identical_task_calls_publish_one_mask() {
+    let dir = scratch("publish-once");
+    let mut client = start(&dir);
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let args = serde_json::json!({ "image": { "path": pano.to_str().unwrap() } });
+    let first = client
+        .call("seam", args.clone())
+        .unwrap()
+        .structured
+        .unwrap();
+    let second = client.call("seam", args).unwrap().structured.unwrap();
+    assert_ne!(first["run"]["id"], second["run"]["id"]);
+    assert_eq!(task_mask(&first), task_mask(&second));
+    client.close().unwrap();
+    let journal = std::fs::read_to_string(dir.join("ws/journal.jsonl")).unwrap();
+    let imports = journal
+        .lines()
+        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+        .filter(|l| l["event"] == "op" && l["op"] == "import_mask")
+        .count();
+    assert_eq!(imports, 1, "{journal}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 10.8: `rascal run remove … --out` lists the same Mask reference as the served call on the
+/// same inputs, its preview in the run directory.
+#[test]
+fn a_command_line_task_lists_the_same_mask_as_the_served_call() {
+    let dir = scratch("cli-task-mask");
+    let image = repo_root().join("fixtures/images/chair-blob.png");
+    let out = Command::new(env!("CARGO_BIN_EXE_rascal"))
+        .args([
+            "run",
+            "remove",
+            image.to_str().unwrap(),
+            "--location",
+            repo_root()
+                .join("fixtures/locations/chairs.json")
+                .to_str()
+                .unwrap(),
+            "--out",
+            dir.join("cli").to_str().unwrap(),
+        ])
+        .env("XDG_CACHE_HOME", dir.join("cache"))
+        .env_remove("RASCAL_LOG")
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let cli: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("cli/run.json")).unwrap()).unwrap();
+    valid("urn:table-manners:core:result", &cli);
+    let cli_mask = task_mask(&cli);
+    let preview = PathBuf::from(
+        cli["artifacts"]["out"][0]["preview"]["path"]
+            .as_str()
+            .unwrap(),
+    );
+    assert!(
+        preview.starts_with(std::path::absolute(dir.join("cli")).unwrap()),
+        "{preview:?}"
+    );
+    let mut client = start(&dir);
+    let served = client
+        .call(
+            "remove",
+            serde_json::json!({ "image": { "path": image.to_str().unwrap() }, "location": chairs() }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    assert_eq!(task_mask(&served), cli_mask);
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 10.8: the preview a task's result carries is drawn in the run's workspace (the overlay
+/// on its image), and the artifact resource gives the same bytes afterwards: the Mask was
+/// published into the store with its frame chain and its image, and the preview cache seeded.
+#[test]
+fn a_task_preview_equals_what_the_artifact_resource_returns() {
+    let dir = scratch("task-preview");
+    let mut client = start(&dir);
+    let image = repo_root().join("fixtures/images/chair-blob.png");
+    let r = client
+        .call(
+            "remove",
+            serde_json::json!({ "image": { "path": image.to_str().unwrap() }, "location": chairs() }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    let mask = task_mask(&r);
+    let in_result = std::fs::read(
+        r["artifacts"]["out"][0]["preview"]["path"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    let uri = format!("{}/preview", mask["resource"].as_str().unwrap());
+    let contents = client
+        .request("resources/read", serde_json::json!({ "uri": uri }))
+        .unwrap()["contents"][0]
+        .clone();
+    let served = base64_decode(contents["blob"].as_str().unwrap()).unwrap();
+    assert_eq!(served, in_result);
+    // The store holds the image the Mask was made on, so a preview drawn there is the overlay
+    // too: the cache cleared, the resource draws it again from the store.
+    std::fs::remove_dir_all(dir.join("cache")).unwrap();
+    let contents = client
+        .request("resources/read", serde_json::json!({ "uri": uri }))
+        .unwrap()["contents"][0]
+        .clone();
+    let redrawn = base64_decode(contents["blob"].as_str().unwrap()).unwrap();
+    assert_eq!(redrawn, in_result);
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -68,11 +68,14 @@ fn run_json(dir: &Path) -> serde_json::Value {
         .collect();
     assert!(errors.is_empty(), "{errors:?}\n{value:#}");
     assert!(!dir.join(".run.json.tmp").exists());
-    assert_eq!(
-        value["artifacts"],
-        serde_json::json!({ "in": [], "out": [] }),
-        "{value:#}"
-    );
+    // A task lists at most the one Mask it made, with its preview in the run directory (10.8).
+    let out = value["artifacts"]["out"].as_array().unwrap();
+    assert!(out.len() <= 1, "{value:#}");
+    for entry in out {
+        assert_eq!(entry["port"], "mask");
+        assert_eq!(entry["artifact"]["type"], "rascal:Mask");
+        assert!(dir.join("preview-mask.png").is_file(), "{value:#}");
+    }
     value
 }
 
@@ -128,7 +131,8 @@ fn a_completed_heal_names_its_input_its_mask_and_its_result() {
         .iter()
         .map(|o| o["role"].as_str().unwrap())
         .collect();
-    assert_eq!(roles, ["mask", "result"]);
+    // The Mask's preview follows the renders (10.8).
+    assert_eq!(roles, ["mask", "result", "preview"]);
     let result = &r["images"]["out"][1];
     assert_eq!(result["image"]["width"], 800);
     assert_eq!(

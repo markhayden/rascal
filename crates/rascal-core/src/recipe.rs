@@ -560,6 +560,23 @@ pub struct Outcome {
     pub renders: Vec<(String, PathBuf)>,
 }
 
+/// The file in a run directory naming the outputs the run made, by output name
+/// ([`Run::record_output`]).
+pub const OUTPUTS_FILE: &str = "outputs.json";
+
+/// The preview of the Mask a task made, which its result lists (PLAN.md 10.8), in the run
+/// directory.
+pub const MASK_PREVIEW_FILE: &str = "preview-mask.png";
+
+/// The outputs a run directory records ([`Run::record_output`]): output name to identity; empty
+/// when it records none.
+pub fn read_outputs(dir: &Path) -> BTreeMap<String, String> {
+    std::fs::read_to_string(dir.join(OUTPUTS_FILE))
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
 /// A run: a workspace (the run directory itself, or one given with `--workspace`) plus the
 /// run-level projections `frames.json` and `locations.json` and the named outputs under the
 /// run directory.
@@ -614,6 +631,28 @@ impl Run {
     /// Appends a note to the journal.
     pub fn note(&self, text: impl Into<String>) -> Result<()> {
         self.workspace.note(text)
+    }
+
+    /// Records in the run directory that this run made the named output `name` (`mask`) with
+    /// `identity`, as the step that makes it completes (fresh or from the cache): the run's own
+    /// outputs, read by its result even when a later step fails or the run is cancelled, and
+    /// never looked up among a shared workspace's records (PLAN.md 10.8). Written whole.
+    pub fn record_output(&self, name: &str, identity: &str) -> Result<()> {
+        let path = self.dir.join(OUTPUTS_FILE);
+        let mut outputs = read_outputs(&self.dir);
+        outputs.insert(name.to_string(), identity.to_string());
+        let text = serde_json::to_string_pretty(&outputs).map_err(|source| Error::Json {
+            path: path.clone(),
+            source,
+        })?;
+        let tmp = self
+            .dir
+            .join(format!(".{OUTPUTS_FILE}.{}.tmp", std::process::id()));
+        std::fs::write(&tmp, text + "\n").map_err(|e| Error::io(&tmp, e))?;
+        std::fs::rename(&tmp, &path).map_err(|e| {
+            let _ = std::fs::remove_file(&tmp);
+            Error::io(&path, e)
+        })
     }
 
     /// Writes `frames.json` and `locations.json` from the workspace's snapshot.
@@ -683,6 +722,8 @@ const RESERVED_RUN_FILES: &[&str] = &[
     "locations.json",
     "dash.html",
     "rascal.toml",
+    OUTPUTS_FILE,
+    MASK_PREVIEW_FILE,
 ];
 
 impl Recipe {
@@ -851,7 +892,13 @@ impl Recipe {
                 continue;
             }
             for (name, artifact) in output.outputs {
-                bindings.insert(format!("{}.{name}", step.id), artifact);
+                let binding = format!("{}.{name}", step.id);
+                if self.outputs.mask.as_deref() == Some(binding.as_str())
+                    && let Artifact::Mask(mask) = &artifact
+                {
+                    run.record_output("mask", &mask.record.identity)?;
+                }
+                bindings.insert(binding, artifact);
             }
         }
         if outcome.status == Status::Ok {

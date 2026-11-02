@@ -678,6 +678,8 @@ impl ContractActions {
                     self.reserve(recipe, args, meta.estimate.as_ref())
                         .map(|reservation| (run_args, reservation))
                 });
+        // The image file the run read, which a Mask it makes is published with.
+        let mut image: Option<PathBuf> = None;
         let (pending, ended, reservation) = match prepared {
             Err(error) => {
                 let pending = run_json::Pending {
@@ -700,6 +702,7 @@ impl ContractActions {
                 (pending, run_json::ended_with(recipe, &error), None)
             }
             Ok((run_args, reservation)) => {
+                image = Some(run_args.image.clone());
                 let mut pending = run_json::pending_for(&run_args, filler.as_deref());
                 pending.invocation = invocation;
                 pending.id = id.clone();
@@ -718,7 +721,11 @@ impl ContractActions {
             }
         };
         let cancelled = ended.status == rascal_core::contract::table_manners::Status::Cancelled;
-        let spent = run_json::conclude(&pending, ended);
+        let publish = |identity: &str| match &image {
+            Some(image) => self.publish(&out, image, identity),
+            None => Ok(()),
+        };
+        let spent = run_json::conclude_publishing(&pending, ended, Some(&publish));
         if let Some(reservation) = reservation {
             reservation.settle(spent);
         }
@@ -726,6 +733,47 @@ impl ContractActions {
             return Err("cancelled".to_string());
         }
         self.result_of(&id, args)
+    }
+
+    /// Publishes the Mask `identity` a task made into the session's store (PLAN.md 10.8), so its
+    /// reference binds there: the image file the run read first (by its digest, unless the
+    /// store holds it; in the projection of the Mask's root frame, so the frames agree), then
+    /// the Mask with its frame chain through 10.5's bundle import (in memory, the same checks,
+    /// idempotent by identity: a Mask already there adds no record). The preview the run drew
+    /// seeds the artifact resource's cache, so the resource gives the same bytes.
+    fn publish(
+        &self,
+        run_dir: &Path,
+        image: &Path,
+        identity: &str,
+    ) -> rascal_core::error::Result<()> {
+        let ws = Workspace::open_read_only(run_dir)?;
+        let frame = ws.load(identity)?.frame().to_string();
+        let frames = ws.frames()?;
+        let chain = frames.chain(&frame)?;
+        let root = chain
+            .last()
+            .ok_or_else(|| Error::usage(format!("frame {frame} has no root")))?;
+        let bytes = std::fs::read(image).map_err(|e| Error::io(image, e))?;
+        let file = format!("sha256:{}", rascal_core::contract::file_sha256(&bytes));
+        if self
+            .store
+            .resolve(rascal_core::artifact::ArtifactType::Image, &file)?
+            .is_none()
+        {
+            self.store.import(image, Some(root.projection))?;
+        }
+        let bundle = ws.export_mask(identity)?;
+        let source = run_dir
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        self.store
+            .import_mask_bytes(&bundle.bytes, identity, &source, Some(&bundle.sha256))?;
+        if let Ok(preview) = std::fs::read(run_dir.join(run_json::PREVIEW_FILE)) {
+            artifact_resource::seed(identity, &preview)?;
+        }
+        Ok(())
     }
 
     /// Runs the recipe, through `heal` when a filler is named.

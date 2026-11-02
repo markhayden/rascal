@@ -14,11 +14,17 @@ pub const PROTOCOL: &str = "2025-11-25";
 /// `<bin> serve --allow-dir <the repository> --allow-dir <the temporary directory>`: a server
 /// as the tests start it, allowed to read the repository's fixtures and the scratch
 /// directories the tests work in (CONTRACT 5.2; rascal refuses every caller path without
-/// `--allow-dir`). The caller adds the rest of the arguments.
+/// `--allow-dir`). Its cache (the artifact previews) is under the temporary directory, never the
+/// person's own; a test that reads the cache sets `XDG_CACHE_HOME` again. The caller adds the
+/// rest of the arguments.
 pub fn serve_command(bin: impl AsRef<std::ffi::OsStr>) -> Command {
     let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut command = Command::new(bin);
     command
+        .env(
+            "XDG_CACHE_HOME",
+            std::env::temp_dir().join("rascal-test-cache"),
+        )
         .arg("serve")
         .arg("--allow-dir")
         .arg(std::fs::canonicalize(repo).expect("the repository resolves"))

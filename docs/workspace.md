@@ -208,5 +208,7 @@ rascal run <recipe> <image> --out run/ [--workspace ws/]
 
 Every op in `rascal ops list` is a subcommand that takes `--workspace` and its ports by id. A
 run without `--workspace` uses its run directory as a private workspace; with it, artifacts and
-the journal go to the shared workspace and the run directory keeps the named outputs and the
-`frames.json` and `locations.json` projections.
+the journal go to the shared workspace and the run directory keeps the named outputs, the
+`frames.json` and `locations.json` projections, and `outputs.json`, the identity of the Mask
+the run made, recorded as the step that makes it completes (so a shared workspace's records
+are never searched for it; PLAN.md 10.8).

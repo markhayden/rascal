@@ -2114,16 +2114,38 @@ there. `rascal run` and `heal` on the command line fill `artifacts` the same way
 into the run's own workspace (the resource resolves only in a server whose store holds it, which
 the reference does not promise).
 
+As built (the coordinator's decisions, 2026-11-01): the run records its own Mask. When the step
+that makes the recipe's `outputs.mask` completes, fresh or from the cache (the same identity, so
+rightly this run's), `Run::record_output` writes its identity into `outputs.json` in the run
+directory; `run.json` lists exactly that, on `completed`, `error` and `cancelled` alike, and no
+Mask when the step never completed. A workspace's records are never searched for "the latest
+record of the step", which a shared `--workspace` would get wrong. The preview is drawn in the run's
+workspace, which holds the image, so it is the overlay; it is `preview-mask.png` in the run
+directory and in `images.out`. `serve` publishes before `run.json` is written: the image file
+the run read (skipped when the store resolves its digest; imported in the projection of the
+Mask's root frame), then the Mask's bundle exported from the run's workspace and imported with
+its frame chain; the run's preview then seeds 10.7's identity-named cache, so the resource's
+preview equals the result's (a test also clears the cache and finds the store's redraw equal).
+No `publish_mask` was added: `import_mask_bytes` already applies 10.5's checks and is idempotent
+by identity (an `already_present` import adds no record). A failed publication is a note in the
+result, never a lost run. `artifacts.in` comes from the invocation's `mask` and `protect`
+references, which 10.3 already writes on both paths. `outputs.json` and `preview-mask.png` are
+reserved run-directory names (a render may not take them). The testkit's `serve_command` now
+sets `XDG_CACHE_HOME` under the temporary directory, so tests never write the person's cache.
+The contract result fixtures and the table-manners `run-*` fixtures were regenerated (their
+Masks and previews); 10.6's test helpers that held a task's `artifacts` empty now check the
+10.8 shape.
+
 **Acceptance.**
-- [ ] A served `remove` lists its Mask in `artifacts.out` with a preview, validating against v0.4;
+- [x] A served `remove` lists its Mask in `artifacts.out` with a preview, validating against v0.4;
       a `feather` call bound to that reference, in the same session, completes.
-- [ ] A heal whose filler fails (`error`) still lists the Mask, and it binds.
-- [ ] Two identical `seam` calls publish one Mask (one import record, the second none).
-- [ ] `rascal run remove … --out r/` writes `run.json` with the same `artifacts.out` reference as
+- [x] A heal whose filler fails (`error`) still lists the Mask, and it binds.
+- [x] Two identical `seam` calls publish one Mask (one import record, the second none).
+- [x] `rascal run remove … --out r/` writes `run.json` with the same `artifacts.out` reference as
       the served call on the same inputs.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- run_json::
-serve_contract:: operations::`; `just check`.
+serve_contract:: operations::`; `just check`. Done 2026-11-01 (on `m10-operations`).
 
 **Dependencies.** 10.6. **Files.** `crates/rascal-mask/src/{actions,run_json,run,heal}.rs`,
 `crates/rascal-core/src/workspace/mod.rs` (`publish_mask` over `import_mask`'s checks),

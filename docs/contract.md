@@ -200,8 +200,24 @@ that still lists the mask. `locations.used` holds the location the run took in;
 `input_identity` is a SHA-256 over what was asked (the action, the recipe, the image's file
 digest, the location files, `--set`, the prompt, the filler), so equal requests have equal
 identities. `spend` and `cache` come from the fill (8.6). `artifacts` (4.7), which every result
-of an operations tool carries, is `{"in": [], "out": []}` on a task's result until tasks list
-the Masks they make (task 10.8); an operation's run fills it ("Operations as runs" below).
+of an operations tool carries, lists a task's Mask too (task 10.8): `artifacts.in` holds the
+`mask` and `protect` references the invocation names (`preview: null`), and `artifacts.out` the
+Mask the recipe outputs (`port: "mask"`), its reference and its preview. The run records that
+Mask itself as the step making `outputs.mask` completes, fresh or from the cache
+(`Run::record_output`, `outputs.json` in the run directory), never by looking through a
+workspace's records, so a shared `--workspace` cannot lend it another run's; so `error` and
+`cancelled` list it whenever that step completed (2.3: a salvaged mask binds another filler's
+call or an operation), and a run whose mask step never completed lists none. The preview is
+drawn in the run's workspace, the overlay on the run's image (`crate::preview::draw`), written
+as `preview-mask.png` in the run directory and also in `images.out` (role `preview`). On the
+command line the reference is into the run's own workspace (the artifact resource resolves it
+only in a server whose store holds it). Under `serve`, before `run.json` is written, the Mask
+is published into the session's store: the image file the run read (unless the store holds its
+digest), then the Mask with its frame chain through the bundle import (in memory, its checks,
+idempotent by identity, so a second identical call adds no record); the run's preview seeds the
+artifact resource's cache, so `rascal://artifact/{identity}/preview` gives the result's bytes.
+A failed publication is said in `notes`. An operation's run fills `artifacts` its own way
+("Operations as runs" below).
 
 ### The invocation (4.8, task 10.2)
 
