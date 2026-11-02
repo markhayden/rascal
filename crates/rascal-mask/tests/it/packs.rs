@@ -678,12 +678,7 @@ fn a_plane_over_the_byte_bound_is_refused_not_timed_out() {
 }
 
 #[test]
-fn a_cancellation_fails_only_the_pack_of_the_cancelled_tool() {
-    use rascal_core::workspace::Workspace;
-    use rascal_mcp::client::op::ops_for;
-    use rascal_mcp::server::Server;
-    let dir = scratch("two-packs");
-    let ws = Arc::new(Workspace::open(&dir.join("ws")).unwrap());
+fn failing_one_packs_calls_leaves_another_pack_alone() {
     let mut second = pack_config("exact", false, 30);
     second.command.push("--name=other".to_string());
     let a = Arc::new(
@@ -696,27 +691,13 @@ fn a_cancellation_fails_only_the_pack_of_the_cancelled_tool() {
             .unwrap()
             .with_grace(Duration::from_secs(1)),
     );
-    let mut registry = rascal_ops::registry().unwrap();
-    for pack in [&a, &b] {
-        for op in ops_for(pack, &ws).unwrap() {
-            registry.register(op).unwrap();
-        }
-    }
-    let server = Server::new(ws, registry, 2, None, &[a.clone(), b.clone()]).unwrap();
-    assert!(Arc::ptr_eq(server.pack_for("segment").unwrap(), &a));
-    assert!(Arc::ptr_eq(server.pack_for("other").unwrap(), &b));
-    assert!(server.pack_for("rect").is_none());
-    // Failing the cancelled tool's pack leaves the other pack's in-flight call alone.
+    // Failing one pack's calls (a cancelled run's) leaves the other pack's in-flight call alone.
     let in_flight = call_tool_in_thread(&b, "other", 1500);
     std::thread::sleep(Duration::from_millis(200));
-    server
-        .pack_for("segment")
-        .unwrap()
-        .fail_in_flight("cancelled by the client");
+    a.fail_in_flight("cancelled by the client");
     assert!(!a.is_live());
     in_flight.join().unwrap().unwrap();
     assert!(b.is_live());
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -913,8 +894,7 @@ fn a_relocated_run_replays_with_the_pack_absent_and_no_call_made() {
     // before writing) and carries the polygon regions.
     let exported = dir.join("segment.json");
     let out = rascal(&[
-        "export",
-        "--compat",
+        "compat-export",
         run1.join("journal.jsonl").to_str().unwrap(),
         "--step",
         "segment",

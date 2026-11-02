@@ -1,0 +1,13 @@
+{
+  "bindings": [
+    {
+      "expected": "rascal:Mask v1",
+      "got": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "port": "artifact",
+      "problem": "unresolved",
+      "remedy": "Import its bundle with the import tool (rascal import), then call again."
+    }
+  ],
+  "reason": "binding",
+  "run": null
+}

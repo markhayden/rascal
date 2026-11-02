@@ -26,6 +26,10 @@ fn repo_root() -> PathBuf {
 struct Tuned;
 
 impl Op for Tuned {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Refine
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             "tuned",
@@ -340,6 +344,10 @@ fn resolved_defaults_and_the_constant_set_appear_in_the_journal() {
 struct StandInSegment;
 
 impl rascal_core::op::Op for StandInSegment {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Find
+    }
+
     fn manifest(&self) -> rascal_core::op::Manifest {
         use rascal_core::op::{Cost, CostTier, Manifest, Param, ParamKind, Port};
         Manifest::new(

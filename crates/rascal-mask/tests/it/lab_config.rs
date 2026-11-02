@@ -22,6 +22,10 @@ use rascal_mask::lab::resolve_matrix;
 struct FinderStub(&'static str);
 
 impl Op for FinderStub {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Find
+    }
+
     fn manifest(&self) -> Manifest {
         let port = |name: &str, artifact_type: ArtifactType, required: bool| Port {
             name: name.to_string(),

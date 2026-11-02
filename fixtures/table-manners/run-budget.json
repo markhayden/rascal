@@ -1,10 +1,14 @@
 {
   "action": "seam",
+  "artifacts": {
+    "in": [],
+    "out": []
+  },
   "body": {
     "recipe": "seam"
   },
   "cache": "off",
-  "contract": "0.3.0",
+  "contract": "0.4.0",
   "duration_ms": 0,
   "error": {
     "code": "budget",
@@ -17,6 +21,47 @@
     "out": []
   },
   "input_identity": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "invocation": {
+    "action": "seam",
+    "arguments": {
+      "filler": "hosted",
+      "image": {
+        "expect": {
+          "file_sha256": "6b2cc035c6a965b3acc1b302f368c5976fe2073d0dc5edb651f3e8f56993d3c4",
+          "height": 400,
+          "pixel_sha256": "894b4c9db72b3252f86d31c4c5c5539b2e62db427b1465940b749bfddc26b66b",
+          "projection": "equirectangular",
+          "topology": "wrap",
+          "width": 800
+        }
+      },
+      "projection": "equirectangular",
+      "strict": false
+    },
+    "effective": {
+      "config_identity": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0001",
+      "model": "fillers.hosted",
+      "x-rascal": {
+        "constants": {
+          "band": "profile-v1",
+          "fan": "fan-v3",
+          "ramp": "ramp-v1"
+        },
+        "filler": {
+          "fill_max_side": null,
+          "kind": "http",
+          "name": "hosted",
+          "paste": "feather",
+          "revision": "hosted-1"
+        }
+      }
+    },
+    "requirements": [
+      "rascal.toml",
+      "fillers.hosted",
+      "RASCAL_FIXTURE_KEY"
+    ]
+  },
   "locations": {
     "found": [],
     "used": []

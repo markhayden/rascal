@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
-# Warns when crates.io has a newer table-manners than the one pinned in Cargo.toml (ADR 0020),
-# and when the pin is a path: the build is against an unreleased draft (a milestone branch).
+# Warns when crates.io has a newer table-manners than the one pinned in Cargo.toml (ADR 0020).
 # Never fails: moving the pin is a deliberate commit. Needs the network, so it runs in CI, not in
 # `just check`; offline it says so and exits 0. CONTRACT_LATEST overrides the lookup and
 # CONTRACT_MANIFEST the manifest read (self-test).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-# The pin is `table-manners = "=X"`, or `{ path = …, version = "=X" }` while a draft is built by path.
-pinned="$(sed -n -e 's/^table-manners = "=\([0-9.]*\)"$/\1/p' \
-  -e 's/^table-manners = {.*version = "=\([0-9.]*\)".*}$/\1/p' "${CONTRACT_MANIFEST:-Cargo.toml}")"
+# The pin is `table-manners = "=X"`, the published crate.
+pinned="$(sed -n -e 's/^table-manners = "=\([0-9.]*\)"$/\1/p' "${CONTRACT_MANIFEST:-Cargo.toml}")"
 if [ -z "$pinned" ]; then
   echo "check-contract: no exact table-manners pin in Cargo.toml" >&2
   exit 1
-fi
-if grep -q '^table-manners = {.*path = ' "${CONTRACT_MANIFEST:-Cargo.toml}"; then
-  echo "::warning title=table-manners draft::rascal builds against the table-manners $pinned draft by path, not a release; the pin moves to the published crate before the milestone merges."
 fi
 latest="${CONTRACT_LATEST:-}"
 if [ -z "$latest" ]; then

@@ -1,12 +1,16 @@
 # Compatibility export
 
-What `rascal export --compat` projects, what it drops, and what it refuses by name.
+What `rascal compat-export` projects, what it drops, and what it refuses by name. (`rascal
+export` is the contract's export of a Mask or a location into rascal's data directory, CONTRACT
+5.1: `docs/contract.md` "Export and import". The compatibility export took the name
+`compat-export` in M10, task 10.10, with no fallback under the old name or the old `--compat`
+flag.)
 
 ## The command
 
 ```
-rascal export --compat run/journal.jsonl --step rect --out rect.json     # a step's envelope
-rascal export --compat --location box.json --out box.json                # a standalone location
+rascal compat-export run/journal.jsonl --step rect --out rect.json     # a step's envelope
+rascal compat-export --location box.json --out box.json                # a standalone location
 ```
 
 The projection keeps `status`, `summary`, `measurements`, `regions`, `images`, `transforms` and

@@ -3,7 +3,9 @@
 Every operation is a tool: one manifest, one envelope per invocation, callable as a subcommand,
 from a recipe step, and (from M3) over MCP with the same arguments. `rascal ops list` prints the
 catalogue; `rascal ops describe <op> [--json]` prints one manifest as a client sees it. From task
-1.9 a check proves every op is documented on this page.
+1.9 a check proves every op is documented on this page. From task 10.4 every op but `segment`
+is also an action of kind `operation` in the contract's description, with its group (the table's
+second column, `Op::group`) and its ports (`docs/contract.md`, "The description").
 
 ## The manifest
 
@@ -93,7 +95,8 @@ A point-list parameter is written `[[x, y], …]` in a recipe and `x,y;x,y` on t
 line; an integer list `[0, 2]` and `0,2`; a box list `[[x0, y0, x1, y1], …]` and
 `x0,y0,x1,y1;…`. A `many` input port (`select`'s `plane`) takes `plane_0`, `plane_1`, … in a
 recipe through one binding, `plane = "<step>.plane"`, which expands to every instance the step
-produced; on the command line `--plane` is repeated, in order; over MCP it is an array of ids.
+produced; on the command line `--plane` is repeated, in order; over MCP it is a non-empty array of
+artifact references (CONTRACT 3.4).
 
 `scripts/check-docs.sh` (part of `just check`) reads the catalogue, the render profiles and the run-page panels from
 the binary and fails when an op or profile is missing from these pages, or when a documented
@@ -105,44 +108,62 @@ through a configured pack like any pack tool.
 ## The server
 
 `rascal serve [--workspace ws/] [--config rascal.toml] [--concurrency n] [--runs dir]
-[--allow-dir <abs>]...` is an MCP
-server over stdio at protocol revision `2025-11-25` (ADR 0015). Beside the op tools below it
-serves the contract's action tools, one per shipped recipe, and `describe`, with run resources
-(table-manners, ADR 0020; `docs/contract.md`). It advertises one tool per op in the table
-above, named as the op, with ordinary arguments only: one string property per input port (an
-artifact id or identity in the workspace) plus the op's parameters by name, and `constants`
-when the op has sets. No argument is injected; ids resolve against the served workspace and
-nowhere else. Five workspace tools go with them: `workspace_import` (a path or base64 bytes in;
-the canonical Image and its `raw:` frame out; the path only inside a directory `--allow-dir`
-allows, else the one refusal of the path rule, `docs/contract.md`), `workspace_list` (by type), `workspace_describe`
-(a record as JSON), `workspace_read` (an Image's PNG as one image content block, bounded at
-64 MiB; any other type is `invalid_args`) and `workspace_dash` (writes the run page into the
-workspace and returns its path).
+[--allow-dir <abs>]...` is an MCP server over stdio at protocol revision `2025-11-25` (ADR 0015).
+It serves one MCP tool per action of the table-manners description and nothing else (CONTRACT 5;
+ADR 0020; `docs/contract.md`): the shipped recipes as tasks, every op in the table above as an
+**operation** of the same name, and the reserved `describe` and `estimate`. There is no op tool
+with rascal's own envelope, no pack tool and no `workspace_*` tool (task 10.6, no shims):
+references are the only way an artifact crosses, the description's artifact types say what a
+host may hold, and a configured pack is reached through `remove_prompt`.
 
-A result is the envelope as `structuredContent`, a text block with the summary, and image
-content blocks in exactly the count and order of the envelope's `images` (none for a pure op;
-one for `workspace_read`). Validation stays in the envelope as `invalid_args` with `isError`;
-a caller's mistake outside any envelope (an unknown tool or id, a malformed argument) is a
-JSON-RPC invalid-params error; an operational failure is a JSON-RPC internal error whose
-`data.class` names rascal's error class (`io`, `op`, `image`, `format`, `mask_invariant`,
-`usage`, `operational` for anything else, and `cancelled` when the client cancelled the call:
-nothing is published after a cancellation reaches the op). Calls are serial per workspace by
-default; `--concurrency n` lets `n` run at once, each still committing in turn; the contract's
-`describe` and `estimate` never wait for the permit. One request is
-one line of at most 256 MiB (a longer line is dropped by the transport and gets no answer), so
-a `workspace_import` of base64 bytes fits any image rascal decodes; a `path` import reads any
-file the server process can, as the spec says, so give a host only the workspace it should
-touch. Tracing goes to stderr only, never to the protocol stream. The
+An operation's input schema is its `params_schema` (the op's parameters by name, and
+`constants` when the op has sets: an `enum`, the first set its `default`;
+`Manifest::params_schema`) plus one property per input port: an artifact reference (CONTRACT
+3.4), a non-empty array of them for a `many` port (`select`'s `plane`), and for an `image` port
+also an image in (a `path` inside a directory `--allow-dir` allows, or `inline` base64, with an
+optional `expect`; its projection is `expect`'s, else an exactly 2:1 image is equirectangular),
+for a `location` port also a location (a table-manners location on the call's image, or
+rascal's own). `return_images` and `image_blocks` choose how its images are delivered. Nothing is
+injected: references resolve by identity in the served workspace (the session's store) and
+nowhere else.
+
+Every call is a run: before it is allocated, each reference is bound (type, schema version,
+resolution) and the frames of the bound inputs are checked together (each op's
+`Op::check_frames`: one frame by default; `put` and `unwindow` take a parent and a frame derived
+from it, `measure`'s line may be in any frame, `invert` has one input), and a call that does not
+bind is the `-32602` `binding` refusal naming every problem with its port (and `index` within a
+`many` port), with no run. Then the run directory is allocated under `--runs`, images and
+locations given by value are registered in the store, and the op runs on the store, so its
+outputs commit there (one operation record, step id the run's id) and the next call binds them
+by reference. The result is the run's `run.json`: `artifacts.in` and `artifacts.out` with a
+reference for each input and output and a PNG **preview** for each Mask and location out
+(`inspect`'s overlay on its frame's image, else the Mask's grey rendering; a location's
+rasterized outline), images in `images.in` and `images.out` (previews included), locations in
+`locations.used` and `locations.found`, and the op's envelope as `body.envelope`. `ok` and
+`measured_nothing` complete; `not_applicable` completes with a note and nothing out;
+`invalid_args` is `invalid`/`usage`. Progress, cancellation, the correlation id, the runs list
+and the run resources work as for a task (`docs/contract.md`). Every reference's `resource`,
+`rascal://artifact/{identity}`, reads the artifact back from the store by identity (its
+reference, a preview for a location or a Mask, rascal's own record), and `…/preview` is that
+PNG, so a host that kept references after a restart, or after moving the workspace, reads and
+binds them again (task 10.7).
+
+Runs are serial by default; `--concurrency n` lets `n` run at once, each still committing in
+turn; `describe`, `estimate`, `export` and `import` never wait for the permit. One request is one line of at most
+256 MiB (a longer line is dropped by the transport and gets no answer), so an inline image fits
+any image rascal decodes. Tracing goes to stderr only, never to the protocol stream. The
 testkit's independent client (`crates/rascal-testkit/src/mcp_client.rs`), written against the
-protocol document and nothing of rascal's, drives the server in `tests/it/serve.rs`.
+protocol document and nothing of rascal's, drives the server in `tests/it/serve.rs` and
+`tests/it/operations.rs`.
 
 ## The packs
 
 A **pack** is a tool server rascal starts: a process speaking MCP over its stdio, declared in
 `rascal.toml` and holding the learned finders (`segment` from the Python pack; the testkit's
 fake pack for tests). Every tool a pack lists becomes an op in the registry of the run,
-callable from a recipe step, from `rascal tools call`, and from `rascal serve` when it is given
-the same configuration.
+callable from a recipe step and from `rascal tools call`; `rascal serve` serves no pack tool (it
+starts each configured pack once to learn whether it starts, for readiness, and reaches the
+segmenter through `remove_prompt`).
 
 ```toml
 [packs.rascal-tools]
@@ -171,8 +192,9 @@ one line the transport carries). A refusal names the tool and the reason; the pa
 `startup_timeout_s` covers initialize and the listing together. The listing is journaled
 (`pack manifest:` notes), so a replay knows the tools without the pack; a restart after a
 failure must list the same tools with the same manifests, or it is refused. A pack that does not
-start leaves its tools out rather than failing everything: `serve` says why on stderr and keeps
-serving (the segmenter's readiness requirement reads `invalid`, task 12.2), and a run notes it in
+start leaves its tools out rather than failing everything: `serve`, which starts each pack once
+at start to learn this, says why on stderr and keeps serving (the segmenter's readiness
+requirement reads `invalid`, task 12.2), and a run notes it in
 its journal, so a recipe that needs none of its tools still runs and one whose op nothing serves
 fails with the pack's own error. `rascal tools list`, `tools call` and the lab still fail on it.
 
@@ -193,8 +215,8 @@ a single port of the type takes exactly one. The envelope's `images[].identity` 
 the stored artifact's identity.
 
 **Concurrency and failure.** Calls to a tool overlap only when the config's `concurrent` and
-the manifest's both say so; otherwise one at a time. A timeout, a cancellation (a `serve`
-client's, or `Pack::fail_in_flight`) or the process dying fails every in-flight call on the
+the manifest's both say so; otherwise one at a time. A timeout, a cancellation
+(`Pack::fail_in_flight`) or the process dying fails every in-flight call on the
 pack and shuts it down before any reuse: stdin closed, five seconds, SIGTERM, five seconds,
 SIGKILL. The next call starts a fresh process, which must list the same tools. A late answer
 for a call that already failed goes nowhere.

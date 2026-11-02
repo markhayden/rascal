@@ -10,7 +10,9 @@ use rascal_core::artifact::{Artifact, ArtifactType};
 use rascal_core::error::Result;
 use rascal_core::frame::FrameKind;
 use rascal_core::image::{Image, Role};
-use rascal_core::op::{Context, Cost, CostTier, Inputs, Manifest, Op, Output, Params, Port};
+use rascal_core::op::{
+    Context, Cost, CostTier, FrameMismatch, Framed, Inputs, Manifest, Op, Output, Params, Port,
+};
 
 /// The op.
 pub struct Unwindow;
@@ -18,6 +20,15 @@ pub struct Unwindow;
 const NAME: &str = "unwindow";
 
 impl Op for Unwindow {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Prep
+    }
+
+    /// The crop in a crop: frame of the image's frame.
+    fn check_frames(&self, inputs: &[Framed<'_>]) -> Vec<FrameMismatch> {
+        rascal_core::op::derived_frame(inputs, "image", "crop", FrameKind::Crop)
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

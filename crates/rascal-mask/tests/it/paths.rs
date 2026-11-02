@@ -7,6 +7,7 @@
 //! `--allow-dir` every path is refused and inline images still work. A bad `--allow-dir` exits
 //! 64 before anything is answered; the allowed set is printed on stderr. `serve` writes only
 //! under its runs root, workspace and cache, and the person's own command line is not held to the rule.
+//! Task 10.2 (CONTRACT 4.6): `rascal://session` lists the set as `allowed_dirs`, `[]` with none.
 #![cfg(feature = "testkit")]
 #![allow(clippy::unwrap_used)]
 
@@ -37,11 +38,9 @@ fn refusal(slot: &str) -> String {
 /// in/sub/pano.png         one in a subdirectory
 /// in/inside-link.png  ->  in/pano.png        (stays inside)
 /// in/out-link.png     ->  secret/pano.png    (points out)
-/// in/mask/                a stored mask (the seam golden)
-/// in/leaky-mask/          the same mask, one plane a link to secret/
 /// secret/pano.png         outside
 /// secret/in-link.png  ->  in/pano.png        (outside, pointing in)
-/// secret/mask/            the mask outside
+/// secret/mask/            a stored mask (the seam golden), outside
 /// link-dir            ->  in                 (a directory that is a symlink)
 /// ```
 fn layout(name: &str) -> PathBuf {
@@ -64,24 +63,10 @@ fn layout(name: &str) -> PathBuf {
     link(&secret.join("pano.png"), &inside.join("out-link.png"));
     link(&inside.join("pano.png"), &secret.join("in-link.png"));
     link(&inside, &dir.join("link-dir"));
-    let golden = repo_root().join("fixtures/masks/seam-step-pano.mask");
-    for to in [
-        inside.join("mask"),
-        inside.join("leaky-mask"),
-        secret.join("mask"),
-    ] {
-        copy_dir(&golden, &to);
-    }
-    // One plane of the leaky mask is a link to the same plane outside.
-    let plane = std::fs::read_dir(inside.join("leaky-mask"))
-        .unwrap()
-        .flatten()
-        .map(|e| e.path())
-        .find(|p| p.extension().is_some_and(|e| e == "png"))
-        .unwrap();
-    let outside = secret.join("mask").join(plane.file_name().unwrap());
-    std::fs::remove_file(&plane).unwrap();
-    link(&outside, &plane);
+    copy_dir(
+        &repo_root().join("fixtures/masks/seam-step-pano.mask"),
+        &secret.join("mask"),
+    );
     dir
 }
 
@@ -234,7 +219,7 @@ fn a_file_inside_runs_and_every_escape_reads_the_same() {
 }
 
 #[test]
-fn estimate_mask_protect_and_import_are_held_to_the_rule() {
+fn estimate_and_import_are_held_to_the_rule() {
     let dir = layout("slots");
     let inside = dir.join("in");
     let mut client = start(&dir, &["--allow-dir", s(&inside)]);
@@ -259,50 +244,56 @@ fn estimate_mask_protect_and_import_are_held_to_the_rule() {
     }
     assert_eq!(seen[0], seen[1]);
 
-    // A stored mask: inside it binds; outside, missing, and inside with a plane linked out are
-    // refused, in the estimate and in the run alike.
-    let protect = |mask: &Path| serde_json::json!({ "image": image, "mask": s(mask) });
-    estimate(&mut client, "protect", protect(&inside.join("mask"))).unwrap();
-    for mask in [
-        dir.join("secret/mask"),
-        inside.join("no-mask"),
-        inside.join("leaky-mask"),
-    ] {
-        let (code, data) = estimate(&mut client, "protect", protect(&mask)).unwrap_err();
-        assert_eq!(code, -32602);
-        assert_eq!(data.unwrap()["error"]["reason"], refusal("mask"));
-        let result = client
-            .call("protect", protect(&mask))
+    // A Mask argument is a reference, never a path (task 10.3): a path there, even to a
+    // stored mask, is a wrong request, refused before anything is read or run.
+    let protect = serde_json::json!({ "image": image, "mask": s(&dir.join("secret/mask")) });
+    let (code, data) = estimate(&mut client, "protect", protect.clone()).unwrap_err();
+    assert_eq!(code, -32602);
+    let data = data.unwrap();
+    assert_eq!(data["error"]["code"], "usage", "{data:#}");
+    assert!(
+        data["error"]["reason"]
+            .as_str()
+            .unwrap()
+            .starts_with("mask: not an artifact reference"),
+        "{data:#}"
+    );
+    let runs = listing(&dir.join("runs"));
+    match client.call("protect", protect) {
+        Err(Failure::Rpc { code, data, .. }) => {
+            assert_eq!(code, -32602);
+            assert_ne!(
+                data.as_ref().map(|d| d["reason"].clone()),
+                Some("binding".into())
+            );
+        }
+        other => panic!("a path for a reference: {other:?}"),
+    }
+    assert_eq!(listing(&dir.join("runs")), runs, "no run");
+
+    // An operation's image port by path (task 10.6): inside runs; outside and missing are each
+    // an `invalid`/`input` run with the one refusal, and nothing outside enters the store.
+    let line = |client: &mut Client, path: &Path| {
+        client
+            .call(
+                "line",
+                serde_json::json!({ "image": { "path": s(path) }, "column": 0.5, "width_px": 8 }),
+            )
             .unwrap()
             .structured
-            .unwrap();
-        refused(&result, "mask");
-    }
-    // `protect` as an argument of `remove`: the same rule.
-    let remove = serde_json::json!({ "image": image, "protect": s(&dir.join("secret/mask")),
-        "location": { "kind": "bbox" } });
-    let result = client.call("remove", remove).unwrap().structured.unwrap();
-    refused(&result, "protect");
-
-    // workspace_import: inside imports; outside and missing are one invalid-params error.
-    let imported = client
-        .call(
-            "workspace_import",
-            serde_json::json!({ "path": s(&inside.join("pano.png")) }),
-        )
-        .unwrap();
-    assert!(!imported.is_error, "{imported:?}");
-    let mut messages = Vec::new();
+            .unwrap()
+    };
+    let ran = line(&mut client, &inside.join("pano.png"));
+    assert_eq!(ran["status"], "completed", "{ran:#}");
     for path in [dir.join("secret/pano.png"), dir.join("secret/missing.png")] {
-        match client.call("workspace_import", serde_json::json!({ "path": s(&path) })) {
-            Err(Failure::Rpc { code, message, .. }) => {
-                assert_eq!(code, -32602);
-                messages.push(message);
-            }
-            other => panic!("{other:?}"),
-        }
+        let result = line(&mut client, &path);
+        refused(&result, "image");
+        assert_eq!(
+            result["artifacts"]["in"],
+            serde_json::json!([]),
+            "{result:#}"
+        );
     }
-    assert_eq!(messages, vec![refusal("path"), refusal("path")]);
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -311,6 +302,7 @@ fn estimate_mask_protect_and_import_are_held_to_the_rule() {
 fn with_no_allowed_directory_every_path_is_refused_and_inline_runs() {
     let dir = layout("closed");
     let mut client = start(&dir, &[]);
+    assert_eq!(allowed_dirs(&mut client), serde_json::json!([]));
     for path in [dir.join("in/pano.png"), dir.join("in/missing.png")] {
         refused(&seam(&mut client, s(&path)), "image");
     }
@@ -324,13 +316,15 @@ fn with_no_allowed_directory_every_path_is_refused_and_inline_runs() {
         .structured
         .unwrap();
     assert_eq!(result["status"], "completed", "{result:#}");
-    assert!(matches!(
-        client.call(
-            "workspace_import",
-            serde_json::json!({ "path": s(&dir.join("in/pano.png")) })
-        ),
-        Err(Failure::Rpc { code: -32602, .. })
-    ));
+    let line = client
+        .call(
+            "line",
+            serde_json::json!({ "image": { "path": s(&dir.join("in/pano.png")) }, "column": 0.5, "width_px": 8 }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    refused(&line, "image");
     client.close().unwrap();
     let out = start_and_end(&dir, &[]);
     assert_ne!(out.status.code(), Some(64), "{}", stderr(&out));
@@ -340,6 +334,19 @@ fn with_no_allowed_directory_every_path_is_refused_and_inline_runs() {
         stderr(&out)
     );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `rascal://session`'s `allowed_dirs` (4.6).
+fn allowed_dirs(client: &mut Client) -> serde_json::Value {
+    let result = client
+        .request(
+            "resources/read",
+            serde_json::json!({ "uri": "rascal://session" }),
+        )
+        .unwrap();
+    let session: serde_json::Value =
+        serde_json::from_str(result["contents"][0]["text"].as_str().unwrap()).unwrap();
+    session["allowed_dirs"].clone()
 }
 
 /// The line `serve` prints with the allowed set, as a list.
@@ -413,6 +420,7 @@ fn the_configuration_narrows_to_the_overlap_and_never_widens() {
     // And the calls follow the set: with `in/sub` configured, `in/pano.png` is refused.
     let narrowed = config("calls", &[&sub]);
     let mut client = start(&dir, &["--allow-dir", s(&inside), "--config", s(&narrowed)]);
+    assert_eq!(allowed_dirs(&mut client), serde_json::json!([s(&sub)]));
     refused(&seam(&mut client, s(&inside.join("pano.png"))), "image");
     estimate(
         &mut client,
@@ -466,12 +474,20 @@ fn serve_writes_only_under_its_own_directories() {
         )
         .unwrap();
     assert_eq!(inline.structured.unwrap()["status"], "completed");
-    client
-        .call("workspace_import", serde_json::json!({ "path": path }))
-        .unwrap();
-    client
-        .call("workspace_dash", serde_json::json!({}))
-        .unwrap();
+    // An operation by path and inline: its outputs commit to the store, its previews go to its
+    // run directory.
+    for image in [
+        serde_json::json!({ "path": path }),
+        serde_json::json!({ "inline": { "media_type": "image/png", "data": data } }),
+    ] {
+        let line = client
+            .call(
+                "line",
+                serde_json::json!({ "image": image, "column": 0.5, "width_px": 8 }),
+            )
+            .unwrap();
+        assert_eq!(line.structured.unwrap()["status"], "completed");
+    }
     client.close().unwrap();
     let created: Vec<PathBuf> = listing(&dir)
         .into_iter()

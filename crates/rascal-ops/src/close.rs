@@ -18,6 +18,10 @@ pub struct Close;
 const NAME: &str = "close";
 
 impl Op for Close {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Refine
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

@@ -15,7 +15,8 @@ use rascal_core::frame::Frame;
 use rascal_core::location::Location;
 use rascal_core::mask::Mask;
 use rascal_core::op::{
-    Context, Cost, CostTier, Inputs, Manifest, Op, Output, Param, ParamKind, Params, Port, Status,
+    Context, Cost, CostTier, FrameMismatch, Framed, Inputs, Manifest, Op, Output, Param, ParamKind,
+    Params, Port, Status,
 };
 use rascal_core::series::Series;
 
@@ -56,6 +57,29 @@ fn constants() -> toml::Table {
 }
 
 impl Op for Measure {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Out
+    }
+
+    /// The images and the mask in one frame; the line, read only as a column fraction of the
+    /// mask's frame, in any.
+    fn check_frames(&self, inputs: &[Framed<'_>]) -> Vec<FrameMismatch> {
+        let framed: Vec<(usize, Framed<'_>)> = inputs
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|(_, i)| i.port != "line")
+            .collect();
+        let subset: Vec<Framed<'_>> = framed.iter().map(|(_, i)| *i).collect();
+        rascal_core::op::same_frame(&subset)
+            .into_iter()
+            .map(|m| FrameMismatch {
+                at: framed[m.at].0,
+                wanted: m.wanted,
+            })
+            .collect()
+    }
+
     fn manifest(&self) -> Manifest {
         let outputs = SERIES
             .iter()

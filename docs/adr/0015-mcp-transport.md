@@ -1,6 +1,9 @@
 # ADR 0015: the MCP transport
 
-Decided 2026-10-29 (M3 task 3.1). Status: accepted.
+Decided 2026-10-29 (M3 task 3.1). Status: accepted; superseded in part by ADR 0021 (2026-11-01):
+its op surface (the op tools, their envelopes, workspace ids in arguments, the `workspace_*`
+tools) is gone; its transport decision (the SDK, the revision, stdio, the independent client)
+stands.
 
 ## Context
 
@@ -58,3 +61,22 @@ features; otherwise the in-house path.
   at run time.
 - The pack client (3.3) uses `rmcp`'s child-process transport and client service; the
   environment allowlist, the `_harness` object and result validation are rascal's.
+
+## Amendment (M10, task 10.6): the server serves the contract's actions only
+
+On table-manners v0.4 every op is an ordinary contract action (`kind: "operation"`), so an op
+call is a run with its `run.json` (CONTRACT 4.7). `rascal serve` now lists one MCP tool per
+action of the description plus `describe` and `estimate` (and, from task 10.10, `export` and
+`import`), and nothing else: the op tools with rascal's envelope as their result, the pack tools
+and the five `workspace_*` tools of M3 are removed, with no shim. Artifacts cross by reference
+(CONTRACT 3.4), resolved by identity in the session's store, never by workspace id; an image
+port takes an image by path or inline, which replaces `workspace_import`; what `workspace_list`
+gave is the host's own references, what `workspace_describe` and `workspace_read` gave is the
+artifact resource (task 10.7), and the run page is the description's `dash` render. A configured
+pack is started once at start, only to learn whether it starts (its readiness requirement), and
+reached through `remove_prompt`. `rascal_mcp::server::Server` knows no op, registry, pack or
+workspace: it serves the binary's `Actions` (the claim, the permit, progress, cancellation,
+resources), and `rascal_mcp::jsonrpc` keeps only what the server and the pack client share
+(the media type, the invalid-params error, the base64 decoder); the envelope's tool-result shape
+and the error-class mapping went with the op tools. The SDK, the revision and the independent
+client are unchanged.

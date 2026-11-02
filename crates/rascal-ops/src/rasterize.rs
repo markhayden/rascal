@@ -23,6 +23,10 @@ pub struct Rasterize;
 const NAME: &str = "rasterize";
 
 impl Op for Rasterize {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Refine
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

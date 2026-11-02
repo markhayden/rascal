@@ -3,11 +3,16 @@
   "allowed": false,
   "binding": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb0002",
   "cap_usd": 0.1,
-  "contract": "0.3.0",
+  "contract": "0.4.0",
   "effective": {
     "config_identity": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0001",
     "model": "fillers.hosted",
     "x-rascal": {
+      "constants": {
+        "band": "profile-v1",
+        "fan": "fan-v3",
+        "ramp": "ramp-v1"
+      },
       "filler": {
         "fill_max_side": null,
         "kind": "http",
@@ -41,8 +46,12 @@
   },
   "refused": "budget",
   "session": {
+    "allowed_dirs": [
+      "/rascal",
+      "/tmp"
+    ],
     "budget_usd": 0.05,
-    "contract": "0.3.0",
+    "contract": "0.4.0",
     "id": "00000000-0000-4000-8000-000000000004",
     "remaining_usd": 0.01,
     "reserved_usd": 0.0,

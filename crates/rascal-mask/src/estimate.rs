@@ -13,8 +13,9 @@
 //! `{action, arguments, tool_version, config_identity, session_id}`, where `arguments` leaves
 //! out the delivery choices (`return_images`, `image_blocks`), each image slot's value is
 //! `{"file_sha256": …}` (a path read, inline bytes decoded; an `expect` verified as the call
-//! would, then dropped), each stored-mask input is `{"mask": <its identity>}`, and every other
-//! argument enters as sent.
+//! would, then dropped), each Mask reference is `{"mask": <its identity>}` (the Mask, wherever
+//! the reference was made; the estimate never reads the store), and every other argument enters
+//! as sent.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -27,7 +28,7 @@ use rascal_core::contract::table_manners::{
     Session as TmSession, Tool as TmTool,
 };
 use rascal_core::error::Result;
-use rascal_core::paths::{PathRule, Want};
+use rascal_core::paths::PathRule;
 use rascal_core::recipe::InputType;
 use serde_json::{Map, Value, json};
 
@@ -72,16 +73,17 @@ pub fn request(value: &Map<String, Value>) -> Option<(&str, &Map<String, Value>)
 }
 
 /// What one action takes, by the recipe's inputs.
-struct Slots {
-    images: Vec<String>,
-    locations: Vec<String>,
-    texts: Vec<String>,
-    masks: Vec<String>,
-    required: Vec<String>,
-    steps: Vec<String>,
+pub struct Slots {
+    pub images: Vec<String>,
+    pub locations: Vec<String>,
+    pub texts: Vec<String>,
+    pub masks: Vec<String>,
+    pub required: Vec<String>,
+    pub steps: Vec<String>,
 }
 
-fn slots(recipe: &str) -> Result<Slots> {
+/// The slots of a recipe (a shipped one by name, or a recipe file).
+pub fn slots(recipe: &str) -> Result<Slots> {
     let recipe = load_recipe(recipe)?;
     let mut slots = Slots {
         images: Vec::new(),
@@ -135,11 +137,7 @@ impl ImageIn {
 /// base64 within the inline limit. Its `expect` is checked by [`verify_expect`].
 pub fn image_in(slot: &str, value: &Value, paths: &PathRule) -> Result<ImageIn> {
     if let Some(path) = value.get("path").and_then(|p| p.as_str()) {
-        return Ok(ImageIn::Path(paths.admit(
-            slot,
-            Path::new(path),
-            Want::File,
-        )?));
+        return Ok(ImageIn::Path(paths.admit(slot, Path::new(path))?));
     }
     if let Some(inline) = value.get("inline") {
         let data = inline["data"].as_str().unwrap_or_default();
@@ -247,12 +245,7 @@ pub fn check_arguments(
                 }
             }
             k if is(&slots.masks, k) => {
-                let Some(path) = value.as_str() else {
-                    return Err(Error::usage(format!(
-                        "{k}: not a stored mask directory's path"
-                    )));
-                };
-                paths.admit(k, Path::new(path), Want::MaskDir)?;
+                rascal_core::binding::reference_in(k, value)?;
             }
             "filler" => {
                 if !value.is_string() {
@@ -327,16 +320,23 @@ pub struct Price {
     pub config_identity: Option<String>,
     /// `x-rascal`: the filler's name, kind, revision, paste and scaled side, or null.
     pub filler: Value,
+    /// `x-rascal`: the constant set in force at each recipe step whose op has sets.
+    pub constants: BTreeMap<String, String>,
     /// What the limits check reserves; none when the call cannot be priced.
     pub worst_case_usd: Option<f64>,
     pub cap_usd: Option<f64>,
 }
 
-/// Prices a call whose arguments are checked: the one function the estimate and the limits
-/// check share. A call needing a configuration that is missing or invalid, naming a filler that
-/// is not configured, or `remove_prompt` without its pack cannot be priced (`worst_case_usd`
-/// none), and is never ready.
-pub fn price(setup: &Setup<'_>, action: &str, args: &Map<String, Value>) -> Result<Price> {
+/// Prices a call of `action` (running `recipe`) whose arguments are checked: the one function
+/// the estimate, the limits check and the invocation share. A call needing a configuration that
+/// is missing or invalid, naming a filler that is not configured, or `remove_prompt` without its
+/// pack cannot be priced (`worst_case_usd` none), and is never ready.
+pub fn price(
+    setup: &Setup<'_>,
+    recipe: &str,
+    action: &str,
+    args: &Map<String, Value>,
+) -> Result<Price> {
     let config = setup.config.config();
     let filler = args.get("filler").and_then(|v| v.as_str());
     let readiness = readiness::for_call(setup, action, filler.map_or(Use::MaskOnly, Use::Filler));
@@ -356,7 +356,9 @@ pub fn price(setup: &Setup<'_>, action: &str, args: &Map<String, Value>) -> Resu
         _ => Some(Config::builtin().identity()),
     };
     let priced = !config_unmet && !pack_unmet && (filler.is_none() || entry.is_some());
+    let overrides = entry.map(|(_, e)| e.overrides.clone()).unwrap_or_default();
     Ok(Price {
+        constants: constants(recipe, &overrides, args.get("set"))?,
         model: entry.map(|(name, _)| format!("fillers.{name}")),
         config_identity,
         filler: entry.map_or(Value::Null, |(name, e)| {
@@ -373,6 +375,64 @@ pub fn price(setup: &Setup<'_>, action: &str, args: &Map<String, Value>) -> Resu
         cap_usd: effective_cap(config, args)?,
         readiness,
     })
+}
+
+/// The constant set in force at each step of `recipe` whose op has sets (the shipped ops'
+/// manifests): the recipe's own, then a filler's `"<step>.constants"` override (`heal` applies
+/// them when that filler paints), then the call's `set`, the last word, as the run applies them;
+/// a step that names none runs with its op's first set. A pack's ops have no sets here.
+pub fn constants(
+    recipe: &str,
+    overrides: &BTreeMap<String, rascal_core::recipe::Override>,
+    set: Option<&Value>,
+) -> Result<BTreeMap<String, String>> {
+    let recipe = load_recipe(recipe)?;
+    let registry = rascal_ops::registry()?;
+    let mut chosen: BTreeMap<String, String> = BTreeMap::new();
+    for (key, value) in overrides {
+        if let (Some(step), rascal_core::recipe::Override::String(name)) =
+            (key.strip_suffix(".constants"), value)
+        {
+            chosen.insert(step.to_string(), name.clone());
+        }
+    }
+    for (key, value) in set.and_then(|s| s.as_object()).into_iter().flatten() {
+        if let (Some(step), Some(name)) = (key.strip_suffix(".constants"), value.as_str()) {
+            chosen.insert(step.to_string(), name.to_string());
+        }
+    }
+    let mut out = BTreeMap::new();
+    for step in &recipe.step {
+        let Some(manifest) = registry.get(&step.op).map(|op| op.manifest()) else {
+            continue;
+        };
+        let Some(first) = manifest.constants.first() else {
+            continue;
+        };
+        let name = chosen
+            .get(&step.id)
+            .or(step.constants.as_ref())
+            .unwrap_or(first);
+        out.insert(step.id.clone(), name.clone());
+    }
+    Ok(out)
+}
+
+/// What a priced call uses where its arguments leave the choice to rascal (4.5): the one
+/// function behind both the estimate's `effective` and the invocation's (4.8), so the two are
+/// equal for the same call. `x-rascal` holds the filler (its name, kind, revision, paste and
+/// scaled side) or null, and the constant set in force by step ([`constants`]).
+pub fn effective(price: &Price) -> Effective {
+    let mut extensions = BTreeMap::new();
+    extensions.insert(
+        "x-rascal".to_string(),
+        json!({ "filler": price.filler, "constants": price.constants }),
+    );
+    Effective {
+        model: price.model.clone(),
+        config_identity: price.config_identity.clone(),
+        extensions,
+    }
 }
 
 /// The spend a call may make, and the limits it is held to (table-manners 4.5).
@@ -448,7 +508,7 @@ pub struct Bound {
 }
 
 /// The binding of a call (module docs): `session_id` is none on the command line, so no server
-/// accepts it. Its images and masks are read through `paths`, as the call reads them.
+/// accepts it. Its images are read through `paths`, as the call reads them.
 pub fn bind(
     recipe: &str,
     action: &str,
@@ -471,12 +531,7 @@ pub fn bind(
             verify_expect(key, value, &image, &bytes)?;
             json!({ "file_sha256": rascal_core::contract::file_sha256(&bytes) })
         } else if slots.masks.contains(key) {
-            let path = value.as_str().unwrap_or_default();
-            let dir = paths.admit(key, Path::new(path), Want::MaskDir)?;
-            let mask = rascal_core::mask::Mask::read(&dir).map_err(|e| {
-                Error::usage(format!("{key}: {path} is not a stored rascal mask: {e}"))
-            })?;
-            json!({ "mask": mask.identity().as_str() })
+            json!({ "mask": rascal_core::binding::reference_in(key, value)?.identity })
         } else {
             value.clone()
         };
@@ -541,14 +596,14 @@ impl Issued {
 }
 
 /// What differs between the call an estimate was made for and the call as it arrived, for
-/// people: each image whose bytes changed and each argument added, removed or changed.
+/// people: each image whose bytes changed (`images`, the action's image slots or ports) and each
+/// argument added, removed or changed.
 pub fn changed(
-    recipe: &str,
+    images: &[String],
     issued: &IssuedEstimate,
     action: &str,
     now: &BTreeMap<String, String>,
 ) -> String {
-    let images = slots(recipe).map(|s| s.images).unwrap_or_default();
     let mut what = Vec::new();
     if issued.action != action {
         what.push(format!("it was made for {}, not {action}", issued.action));
@@ -582,8 +637,6 @@ pub fn document(
     expires_ms: u128,
 ) -> Estimate {
     let refused = refusal(&price, held);
-    let mut extensions = BTreeMap::new();
-    extensions.insert("x-rascal".to_string(), json!({ "filler": price.filler }));
     Estimate {
         contract: rascal_core::contract::CONTRACT_VERSION.to_string(),
         tool: TmTool {
@@ -593,11 +646,7 @@ pub fn document(
         action: action.to_string(),
         binding: bound.binding.clone(),
         session_id: session.as_ref().map(|s| s.id.clone()),
-        effective: Effective {
-            model: price.model,
-            config_identity: price.config_identity,
-            extensions,
-        },
+        effective: effective(&price),
         worst_case_usd: price.worst_case_usd.map(usd),
         cap_usd: price.cap_usd.map(usd),
         allowed: refused.is_none(),
@@ -625,7 +674,7 @@ pub fn without_session(state: &ConfigState, request: &Value) -> Result<Estimate>
         failed_packs: &failed,
     };
     check_arguments(recipe, action, args, state.config(), &PathRule::Own)?;
-    let price = price(&setup, action, args)?;
+    let price = price(&setup, recipe, action, args)?;
     let bound = bind(
         recipe,
         action,
@@ -717,6 +766,40 @@ mod tests {
         }
     }
 
+    /// The constant sets in force: the recipe's, a filler's override over it, the call's `set`
+    /// over both; a step naming none runs its op's first set; a step without sets is absent.
+    #[test]
+    fn the_constants_in_force_are_the_last_word_by_step() {
+        use rascal_core::recipe::Override;
+        let seam = constants("seam", &BTreeMap::new(), None).unwrap();
+        assert_eq!(
+            seam,
+            [
+                ("fan", "fan-v3"),
+                ("band", "profile-v1"),
+                ("ramp", "ramp-v1")
+            ]
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .into()
+        );
+        let filler: BTreeMap<String, Override> = [(
+            "fan.constants".to_string(),
+            Override::String("fan-v1".to_string()),
+        )]
+        .into();
+        assert_eq!(constants("seam", &filler, None).unwrap()["fan"], "fan-v1");
+        let set = json!({ "fan.constants": "fan-v2", "fan.min_px": 3 });
+        assert_eq!(
+            constants("seam", &filler, Some(&set)).unwrap()["fan"],
+            "fan-v2"
+        );
+        // `remove`'s feather names no set: its op's first.
+        assert_eq!(
+            constants("remove", &BTreeMap::new(), None).unwrap(),
+            [("feather".to_string(), "feather-v1".to_string())].into()
+        );
+    }
+
     /// The table keeps the newest [`Issued::LIMIT`] bindings.
     #[test]
     fn the_issued_table_keeps_the_newest() {
@@ -742,13 +825,14 @@ mod tests {
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
-        let text = changed("seam", &then, "seam", &now);
+        let images = ["image".to_string()];
+        let text = changed(&images, &then, "seam", &now);
         assert_eq!(
             text,
             "the argument `filler` changed; the image `image` changed; the argument `set` was added; the argument `strict` was removed"
         );
         assert_eq!(
-            changed("seam", &then, "remove", &then.parts),
+            changed(&images, &then, "remove", &then.parts),
             "it was made for seam, not remove"
         );
     }

@@ -21,6 +21,10 @@ pub struct Cut;
 const NAME: &str = "cut";
 
 impl Op for Cut {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Prep
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

@@ -1,0 +1,28 @@
+{
+  "artifact": {
+    "frame": "sha256:b99a8275191d807e2c331f13c90c23e421ebe211573b644b99fc613f5d30f95f",
+    "identity": "sha256:a6f8e958637af08a20adc7b495846e4ad24c1fe2b4e2b0a5258ef5c2bdd5d4b2",
+    "on": {
+      "file_sha256": "40ec7298d2c908c6652ebcdd96215dd45ba98c8b7d909ba1767078d63e9a7a50",
+      "height": 200,
+      "projection": "flat",
+      "topology": "bounded",
+      "width": 320
+    },
+    "resource": "rascal://artifact/sha256:a6f8e958637af08a20adc7b495846e4ad24c1fe2b4e2b0a5258ef5c2bdd5d4b2",
+    "schema_version": 1,
+    "tool": "rascal",
+    "type": "rascal:Mask"
+  },
+  "contract": "0.4.0",
+  "file": {
+    "bytes": 7168,
+    "media_type": "application/x-tar",
+    "path": "/work/data/rascal/exports/sha256-a6f8e958637af08a20adc7b495846e4ad24c1fe2b4e2b0a5258ef5c2bdd5d4b2.mask.tar",
+    "sha256": "c2cbefc801104a4c1ec3058d14905ed32ed9199008c08031ea5f096b3bb1a449"
+  },
+  "tool": {
+    "name": "rascal",
+    "version": "0.1.1"
+  }
+}

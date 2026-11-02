@@ -6,21 +6,27 @@ mod exit;
 mod export;
 mod heal;
 mod inspect;
+mod invocation;
 mod lab_run;
 use rascal_mask::lab;
 use rascal_mask::readiness::{self, Setup};
 mod actions;
+mod artifact_resource;
+mod call;
 mod estimate;
 mod measure;
+mod operations;
 mod ops;
 mod packs;
 mod paste;
 mod playground;
+mod preview;
 mod render;
 mod run;
 mod run_json;
 mod serve;
 mod tools;
+mod transfer;
 mod workspace_cmd;
 
 use std::collections::BTreeMap;
@@ -147,17 +153,18 @@ enum Command {
         #[arg(long)]
         strict: bool,
     },
-    /// The MCP server over stdio: every op as a tool over a workspace (SPEC "The MCP server").
+    /// The MCP server over stdio: the table-manners actions (the recipes as tasks, the ops as
+    /// operations) as tools (SPEC "The MCP server").
     Serve {
-        /// The workspace the op tools read and write; the configuration's `[workspace] dir`,
-        /// else `$XDG_DATA_HOME/rascal/workspace`, by default.
+        /// The session's store, where references resolve and operations commit; the
+        /// configuration's `[workspace] dir`, else `$XDG_DATA_HOME/rascal/workspace`, by default.
         #[arg(long)]
         workspace: Option<PathBuf>,
         /// The configuration file (rascal.toml): its fillers and packs. Without one, or with
         /// one that does not load, the server still starts and its actions say what is missing.
         #[arg(long)]
         config: Option<PathBuf>,
-        /// Calls that may run at once; each still commits in turn.
+        /// Runs that may go at once; each still commits in turn.
         #[arg(long, default_value_t = 1)]
         concurrency: usize,
         /// Where the contract's action runs go, one directory each (table-manners);
@@ -169,6 +176,40 @@ enum Command {
         /// caller path is refused and inline images still work (CONTRACT 5.2).
         #[arg(long = "allow-dir", value_name = "ABS_DIR")]
         allow_dir: Vec<PathBuf>,
+    },
+    /// Run one action from exactly the arguments an MCP call sends (table-manners 4.8): the same
+    /// checks and run as `rascal serve`, with no session. Prints the result (or a refusal) on one
+    /// line; exits 0, 3, 64, 130 or 143 as a run does. With `--bundle`, replays an invocation
+    /// bundle (4.9), one result per line, stopping at the first step that does not complete.
+    Call {
+        /// The action: a shipped recipe's or an op's name (`rascal describe --json`).
+        #[arg(required_unless_present = "bundle", conflicts_with = "bundle")]
+        action: Option<String>,
+        /// The call's arguments, a JSON object: a file, or `-` for stdin. A result's
+        /// `invocation.arguments`, with a `path` beside each image's `expect`, call it again.
+        #[arg(
+            long,
+            value_name = "FILE",
+            required_unless_present = "bundle",
+            conflicts_with = "bundle"
+        )]
+        arguments: Option<PathBuf>,
+        /// An invocation bundle a host built (a path under an `--allow-dir`): replay its steps.
+        #[arg(long, value_name = "PATH")]
+        bundle: Option<PathBuf>,
+        /// The configuration file (rascal.toml), as `rascal serve` takes it.
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// A directory whose files the arguments (or `--bundle`) may name by path (repeatable;
+        /// absolute and existing). Without one every path is refused; inline images still work.
+        #[arg(long = "allow-dir", value_name = "ABS_DIR")]
+        allow_dir: Vec<PathBuf>,
+        /// The store references resolve in and operations commit to; `rascal serve`'s default.
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// Where the runs go; `rascal serve`'s default runs root.
+        #[arg(long)]
+        runs: Option<PathBuf>,
     },
     /// The configured tool packs: list their tools, or call one from the shell.
     Tools {
@@ -281,8 +322,43 @@ enum Command {
         #[arg(long)]
         frame_ancestor: Option<String>,
     },
-    /// Project a native envelope or a location onto the copied schemas (ADR 0009).
+    /// Write an artifact's portable form (a Mask's bundle, a location's JSON) into rascal's
+    /// data directory and print the file's path and digest (table-manners 5.1): the export
+    /// tool's request read, its document printed. Exit 0, or 64 with the refusal JSON on stdout.
     Export {
+        /// The request, `{"artifact": <artifact reference>}`, as a JSON file, or `-` for stdin.
+        #[arg(long = "json", value_name = "REQUEST")]
+        json: PathBuf,
+        /// The store the reference resolves in; `serve`'s default without it.
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// The configuration file (rascal.toml): its `[workspace] dir` is the default store.
+        #[arg(long)]
+        config: Option<PathBuf>,
+    },
+    /// Record an exported artifact (a mask bundle or a location JSON, by path or inline) in a
+    /// store and print its reference (table-manners 5.1): the import tool's request read, its
+    /// document printed. A path is read only inside --allow-dir (5.2). Exit 0, or 64 with the
+    /// refusal JSON on stdout.
+    Import {
+        /// The request, `{"file": {"path": …}}` or `{"inline": {"media_type", "data"}}` with an
+        /// optional `sha256`, as a JSON file, or `-` for stdin.
+        #[arg(long = "json", value_name = "REQUEST")]
+        json: PathBuf,
+        /// The store to record in; `serve`'s default without it.
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// The configuration file (rascal.toml): its `[workspace] dir` is the default store and
+        /// its `[serve] allow_dirs` narrows --allow-dir.
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// A directory the request's path may name (absolute, existing; repeatable). Without
+        /// one, every path is refused and inline bytes still work (CONTRACT 5.2).
+        #[arg(long = "allow-dir", value_name = "ABS_DIR")]
+        allow_dir: Vec<PathBuf>,
+    },
+    /// Project a native envelope or a location onto the copied schemas (ADR 0009).
+    CompatExport {
         /// The journal (journal.jsonl) to take the envelope from.
         journal: Option<PathBuf>,
         /// The step whose envelope to export.
@@ -291,9 +367,6 @@ enum Command {
         /// A location JSON file to export standalone instead of an envelope.
         #[arg(long)]
         location: Option<PathBuf>,
-        /// Validate against the copied schemas and write the projection.
-        #[arg(long)]
-        compat: bool,
         /// The file to write; overwritten if it exists.
         #[arg(long)]
         out: PathBuf,
@@ -582,6 +655,8 @@ const RESERVED: &[&str] = &[
     "render",
     "inspect",
     "export",
+    "import",
+    "compat-export",
     "paste",
     "measure",
     "fake-filler",
@@ -677,8 +752,8 @@ fn main() {
                 bbox,
                 location,
                 stroke,
-                protect,
-                mask,
+                protect: protect.map(run::MaskIn::Dir),
+                mask: mask.map(run::MaskIn::Dir),
                 prompt,
                 config,
                 workspace,
@@ -696,8 +771,7 @@ fn main() {
                 eprintln!("rascal run: {error}");
                 std::process::exit(exit::code_for(&error));
             }
-            let pending = run_json::begin(run_json::pending_for(&args, None));
-            run_json::watch_signals();
+            let pending = start("run", &args, None);
             let result = run::run(&args);
             let ended = match &result {
                 Ok(report) => run_json::ended_ok(
@@ -774,8 +848,8 @@ fn main() {
                     bbox,
                     location,
                     stroke,
-                    protect,
-                    mask,
+                    protect: protect.map(run::MaskIn::Dir),
+                    mask: mask.map(run::MaskIn::Dir),
                     prompt,
                     config: Some(config),
                     workspace,
@@ -802,8 +876,7 @@ fn main() {
                 eprintln!("rascal heal: {error}");
                 std::process::exit(exit::code_for(&error));
             }
-            let pending = run_json::begin(run_json::pending_for(&args.run, Some(&args.filler)));
-            run_json::watch_signals();
+            let pending = start("heal", &args.run, Some(&args.filler));
             let result = heal::heal(&args);
             let ended = match &result {
                 Ok(report) => run_json::ended_ok(
@@ -856,6 +929,35 @@ fn main() {
                 }
             }
         }
+        Command::Call {
+            action,
+            arguments,
+            bundle,
+            config,
+            allow_dir,
+            workspace,
+            runs,
+        } => match (bundle, action, arguments) {
+            (Some(bundle), _, _) => call::replay(&call::BundleArgs {
+                bundle,
+                config,
+                allow_dirs: allow_dir,
+                workspace,
+                runs,
+            }),
+            (None, Some(action), Some(arguments)) => call::call(&call::CallArgs {
+                action,
+                arguments,
+                config,
+                allow_dirs: allow_dir,
+                workspace,
+                runs,
+            }),
+            _ => {
+                eprintln!("rascal call: give <action> --arguments <file>, or --bundle <path>");
+                exit::USAGE
+            }
+        },
         Command::Serve {
             workspace,
             config,
@@ -1124,18 +1226,40 @@ fn main() {
             }
         }
         Command::Export {
+            json,
+            workspace,
+            config,
+        } => transfer::command(
+            transfer::Direction::Export,
+            &json,
+            workspace.as_deref(),
+            config.as_deref(),
+            &[],
+        ),
+        Command::Import {
+            json,
+            workspace,
+            config,
+            allow_dir,
+        } => transfer::command(
+            transfer::Direction::Import,
+            &json,
+            workspace.as_deref(),
+            config.as_deref(),
+            &allow_dir,
+        ),
+        Command::CompatExport {
             journal,
             step,
             location,
-            compat,
             out,
-        } => match export::run(&journal, step.as_deref(), &location, compat, &out) {
+        } => match export::run(&journal, step.as_deref(), &location, &out) {
             Ok(path) => {
                 println!("{}", path.display());
                 exit::OK
             }
             Err(error) => {
-                eprintln!("rascal export: {error}");
+                eprintln!("rascal compat-export: {error}");
                 exit::code_for(&error)
             }
         },
@@ -1302,9 +1426,20 @@ fn describe_cmd(json: bool, config: Option<&std::path::Path>) -> rascal_core::er
         println!("{text}");
         return Ok(());
     }
+    let profiles: Vec<&str> = description
+        .profiles
+        .iter()
+        .map(|p| match p {
+            rascal_core::contract::table_manners::Profile::Images => "images",
+            rascal_core::contract::table_manners::Profile::Operations => "operations",
+        })
+        .collect();
     println!(
-        "{} {} (table-manners {}, profiles: images)",
-        description.tool.name, description.tool.version, description.contract
+        "{} {} (table-manners {}, profiles: {})",
+        description.tool.name,
+        description.tool.version,
+        description.contract,
+        profiles.join(", ")
     );
     for action in &description.actions {
         let ready = match action.readiness.state {
@@ -1322,7 +1457,16 @@ fn describe_cmd(json: bool, config: Option<&std::path::Path>) -> rascal_core::er
                 )
             ),
         };
-        println!("{:<14} {}{ready}", action.name, action.title);
+        let mut kind = match action.kind {
+            rascal_core::contract::table_manners::ActionKind::Task => "task",
+            rascal_core::contract::table_manners::ActionKind::Operation => "operation",
+            rascal_core::contract::table_manners::ActionKind::Utility => "utility",
+        }
+        .to_string();
+        if let Some(group) = &action.group {
+            kind = format!("{kind}, {group}");
+        }
+        println!("{:<14} {:<18} {}{ready}", action.name, kind, action.title);
     }
     Ok(())
 }
@@ -1372,6 +1516,30 @@ fn estimate_cmd(
         estimate.expires
     );
     Ok(())
+}
+
+/// Starts a command-line `run` or `heal` (with `filler`): its flags resolve to the invocation
+/// (4.8) first, and only then is the run registered and the signal watcher started, so a
+/// signal can only ever cancel a run that records what it was asked. Flags that do not resolve
+/// end the command `invalid` before anything runs: `run.json` with a null invocation (the one
+/// status that may lack it) when `--out` is the caller's, and exit 64.
+fn start(command: &str, args: &run::RunArgs, filler: Option<&str>) -> run_json::Pending {
+    match invocation::of_command(args, filler) {
+        Ok(invocation) => {
+            let pending = run_json::begin(run_json::pending_for(args, filler), invocation);
+            run_json::watch_signals();
+            pending
+        }
+        Err(error) => {
+            let pending = run_json::pending_for(args, filler);
+            if pending.fresh {
+                let _ = std::fs::create_dir_all(&pending.dir);
+            }
+            run_json::conclude(&pending, run_json::ended_with(&args.recipe, &error));
+            eprintln!("rascal {command}: {error}");
+            std::process::exit(exit::USAGE);
+        }
+    }
 }
 
 /// The command line's readiness check for `run` and `heal` (table-manners 3.1): the same check

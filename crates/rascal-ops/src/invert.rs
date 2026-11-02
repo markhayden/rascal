@@ -13,7 +13,8 @@ use rascal_core::error::Result;
 use rascal_core::frame::{Frame, FrameKind};
 use rascal_core::mask::{Mask, Source, UseCase};
 use rascal_core::op::{
-    Context, Cost, CostTier, Inputs, Manifest, Op, Output, Param, ParamKind, Params, Port,
+    Context, Cost, CostTier, FrameMismatch, Framed, Inputs, Manifest, Op, Output, Param, ParamKind,
+    Params, Port,
 };
 use rascal_core::recipe::mask_artifact;
 
@@ -25,6 +26,15 @@ pub struct Invert;
 const NAME: &str = "invert";
 
 impl Op for Invert {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Refine
+    }
+
+    /// One input, in any frame: `to` names the target frame on its chain, which the run checks.
+    fn check_frames(&self, _inputs: &[Framed<'_>]) -> Vec<FrameMismatch> {
+        Vec::new()
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

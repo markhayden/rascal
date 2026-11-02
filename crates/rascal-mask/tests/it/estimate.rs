@@ -238,7 +238,9 @@ fn an_estimate_is_allowed_or_refused_for_cap_budget_or_readiness() {
     assert_eq!(
         allowed["effective"]["x-rascal"],
         serde_json::json!({ "filler": { "name": "hosted", "kind": "http", "revision": "hosted-1",
-                                        "paste": "feather", "fill_max_side": 512 } })
+                                        "paste": "feather", "fill_max_side": 512 },
+                            "constants": { "fan": "fan-v3", "band": "profile-v1",
+                                           "ramp": "ramp-v1" } })
     );
     let readiness = &allowed["readiness"];
     assert_eq!(readiness["state"], "ready");
@@ -261,7 +263,9 @@ fn an_estimate_is_allowed_or_refused_for_cap_budget_or_readiness() {
     assert_eq!(free["effective"]["model"], serde_json::Value::Null);
     assert_eq!(
         free["effective"]["x-rascal"],
-        serde_json::json!({ "filler": null })
+        serde_json::json!({ "filler": null,
+                            "constants": { "fan": "fan-v3", "band": "profile-v1",
+                                           "ramp": "ramp-v1" } })
     );
     assert_eq!(
         free["effective"]["config_identity"],
@@ -744,6 +748,196 @@ fn an_allowed_estimate_is_no_reservation() {
     assert_eq!(s["status"], "error", "{s:#}");
     assert_eq!(s["error"]["code"], "budget", "{s:#}");
     assert_eq!(seen.lock().unwrap().len(), 1);
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 10.9: Line → Rasterize in `client`'s store; the Mask's reference and the location's.
+fn held_mask(client: &mut Client) -> (serde_json::Value, serde_json::Value) {
+    let floor = repo_root().join("fixtures/images/floor.png");
+    let line = client
+        .call(
+            "line",
+            serde_json::json!({ "image": { "path": floor.to_str().unwrap() }, "column": 0.5, "width_px": 24 }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    assert_eq!(line["status"], "completed", "{line:#}");
+    let location = line["artifacts"]["out"][0]["artifact"].clone();
+    let image = line["artifacts"]["in"][0]["artifact"].clone();
+    let rasterized = client
+        .call(
+            "rasterize",
+            serde_json::json!({ "location": location, "image": image }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    assert_eq!(rasterized["status"], "completed", "{rasterized:#}");
+    (
+        rasterized["artifacts"]["out"][0]["artifact"].clone(),
+        location,
+    )
+}
+
+/// Task 10.9 (4.5): an operation's estimate is allowed at 0 under the configured cap, names no
+/// model and the constant set it would use, and is ready; its binding is the same for the same
+/// call and changes with a parameter, the Mask's identity and the configuration.
+#[test]
+fn an_operation_estimate_is_allowed_at_zero_and_its_binding_follows_the_call() {
+    let dir = scratch("operation");
+    let (url, _seen) = spawn(Behaviour::Exact, None);
+    let config_a = config(&dir, &url, "call_cap_usd = 0.5");
+    let mut client = serve(&dir, Some(&config_a), false);
+    let (mask, _) = held_mask(&mut client);
+    let args = serde_json::json!({ "mask": mask, "sigma_px": 6 });
+    let e = estimate(&mut client, "feather", args.clone());
+    assert_eq!(e["action"], "feather");
+    assert_eq!(e["allowed"], true, "{e:#}");
+    assert_eq!(e["worst_case_usd"], 0.0);
+    assert_eq!(e["cap_usd"], 0.5);
+    assert_eq!(e["effective"]["model"], serde_json::Value::Null);
+    assert_eq!(
+        e["effective"]["x-rascal"]["constants"], "feather-v1",
+        "{e:#}"
+    );
+    assert_eq!(e["readiness"]["state"], "ready");
+    assert_eq!(
+        estimate(&mut client, "feather", args)["binding"],
+        e["binding"]
+    );
+    let wider = estimate(
+        &mut client,
+        "feather",
+        serde_json::json!({ "mask": mask, "sigma_px": 7 }),
+    );
+    assert_ne!(wider["binding"], e["binding"], "the parameter");
+    let feathered = client
+        .call(
+            "feather",
+            serde_json::json!({ "mask": mask, "sigma_px": 6 }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    let other = feathered["artifacts"]["out"][0]["artifact"].clone();
+    assert_ne!(other["identity"], mask["identity"]);
+    let on_other = estimate(
+        &mut client,
+        "feather",
+        serde_json::json!({ "mask": other, "sigma_px": 6 }),
+    );
+    assert_ne!(on_other["binding"], e["binding"], "the Mask's identity");
+    client.close().unwrap();
+    // Another configuration over the same store.
+    let config_b = dir.join("other.toml");
+    std::fs::write(
+        &config_b,
+        std::fs::read_to_string(&config_a)
+            .unwrap()
+            .replace("call_cap_usd = 0.5", "call_cap_usd = 0.25"),
+    )
+    .unwrap();
+    let mut client = serve(&dir, Some(&config_b), false);
+    let elsewhere = estimate(
+        &mut client,
+        "feather",
+        serde_json::json!({ "mask": mask, "sigma_px": 6 }),
+    );
+    assert_ne!(
+        elsewhere["effective"]["config_identity"],
+        e["effective"]["config_identity"]
+    );
+    assert_eq!(elsewhere["cap_usd"], 0.25);
+    assert_ne!(elsewhere["binding"], e["binding"], "the configuration");
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 10.9: every binding problem is the same `binding` refusal from `estimate` as from the
+/// call, byte-equal in its `bindings`.
+#[test]
+fn an_operation_estimate_refuses_what_the_call_refuses() {
+    let dir = scratch("operation-refused");
+    let mut client = serve(&dir, None, false);
+    let (mask, location) = held_mask(&mut client);
+    let mut unresolved = mask.clone();
+    unresolved["identity"] = serde_json::json!(format!("sha256:{}", "0".repeat(64)));
+    let mut newer = mask.clone();
+    newer["schema_version"] = serde_json::json!(2);
+    for (problem, given) in [
+        ("wrong_type", location),
+        ("unresolved", unresolved),
+        ("wrong_version", newer),
+    ] {
+        let args = serde_json::json!({ "mask": given, "sigma_px": 6 });
+        let (code, data) = refused(
+            &mut client,
+            serde_json::json!({ "action": "feather", "arguments": args }),
+        );
+        assert_eq!(code, -32602, "{problem}");
+        let data = data.unwrap();
+        valid("urn:table-manners:core:refusal", &data);
+        assert_eq!(data["reason"], "binding", "{problem}: {data:#}");
+        assert_eq!(data["bindings"][0]["problem"], problem, "{data:#}");
+        let call = match client.call("feather", args) {
+            Err(Failure::Rpc { data, .. }) => data.unwrap(),
+            other => panic!("{problem}: not refused: {other:?}"),
+        };
+        assert_eq!(
+            serde_json::to_string(&data["bindings"]).unwrap(),
+            serde_json::to_string(&call["bindings"]).unwrap(),
+            "{problem}"
+        );
+    }
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 10.9 (4.5, 12.6): an operation call carrying its estimate's binding runs; with another
+/// parameter it ends `invalid`/`stale_estimate` naming what changed.
+#[test]
+fn an_operation_call_carrying_its_estimate_runs_and_a_changed_one_is_stale() {
+    let dir = scratch("operation-bound");
+    let mut client = serve(&dir, None, false);
+    let (mask, _) = held_mask(&mut client);
+    let e = estimate(
+        &mut client,
+        "feather",
+        serde_json::json!({ "mask": mask, "sigma_px": 6 }),
+    );
+    let meta = serde_json::json!({ "table-manners/estimate": e["binding"] });
+    let ran = client
+        .call_with_meta(
+            "feather",
+            serde_json::json!({ "mask": mask, "sigma_px": 6 }),
+            meta.clone(),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    valid("urn:table-manners:core:result", &ran);
+    assert_eq!(ran["status"], "completed", "{ran:#}");
+    let stale = client
+        .call_with_meta(
+            "feather",
+            serde_json::json!({ "mask": mask, "sigma_px": 7 }),
+            meta,
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    valid("urn:table-manners:core:result", &stale);
+    assert_eq!(stale["status"], "invalid", "{stale:#}");
+    assert_eq!(stale["error"]["code"], "stale_estimate");
+    assert!(
+        stale["error"]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("sigma_px"),
+        "{stale:#}"
+    );
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }

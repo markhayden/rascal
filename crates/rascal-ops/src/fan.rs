@@ -171,6 +171,10 @@ const TUNABLES: [(&str, &str); 10] = [
 ];
 
 impl Op for Fan {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Refine
+    }
+
     fn manifest(&self) -> Manifest {
         let defaults = set(DEFAULT_SET).expect("the default set is embedded");
         let number = |key: &str| -> serde_json::Value {

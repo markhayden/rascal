@@ -2,6 +2,10 @@
 //! graph is linked once, not once per file. `cargo nextest run` runs each test in its own
 //! process.
 
+mod artifact_resource;
+mod binding;
+mod call_bundle;
+mod call_cli;
 mod cli;
 mod contract_locations;
 mod corpus_cli;
@@ -22,6 +26,8 @@ mod lab_pairs;
 mod lab_run;
 mod measure_cli;
 mod no_provider_call;
+mod operations;
+mod operations_path;
 mod ops_cli;
 mod packs;
 mod packs_real;
@@ -39,5 +45,6 @@ mod serve;
 mod serve_contract;
 mod table_manners_fixtures;
 mod tools_setup;
+mod transfer;
 mod walking_slice;
 mod workspace_cli;

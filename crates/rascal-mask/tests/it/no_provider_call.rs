@@ -3,7 +3,7 @@
 //! load, a loaded file) and every credential state (missing, present, valid after a 2xx,
 //! invalid after a 401), `describe` (the command line, with and without `--json`, and the tool),
 //! `estimate` (the command line and the tool; allowed and refused for the cap, the budget and
-//! readiness) and every `not_ready` refusal (the tool's and the command line's) leave the
+//! readiness; an operation's too, task 10.9) and every `not_ready` refusal (the tool's and the command line's) leave the
 //! recording fake HTTP filler with no request, the fake segmenter pack never started (its
 //! start marker absent), and the runs root and the workspace (its registry generations among
 //! its files) as they were.
@@ -314,6 +314,18 @@ fn the_server_describes_estimates_and_refuses_without_a_provider_call() {
                 refusals.contains(&json!("readiness")),
                 "{what}: {refusals:?}"
             );
+            // An operation's estimate (task 10.9) is free and calls no provider either.
+            let operation = client
+                .call(
+                    "estimate",
+                    json!({ "action": "line",
+                            "arguments": { "image": image(), "column": 0.5, "width_px": 24 } }),
+                )
+                .unwrap()
+                .structured
+                .unwrap();
+            assert_eq!(operation["worst_case_usd"], 0.0, "{what}: {operation:#}");
+            assert_eq!(operation["readiness"]["state"], "ready", "{what}");
             if state == "loaded" && credential != "missing" && credential != "invalid" {
                 let expected = if credential == "valid" {
                     "budget"

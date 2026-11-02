@@ -1,7 +1,8 @@
 //! The isolation suite (G5): instruction-like text in filenames, prompts and tool output
 //! never alters control flow across recipes, workspaces and packs; ids never resolve outside
-//! the registry; a pack receives the allowlisted environment only. (A filler's key appearing
-//! in no file is proven in `tests/it/fillers.rs` and `tests/it/heal.rs`.)
+//! the registry, and through `serve` (task 10.6) a reference resolves only by identity in the
+//! store, never as a path; a pack receives the allowlisted environment only. (A filler's key
+//! appearing in no file is proven in `tests/it/fillers.rs` and `tests/it/heal.rs`.)
 #![cfg(feature = "testkit")]
 #![allow(clippy::unwrap_used)]
 
@@ -180,6 +181,101 @@ fn ids_never_resolve_outside_the_registry() {
         "2",
     ]);
     assert_ne!(out.status.code(), Some(0));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn served_references_resolve_only_by_identity_in_the_store() {
+    use rascal_testkit::mcp_client::{Client, Failure};
+    let dir = scratch("refs");
+    let secret = dir.join("secret.json");
+    std::fs::write(&secret, "{\"leak\": true}").unwrap();
+    let mut command = rascal_testkit::mcp_client::serve_command(env!("CARGO_BIN_EXE_rascal"));
+    command
+        .args([
+            "--workspace",
+            dir.join("ws").to_str().unwrap(),
+            "--runs",
+            dir.join("runs").to_str().unwrap(),
+        ])
+        .env_remove("RASCAL_LOG");
+    let mut client = Client::start(&mut command).unwrap();
+    let floor = repo_root().join("fixtures/images/floor.png");
+    let rect = client
+        .call(
+            "rect",
+            serde_json::json!({ "image": { "path": floor.to_str().unwrap() }, "bbox": [0.2, 0.2, 0.6, 0.6] }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    assert_eq!(rect["status"], "completed", "{rect:#}");
+    let location = rect["artifacts"]["out"][0]["artifact"].clone();
+    // Path-shaped identities, a foreign resource scheme and an instruction-like type: each is
+    // refused before any run, never read; a well-formed identity the store lacks is unresolved.
+    let secret_path = secret.to_str().unwrap();
+    let mut shaped = Vec::new();
+    for (field, value) in [
+        ("identity", serde_json::json!("../secret.json")),
+        ("identity", serde_json::json!(secret_path)),
+        ("identity", serde_json::json!("/etc/hosts")),
+        (
+            "resource",
+            serde_json::json!(format!("file://{secret_path}")),
+        ),
+        ("type", serde_json::json!(INJECTION)),
+    ] {
+        let mut reference = location.clone();
+        reference["type"] = serde_json::json!("rascal:Mask");
+        reference[field] = value;
+        shaped.push(reference);
+    }
+    let mut unknown = location.clone();
+    unknown["type"] = serde_json::json!("rascal:Mask");
+    unknown["identity"] = serde_json::json!(format!("sha256:{}", "0".repeat(64)));
+    shaped.push(unknown);
+    for reference in shaped {
+        match client.call(
+            "feather",
+            serde_json::json!({ "mask": reference, "sigma_px": 2 }),
+        ) {
+            Err(Failure::Rpc {
+                code,
+                message,
+                data,
+            }) => {
+                assert_eq!(code, -32602, "{message}");
+                let data = data.unwrap_or_default();
+                assert!(
+                    !message.contains("leak") && !data.to_string().contains("leak"),
+                    "{message} {data}"
+                );
+                if data.get("reason").is_some() {
+                    assert_eq!(data["reason"], "binding", "{data}");
+                }
+            }
+            other => panic!("{reference}: {other:?}"),
+        }
+    }
+    // A location given by value naming a frame by a path-like id is the run's invalid, unread.
+    let result = client
+        .call(
+            "rasterize",
+            serde_json::json!({ "image": rect["artifacts"]["in"][0]["artifact"],
+                                "location": { "kind": "bbox", "frame": "../secret.json", "bbox": [0.1, 0.1, 0.2, 0.2] } }),
+        )
+        .unwrap()
+        .structured
+        .unwrap();
+    assert_eq!(result["status"], "invalid", "{result:#}");
+    assert!(!result.to_string().contains("leak"));
+    assert!(
+        !std::fs::read_dir(dir.join("runs"))
+            .unwrap()
+            .flatten()
+            .any(|e| e.path().join("secret.json").exists())
+    );
+    client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
 

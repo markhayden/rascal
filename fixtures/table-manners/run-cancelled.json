@@ -1,11 +1,45 @@
 {
   "action": "seam",
+  "artifacts": {
+    "in": [],
+    "out": [
+      {
+        "artifact": {
+          "frame": "sha256:ff4b879cce1f3b84311b6209a25866ac63915853883918fb42b6e4faa1a95519",
+          "identity": "sha256:feeebc65d7c05a27dc313a563615ac04c0ca1215db675748064519d5bd87db8b",
+          "on": {
+            "file_sha256": "6b2cc035c6a965b3acc1b302f368c5976fe2073d0dc5edb651f3e8f56993d3c4",
+            "height": 400,
+            "projection": "equirectangular",
+            "topology": "wrap",
+            "width": 800
+          },
+          "resource": "rascal://artifact/sha256:feeebc65d7c05a27dc313a563615ac04c0ca1215db675748064519d5bd87db8b",
+          "schema_version": 1,
+          "tool": "rascal",
+          "type": "rascal:Mask"
+        },
+        "port": "mask",
+        "preview": {
+          "image": {
+            "file_sha256": "b84225f6ed513c4835102b9b8f8a7c5a0dea2e4791bd06b44650839f12bf2916",
+            "height": 400,
+            "projection": "flat",
+            "topology": "bounded",
+            "width": 112
+          },
+          "path": "/runs/run-1767225600003-1/preview-mask.png",
+          "role": "preview"
+        }
+      }
+    ]
+  },
   "body": {
     "recipe": "seam",
     "stopped_before": "paste"
   },
   "cache": "off",
-  "contract": "0.3.0",
+  "contract": "0.4.0",
   "duration_ms": 0,
   "error": null,
   "finished": "2026-01-01T00:00:00.000Z",
@@ -35,10 +69,62 @@
         },
         "path": "/runs/run-1767225600003-1/seam-grey.png",
         "role": "mask"
+      },
+      {
+        "image": {
+          "file_sha256": "b84225f6ed513c4835102b9b8f8a7c5a0dea2e4791bd06b44650839f12bf2916",
+          "height": 400,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 112
+        },
+        "path": "/runs/run-1767225600003-1/preview-mask.png",
+        "role": "preview"
       }
     ]
   },
   "input_identity": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "invocation": {
+    "action": "seam",
+    "arguments": {
+      "filler": "slow",
+      "image": {
+        "expect": {
+          "file_sha256": "6b2cc035c6a965b3acc1b302f368c5976fe2073d0dc5edb651f3e8f56993d3c4",
+          "height": 400,
+          "pixel_sha256": "894b4c9db72b3252f86d31c4c5c5539b2e62db427b1465940b749bfddc26b66b",
+          "projection": "equirectangular",
+          "topology": "wrap",
+          "width": 800
+        }
+      },
+      "projection": "equirectangular",
+      "strict": false
+    },
+    "effective": {
+      "config_identity": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0002",
+      "model": "fillers.slow",
+      "x-rascal": {
+        "constants": {
+          "band": "profile-v1",
+          "fan": "fan-v3",
+          "ramp": "ramp-v1"
+        },
+        "filler": {
+          "fill_max_side": null,
+          "kind": "command",
+          "name": "slow",
+          "paste": "feather",
+          "revision": "slow"
+        }
+      }
+    },
+    "requirements": [
+      "rascal.toml",
+      "fillers.slow",
+      "rascal"
+    ]
+  },
   "locations": {
     "found": [],
     "used": []

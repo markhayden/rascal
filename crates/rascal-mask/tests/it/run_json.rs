@@ -1,6 +1,11 @@
 //! Task 8.4 (ADR 0020): every `run` and `heal` writes `run.json`, the contract's result, last
 //! and atomically: completed, invalid and error runs, each valid against table-manners' result
 //! schema; a failed heal keeps the mask it made; an `--out` that held something is not touched.
+//! Task 10.2 (table-manners 4.8): every one records its invocation as the matching action's
+//! arguments, null only on an `invalid` run whose arguments did not resolve.
+//! Task 10.4 (table-manners 4.7): rascal is an operations tool, so every result carries
+//! `artifacts`, a command-line run's empty until tasks list their Masks (10.8; an operation's are
+//! `tests/it/operations.rs`).
 #![cfg(feature = "testkit")]
 #![allow(clippy::unwrap_used)]
 
@@ -63,6 +68,14 @@ fn run_json(dir: &Path) -> serde_json::Value {
         .collect();
     assert!(errors.is_empty(), "{errors:?}\n{value:#}");
     assert!(!dir.join(".run.json.tmp").exists());
+    // A task lists at most the one Mask it made, with its preview in the run directory (10.8).
+    let out = value["artifacts"]["out"].as_array().unwrap();
+    assert!(out.len() <= 1, "{value:#}");
+    for entry in out {
+        assert_eq!(entry["port"], "mask");
+        assert_eq!(entry["artifact"]["type"], "rascal:Mask");
+        assert!(dir.join("preview-mask.png").is_file(), "{value:#}");
+    }
     value
 }
 
@@ -118,7 +131,8 @@ fn a_completed_heal_names_its_input_its_mask_and_its_result() {
         .iter()
         .map(|o| o["role"].as_str().unwrap())
         .collect();
-    assert_eq!(roles, ["mask", "result"]);
+    // The Mask's preview follows the renders (10.8).
+    assert_eq!(roles, ["mask", "result", "preview"]);
     let result = &r["images"]["out"][1];
     assert_eq!(result["image"]["width"], 800);
     assert_eq!(
@@ -128,6 +142,22 @@ fn a_completed_heal_names_its_input_its_mask_and_its_result() {
     assert!(Path::new(result["path"].as_str().unwrap()).is_file());
     assert_eq!(r["body"]["filler"], "fake");
     assert_eq!(r["body"]["outcome"], "ok");
+    // The heal as the action's call: the image by its reference, the filler, the defaults.
+    assert_eq!(r["invocation"]["action"], "seam");
+    assert_eq!(
+        r["invocation"]["arguments"],
+        serde_json::json!({
+            "image": { "expect": r["images"]["in"][0]["image"] },
+            "filler": "fake",
+            "projection": "equirectangular",
+            "strict": false,
+        }),
+        "{r:#}"
+    );
+    assert_eq!(
+        r["invocation"]["requirements"],
+        serde_json::json!(["rascal.toml", "fillers.fake", "rascal"])
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -259,6 +289,13 @@ fn an_invalid_request_is_invalid_and_a_used_location_is_listed() {
         r["locations"]["used"][0]["parts"][0]["bbox"],
         serde_json::json!([0.27, 0.21, 0.53, 0.79])
     );
+    // rascal's own location file is written as the contract location the run used.
+    assert_eq!(r["invocation"]["action"], "remove");
+    assert_eq!(
+        r["invocation"]["arguments"]["location"],
+        r["locations"]["used"][0]
+    );
+    assert_eq!(r["invocation"]["arguments"]["projection"], "flat");
     let bad = rascal(&[
         "run",
         "remove",
@@ -276,6 +313,8 @@ fn an_invalid_request_is_invalid_and_a_used_location_is_listed() {
     assert_eq!(r["status"], "invalid");
     assert_eq!(r["error"]["code"], "input");
     assert_eq!(r["error"]["retryable"], false);
+    // A location on another image: the arguments did not resolve, so no invocation.
+    assert_eq!(r["invocation"], serde_json::Value::Null);
     // Equal requests have equal identities; a different location does not.
     let again = rascal(&[
         "run",
@@ -372,7 +411,117 @@ fn a_signal_cancels_the_run_and_says_so() {
         assert_eq!(r["spend"]["usd"], 0.04, "SIG{signal}: {r:#}");
         assert_eq!(r["spend"]["unresolved_usd"], 0.04);
         assert_eq!(r["images"]["in"].as_array().unwrap().len(), 1);
+        // Cancelled, it still records what it was asked (4.8).
+        assert_eq!(r["invocation"]["action"], "seam", "SIG{signal}: {r:#}");
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Flags that do not resolve end the run `invalid` (exit 64) before it starts, so no signal can
+/// cancel a run that has no invocation (4.8 allows a null one only on `invalid`). The image is a
+/// FIFO: it is no file, so the flags do not resolve, and a run that went on regardless would
+/// block reading it, a window in which a signal used to write `cancelled` with a null
+/// invocation. The command must end by itself; if it hangs, it is signalled and the assertions
+/// below say what it wrote.
+#[test]
+fn flags_that_do_not_resolve_never_start_a_run_a_signal_could_cancel() {
+    let dir = scratch("unresolved-signal");
+    let fifo = dir.join("pano.png");
+    let made = Command::new("mkfifo").arg(&fifo).status().unwrap();
+    assert!(made.success());
+    let slow = priced(&dir, "slow", None);
+    for command in ["run", "heal"] {
+        let run = dir.join(format!("run-{command}"));
+        let mut args = vec![command, "seam", fifo.to_str().unwrap()];
+        if command == "heal" {
+            args.extend(["--filler", "fake", "--no-dash", "--config"]);
+            args.push(slow.to_str().unwrap());
+        }
+        args.extend(["--out", run.to_str().unwrap()]);
+        let mut child = Command::new(env!("CARGO_BIN_EXE_rascal"))
+            .args(&args)
+            .env_remove("RASCAL_LOG")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let started = std::time::Instant::now();
+        let status = loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                break status;
+            }
+            if started.elapsed().as_secs() >= 20 {
+                let _ = Command::new("kill")
+                    .args(["-TERM", &child.id().to_string()])
+                    .status();
+                break child.wait().unwrap();
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        };
+        let r = run_json(&run);
+        assert_eq!(r["status"], "invalid", "{command}: {r:#}");
+        assert_eq!(r["invocation"], serde_json::Value::Null);
+        assert_eq!(status.code(), Some(64), "{command}");
+        // Nothing ran: the run directory holds its result and nothing else.
+        let entries: Vec<_> = std::fs::read_dir(&run)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(entries, ["run.json"], "{command}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 10.2: a command line's flags as the action's arguments: `--bbox` a contract location on
+/// the image (the one the run used), `--set` the `set` object with its values typed, `--strict`
+/// and `--projection` as given, and no path anywhere.
+#[test]
+fn a_command_lines_invocation_is_the_actions_arguments() {
+    let dir = scratch("cli-invocation");
+    let image = repo_root().join("fixtures/images/chair-blob.png");
+    let out = rascal(&[
+        "run",
+        "remove",
+        image.to_str().unwrap(),
+        "--bbox",
+        "0.27,0.21,0.53,0.79",
+        "--set",
+        "grow.px=8",
+        "--set",
+        "feather.sigma_px=2.5",
+        "--projection",
+        "flat",
+        "--strict",
+        "--out",
+        dir.join("run").to_str().unwrap(),
+    ]);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let r = run_json(&dir.join("run"));
+    let invocation = &r["invocation"];
+    assert_eq!(invocation["action"], "remove");
+    assert_eq!(
+        invocation["arguments"],
+        serde_json::json!({
+            "image": { "expect": r["images"]["in"][0]["image"] },
+            "location": r["locations"]["used"][0],
+            "set": { "grow.px": 8, "feather.sigma_px": 2.5 },
+            "projection": "flat",
+            "strict": true,
+        }),
+        "{r:#}"
+    );
+    assert_eq!(invocation["requirements"], serde_json::json!([]));
+    assert_eq!(
+        invocation["effective"]["config_identity"],
+        rascal_core::config::Config::builtin().identity().as_str()
+    );
+    assert!(!invocation.to_string().contains(dir.to_str().unwrap()));
+    assert!(!invocation.to_string().contains("fixtures/images"));
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -469,6 +618,15 @@ fn masked(mut value: serde_json::Value, scratch: &Path) -> serde_json::Value {
     }
     value["duration_ms"] = serde_json::json!(0);
     value["run"]["id"] = serde_json::json!("<id>");
+    // The configuration names the fake filler by this checkout's path, so its identity is
+    // machine-specific; the built-in defaults' is the same everywhere.
+    let builtin = rascal_core::config::Config::builtin().identity();
+    if let Some(identity) = value.pointer_mut("/invocation/effective/config_identity")
+        && identity.is_string()
+        && identity != builtin.as_str()
+    {
+        *identity = serde_json::json!(format!("sha256:{}0001", "c".repeat(60)));
+    }
     value["run"]["resource"] = serde_json::json!("rascal://run/<id>/run.json");
     value["tool"]["version"] = serde_json::json!("<version>");
     value

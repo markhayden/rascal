@@ -33,7 +33,7 @@ use rascal_mcp::client::Pack;
 use rascal_mcp::provision::{PACK_NAME, install_dir_of};
 
 use crate::heal::{self, HealArgs};
-use crate::run::RunArgs;
+use crate::run::{MaskIn, RunArgs};
 
 /// What `lab run` was asked to do.
 pub struct LabRunArgs {
@@ -305,8 +305,8 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
                 bbox: None,
                 location: plan.inputs.get("location").cloned(),
                 stroke: plan.inputs.get("stroke").cloned(),
-                protect: plan.inputs.get("protect").cloned(),
-                mask: plan.inputs.get("mask").cloned(),
+                protect: plan.inputs.get("protect").cloned().map(MaskIn::Dir),
+                mask: plan.inputs.get("mask").cloned().map(MaskIn::Dir),
                 prompt: None,
                 config: Some(args.config.clone()),
                 workspace: None,

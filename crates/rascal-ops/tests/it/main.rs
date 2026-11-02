@@ -5,6 +5,8 @@
 mod cut_put;
 mod fan;
 mod fan_thin_widths;
+mod frames;
+mod groups;
 mod grow_shrink_close;
 mod measure;
 mod paste;

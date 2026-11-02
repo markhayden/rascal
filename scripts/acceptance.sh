@@ -84,15 +84,10 @@ python3 -I -c '
 import json, sys
 wanted, listing = sys.argv[1], sys.argv[2]
 rows = json.load(open(listing))
-assert any(r["id"] == wanted for r in rows), rows
+assert any(r["identity"] == wanted for r in rows), rows
 print("the CLI sees the served mask")
 ' "$served_mask" "$scratch/served-masks.json"
-served_dir="$(python3 -I -c '
-import json, sys
-wanted, listing = sys.argv[1], sys.argv[2]
-rows = json.load(open(listing))
-print(next(r["identity"] for r in rows if r["id"] == wanted).split(":")[1] + ".mask")
-' "$served_mask" "$scratch/served-masks.json")"
+served_dir="${served_mask#sha256:}.mask"
 inspected "$runs/served/artifacts/$served_dir"
 
 step "docs coverage, read from the installed binary"

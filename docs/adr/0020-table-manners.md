@@ -127,3 +127,18 @@ The contract's `fixtures/rascal/` at v0.3 comes from rascal's own test
 (`table_manners_fixtures.rs`), held to the contract exactly as the contract's own fixtures test
 holds it, and `no_provider_call.rs` proves that `describe` and `estimate` make no provider call
 in any configuration or credential state (`docs/contract.md`, "Conformance").
+
+## Amendment (M10, task 10.6): operations are actions
+
+What "does not change" above no longer holds for the op tools: on v0.4 each built-in op is an
+operation of the description, served as an action tool whose call is a run (ports bound by
+artifact reference before the run, the op run on the session's store, `artifacts` with previews
+in `run.json`), and the op tools with their envelopes leave `serve` (ADR 0015's amendment). The
+envelope stays rascal's own record of a step and is the operation's `body.envelope`.
+
+## Note 2026-11-01: ADR 0021
+
+Milestone M10 records the v0.4 surface as its own decision, ADR 0021 "Operations are actions"
+(references, the binding refusal, the store, previews, the artifact resource, export and import,
+`rascal call` and bundles, the path rule). The contract's `fixtures/rascal/` at v0.4 comes from
+the same test as before, `table_manners_fixtures.rs`.

@@ -11,7 +11,9 @@ use rascal_core::artifact::{Artifact, ArtifactType};
 use rascal_core::error::Result;
 use rascal_core::frame::Frame;
 use rascal_core::image::{Image, Role};
-use rascal_core::op::{Context, Cost, CostTier, Inputs, Manifest, Op, Output, Params, Port};
+use rascal_core::op::{
+    Context, Cost, CostTier, FrameMismatch, Framed, Inputs, Manifest, Op, Output, Params, Port,
+};
 
 /// The op.
 pub struct Put;
@@ -19,6 +21,35 @@ pub struct Put;
 const NAME: &str = "put";
 
 impl Op for Put {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Prep
+    }
+
+    /// The canvas in the cut frame of the image's frame, and the plan made for the image's
+    /// frame.
+    fn check_frames(&self, inputs: &[Framed<'_>]) -> Vec<FrameMismatch> {
+        let mut out = rascal_core::op::derived_frame(
+            inputs,
+            "image",
+            "canvas",
+            rascal_core::frame::FrameKind::Cut,
+        );
+        if let Some(image) = inputs.iter().find(|i| i.port == "image") {
+            out.extend(
+                inputs
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, i)| i.port == "plan" && i.frame.identity != image.frame.identity)
+                    .map(|(at, _)| FrameMismatch {
+                        at,
+                        wanted: "the frame of image (the frame the plan was made for)".to_string(),
+                    }),
+            );
+            out.sort_by_key(|m| m.at);
+        }
+        out
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

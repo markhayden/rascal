@@ -33,6 +33,10 @@ pub fn support() -> f64 {
 }
 
 impl Op for Feather {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Refine
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

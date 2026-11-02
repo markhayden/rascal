@@ -1,0 +1,40 @@
+{
+  "artifact": {
+    "frame": "sha256:cae6a7e96ce5120c0c1122d9ee5a25646732bd1522170877204a88def89aa71d",
+    "identity": "sha256:d472d3204af41863d3685e977a8fcd5521b7928becf77befed10b9a5a23c52fa",
+    "on": {
+      "file_sha256": "6b2cc035c6a965b3acc1b302f368c5976fe2073d0dc5edb651f3e8f56993d3c4",
+      "height": 400,
+      "projection": "equirectangular",
+      "topology": "wrap",
+      "width": 800
+    },
+    "resource": "rascal://artifact/sha256:d472d3204af41863d3685e977a8fcd5521b7928becf77befed10b9a5a23c52fa",
+    "schema_version": 1,
+    "tool": "rascal",
+    "type": "rascal:Plan"
+  },
+  "contract": "0.4.0",
+  "preview": null,
+  "record": {
+    "height": 400,
+    "identity": "sha256:d472d3204af41863d3685e977a8fcd5521b7928becf77befed10b9a5a23c52fa",
+    "left_span": [
+      720,
+      800
+    ],
+    "parent": "raw:800x400:equirectangular",
+    "parent_identity": "sha256:cae6a7e96ce5120c0c1122d9ee5a25646732bd1522170877204a88def89aa71d",
+    "plan_version": 1,
+    "right_span": [
+      0,
+      80
+    ],
+    "strip": 80,
+    "width": 800
+  },
+  "tool": {
+    "name": "rascal",
+    "version": "0.1.1"
+  }
+}

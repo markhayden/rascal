@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "input",
+    "reason": "inline: neither a mask bundle nor a location: it is a PNG image; a rendering of a Mask is an image, never the Mask (CONTRACT 5.1); nothing was imported",
+    "retryable": false
+  },
+  "reason": "invalid_arguments",
+  "run": null
+}

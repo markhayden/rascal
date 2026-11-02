@@ -2,13 +2,16 @@
 //! [--allow-dir <abs>]...`: the MCP server over stdio. Nothing but the protocol goes to stdout;
 //! tracing goes to stderr (`RASCAL_LOG`). It starts in every configuration state (table-manners 3.1, 5): with no file,
 //! a file that does not exist or one that does not load, its actions say what is missing and a
-//! call that needs it is refused `not_ready`. With `[packs.*]` in the configuration, their tools
-//! are served too, journaling into the same workspace; a pack that does not start leaves its
-//! tools out and says why on stderr. The contract's action tools (one per shipped recipe, and
-//! `describe`) run each call in its own run directory under `--runs` and serve the runs as
-//! resources (table-manners; ADR 0020). A caller's path is read only inside the directories
-//! `--allow-dir` names, narrowed by `[serve] allow_dirs` (CONTRACT 5.2, `rascal_core::paths`);
-//! with none, every path is refused and inline images still work.
+//! call that needs it is refused `not_ready`. It serves one MCP tool per action of the
+//! description (the shipped recipes as tasks, the built-in ops as operations) plus `describe`
+//! and `estimate`, and nothing else (CONTRACT 5): every call is a run in its own run directory
+//! under `--runs`, the runs served as resources (ADR 0020). The workspace is the session's
+//! store (CONTRACT 3.4, 4.7): artifact references resolve there by identity, and an operation's
+//! outputs commit there. Each `[packs.*]` entry is started once at start to learn whether it
+//! starts (its readiness requirement, 12.2) and then stopped; a pack's tools are not served, and
+//! the segmenter is reached through `remove_prompt`. A caller's path is read only inside the
+//! directories `--allow-dir` names, narrowed by `[serve] allow_dirs` (CONTRACT 5.2,
+//! `rascal_core::paths`); with none, every path is refused and inline images still work.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -21,8 +24,9 @@ use rascal_core::workspace::Workspace;
 use rascal_mcp::server::Server;
 
 pub struct ServeArgs {
-    /// The op tools' workspace; the configuration's `[workspace] dir` (relative to the file),
-    /// else `$XDG_DATA_HOME/rascal/workspace`, by default.
+    /// The session's store, where references resolve and operations commit; the
+    /// configuration's `[workspace] dir` (relative to the file), else
+    /// `$XDG_DATA_HOME/rascal/workspace`, by default.
     pub workspace: Option<PathBuf>,
     pub config: Option<PathBuf>,
     pub concurrency: usize,
@@ -52,13 +56,14 @@ pub fn default_workspace(config: &ConfigState) -> PathBuf {
 /// non-directory one is a usage error, exit 64, before anything is served), narrowed by the
 /// configuration's `[serve] allow_dirs`. A configuration that does not load allows no caller
 /// path (fail closed: what it would narrow is unknown); `serve` still starts, and inline images
-/// still work. The set, and why anything was dropped, go to stderr.
-pub fn allowed(flags: &[PathBuf], state: &ConfigState) -> Result<PathRule> {
+/// still work. The set, and why anything was dropped, go to stderr under `who` (`rascal serve`,
+/// `rascal call`).
+pub fn allowed(flags: &[PathBuf], state: &ConfigState, who: &str) -> Result<PathRule> {
     let flags = paths::resolve_flags(flags)?;
     let configured = match state {
         ConfigState::Invalid { .. } => {
             eprintln!(
-                "rascal serve: the configuration does not load, so what its [serve] allow_dirs would allow is unknown and no caller path is allowed"
+                "{who}: the configuration does not load, so what its [serve] allow_dirs would allow is unknown and no caller path is allowed"
             );
             Some(Vec::new())
         }
@@ -70,7 +75,7 @@ pub fn allowed(flags: &[PathBuf], state: &ConfigState) -> Result<PathRule> {
                 let (resolved, dropped) = paths::resolve_configured(dirs);
                 for dir in dropped {
                     eprintln!(
-                        "rascal serve: serve.allow_dirs: {dir} is not a directory, so it allows nothing"
+                        "{who}: serve.allow_dirs: {dir} is not a directory, so it allows nothing"
                     );
                 }
                 resolved
@@ -79,27 +84,35 @@ pub fn allowed(flags: &[PathBuf], state: &ConfigState) -> Result<PathRule> {
     let allowed = paths::overlap(&flags, configured.as_deref());
     if allowed.is_empty() {
         eprintln!(
-            "rascal serve: no directory is allowed, so every caller path is refused (inline images still work); give {} <absolute directory>",
+            "{who}: no directory is allowed, so every caller path is refused (inline images still work); give {} <absolute directory>",
             paths::FLAG
         );
     } else {
         let list: Vec<String> = allowed.iter().map(|d| d.display().to_string()).collect();
         eprintln!(
-            "rascal serve: callers' paths are read only inside: {}",
+            "{who}: callers' paths are read only inside: {}",
             list.join(", ")
         );
     }
     Ok(PathRule::Allowed(allowed))
 }
 
-/// Serves until the client closes the connection.
-pub fn serve(args: &ServeArgs) -> Result<()> {
+/// The contract's actions over a store, as `serve` and `rascal call` (PLAN.md 10.12) both run
+/// them: the configuration read once in whatever state, the path rule, the store (`--workspace`,
+/// else the default), each pack started once to learn whether it starts, the runs root and the
+/// built-in ops. `session` is `serve`'s; `rascal call` has none. `who` names the command in what
+/// goes to stderr.
+pub fn contract_actions(
+    args: &ServeArgs,
+    session: Option<crate::actions::Session>,
+    who: &str,
+) -> Result<crate::actions::ContractActions> {
     let state = ConfigState::read(args.config.as_deref());
     // The host's own flags are checked before anything is opened or answered.
-    let paths = allowed(&args.allow_dirs, &state)?;
+    let paths = allowed(&args.allow_dirs, &state, who)?;
     if let ConfigState::Invalid { reason, .. } = &state {
         eprintln!(
-            "rascal serve: the configuration does not load, so the actions that need it are not ready: {reason}"
+            "{who}: the configuration does not load, so the actions that need it are not ready: {reason}"
         );
     }
     let config = state.config().cloned();
@@ -108,16 +121,23 @@ pub fn serve(args: &ServeArgs) -> Result<()> {
         .clone()
         .unwrap_or_else(|| default_workspace(&state));
     let workspace = Arc::new(Workspace::open(&workspace_dir)?);
-    let (registry, packs, failed_packs) =
-        crate::packs::registry_tolerant(config.as_ref(), &workspace, None)?;
-    let failed_packs: std::collections::BTreeMap<String, String> = failed_packs
-        .into_iter()
-        .map(|(name, error)| {
-            eprintln!("rascal serve: packs.{name} did not start, so its tools are absent: {error}");
-            (name, error.to_string())
-        })
-        .collect();
-    let actions = Arc::new(crate::actions::ContractActions {
+    // Each pack is started once to learn whether it starts (its readiness requirement reads
+    // `invalid` when it does not, 12.2), then stopped: no pack tool is served.
+    let failed_packs: std::collections::BTreeMap<String, String> = {
+        let (_, packs, failed) =
+            crate::packs::registry_tolerant(config.as_ref(), &workspace, None)?;
+        drop(packs);
+        failed
+            .into_iter()
+            .map(|(name, error)| {
+                eprintln!(
+                    "{who}: packs.{name} did not start, so the actions that need it are not ready: {error}"
+                );
+                (name, error.to_string())
+            })
+            .collect()
+    };
+    Ok(crate::actions::ContractActions {
         config_path: config
             .is_some()
             .then(|| state.path().map(PathBuf::from))
@@ -131,28 +151,27 @@ pub fn serve(args: &ServeArgs) -> Result<()> {
             .clone()
             .unwrap_or_else(crate::actions::default_runs_root),
         ledger: std::sync::Mutex::default(),
-        session: crate::actions::Session::start(),
+        session,
         issued: std::sync::Mutex::default(),
-        paths: paths.clone(),
-    });
-    let server = Server::new(
-        workspace,
-        registry,
-        args.concurrency,
-        Some(Arc::new(|root: &std::path::Path| {
-            crate::dash::write(root, &root.join("dash.html"))
-        })),
-        &packs,
-    )?
-    .with_actions(actions)
-    .with_paths(paths);
+        paths,
+        store: workspace,
+        ops: rascal_ops::registry()?,
+    })
+}
+
+/// Serves until the client closes the connection.
+pub fn serve(args: &ServeArgs) -> Result<()> {
+    let actions = Arc::new(contract_actions(
+        args,
+        Some(crate::actions::Session::start()),
+        "rascal serve",
+    )?);
+    let server = Server::new(actions, args.concurrency);
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .map_err(|e| Error::op("serve", format!("runtime: {e}")))?;
     let served = runtime.block_on(server.serve_stdio());
-    // The packs stop on this thread, after the runtime, so their escalation can block.
     drop(runtime);
-    drop(packs);
     served
 }

@@ -1,0 +1,17 @@
+{
+  "image": {
+    "file_sha256": "40ec7298d2c908c6652ebcdd96215dd45ba98c8b7d909ba1767078d63e9a7a50",
+    "width": 320,
+    "height": 200,
+    "projection": "flat",
+    "topology": "bounded"
+  },
+  "kind": "line",
+  "parts": [
+    {
+      "column": 0.5,
+      "width_px": 24.0
+    }
+  ],
+  "straddles_wrap": false
+}

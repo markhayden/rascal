@@ -18,6 +18,10 @@ pub struct Shrink;
 const NAME: &str = "shrink";
 
 impl Op for Shrink {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Refine
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

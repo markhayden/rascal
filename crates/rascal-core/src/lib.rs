@@ -6,6 +6,7 @@
 //! (task 1.1) brought in a minimal form say which later task replaces them.
 
 pub mod artifact;
+pub mod binding;
 pub mod bundle;
 pub mod canonical;
 pub mod config;
@@ -15,6 +16,7 @@ pub mod export;
 pub mod frame;
 pub mod identity;
 pub mod image;
+pub mod invocation_bundle;
 pub mod journal;
 pub mod lab;
 pub mod location;

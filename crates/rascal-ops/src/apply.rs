@@ -20,6 +20,10 @@ pub struct Apply;
 const NAME: &str = "apply";
 
 impl Op for Apply {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Prep
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

@@ -28,8 +28,8 @@ pub struct RunArgs {
     pub bbox: Option<String>,
     pub location: Option<PathBuf>,
     pub stroke: Option<PathBuf>,
-    pub protect: Option<PathBuf>,
-    pub mask: Option<PathBuf>,
+    pub protect: Option<MaskIn>,
+    pub mask: Option<MaskIn>,
     pub prompt: Option<String>,
     pub config: Option<PathBuf>,
     pub workspace: Option<PathBuf>,
@@ -46,6 +46,35 @@ pub struct RunArgs {
     pub sets: Vec<String>,
     /// Set by a caller (a client's cancellation) to stop the run between steps.
     pub cancel: Option<Arc<rascal_core::workspace::Cancel>>,
+}
+
+/// A Mask a run binds to `inputs.mask` or `inputs.protect`: a stored mask directory a person
+/// named on the command line, or the bundle of a Mask `serve` bound by reference in its store
+/// (PLAN.md 10.3), which the run imports into its own workspace with its frame chain.
+#[derive(Clone)]
+pub enum MaskIn {
+    Dir(PathBuf),
+    Bundle(Arc<rascal_core::workspace::ExportedMask>),
+}
+
+impl std::fmt::Debug for MaskIn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MaskIn::Dir(path) => write!(f, "Dir({})", path.display()),
+            MaskIn::Bundle(bundle) => write!(f, "Bundle({})", bundle.identity),
+        }
+    }
+}
+
+impl MaskIn {
+    /// What the run's input identity digests for it: the directory as given, or the Mask's
+    /// identity.
+    pub fn digest_part(&self) -> String {
+        match self {
+            MaskIn::Dir(path) => path.display().to_string(),
+            MaskIn::Bundle(bundle) => bundle.identity.clone(),
+        }
+    }
 }
 
 /// One `--set`: `<step>.<param>=<value>`, the value read as TOML (`0.3`, `1`, `true`,
@@ -122,12 +151,7 @@ pub fn declares_prompt(recipe: &Recipe) -> bool {
 /// (text) from `--prompt`; a declared input without its flag, or a flag without its input,
 /// is a usage error.
 pub fn run(args: &RunArgs) -> Result<RunReport> {
-    if args.prompt.is_some() && !declares_prompt(&load_recipe(&args.recipe)?) {
-        return Err(Error::usage(format!(
-            "recipe {} declares no inputs.prompt; --prompt does not apply (remove-prompt takes one)",
-            args.recipe
-        )));
-    }
+    check_flags(args, &load_recipe(&args.recipe)?, false)?;
     let Prepared { run, outcome, .. } = run_recipe(args)?;
     let mask_dir = match outcome.outputs.get("mask") {
         Some(Artifact::Mask(mask)) => Some(mask.path_in(&run.workspace.root.join("artifacts"))),
@@ -142,19 +166,19 @@ pub fn run(args: &RunArgs) -> Result<RunReport> {
     })
 }
 
-/// Binds the inputs and runs the recipe; `heal` continues from the outcome. The registry is
-/// built here: the shipped ops plus every configured pack's tools, journaling into the run's
-/// workspace (so the run directory exists before the recipe is validated). A pack that does not
-/// start is noted and leaves its tools out, so a recipe that needs none of them still runs and
-/// one that does fails with the pack's own error.
-pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
-    let config = args
-        .config
-        .as_deref()
-        .map(rascal_core::config::Config::read)
-        .transpose()?;
-    let mut recipe = load_recipe(&args.recipe)?;
-    if declares_prompt(&recipe) && args.prompt.is_none() {
+/// The checks a run's flags get against its recipe before anything is read or made: a `prompt`
+/// it declares is given, every declared input has its flag and every flag its input, and the
+/// recipe takes an image. A `run` (`filler` false) also refuses `--prompt` for a recipe that
+/// declares none; a `heal` passes it to the filler. The command line's invocation makes these
+/// checks first, so flags that do not apply never start a run.
+pub fn check_flags(args: &RunArgs, recipe: &Recipe, filler: bool) -> Result<()> {
+    if !filler && args.prompt.is_some() && !declares_prompt(recipe) {
+        return Err(Error::usage(format!(
+            "recipe {} declares no inputs.prompt; --prompt does not apply (remove-prompt takes one)",
+            args.recipe
+        )));
+    }
+    if declares_prompt(recipe) && args.prompt.is_none() {
         return Err(Error::usage(format!(
             "recipe {} needs inputs.prompt: give --prompt",
             recipe.name
@@ -191,6 +215,22 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
             recipe.name
         )));
     }
+    Ok(())
+}
+
+/// Binds the inputs and runs the recipe; `heal` continues from the outcome. The registry is
+/// built here: the shipped ops plus every configured pack's tools, journaling into the run's
+/// workspace (so the run directory exists before the recipe is validated). A pack that does not
+/// start is noted and leaves its tools out, so a recipe that needs none of them still runs and
+/// one that does fails with the pack's own error.
+pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
+    let config = args
+        .config
+        .as_deref()
+        .map(rascal_core::config::Config::read)
+        .transpose()?;
+    let mut recipe = load_recipe(&args.recipe)?;
+    check_flags(args, &recipe, true)?;
     let bbox = args.bbox.as_deref().map(Location::parse_bbox).transpose()?;
     if !args.image.is_file() {
         return Err(Error::io(
@@ -285,34 +325,50 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
         let (_, artifact) = run.workspace.add_location(location)?;
         inputs.insert("stroke".to_string(), artifact);
     }
-    for (name, path) in [("protect", &args.protect), ("mask", &args.mask)] {
-        if let Some(path) = path {
-            let mask = Mask::read(path)?;
-            // The mask is in the image's frame, or (for protect's second pass) in a frame
-            // derived from it that the workspace knows: a cut canvas or a crop of it.
-            if mask.record.frame != frame.id {
-                let root = run
-                    .workspace
-                    .frames()?
-                    .chain(&mask.record.frame)
-                    .ok()
-                    .and_then(|chain| chain.last().map(|f| f.id.clone()));
-                if root.as_deref() != Some(frame.id.as_str()) {
-                    return Err(Error::usage(format!(
-                        "{}: the mask is in frame {} but the image is in {}{}",
-                        path.display(),
-                        mask.record.frame,
-                        frame.id,
-                        if root.is_none() {
-                            "; the workspace does not know the mask's frame (use --workspace from the run that made it)"
-                        } else {
-                            ""
-                        }
-                    )));
-                }
+    for (name, given) in [("protect", &args.protect), ("mask", &args.mask)] {
+        let Some(given) = given else {
+            continue;
+        };
+        let (named, mask) = match given {
+            MaskIn::Dir(path) => (path.display().to_string(), Mask::read(path)?),
+            // A Mask bound by reference enters the run's workspace with its frame chain, after
+            // the image, so a chain rooted in the image's frame joins it.
+            MaskIn::Bundle(bundle) => {
+                let imported = run.workspace.import_mask_bytes(
+                    &bundle.bytes,
+                    name,
+                    name,
+                    Some(&bundle.sha256),
+                )?;
+                let Artifact::Mask(mask) = run.workspace.load(&imported.id)? else {
+                    return Err(Error::usage(format!("{name}: the bundle holds no Mask")));
+                };
+                (name.to_string(), (*mask).clone())
             }
-            inputs.insert(name.to_string(), Artifact::Mask(Arc::new(mask)));
+        };
+        // The mask is in the image's frame, or (for protect's second pass) in a frame derived
+        // from it that the workspace knows: a cut canvas or a crop of it.
+        if mask.record.frame != frame.id {
+            let root = run
+                .workspace
+                .frames()?
+                .chain(&mask.record.frame)
+                .ok()
+                .and_then(|chain| chain.last().map(|f| f.id.clone()));
+            if root.as_deref() != Some(frame.id.as_str()) {
+                return Err(Error::usage(format!(
+                    "{named}: the mask is in frame {} but the image is in {}{}",
+                    mask.record.frame,
+                    frame.id,
+                    if root.is_none() {
+                        "; the workspace does not know the mask's frame (use --workspace from the run that made it)"
+                    } else {
+                        ""
+                    }
+                )));
+            }
         }
+        inputs.insert(name.to_string(), Artifact::Mask(Arc::new(mask)));
     }
 
     let mut texts: BTreeMap<String, String> = BTreeMap::new();

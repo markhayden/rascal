@@ -201,6 +201,11 @@ impl PackOp {
 }
 
 impl Op for PackOp {
+    /// A pack's ops find things (the segmenter); they are not described (PLAN.md M10, question 6).
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Find
+    }
+
     fn manifest(&self) -> Manifest {
         self.tool.manifest.clone()
     }

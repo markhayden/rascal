@@ -11,4 +11,5 @@ pub mod fake_install;
 pub mod fake_pack;
 pub mod fs_shim;
 pub mod images;
+pub mod invocation_bundle;
 pub mod mcp_client;

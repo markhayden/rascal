@@ -1,5 +1,5 @@
 //! `run.json`: the contract's result header and rascal's body, written atomically and last into
-//! every run directory (table-manners 2 and 11.1; ADR 0020). `run` and `heal` call [`finish`]
+//! every run directory (table-manners 2, 4.7 and 11.1; ADR 0020). `run` and `heal` call [`finish`]
 //! with however far they got; a signal calls it through [`Pending`] with status `cancelled`.
 
 use std::path::{Path, PathBuf};
@@ -11,8 +11,9 @@ use rascal_core::contract::table_manners::images::{
     ImageOut, ImageReference, ImageTaken, Images, Location as TmLocation, Locations, Locator,
     Projection as TmProjection, Source, Topology as TmTopology,
 };
+use rascal_core::contract::table_manners::operations::{ArtifactEntry, ArtifactRef, Artifacts};
 use rascal_core::contract::table_manners::{
-    Cache, ErrorCode, ErrorInfo, Run, RunResult, Spend, SpendBasis, Status, Tool,
+    Cache, ErrorCode, ErrorInfo, Invocation, Run, RunResult, Spend, SpendBasis, Status, Tool,
 };
 use rascal_core::contract::{self, LocationMeta, location_out};
 use rascal_mask::filler::{self, Spent};
@@ -84,6 +85,12 @@ pub struct Pending {
     pub input_identity: String,
     pub images_in: Vec<ImageTaken>,
     pub locations_used: Vec<TmLocation>,
+    /// What the call resolved to (4.8, `crate::invocation`); none only when its arguments did
+    /// not resolve, which ends the run `invalid`.
+    pub invocation: Option<Invocation>,
+    /// Notes known before the run, which its result carries first (the bundle replay's report
+    /// of a rebound reference, CONTRACT 4.9).
+    pub notes: Vec<String>,
 }
 
 /// The run a signal would cancel, if any.
@@ -178,8 +185,10 @@ pub fn fresh(dir: &Path) -> bool {
     }
 }
 
-/// Registers a run a signal may cancel, and returns it.
-pub fn begin(pending: Pending) -> Pending {
+/// Registers a run a signal may cancel, with the invocation its flags resolved to, and returns
+/// it: a run is registered only once it has one, so a cancelled `run.json` always records it.
+pub fn begin(mut pending: Pending, invocation: Invocation) -> Pending {
+    pending.invocation = Some(invocation);
     if let Ok(mut current) = CURRENT.lock() {
         *current = Some(pending.clone());
     }
@@ -239,7 +248,8 @@ fn from_workspace(
     if let Ok(lines) = rascal_core::journal::Journal::read(&workspace_dir.join("journal.jsonl")) {
         notes.extend(lines.into_iter().filter_map(|l| l.note));
     }
-    let Ok(ws) = rascal_core::workspace::Workspace::open(workspace_dir) else {
+    // Read only: a run that never made its workspace is not given one by its result.
+    let Ok(ws) = rascal_core::workspace::Workspace::open_read_only(workspace_dir) else {
         return (None, vec![], vec![], notes);
     };
     let records = ws.records().unwrap_or_default();
@@ -295,16 +305,21 @@ fn from_workspace(
     (input, used, found, notes)
 }
 
+/// Where a task's Mask goes once it is listed: `serve` publishes it into the session's store
+/// (PLAN.md 10.8); the command line has none. Called with the Mask's identity before `run.json`
+/// is written; an error is said in the result's `notes`.
+pub type Publish<'a> = &'a (dyn Fn(&str) -> rascal_core::error::Result<()> + Sync);
+
 /// Writes `run.json` into the run directory, atomically (a temporary name, then a rename).
 pub fn finish(
     pending: &Pending,
     workspace_dir: &Path,
     ended: Ended,
+    publish: Option<Publish<'_>>,
 ) -> rascal_core::error::Result<Spent> {
     if let Ok(mut current) = CURRENT.lock() {
         *current = None;
     }
-    let finished = now_ms();
     let (input, used, found, mut notes) = from_workspace(workspace_dir);
     // The spend is the journal's, whatever the status (2.1, 4.5): a call that may have been
     // charged is never reported as zero; the part no answer settled is `spend.unresolved_usd`.
@@ -347,6 +362,140 @@ pub fn finish(
             locator: Locator::Path(absolute(path)),
         });
     }
+    let artifacts = task_artifacts(pending, workspace_dir, &mut out, &mut notes);
+    if let Some(publish) = publish {
+        for entry in &artifacts.out {
+            if let Err(e) = publish(&entry.artifact.identity) {
+                notes.push(format!(
+                    "the Mask {} was not published into the session's store, so its reference does not bind there: {e}",
+                    entry.artifact.identity
+                ));
+            }
+        }
+    }
+    let locations = Locations {
+        used: if pending.locations_used.is_empty() {
+            used
+        } else {
+            pending.locations_used.clone()
+        },
+        found,
+    };
+    let produced = Produced {
+        images: Images { taken, out },
+        artifacts,
+        locations,
+        notes,
+        spent,
+    };
+    finish_with(
+        pending,
+        ended.status,
+        ended.error,
+        ended.cache,
+        body,
+        produced,
+    )
+    .map(|()| spent)
+}
+
+/// A task's artifacts (4.7; PLAN.md 10.8): in, the `mask` and `protect` references its
+/// invocation names; out, the Mask the run recorded making ([`rascal_core::recipe::read_outputs`],
+/// so also on `error` and `cancelled` once its step completed), as `port: "mask"` with its
+/// reference in the run's workspace and its preview, drawn there (`crate::preview::draw`, the
+/// overlay on the run's image), written as `preview-mask.png` in the run directory and added to
+/// `images` (`out`). A Mask that cannot be listed is said in `notes`.
+fn task_artifacts(
+    pending: &Pending,
+    workspace_dir: &Path,
+    images_out: &mut Vec<ImageOut>,
+    notes: &mut Vec<String>,
+) -> Artifacts {
+    let mut taken = Vec::new();
+    if let Some(invocation) = &pending.invocation {
+        for port in ["mask", "protect"] {
+            if let Some(reference) = invocation
+                .arguments
+                .get(port)
+                .and_then(|v| serde_json::from_value::<ArtifactRef>(v.clone()).ok())
+            {
+                taken.push(ArtifactEntry {
+                    port: port.to_string(),
+                    artifact: reference,
+                    preview: None,
+                });
+            }
+        }
+    }
+    let mut out = Vec::new();
+    if let Some(identity) = rascal_core::recipe::read_outputs(&pending.dir).get("mask") {
+        match mask_entry(pending, workspace_dir, identity) {
+            Ok(entry) => {
+                images_out.extend(entry.preview.clone());
+                out.push(entry);
+            }
+            Err(e) => notes.push(format!(
+                "the run's Mask {identity} could not be listed: {e}"
+            )),
+        }
+    }
+    Artifacts { taken, out }
+}
+
+/// The out entry of the Mask `identity` the run made, with its preview.
+fn mask_entry(
+    pending: &Pending,
+    workspace_dir: &Path,
+    identity: &str,
+) -> rascal_core::error::Result<ArtifactEntry> {
+    let ws = rascal_core::workspace::Workspace::open_read_only(workspace_dir)?;
+    let artifact = contract::artifact_ref(&ws, identity)?;
+    let ops = rascal_ops::registry()?;
+    let preview = match crate::preview::draw(&ws, &ops, identity)? {
+        Some((bytes, frame)) => {
+            let file = pending.dir.join(PREVIEW_FILE);
+            std::fs::write(&file, &bytes).map_err(|e| Error::io(&file, e))?;
+            Some(crate::preview::image_out(
+                &bytes,
+                &frame,
+                Locator::Path(absolute(&file)),
+            )?)
+        }
+        None => None,
+    };
+    Ok(ArtifactEntry {
+        port: "mask".to_string(),
+        artifact,
+        preview,
+    })
+}
+
+/// The task's Mask preview in its run directory.
+pub const PREVIEW_FILE: &str = rascal_core::recipe::MASK_PREVIEW_FILE;
+
+/// What a run produced beyond its header, for its `run.json`: the images, artifacts and
+/// locations it took and made (4.7, 11.1), its notes, and what it spent.
+pub struct Produced {
+    pub images: Images,
+    pub artifacts: Artifacts,
+    pub locations: Locations,
+    pub notes: Vec<String>,
+    pub spent: Spent,
+}
+
+/// Writes `run.json` into the run directory from its parts, atomically: the header from
+/// `pending` and the outcome, and what the run produced. A task's comes through [`finish`]; an
+/// operation's (`crate::operations`) directly.
+pub fn finish_with(
+    pending: &Pending,
+    status: Status,
+    error: Option<ErrorInfo>,
+    cache: Option<bool>,
+    body: serde_json::Map<String, Value>,
+    produced: Produced,
+) -> rascal_core::error::Result<()> {
+    let finished = now_ms();
+    let spent = produced.spent;
     let result = RunResult {
         contract: contract::CONTRACT_VERSION.to_string(),
         tool: Tool {
@@ -361,12 +510,13 @@ pub fn finish(
             client_run_id: pending.client_run_id.clone(),
             dir: Some(absolute(&pending.dir)),
         },
-        status: ended.status,
-        error: ended.error,
+        status,
+        error,
         started: rfc3339(pending.started_ms),
         finished: rfc3339(finished),
         duration_ms: u64::try_from(finished.saturating_sub(pending.started_ms)).unwrap_or(u64::MAX),
         input_identity: pending.input_identity.clone(),
+        invocation: pending.invocation.clone(),
         spend: Spend {
             usd: usd(spent.usd),
             unresolved_usd: usd(spent.unresolved_usd),
@@ -376,24 +526,23 @@ pub fn finish(
                 SpendBasis::Estimated
             },
         },
-        cache: match ended.cache {
+        cache: match cache {
             Some(true) => Cache::Hit,
             Some(false) => Cache::Miss,
             None => Cache::Off,
         },
-        images: Some(Images { taken, out }),
-        locations: Some(Locations {
-            used: if pending.locations_used.is_empty() {
-                used
-            } else {
-                pending.locations_used.clone()
-            },
-            found,
-        }),
-        notes,
+        images: Some(produced.images),
+        artifacts: Some(produced.artifacts),
+        locations: Some(produced.locations),
+        notes: pending
+            .notes
+            .iter()
+            .cloned()
+            .chain(produced.notes)
+            .collect(),
         body,
     };
-    write(&pending.dir, &result).map(|()| spent)
+    write(&pending.dir, &result)
 }
 
 /// A dollar amount as the contract writes it: at most six decimals (4.6), so a sum of prices
@@ -417,8 +566,10 @@ pub fn write(dir: &Path, result: &RunResult) -> rascal_core::error::Result<()> {
 /// starts: its id, action, directory, start time and input identity.
 pub fn pending_for(args: &crate::run::RunArgs, filler: Option<&str>) -> Pending {
     let started_ms = allocate_ms();
+    // Only regular files are read: a FIFO or a device named as an input would block the read.
     let digest_of = |p: &Option<PathBuf>| {
         p.as_ref()
+            .filter(|p| p.is_file())
             .and_then(|p| std::fs::read(p).ok())
             .map(|b| contract::file_sha256(&b))
     };
@@ -434,8 +585,8 @@ pub fn pending_for(args: &crate::run::RunArgs, filler: Option<&str>) -> Pending 
         "bbox": args.bbox,
         "location": digest_of(&args.location),
         "stroke": digest_of(&args.stroke),
-        "protect": args.protect.as_ref().map(|p| p.display().to_string()),
-        "mask": args.mask.as_ref().map(|p| p.display().to_string()),
+        "protect": args.protect.as_ref().map(crate::run::MaskIn::digest_part),
+        "mask": args.mask.as_ref().map(crate::run::MaskIn::digest_part),
         "prompt": args.prompt,
         "set": args.sets,
         "projection": args.projection.map(|p| format!("{p:?}")),
@@ -453,6 +604,8 @@ pub fn pending_for(args: &crate::run::RunArgs, filler: Option<&str>) -> Pending 
         input_identity: format!("sha256:{}", input_identity(&parts)),
         images_in: Vec::new(),
         locations_used: Vec::new(),
+        invocation: None,
+        notes: Vec::new(),
     }
 }
 
@@ -490,6 +643,15 @@ pub fn body_of(
 /// run got as far as making it, and returns what the run spent; `None` when nothing was written
 /// (a failure to write is reported on stderr, never as the run's).
 pub fn conclude(pending: &Pending, ended: Ended) -> Option<Spent> {
+    conclude_publishing(pending, ended, None)
+}
+
+/// [`conclude`], with the task's Mask handed to `publish` before `run.json` is written.
+pub fn conclude_publishing(
+    pending: &Pending,
+    ended: Ended,
+    publish: Option<Publish<'_>>,
+) -> Option<Spent> {
     let workspace_dir = pending.workspace.clone();
     let workspace_dir = workspace_dir.as_path();
     if !pending.fresh || !pending.dir.is_dir() {
@@ -513,7 +675,7 @@ pub fn conclude(pending: &Pending, ended: Ended) -> Option<Spent> {
                 .extend(greys.into_iter().map(|p| ("grey".to_string(), p)));
         }
     }
-    finish(pending, workspace_dir, ended)
+    finish(pending, workspace_dir, ended, publish)
         .map_err(|error| eprintln!("rascal: run.json: {error}"))
         .ok()
 }
@@ -594,6 +756,7 @@ pub fn watch_signals() {
                     body,
                     cache: None,
                 },
+                None,
             );
         }
         eprintln!("rascal: cancelled by signal");

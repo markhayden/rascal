@@ -86,6 +86,10 @@ const TUNABLES: [(&str, &str, f64, f64); 5] = [
 ];
 
 impl Op for Tighten {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Refine
+    }
+
     fn manifest(&self) -> Manifest {
         let number = |key: &str| {
             set()

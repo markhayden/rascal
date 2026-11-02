@@ -22,6 +22,10 @@ pub struct Inspect;
 const NAME: &str = "inspect";
 
 impl Op for Inspect {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Inspect
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             NAME,

@@ -62,6 +62,10 @@ fn location(frame: &Frame) -> Artifact {
 struct Probe;
 
 impl Op for Probe {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Refine
+    }
+
     fn manifest(&self) -> Manifest {
         Manifest::new(
             "probe",
@@ -285,6 +289,10 @@ fn a_malformed_manifest_is_refused_at_registration() {
     // Through the registry: a bad manifest and a duplicate name.
     struct Bad;
     impl Op for Bad {
+        fn group(&self) -> rascal_core::op::Group {
+            rascal_core::op::Group::Refine
+        }
+
         fn manifest(&self) -> Manifest {
             let mut m = Probe.manifest();
             m.when_to_use = String::new();
