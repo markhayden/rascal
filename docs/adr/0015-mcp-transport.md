@@ -1,6 +1,9 @@
 # ADR 0015: the MCP transport
 
-Decided 2026-10-29 (M3 task 3.1). Status: accepted.
+Decided 2026-10-29 (M3 task 3.1). Status: accepted; superseded in part by ADR 0021 (2026-11-01):
+its op surface (the op tools, their envelopes, workspace ids in arguments, the `workspace_*`
+tools) is gone; its transport decision (the SDK, the revision, stdio, the independent client)
+stands.
 
 ## Context
 

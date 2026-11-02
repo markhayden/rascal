@@ -2431,17 +2431,33 @@ path rule), `docs/tools.md` (the operations as actions; the op CLI unchanged), `
 "Workspace", "External interface" and "Commands", README (`serve --allow-dir`, `rascal call`,
 `export --json`, `import --json`), `docs/architecture.md`.
 
+As built: the fixtures come from `v04_set` in `table_manners_fixtures.rs` beside the M11 and
+v0.3 sets, from servers whose data and cache sit under the scratch directory (so the export area
+and the preview cache normalise to `/work/data/…` and `/work/cache/…`). The file name chooses the
+schema as table-manners' test does, now also `artifact-*` (`operations:artifact`), `export-*`
+and `import-*` (the controls' responses) and `bundle-*/invocation.json` (the bundle manifest),
+whose members are written and compared byte for byte beside it; the comparison walks
+subdirectories. `wrong_frame` comes from `subtract` on Masks of two images, the `many` index from
+`select` with a wrong-typed and an unresolved plane. The replay's results are
+`run-replay-line.json`, `-rasterize.json` and `-feather.json` (the plan named no files for them).
+Results whose arguments did not resolve keep a null invocation: `run-invalid.json` and the
+`run-path-*.json` refusals. `session.json` (the M11 set's) carries the suite's two allowed
+directories. The second acceptance item's table-manners half (`cargo test --test fixtures` in
+the contract's checkout, and MAPPING's v0.4 column) is the coordinator's: this task does not
+touch the table-manners checkout. ADR 0015 is marked superseded in part, ADR 0020 notes 0021,
+and ADR 0022's MCP tools note was already in from 10.10.
+
 **Acceptance.**
-- [ ] `operations_path.rs` passes through the independent client, end to end as above.
+- [x] `operations_path.rs` passes through the independent client, end to end as above.
 - [ ] table-manners' fixtures test (`cargo test --test fixtures` there) passes for
       `fixtures/rascal/`; rascal's own check passes without `UPDATE_FIXTURES`.
-- [ ] The docs name v0.4; none describes the op tools, the `workspace_*` tools, workspace ids in
+- [x] The docs name v0.4; none describes the op tools, the `workspace_*` tools, workspace ids in
       MCP arguments, a path form of a mask argument, or MCP roots.
 
 **Verification.** `UPDATE_FIXTURES=1 cargo nextest run -p rascal-mask --features testkit --test
 it -- table_manners_fixtures::`, then the same without it; `cargo nextest run -p rascal-mask
 --features testkit --test it -- operations_path::`; in the table-manners checkout `cargo test`;
-`just check`.
+`just check`. Done 2026-11-01 on `m10-operations` (the table-manners side waits for the coordinator).
 
 **Dependencies.** 10.7 to 10.13. **Files.** `crates/rascal-mask/tests/it/{operations_path,
 table_manners_fixtures}.rs` (the first new), `crates/rascal-mask/tests/it/main.rs`,

@@ -135,3 +135,10 @@ operation of the description, served as an action tool whose call is a run (port
 artifact reference before the run, the op run on the session's store, `artifacts` with previews
 in `run.json`), and the op tools with their envelopes leave `serve` (ADR 0015's amendment). The
 envelope stays rascal's own record of a step and is the operation's `body.envelope`.
+
+## Note 2026-11-01: ADR 0021
+
+Milestone M10 records the v0.4 surface as its own decision, ADR 0021 "Operations are actions"
+(references, the binding refusal, the store, previews, the artifact resource, export and import,
+`rascal call` and bundles, the path rule). The contract's `fixtures/rascal/` at v0.4 comes from
+the same test as before, `table_manners_fixtures.rs`.

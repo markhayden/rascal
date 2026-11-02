@@ -420,6 +420,14 @@ one **envelope**: `status` (`ok | measured_nothing | not_applicable | invalid_ar
 `provenance`, `artifacts` (rascal's extension: the typed outputs by id and identity). Ops never
 return a verdict.
 
+Under table-manners v0.4 (ADR 0021, PLAN.md M10) every built-in op but the pack's `segment` is
+also an **action** of kind `operation` in the description, with its `group` and typed `ports`:
+`serve` calls it with artifact references (resolved by identity in the session's store, bound
+before any run, the `binding` refusal naming every problem), runs it on the store, and its
+result is a `run.json` whose `body.envelope` is the envelope above and whose `artifacts` list
+each input and output with a preview for a Mask or a location. The op commands on the command
+line keep their workspace ids.
+
 Shared rules: an op validates its inputs' artifact types and frames before running (a mask and
 an image must share a frame id and size); a requirement names an input binding and is satisfied
 only by an artifact that exists and was produced by a successful step; an op that cannot act on
@@ -747,6 +755,13 @@ timeout or a non-PNG body is an operational error. There is no automatic resize 
 output, and no scaled request in v1.
 
 ### Workspace
+
+`rascal serve`'s workspace is the session's **store** (table-manners v0.4): references resolve
+there by identity, operations commit there, and tasks publish their Masks into it; a store
+restarted or moved to another directory resolves the same references. Exports go to rascal's
+export area (`$XDG_DATA_HOME/rascal/exports/`), previews to its cache
+(`$XDG_CACHE_HOME/rascal/previews/`) and a bundle replay's images to its replay area
+(`$XDG_DATA_HOME/rascal/replay/`), never into the store or a caller's path (`docs/workspace.md`).
 
 A **workspace** is a directory:
 
