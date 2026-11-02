@@ -1503,6 +1503,7 @@ fn the_session_marks_credentials_by_what_providers_answered() {
     assert_eq!(r["error"]["code"], "credential");
     assert_eq!(r["error"]["retryable"], false);
     assert_eq!(r["spend"]["usd"], 0.0);
+    assert_eq!(r["spend"]["basis"], "measured", "{r:#}");
     assert!(
         r["images"]["out"]
             .as_array()

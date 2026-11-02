@@ -864,6 +864,8 @@ fn v03_set(
     out.insert("run-stale-estimate-session.json", restarted);
     let rejected = result(&mut client, call("rejected", "seam", paid.clone(), None));
     assert_eq!(rejected["error"]["code"], "credential", "{rejected:#}");
+    assert_eq!(rejected["spend"]["usd"], 0.0, "{rejected:#}");
+    assert_eq!(rejected["spend"]["basis"], "measured", "{rejected:#}");
     out.insert("run-credential-rejected.json", rejected);
     assert_eq!(filler_requests(), 2);
     let invalid = describe(&mut client);

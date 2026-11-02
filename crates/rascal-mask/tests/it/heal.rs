@@ -770,8 +770,8 @@ fn heal_hosted(
 }
 
 /// Task 12.3 (table-manners 2.2): a provider's 401 or 403 during the run is `credential`: an
-/// `error`, never retryable, spending nothing, the mask kept in `images.out` (2.3); `rascal
-/// heal` exits 3. A 5xx stays a retryable `provider` and a timeout stays `timeout`.
+/// `error`, never retryable, a known call at zero (4.5: an answer, so not unsent; a known zero
+/// is `measured`), the mask kept in `images.out` (2.3); `rascal heal` exits 3. A 5xx stays a retryable `provider` and a timeout stays `timeout`.
 #[test]
 fn a_rejected_credential_is_credential_and_never_retryable() {
     let dir = scratch("credential");
@@ -801,6 +801,17 @@ fn a_rejected_credential_is_credential_and_never_retryable() {
         );
         assert_eq!(r["spend"]["usd"], 0.0, "{r:#}");
         assert_eq!(r["spend"]["unresolved_usd"], 0.0);
+        assert_eq!(r["spend"]["basis"], "measured", "{r:#}");
+        let call = r["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|n| n.as_str()?.strip_prefix("filler call: "))
+            .collect::<Vec<_>>();
+        assert_eq!(call.len(), 1, "{r:#}");
+        let call: serde_json::Value = serde_json::from_str(call[0]).unwrap();
+        assert_eq!(call["charge"], "known", "{call:#}");
+        assert_eq!(call["status"], status, "{call:#}");
         let roles: Vec<&str> = r["images"]["out"]
             .as_array()
             .unwrap()

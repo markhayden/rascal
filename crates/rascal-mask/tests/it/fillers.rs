@@ -442,9 +442,9 @@ fn each_fake_behaviour_produces_its_outcome_over_http_and_the_key_stays_out_of_e
 }
 
 /// Task 9.1: each call says whether it may have been charged. Not sent: refused before the
-/// request left (no key, nothing listening, a command that cannot start) or rejected as
-/// unauthenticated; known: an answer; unresolved: sent and not settled (a failure status, a
-/// timeout, a non-zero exit).
+/// request left (no key, nothing listening, a command that cannot start); known: an answer,
+/// the authentication rejected (401, 403) included (table-manners 4.5); unresolved: sent and
+/// not settled (a failure status, a timeout, a non-zero exit).
 #[test]
 fn each_call_says_whether_it_may_have_been_charged() {
     let dir = scratch("charge");
@@ -475,7 +475,7 @@ fn each_call_says_whether_it_may_have_been_charged() {
         "{}",
         refused.call.outcome
     );
-    // A rejected key is not charged.
+    // A rejected key is an answer: known, not unsent, and it counts zero.
     let (url, _) = spawn(Behaviour::Exact, Some("the-key".to_string()));
     let wrong = HttpFiller::new(
         "hosted",
@@ -485,7 +485,20 @@ fn each_call_says_whether_it_may_have_been_charged() {
     )
     .unwrap()
     .with_key_source(|_| Some("not-the-key".to_string()));
-    assert_eq!(wrong.call(&request, &dir).call.charge, Charge::NotSent);
+    let rejected = wrong.call(&request, &dir).call;
+    assert_eq!(rejected.charge, Charge::Known, "{}", rejected.outcome);
+    assert_eq!(rejected.status, 401);
+    let notes = [
+        filler::CallStarted {
+            filler: "hosted".into(),
+            spend_usd: 0.04,
+        }
+        .note(),
+        rejected.note(),
+    ];
+    let spent = filler::spent(&notes);
+    assert_eq!(spent.usd, 0.0, "{spent:?}");
+    assert!(spent.measured, "{spent:?}");
     // Commands.
     let command = |behaviour: Behaviour, timeout_s: u64| {
         filler::from_config("fake", &command_config(behaviour, true, timeout_s))

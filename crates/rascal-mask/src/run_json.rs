@@ -369,7 +369,11 @@ pub fn finish(
         spend: Spend {
             usd: usd(spent.usd),
             unresolved_usd: usd(spent.unresolved_usd),
-            basis: SpendBasis::Estimated,
+            basis: if spent.measured {
+                SpendBasis::Measured
+            } else {
+                SpendBasis::Estimated
+            },
         },
         cache: match ended.cache {
             Some(true) => Cache::Hit,

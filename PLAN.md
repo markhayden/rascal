@@ -1354,8 +1354,9 @@ task is a branch merged on a green check; the checkpoint tags `m9`.
 ### Task 9.1: Spend survives the status
 
 **Description.** A filler call is *not sent* (refused before its request left rascal: no key,
-connection refused, the command could not start, authentication rejected with 401 or 403),
-*known* (the filler answered: a 2xx, or a command that exited 0), or *unresolved* (sent with no
+connection refused, the command could not start), *known* (the filler answered: a 2xx, or a
+command that exited 0; from M12, a 401 or 403 too, counting zero, table-manners v0.3 4.5), or
+*unresolved* (sent with no
 answer that settles it: timed out, killed, a failure status, a non-zero exit). The call record
 says which (`charge`) and what it costs (`spend_usd`: the entry's price unless not sent). `heal`
 notes `filler call started` before the call, so a run killed mid-call still shows it. A run's
@@ -1905,8 +1906,9 @@ for a provider's 401 or 403 during a run (today `provider`, retryable): status `
 `credential`, `retryable: false`, exit 3 on the command line. `credential` is only that (2.2): a
 key that is not set is refused `not_ready` before any run (12.2); if one still goes missing at the
 call (`filler/http.rs`, today a `usage`), that is an `internal` error, since 12.2's check should
-have caught it. Spend is unchanged: a rejection counts zero (rascal's 9.1 classes it not sent; the contract calls it a known answer
-that counts zero; the amount is the same and the reservation is released either way). The session
+have caught it. A rejection is a known call that counts zero (table-manners 4.5: the provider
+answered, refusing before any work), not a call not sent: its record says `charge: known`, the
+reservation is settled at zero, and the run's `spend.basis` is `measured`. The session
 keeps what providers said about each credential: `serve`'s `ContractActions` holds `answers`
 (`key_env` → `valid` | `invalid`), updated when a run ends from its filler call records (a 2xx →
 `valid`, a 401 or 403 → `invalid`, anything else leaves it as it was; a cache hit says nothing),

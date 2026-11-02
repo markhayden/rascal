@@ -232,14 +232,18 @@ with exit 3 rather than resized. The lab always caches, in `fills/` under its di
 
 A run's spend is its journal's, whatever its status (task 9.1): a call that may have been charged
 is never reported as zero, and cancelling does not erase a cost. Each call is *not sent* (refused
-before its request left rascal: no key, the connection refused, the command not started, or 401
-and 403), *known* (the filler answered: a 2xx, or exit 0) or *unresolved* (sent and not settled:
-a timeout, a failure status, a non-zero exit, or the run killed mid-call). Known and unresolved
-calls count at the price; `heal` journals `filler call started` before each call, so a run stopped
-mid-call counts it too. `spend.usd` is the total and `spend.unresolved_usd` the part no answer
-settled, with a note (table-manners v0.2, 4.5). The contract files an authentication refusal as
-*known* at zero; rascal records it as `not_sent`, which also counts zero, so the spend is the
-same.
+before its request left rascal: no key, the connection refused, the command not started),
+*known* (the filler answered: a 2xx, exit 0, or the authentication rejected with 401 or 403) or
+*unresolved* (sent and not settled: a timeout, any other failure status, a non-zero exit, or the
+run killed mid-call). Known and unresolved calls count at the price, except an answer that
+refused before any work, a 401 or 403, which is known and counts zero (4.5); `heal` journals
+`filler call started` before each call, so a run stopped mid-call counts it too. `spend.usd` is
+the total and `spend.unresolved_usd` the part no answer settled, with a note (table-manners v0.2,
+4.5). `spend.basis` is `estimated` when any amount comes from a price (a known or unresolved
+call, at its configured price) and `measured` when the spend is a known zero: a call answered
+with 401 or 403 and none counted at its price (`run-credential-rejected.json`). A run with no
+call, or only calls not sent, stays `estimated` at zero. The call's reservation is settled at
+what it spent, so a rejected key holds nothing back from the budget.
 `[limits]` holds `serve` to `call_cap_usd` per call and `session_budget_usd` across the process's
 calls (4.5). A call's `max_spend_usd` lowers the cap: the effective cap is the configured one
 lowered by it, or the caller's value when no cap is configured. It is an argument like any other,

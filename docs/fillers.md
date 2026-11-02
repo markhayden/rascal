@@ -98,10 +98,12 @@ Every call is two journal notes. Before it, `filler call started: {…}` with th
 its price; after it, `filler call: {…}` with the entry's name, the command as configured
 (placeholders shown) or the URL, the request's dimensions and bytes, the answer's bytes, the
 duration, the exit code or HTTP status, the outcome, and `charge`: `not_sent`, `known` or
-`unresolved` (`docs/contract.md`, "The fill cache, prices and limits"). A run's spend is read from
+`unresolved` (`docs/contract.md`, "The fill cache, prices and limits"); a 401 or 403 is `known`
+and counts zero. A run's spend is read from
 these notes, so a failed, cancelled or interrupted run keeps what it may have been charged. The key is handed to the
 `Authorization` header and appears in no file, message or span. A key the server rejects (HTTP
-401 or 403) ends the run `credential`, never retryable (exit 3), and spends nothing; a key that is
+401 or 403) ends the run `credential`, never retryable (exit 3): the call is known (the
+provider answered) and counts zero, with `spend.basis: measured`; a key that is
 not set never reaches the filler, since the call is refused as not ready before its run
 (`docs/contract.md`, "Readiness").
 

@@ -96,6 +96,7 @@ impl Reservation<'_> {
         let spent = spent.unwrap_or(Spent {
             usd: self.usd,
             unresolved_usd: self.usd,
+            measured: false,
         });
         self.apply(spent);
     }
@@ -116,6 +117,7 @@ impl Drop for Reservation<'_> {
             self.apply(Spent {
                 usd,
                 unresolved_usd: usd,
+                measured: false,
             });
         }
     }

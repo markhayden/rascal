@@ -146,9 +146,11 @@ impl HttpFiller {
                 Error::op("filler", format!("fillers.{}: {kind}", self.name))
             })?;
             let status = response.status().as_u16();
+            // Recorded with the answer, so a body that then fails to read keeps it.
+            call.status = i64::from(status);
+            // A 401 or 403 is an answer too: known, refused before any work, counting zero.
             call.charge = match status {
-                200..=299 => Charge::Known,
-                401 | 403 => Charge::NotSent,
+                200..=299 | 401 | 403 => Charge::Known,
                 _ => Charge::Unresolved,
             };
             let content_type = response
