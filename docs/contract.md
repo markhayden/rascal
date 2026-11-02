@@ -255,6 +255,23 @@ armed: flags that do not resolve end the command `invalid` at once (exit 64, `ru
 null invocation and nothing else in the run directory), so a SIGINT or SIGTERM can only cancel a
 run that records its invocation.
 
+**`rascal call` (task 10.12).** `rascal call <action> --arguments <file.json|-> [--config]
+[--allow-dir <abs>]… [--workspace] [--runs]` runs any action from exactly the arguments an MCP
+call would send, through the same `ContractActions` as `serve` (one constructor,
+`serve::contract_actions`): the same parsing, readiness, binding, limits and run, with no
+session, so `run.session_id` is null, there is no budget ledger and the per-call cap still
+applies. Paths follow the path rule with the given `--allow-dir` (none refusing every path;
+inline images need none, and the refusal is `serve`'s); the run goes under `--runs` and the
+store is `--workspace`, both `serve`'s defaults. It prints the run's result on one line of stdout
+and exits 0 `completed`, 3 `error`, 64 `invalid`, or 130 and 143 when SIGINT or SIGTERM cancelled
+it (the run stops before its next commit and writes `run.json` `cancelled`, which is printed). A
+refusal `serve` sends as a JSON-RPC error (`not_ready`, `binding`, `invalid_arguments`) prints
+its refusal JSON and exits 64, with no run; an unknown action, a reserved tool (`describe`,
+`estimate`, `export`, `import` are tools, not actions) or arguments that are not a JSON object
+are said on stderr and exit 64. So a result's `invocation.arguments`, with a `path` beside each
+image's `expect`, are the file for `rascal call <invocation.action>`, and the result's
+`invocation` is the original's.
+
 ## `serve` (8.5)
 
 ```

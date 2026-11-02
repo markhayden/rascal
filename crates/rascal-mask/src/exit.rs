@@ -10,8 +10,11 @@ pub const NOT_APPLICABLE: i32 = 1;
 pub const OPERATIONAL: i32 = 3;
 /// A usage error: bad arguments, a missing command, an `--out` that is not allowed.
 pub const USAGE: i32 = 64;
-// 130 and 143: a `run` or `heal` cancelled by SIGINT or SIGTERM (table-manners 6); the signal
-// watcher in `run_json` exits with them after writing `run.json`.
+/// A `run`, `heal` or `call` cancelled by SIGINT (table-manners 6); the signal watchers in
+/// `run_json` and `call` exit with it after the run's `run.json` is written.
+pub const INTERRUPTED: i32 = 130;
+/// The same, cancelled by SIGTERM.
+pub const TERMINATED: i32 = 143;
 
 /// The exit code for a core error.
 pub fn code_for(error: &Error) -> i32 {

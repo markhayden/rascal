@@ -56,13 +56,14 @@ pub fn default_workspace(config: &ConfigState) -> PathBuf {
 /// non-directory one is a usage error, exit 64, before anything is served), narrowed by the
 /// configuration's `[serve] allow_dirs`. A configuration that does not load allows no caller
 /// path (fail closed: what it would narrow is unknown); `serve` still starts, and inline images
-/// still work. The set, and why anything was dropped, go to stderr.
-pub fn allowed(flags: &[PathBuf], state: &ConfigState) -> Result<PathRule> {
+/// still work. The set, and why anything was dropped, go to stderr under `who` (`rascal serve`,
+/// `rascal call`).
+pub fn allowed(flags: &[PathBuf], state: &ConfigState, who: &str) -> Result<PathRule> {
     let flags = paths::resolve_flags(flags)?;
     let configured = match state {
         ConfigState::Invalid { .. } => {
             eprintln!(
-                "rascal serve: the configuration does not load, so what its [serve] allow_dirs would allow is unknown and no caller path is allowed"
+                "{who}: the configuration does not load, so what its [serve] allow_dirs would allow is unknown and no caller path is allowed"
             );
             Some(Vec::new())
         }
@@ -74,7 +75,7 @@ pub fn allowed(flags: &[PathBuf], state: &ConfigState) -> Result<PathRule> {
                 let (resolved, dropped) = paths::resolve_configured(dirs);
                 for dir in dropped {
                     eprintln!(
-                        "rascal serve: serve.allow_dirs: {dir} is not a directory, so it allows nothing"
+                        "{who}: serve.allow_dirs: {dir} is not a directory, so it allows nothing"
                     );
                 }
                 resolved
@@ -83,27 +84,35 @@ pub fn allowed(flags: &[PathBuf], state: &ConfigState) -> Result<PathRule> {
     let allowed = paths::overlap(&flags, configured.as_deref());
     if allowed.is_empty() {
         eprintln!(
-            "rascal serve: no directory is allowed, so every caller path is refused (inline images still work); give {} <absolute directory>",
+            "{who}: no directory is allowed, so every caller path is refused (inline images still work); give {} <absolute directory>",
             paths::FLAG
         );
     } else {
         let list: Vec<String> = allowed.iter().map(|d| d.display().to_string()).collect();
         eprintln!(
-            "rascal serve: callers' paths are read only inside: {}",
+            "{who}: callers' paths are read only inside: {}",
             list.join(", ")
         );
     }
     Ok(PathRule::Allowed(allowed))
 }
 
-/// Serves until the client closes the connection.
-pub fn serve(args: &ServeArgs) -> Result<()> {
+/// The contract's actions over a store, as `serve` and `rascal call` (PLAN.md 10.12) both run
+/// them: the configuration read once in whatever state, the path rule, the store (`--workspace`,
+/// else the default), each pack started once to learn whether it starts, the runs root and the
+/// built-in ops. `session` is `serve`'s; `rascal call` has none. `who` names the command in what
+/// goes to stderr.
+pub fn contract_actions(
+    args: &ServeArgs,
+    session: Option<crate::actions::Session>,
+    who: &str,
+) -> Result<crate::actions::ContractActions> {
     let state = ConfigState::read(args.config.as_deref());
     // The host's own flags are checked before anything is opened or answered.
-    let paths = allowed(&args.allow_dirs, &state)?;
+    let paths = allowed(&args.allow_dirs, &state, who)?;
     if let ConfigState::Invalid { reason, .. } = &state {
         eprintln!(
-            "rascal serve: the configuration does not load, so the actions that need it are not ready: {reason}"
+            "{who}: the configuration does not load, so the actions that need it are not ready: {reason}"
         );
     }
     let config = state.config().cloned();
@@ -113,7 +122,7 @@ pub fn serve(args: &ServeArgs) -> Result<()> {
         .unwrap_or_else(|| default_workspace(&state));
     let workspace = Arc::new(Workspace::open(&workspace_dir)?);
     // Each pack is started once to learn whether it starts (its readiness requirement reads
-    // `invalid` when it does not, 12.2), then stopped: `serve` serves no pack tool.
+    // `invalid` when it does not, 12.2), then stopped: no pack tool is served.
     let failed_packs: std::collections::BTreeMap<String, String> = {
         let (_, packs, failed) =
             crate::packs::registry_tolerant(config.as_ref(), &workspace, None)?;
@@ -122,13 +131,13 @@ pub fn serve(args: &ServeArgs) -> Result<()> {
             .into_iter()
             .map(|(name, error)| {
                 eprintln!(
-                    "rascal serve: packs.{name} did not start, so the actions that need it are not ready: {error}"
+                    "{who}: packs.{name} did not start, so the actions that need it are not ready: {error}"
                 );
                 (name, error.to_string())
             })
             .collect()
     };
-    let actions = Arc::new(crate::actions::ContractActions {
+    Ok(crate::actions::ContractActions {
         config_path: config
             .is_some()
             .then(|| state.path().map(PathBuf::from))
@@ -142,12 +151,21 @@ pub fn serve(args: &ServeArgs) -> Result<()> {
             .clone()
             .unwrap_or_else(crate::actions::default_runs_root),
         ledger: std::sync::Mutex::default(),
-        session: crate::actions::Session::start(),
+        session,
         issued: std::sync::Mutex::default(),
         paths,
         store: workspace,
         ops: rascal_ops::registry()?,
-    });
+    })
+}
+
+/// Serves until the client closes the connection.
+pub fn serve(args: &ServeArgs) -> Result<()> {
+    let actions = Arc::new(contract_actions(
+        args,
+        Some(crate::actions::Session::start()),
+        "rascal serve",
+    )?);
     let server = Server::new(actions, args.concurrency);
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

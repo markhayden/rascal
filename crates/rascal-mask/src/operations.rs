@@ -301,6 +301,12 @@ impl Outcome {
 }
 
 impl ContractActions {
+    /// Whether `name` is one of the description's actions: a shipped recipe's task or an
+    /// operation (never a reserved tool).
+    pub(crate) fn is_action(&self, name: &str) -> bool {
+        rascal_mask::describe::recipe_of(name).is_some() || self.is_operation(name)
+    }
+
     /// Whether `name` is an operation: a built-in op.
     pub(crate) fn is_operation(&self, name: &str) -> bool {
         self.ops.get(name).is_some()
@@ -419,7 +425,7 @@ impl ContractActions {
             &bound,
             price,
             Some(self.held(&ledger)),
-            Some(self.session_view_of(&ledger)),
+            self.session_view_of(&ledger),
             expires_ms,
         );
         let mut extensions = BTreeMap::new();
@@ -493,7 +499,7 @@ impl ContractActions {
             "arguments": arguments,
             "tool_version": estimate::VERSION,
             "config_identity": self.config_state.identity(),
-            "session_id": self.session.id,
+            "session_id": self.session_id(),
         });
         Ok(estimate::Bound {
             binding: rascal_core::canonical::identity("estimate", &payload)
@@ -601,7 +607,7 @@ impl ContractActions {
         let _ = std::fs::create_dir_all(&inputs_dir);
         let association = Association {
             action: manifest.name.clone(),
-            session_id: Some(self.session.id.clone()),
+            session_id: self.session_id(),
             client_run_id: meta.client_run_id.clone(),
         };
         let _ = std::fs::write(
@@ -622,7 +628,7 @@ impl ContractActions {
             workspace: out.clone(),
             fresh: true,
             started_ms,
-            session_id: Some(self.session.id.clone()),
+            session_id: self.session_id(),
             client_run_id: meta.client_run_id.clone(),
             input_identity: format!(
                 "sha256:{}",

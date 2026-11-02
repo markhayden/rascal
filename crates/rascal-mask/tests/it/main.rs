@@ -4,6 +4,7 @@
 
 mod artifact_resource;
 mod binding;
+mod call_cli;
 mod cli;
 mod contract_locations;
 mod corpus_cli;

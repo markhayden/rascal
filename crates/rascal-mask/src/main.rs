@@ -12,6 +12,7 @@ use rascal_mask::lab;
 use rascal_mask::readiness::{self, Setup};
 mod actions;
 mod artifact_resource;
+mod call;
 mod estimate;
 mod measure;
 mod operations;
@@ -175,6 +176,30 @@ enum Command {
         /// caller path is refused and inline images still work (CONTRACT 5.2).
         #[arg(long = "allow-dir", value_name = "ABS_DIR")]
         allow_dir: Vec<PathBuf>,
+    },
+    /// Run one action from exactly the arguments an MCP call sends (table-manners 4.8): the same
+    /// checks and run as `rascal serve`, with no session. Prints the result (or a refusal) on one
+    /// line; exits 0, 3, 64, 130 or 143 as a run does.
+    Call {
+        /// The action: a shipped recipe's or an op's name (`rascal describe --json`).
+        action: String,
+        /// The call's arguments, a JSON object: a file, or `-` for stdin. A result's
+        /// `invocation.arguments`, with a `path` beside each image's `expect`, call it again.
+        #[arg(long, value_name = "FILE")]
+        arguments: PathBuf,
+        /// The configuration file (rascal.toml), as `rascal serve` takes it.
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// A directory whose files the arguments may name by path (repeatable; absolute and
+        /// existing). Without one every path is refused; inline images still work.
+        #[arg(long = "allow-dir", value_name = "ABS_DIR")]
+        allow_dir: Vec<PathBuf>,
+        /// The store references resolve in and operations commit to; `rascal serve`'s default.
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// Where the run goes; `rascal serve`'s default runs root.
+        #[arg(long)]
+        runs: Option<PathBuf>,
     },
     /// The configured tool packs: list their tools, or call one from the shell.
     Tools {
@@ -894,6 +919,21 @@ fn main() {
                 }
             }
         }
+        Command::Call {
+            action,
+            arguments,
+            config,
+            allow_dir,
+            workspace,
+            runs,
+        } => call::call(&call::CallArgs {
+            action,
+            arguments,
+            config,
+            allow_dirs: allow_dir,
+            workspace,
+            runs,
+        }),
         Command::Serve {
             workspace,
             config,

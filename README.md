@@ -101,6 +101,7 @@ rascal describe --json [--config rascal.toml]             # what rascal can run,
                                                           # configuration too, each action saying what it still needs
 echo '{"action":"seam","arguments":{"image":{"path":"/abs/pano.png"},"filler":"hosted"}}' | rascal estimate --json --config rascal.toml -   # what that exact call would spend, sending nothing
 rascal playground                                         # open Wafflery, the shared program (separate)
+rascal call feather --arguments args.json --workspace ws/   # one action from an MCP call's arguments, as serve runs it, no session
 rascal serve [--config rascal.toml] [--allow-dir /abs/in]   # the table-manners actions as MCP tools over stdio: one per recipe
                                                           # and one per op (an operation, bound by artifact reference), with run
                                                           # and artifact resources, `describe`, `estimate`, `export` and `import`;

@@ -49,8 +49,9 @@ pub struct ContractActions {
     pub runs: PathBuf,
     /// What this server process has spent and holds for calls under way (table-manners 4.5).
     pub ledger: std::sync::Mutex<Ledger>,
-    /// The serving session the ledger belongs to (table-manners 4.6).
-    pub session: Session,
+    /// The serving session the ledger belongs to (table-manners 4.6); none for `rascal call`,
+    /// whose runs have no session (`session_id` null) and no budget (the cap still applies).
+    pub session: Option<Session>,
     /// The estimates this session issued, for the calls that name them (table-manners 4.5).
     pub issued: std::sync::Mutex<estimate::Issued>,
     /// The directories callers' paths may name, fixed for the session (CONTRACT 5.2).
@@ -478,7 +479,7 @@ impl ContractActions {
                 &action,
                 args,
                 price.config_identity.as_deref(),
-                Some(&self.session.id),
+                self.session_id().as_deref(),
                 estimate::VERSION,
                 &self.paths,
             )?;
@@ -561,6 +562,7 @@ impl ContractActions {
 
     /// The configured session budget, none when uncapped.
     fn budget_usd(&self) -> Option<f64> {
+        self.session.as_ref()?;
         self.config
             .as_ref()
             .and_then(|c| c.limits.as_ref())
@@ -585,7 +587,7 @@ impl ContractActions {
             action,
             args,
             price.config_identity.as_deref(),
-            Some(&self.session.id),
+            self.session_id().as_deref(),
             estimate::VERSION,
             &self.paths,
         )?;
@@ -607,7 +609,7 @@ impl ContractActions {
             &bound,
             price,
             Some(self.held(&ledger)),
-            Some(self.session_view_of(&ledger)),
+            self.session_view_of(&ledger),
             expires_ms,
         );
         serde_json::to_value(&document).map_err(|e| Error::usage(format!("estimate: {e}")))
@@ -644,7 +646,7 @@ impl ContractActions {
         std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
         let association = Association {
             action: describe::action_name(recipe),
-            session_id: Some(self.session.id.clone()),
+            session_id: self.session_id(),
             client_run_id: client_run_id.map(str::to_string),
         };
         let _ = std::fs::write(
@@ -691,7 +693,7 @@ impl ContractActions {
                     workspace: out.clone(),
                     fresh: true,
                     started_ms,
-                    session_id: Some(self.session.id.clone()),
+                    session_id: self.session_id(),
                     client_run_id: client_run_id.map(str::to_string),
                     input_identity: format!(
                         "sha256:{}",
@@ -709,7 +711,7 @@ impl ContractActions {
                 pending.invocation = invocation;
                 pending.id = id.clone();
                 pending.started_ms = started_ms;
-                pending.session_id = Some(self.session.id.clone());
+                pending.session_id = self.session_id();
                 pending.client_run_id = client_run_id.map(str::to_string);
                 let done = AtomicBool::new(false);
                 let journal = out.join("journal.jsonl");
@@ -892,21 +894,27 @@ impl ContractActions {
     }
 
     /// The `rascal://session` observation: one copy of the ledger, taken under its lock.
-    fn session_view(&self) -> TmSession {
+    fn session_view(&self) -> Option<TmSession> {
         self.session_view_of(&self.ledger())
     }
 
-    /// The session observation for one copy of the ledger.
-    pub(crate) fn session_view_of(&self, ledger: &Ledger) -> TmSession {
+    /// The session's id; none without a session (`rascal call`).
+    pub(crate) fn session_id(&self) -> Option<String> {
+        self.session.as_ref().map(|s| s.id.clone())
+    }
+
+    /// The session observation for one copy of the ledger; none without a session.
+    pub(crate) fn session_view_of(&self, ledger: &Ledger) -> Option<TmSession> {
+        let session = self.session.as_ref()?;
         let budget = self.budget_usd();
-        TmSession {
+        Some(TmSession {
             contract: rascal_core::contract::CONTRACT_VERSION.to_string(),
             tool: TmTool {
                 name: "rascal".to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
             },
-            id: self.session.id.clone(),
-            started: run_json::rfc3339(self.session.started_ms),
+            id: session.id.clone(),
+            started: run_json::rfc3339(session.started_ms),
             budget_usd: budget.map(usd),
             spent_usd: usd(ledger.spent_usd),
             unresolved_usd: usd(ledger.unresolved_usd),
@@ -919,7 +927,7 @@ impl ContractActions {
                 .iter()
                 .map(|d| d.display().to_string())
                 .collect(),
-        }
+        })
     }
 
     /// One page of the runs (table-manners 4.3): newest first by (started, id), `RUNS_PAGE` a
@@ -1256,7 +1264,7 @@ impl ContractActions {
         if uri == "rascal://session" {
             return Some(ResourceBody::Text {
                 mime: "application/json".into(),
-                text: serde_json::to_string_pretty(&self.session_view()).ok()?,
+                text: serde_json::to_string_pretty(&self.session_view()?).ok()?,
             });
         }
         if uri == "rascal://runs" || uri.starts_with("rascal://runs?") {

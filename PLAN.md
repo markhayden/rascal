@@ -2294,16 +2294,30 @@ the file for `rascal call <invocation.action>`.
 `rascal call feather --arguments args.json --workspace <the store>` prints a result whose
 `invocation` equals the original and whose out reference is the same.
 
+As built: `serve` and `rascal call` build their `ContractActions` through one function,
+`serve::contract_actions`, which takes the session (`serve`'s, or none) and the command's name
+for stderr; the session field became optional, so without one `session_id` is null, the budget
+is not applied and no `rascal://session` exists. The call goes through `Actions::call` itself
+with an empty `CallMeta` (no correlation id, no estimate). The result is printed compact on one
+line (so 10.13's JSON Lines are the same printing); a cancelled run's `run.json` is found through
+the run reference its progress carried and printed. SIGINT and SIGTERM set the call's cancel flag
+and the exit code (130, 143) rather than exiting at once, so the run writes `cancelled` itself
+before the next commit, as a cancelled MCP call does. Only the description's actions are called:
+a reserved tool or an unknown name exits 64 with the reason on stderr. A refusal with data
+(`not_ready`, `binding`, `invalid_arguments`) prints the data and exits 64; a call error without
+data (malformed arguments) is said on stderr and exits 64. `exit::INTERRUPTED` and
+`exit::TERMINATED` name 130 and 143.
+
 **Acceptance.**
-- [ ] For a task (`seam` with the command filler, an image path added) and an operation
+- [x] For a task (`seam` with the command filler, an image path added) and an operation
       (`feather`), `rascal call` of a result's invocation gives a result whose `invocation`
       equals the original's and whose outputs have the same identities.
-- [ ] Each exit code: 0 completed, 3 error (a failing filler), 64 invalid, a refused path, a
+- [x] Each exit code: 0 completed, 3 error (a failing filler), 64 invalid, a refused path, a
       `binding` refusal (refusal JSON on stdout), 130 on SIGINT.
-- [ ] A path outside `--allow-dir` is refused as in 10.1; inline images need no flag.
+- [x] A path outside `--allow-dir` is refused as in 10.1; inline images need no flag.
 
 **Verification.** `cargo nextest run -p rascal-mask --features testkit --test it -- call_cli::`;
-`just check`.
+`just check`. Done 2026-11-01 (on `m10-operations`).
 
 **Dependencies.** 10.2 (its `binding` refusal comes with 10.3, its `feather` scenario with
 10.6). **Files.** `crates/rascal-mask/src/{main,call}.rs` (the second new),
