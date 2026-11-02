@@ -1,0 +1,182 @@
+{
+  "action": "line",
+  "artifacts": {
+    "in": [
+      {
+        "artifact": {
+          "frame": "sha256:b99a8275191d807e2c331f13c90c23e421ebe211573b644b99fc613f5d30f95f",
+          "identity": "sha256:40ec7298d2c908c6652ebcdd96215dd45ba98c8b7d909ba1767078d63e9a7a50",
+          "on": {
+            "file_sha256": "40ec7298d2c908c6652ebcdd96215dd45ba98c8b7d909ba1767078d63e9a7a50",
+            "height": 200,
+            "projection": "flat",
+            "topology": "bounded",
+            "width": 320
+          },
+          "resource": "rascal://artifact/sha256:40ec7298d2c908c6652ebcdd96215dd45ba98c8b7d909ba1767078d63e9a7a50",
+          "schema_version": 1,
+          "tool": "rascal",
+          "type": "image"
+        },
+        "port": "image",
+        "preview": null
+      }
+    ],
+    "out": [
+      {
+        "artifact": {
+          "frame": "sha256:b99a8275191d807e2c331f13c90c23e421ebe211573b644b99fc613f5d30f95f",
+          "identity": "sha256:b504057831c636571a58941e304a192fecd9e6ada646973adfd1a19b2d51f59e",
+          "on": {
+            "file_sha256": "40ec7298d2c908c6652ebcdd96215dd45ba98c8b7d909ba1767078d63e9a7a50",
+            "height": 200,
+            "projection": "flat",
+            "topology": "bounded",
+            "width": 320
+          },
+          "resource": "rascal://artifact/sha256:b504057831c636571a58941e304a192fecd9e6ada646973adfd1a19b2d51f59e",
+          "schema_version": 1,
+          "tool": "rascal",
+          "type": "location"
+        },
+        "port": "location",
+        "preview": {
+          "image": {
+            "file_sha256": "ba0497b0e84fd647cee5d61fb4f5a084a506a10bb6b0cea55b02a5b66fad63d3",
+            "height": 200,
+            "projection": "flat",
+            "topology": "bounded",
+            "width": 320
+          },
+          "path": "/runs/run-1767225600073-1/preview-location.png",
+          "role": "preview"
+        }
+      }
+    ]
+  },
+  "body": {
+    "envelope": {
+      "artifacts": {
+        "location": {
+          "artifact_type": "Location",
+          "id": "location",
+          "identity": "sha256:b504057831c636571a58941e304a192fecd9e6ada646973adfd1a19b2d51f59e"
+        }
+      },
+      "envelope_version": 1,
+      "provenance": {
+        "duration_ms": 0,
+        "tool": "line",
+        "version": "1.0.0"
+      },
+      "status": "ok",
+      "summary": "line at column 0.5 (24 px wide) in raw:320x200:flat"
+    }
+  },
+  "cache": "off",
+  "contract": "0.4.0",
+  "duration_ms": 0,
+  "error": null,
+  "finished": "2026-01-01T00:00:00.000Z",
+  "images": {
+    "in": [
+      {
+        "image": {
+          "file_sha256": "40ec7298d2c908c6652ebcdd96215dd45ba98c8b7d909ba1767078d63e9a7a50",
+          "height": 200,
+          "pixel_sha256": "d77f5a67ba7ebb1b521e187d40dba70d8f0be1d0c25ae45b5b18affdb334ecd4",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 320
+        },
+        "role": "image",
+        "slot": "image"
+      }
+    ],
+    "out": [
+      {
+        "image": {
+          "file_sha256": "ba0497b0e84fd647cee5d61fb4f5a084a506a10bb6b0cea55b02a5b66fad63d3",
+          "height": 200,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 320
+        },
+        "path": "/runs/run-1767225600073-1/preview-location.png",
+        "role": "preview"
+      }
+    ]
+  },
+  "input_identity": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "invocation": {
+    "action": "line",
+    "arguments": {
+      "column": 0.5,
+      "image": {
+        "expect": {
+          "file_sha256": "40ec7298d2c908c6652ebcdd96215dd45ba98c8b7d909ba1767078d63e9a7a50",
+          "height": 200,
+          "pixel_sha256": "d77f5a67ba7ebb1b521e187d40dba70d8f0be1d0c25ae45b5b18affdb334ecd4",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 320
+        }
+      },
+      "width_px": 24.0
+    },
+    "effective": {
+      "config_identity": "sha256:ecacf98c64387c1697e576e92ec3925051e7a4a8a16073ea901f59c5775f514d",
+      "model": null,
+      "x-rascal": {
+        "constants": null
+      }
+    },
+    "requirements": []
+  },
+  "locations": {
+    "found": [
+      {
+        "image": {
+          "file_sha256": "40ec7298d2c908c6652ebcdd96215dd45ba98c8b7d909ba1767078d63e9a7a50",
+          "height": 200,
+          "pixel_sha256": "d77f5a67ba7ebb1b521e187d40dba70d8f0be1d0c25ae45b5b18affdb334ecd4",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 320
+        },
+        "kind": "line",
+        "parts": [
+          {
+            "column": 0.5,
+            "width_px": 24.0
+          }
+        ],
+        "source": {
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      }
+    ],
+    "used": []
+  },
+  "notes": [],
+  "run": {
+    "client_run_id": null,
+    "dir": "/runs/run-1767225600073-1",
+    "id": "run-1767225600073-1",
+    "resource": "rascal://run/run-1767225600073-1/run.json",
+    "session_id": null
+  },
+  "spend": {
+    "basis": "measured",
+    "unresolved_usd": 0.0,
+    "usd": 0.0
+  },
+  "started": "2026-01-01T00:00:00.000Z",
+  "status": "completed",
+  "tool": {
+    "name": "rascal",
+    "version": "0.1.1"
+  }
+}

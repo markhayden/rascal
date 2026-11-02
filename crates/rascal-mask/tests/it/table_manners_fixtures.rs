@@ -139,10 +139,15 @@ impl jsonschema::Retrieve for Embedded {
 }
 
 fn validator(schema: &str) -> jsonschema::Validator {
+    let id = if schema.contains(':') {
+        format!("urn:table-manners:{schema}")
+    } else {
+        format!("urn:table-manners:core:{schema}")
+    };
     let (_, text) = table_manners::SCHEMAS
         .iter()
-        .find(|(i, _)| *i == format!("urn:table-manners:core:{schema}"))
-        .unwrap();
+        .find(|(i, _)| *i == id)
+        .unwrap_or_else(|| panic!("no schema {id}"));
     let schema: Value = serde_json::from_str(text).unwrap();
     jsonschema::options()
         .with_retriever(Embedded)
@@ -186,7 +191,15 @@ fn six_decimals(name: &str, key: &str, value: &Value) {
 /// is valid against it, reads into the crate's type, names rascal and this contract version, and
 /// no dollar amount has more than six decimals.
 fn conforms(name: &str, value: &Value) {
-    let schema = if name == "describe.json" || name.starts_with("describe-") {
+    let schema = if name.starts_with("bundle-") {
+        "core:invocation-bundle"
+    } else if name.starts_with("artifact-") {
+        "operations:artifact"
+    } else if name.starts_with("export-") {
+        "operations:export-response"
+    } else if name.starts_with("import-") {
+        "operations:import-response"
+    } else if name == "describe.json" || name.starts_with("describe-") {
         "description"
     } else if name.starts_with("estimate-") {
         "estimate"
@@ -194,7 +207,7 @@ fn conforms(name: &str, value: &Value) {
         "result"
     } else if name.starts_with("runs") {
         "runs"
-    } else if name == "session.json" {
+    } else if name == "session.json" || name.starts_with("session-") {
         "session"
     } else if name.starts_with("refusal-") {
         "refusal"
@@ -242,6 +255,25 @@ fn conforms(name: &str, value: &Value) {
                 .tool
                 .name,
         ),
+        "operations:export-response" => Some(
+            serde_json::from_value::<table_manners::operations::ExportResponse>(v)
+                .unwrap()
+                .tool
+                .name,
+        ),
+        "operations:import-response" => Some(
+            serde_json::from_value::<table_manners::operations::ImportResponse>(v)
+                .unwrap()
+                .tool
+                .name,
+        ),
+        "operations:artifact" => v["tool"]["name"].as_str().map(str::to_string),
+        "core:invocation-bundle" => {
+            for step in v["steps"].as_array().unwrap() {
+                assert_eq!(step["tool"]["name"], "rascal", "{name}");
+            }
+            None
+        }
         _ => {
             let _: table_manners::Refusal = serde_json::from_value(v).unwrap();
             None
@@ -944,6 +976,462 @@ fn v03_set(
     out.insert("estimate-cli.json", cli);
 }
 
+/// A `rascal serve` over `ws` with the runs under `dir/runs` and rascal's data and cache under
+/// `dir`, allowed `allow` (the repository and the temporary directory when `None`).
+fn serve_v04(dir: &Path, ws: &Path, allow: Option<&[&Path]>) -> Client {
+    let mut command = match allow {
+        None => rascal_testkit::mcp_client::serve_command(env!("CARGO_BIN_EXE_rascal")),
+        Some(dirs) => {
+            let mut command = Command::new(env!("CARGO_BIN_EXE_rascal"));
+            command.arg("serve");
+            for d in dirs {
+                command.arg("--allow-dir").arg(d);
+            }
+            command
+        }
+    };
+    command
+        .args([
+            "--workspace",
+            ws.to_str().unwrap(),
+            "--runs",
+            dir.join("runs").to_str().unwrap(),
+        ])
+        .env("XDG_DATA_HOME", dir.join("data"))
+        .env("XDG_CACHE_HOME", dir.join("cache"))
+        .env_remove("RASCAL_LOG")
+        .env_remove(KEY_ENV);
+    Client::start(&mut command).unwrap()
+}
+
+/// A completed call's result, by `tools/call`.
+fn done(client: &mut Client, token: &str, name: &str, arguments: Value) -> Value {
+    let r = result(client, call(token, name, arguments, None));
+    assert_eq!(r["status"], "completed", "{name}: {r:#}");
+    r
+}
+
+/// The reference an operation or task made on `port`.
+fn made(result: &Value, port: &str) -> Value {
+    result["artifacts"]["out"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["port"] == port)
+        .unwrap_or_else(|| panic!("no {port} in {result:#}"))["artifact"]
+        .clone()
+}
+
+/// The refusal data of a resource read.
+fn read_refused(client: &mut Client, uri: &str) -> Value {
+    match client.request("resources/read", json!({ "uri": uri })) {
+        Err(rascal_testkit::mcp_client::Failure::Rpc { code, data, .. }) => {
+            assert_eq!(code, -32602);
+            data.unwrap()
+        }
+        other => panic!("{uri}: not refused: {other:?}"),
+    }
+}
+
+/// A control's answer (`export`, `import`) or its refusal data.
+fn control(client: &mut Client, name: &str, arguments: Value) -> Result<Value, Value> {
+    match client.call(name, arguments) {
+        Ok(r) => Ok(r.structured.unwrap()),
+        Err(rascal_testkit::mcp_client::Failure::Rpc { data, .. }) => Err(data.unwrap()),
+        Err(other) => panic!("{name}: {other:?}"),
+    }
+}
+
+/// v0.4's set (task 10.14): the operations Line → Rasterize → Feather, a task's Mask bound by
+/// an operation, every binding refusal from a call and from `estimate` (an index in a `many`
+/// port, the released id accepted again), the artifact resource, export and import, a
+/// `rascal call` of an invocation, a bundle and its replay from another directory with the
+/// original store gone, a session with no `--allow-dir`, and every path the rule refuses. The
+/// bundle's members go into `raw`, byte for byte.
+fn v04_set(
+    dir: &Path,
+    out: &mut BTreeMap<&'static str, Value>,
+    raw: &mut BTreeMap<String, Vec<u8>>,
+    sessions: &mut Vec<String>,
+) {
+    let images = repo_root().join("fixtures/images");
+    let floor = images.join("floor.png");
+    let chair = images.join("chair-blob.png");
+    let pano = images.join("step-pano.png");
+    let path = |p: &Path| json!({ "path": p.to_str().unwrap() });
+    let ws = dir.join("v04/ws");
+    let mut client = serve_v04(dir, &ws, None);
+    sessions.push(session_id(&mut client));
+
+    let line = done(
+        &mut client,
+        "line",
+        "line",
+        json!({ "image": path(&floor), "column": 0.5, "width_px": 24 }),
+    );
+    let location = made(&line, "location");
+    let image = line["artifacts"]["in"][0]["artifact"].clone();
+    let rasterized = done(
+        &mut client,
+        "rasterize",
+        "rasterize",
+        json!({ "location": location, "image": image }),
+    );
+    let mask = made(&rasterized, "mask");
+    let feathered = done(
+        &mut client,
+        "feather",
+        "feather",
+        json!({ "mask": mask, "sigma_px": 6 }),
+    );
+    let removed = done(
+        &mut client,
+        "remove",
+        "remove",
+        json!({ "image": path(&chair), "location": { "kind": "bbox", "bbox": [0.27, 0.21, 0.53, 0.79] } }),
+    );
+    let chair_mask = made(&removed, "mask");
+    let from_remove = done(
+        &mut client,
+        "feather-from-remove",
+        "feather",
+        json!({ "mask": chair_mask, "sigma_px": 3 }),
+    );
+
+    // Every binding problem, from a call and from `estimate`.
+    let zeros = format!("sha256:{}", "0".repeat(64));
+    let mut unresolved = mask.clone();
+    unresolved["identity"] = json!(zeros);
+    unresolved["resource"] = json!(format!("rascal://artifact/{zeros}"));
+    let mut newer = mask.clone();
+    newer["schema_version"] = json!(2);
+    let problems: [(&'static str, &'static str, &str, Value); 4] = [
+        (
+            "refusal-binding-wrong-type.json",
+            "refusal-binding-estimate-wrong-type.json",
+            "feather",
+            json!({ "mask": location, "sigma_px": 6 }),
+        ),
+        (
+            "refusal-binding-wrong-version.json",
+            "refusal-binding-estimate-wrong-version.json",
+            "feather",
+            json!({ "mask": newer, "sigma_px": 6 }),
+        ),
+        (
+            "refusal-binding-wrong-frame.json",
+            "refusal-binding-estimate-wrong-frame.json",
+            "subtract",
+            json!({ "mask": mask, "subtract": chair_mask }),
+        ),
+        (
+            "refusal-binding-unresolved.json",
+            "refusal-binding-estimate-unresolved.json",
+            "feather",
+            json!({ "mask": unresolved, "sigma_px": 6 }),
+        ),
+    ];
+    for (from_call, from_estimate, action, arguments) in problems {
+        let refused = refusal(
+            &mut client,
+            call("refused", action, arguments.clone(), None),
+        );
+        let estimated = refusal(
+            &mut client,
+            json!({ "name": "estimate", "arguments": { "action": action, "arguments": arguments } }),
+        );
+        assert_eq!(refused["bindings"], estimated["bindings"], "{from_call}");
+        out.insert(from_call, refused);
+        out.insert(from_estimate, estimated);
+    }
+    let many = refusal(
+        &mut client,
+        call(
+            "many",
+            "select",
+            json!({ "plane": [location, unresolved] }),
+            None,
+        ),
+    );
+    assert!(many["bindings"][1]["index"] == 1, "{many:#}");
+    out.insert("refusal-binding-many-index.json", many);
+    // A refused call releases its id; the retry under it is accepted.
+    let id = Some("fixture.binding");
+    let first = refusal(
+        &mut client,
+        call(
+            "released",
+            "feather",
+            json!({ "mask": unresolved, "sigma_px": 6 }),
+            id,
+        ),
+    );
+    assert_eq!(first["reason"], "binding");
+    let retried = result(
+        &mut client,
+        call(
+            "retried",
+            "feather",
+            json!({ "mask": mask, "sigma_px": 5 }),
+            id,
+        ),
+    );
+    assert_eq!(retried["status"], "completed", "{retried:#}");
+    out.insert("run-binding-claim-released.json", retried);
+
+    // The artifact resource.
+    out.insert(
+        "artifact-mask.json",
+        read(&mut client, mask["resource"].as_str().unwrap()),
+    );
+    out.insert(
+        "artifact-location.json",
+        read(&mut client, location["resource"].as_str().unwrap()),
+    );
+    let cut = done(
+        &mut client,
+        "cut",
+        "cut",
+        json!({ "image": path(&pano), "strip": 0.1 }),
+    );
+    let plan = made(&cut, "plan");
+    let plan_body = read(&mut client, plan["resource"].as_str().unwrap());
+    assert_eq!(plan_body["preview"], Value::Null);
+    out.insert("artifact-plan.json", plan_body);
+    out.insert(
+        "refusal-artifact-unresolved.json",
+        read_refused(&mut client, &format!("rascal://artifact/{zeros}")),
+    );
+
+    // Export, and the refusals.
+    let exported = control(&mut client, "export", json!({ "artifact": mask })).unwrap();
+    let mask_file = PathBuf::from(exported["file"]["path"].as_str().unwrap());
+    out.insert("export-mask.json", exported);
+    let exported_location =
+        control(&mut client, "export", json!({ "artifact": location })).unwrap();
+    let location_bytes =
+        std::fs::read(exported_location["file"]["path"].as_str().unwrap()).unwrap();
+    out.insert(
+        "refusal-export-not-portable.json",
+        control(&mut client, "export", json!({ "artifact": plan })).unwrap_err(),
+    );
+    out.insert(
+        "refusal-export-unresolved.json",
+        control(&mut client, "export", json!({ "artifact": unresolved })).unwrap_err(),
+    );
+    client.close().unwrap();
+
+    // Import into another store.
+    let mut other = serve_v04(dir, &dir.join("v04/other"), None);
+    sessions.push(session_id(&mut other));
+    let file = json!({ "file": { "path": mask_file.to_str().unwrap() } });
+    let imported = control(&mut other, "import", file.clone()).unwrap();
+    assert_eq!(imported["already_present"], false);
+    out.insert("import-mask.json", imported);
+    let again = control(&mut other, "import", file).unwrap();
+    assert_eq!(again["already_present"], true);
+    out.insert("import-mask-again.json", again);
+    // A location needs its image in the store first: any action that takes it.
+    done(
+        &mut other,
+        "other-line",
+        "line",
+        json!({ "image": path(&floor), "column": 0.25, "width_px": 16 }),
+    );
+    let inline = json!({ "inline": { "media_type": "application/json",
+        "data": rascal_core::panel::base64(&location_bytes) } });
+    let location_in = control(&mut other, "import", inline).unwrap();
+    assert_eq!(location_in["already_present"], false, "{location_in:#}");
+    out.insert("import-location-inline.json", location_in);
+    let png = json!({ "inline": { "media_type": "image/png",
+        "data": rascal_core::panel::base64(&std::fs::read(&floor).unwrap()) } });
+    out.insert(
+        "refusal-import-png.json",
+        control(&mut other, "import", png).unwrap_err(),
+    );
+    other.close().unwrap();
+
+    // `rascal call` of the Feather's invocation.
+    let args_file = dir.join("v04/feather-args.json");
+    std::fs::write(&args_file, feathered["invocation"]["arguments"].to_string()).unwrap();
+    let called = Command::new(env!("CARGO_BIN_EXE_rascal"))
+        .args([
+            "call",
+            "feather",
+            "--arguments",
+            args_file.to_str().unwrap(),
+            "--workspace",
+            ws.to_str().unwrap(),
+            "--runs",
+            dir.join("runs").to_str().unwrap(),
+        ])
+        .env("XDG_DATA_HOME", dir.join("data"))
+        .env("XDG_CACHE_HOME", dir.join("cache"))
+        .env_remove("RASCAL_LOG")
+        .output()
+        .unwrap();
+    assert_eq!(called.status.code(), Some(0));
+    let called: Value = serde_json::from_slice(&called.stdout).unwrap();
+    assert_eq!(called["invocation"], feathered["invocation"]);
+    out.insert("run-call-feather.json", called);
+
+    // The chain as a bundle, replayed elsewhere with the original store gone.
+    use rascal_testkit::invocation_bundle::{self as writer, ArtifactFile, InputFile, Step};
+    let floor_bytes = std::fs::read(&floor).unwrap();
+    let inputs = |result: &Value| -> Vec<InputFile> {
+        result["images"]["in"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|taken| InputFile {
+                slot: None,
+                port: Some(taken["slot"].as_str().unwrap().to_string()),
+                image: taken["image"].clone(),
+                bytes: floor_bytes.clone(),
+                ext: "png".to_string(),
+            })
+            .collect()
+    };
+    let steps = vec![
+        Step {
+            result: line.clone(),
+            inputs: inputs(&line),
+            artifacts: vec![],
+            reference_only: vec![],
+            unportable: vec![],
+        },
+        Step {
+            result: rasterized.clone(),
+            inputs: inputs(&rasterized),
+            artifacts: vec![ArtifactFile {
+                port: "location".to_string(),
+                artifact: location.clone(),
+                bytes: location_bytes,
+                ext: "location.json".to_string(),
+            }],
+            reference_only: vec![],
+            unportable: vec![],
+        },
+        Step {
+            result: feathered.clone(),
+            inputs: vec![],
+            artifacts: vec![ArtifactFile {
+                port: "mask".to_string(),
+                artifact: mask.clone(),
+                bytes: std::fs::read(&mask_file).unwrap(),
+                ext: "mask.tar".to_string(),
+            }],
+            reference_only: vec![],
+            unportable: vec![],
+        },
+    ];
+    let (manifest, members) = writer::parts(&steps);
+    let bundle = dir.join("v04/bundle/chain.tar");
+    std::fs::create_dir_all(bundle.parent().unwrap()).unwrap();
+    std::fs::write(&bundle, writer::write(&steps)).unwrap();
+    std::fs::remove_dir_all(&ws).unwrap();
+    let replayed = Command::new(env!("CARGO_BIN_EXE_rascal"))
+        .args([
+            "call",
+            "--bundle",
+            bundle.to_str().unwrap(),
+            "--workspace",
+            dir.join("v04/replay").to_str().unwrap(),
+            "--runs",
+            dir.join("runs").to_str().unwrap(),
+            "--allow-dir",
+            bundle.parent().unwrap().to_str().unwrap(),
+        ])
+        .env("XDG_DATA_HOME", dir.join("data"))
+        .env("XDG_CACHE_HOME", dir.join("cache"))
+        .env_remove("RASCAL_LOG")
+        .output()
+        .unwrap();
+    assert_eq!(
+        replayed.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&replayed.stderr)
+    );
+    let lines: Vec<Value> = String::from_utf8(replayed.stdout)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    for ((name, original), replayed) in [
+        ("run-replay-line.json", &line),
+        ("run-replay-rasterize.json", &rasterized),
+        ("run-replay-feather.json", &feathered),
+    ]
+    .into_iter()
+    .zip(lines)
+    {
+        assert_eq!(replayed["invocation"], original["invocation"], "{name}");
+        out.insert(name, replayed);
+    }
+    out.insert(BUNDLE_MANIFEST, manifest);
+    for (member, bytes) in members {
+        raw.insert(format!("{BUNDLE_DIR}/{member}"), bytes);
+    }
+    out.insert("run-op-line.json", line);
+    out.insert("run-op-rasterize.json", rasterized);
+    out.insert("run-op-feather.json", feathered);
+    out.insert("run-remove-mask.json", removed);
+    out.insert("run-op-feather-from-remove.json", from_remove);
+
+    // The path rule: a server allowed one directory, and one allowed none.
+    let allowed = dir.join("v04/allowed");
+    let outside = dir.join("v04/outside");
+    std::fs::create_dir_all(&allowed).unwrap();
+    std::fs::create_dir_all(&outside).unwrap();
+    let outside_pano = outside.join("pano.png");
+    std::fs::copy(&pano, &outside_pano).unwrap();
+    std::fs::copy(&pano, allowed.join("pano.png")).unwrap();
+    std::os::unix::fs::symlink(&outside_pano, allowed.join("link.png")).unwrap();
+    let allowed_dir = allowed.canonicalize().unwrap();
+    let mut ruled = serve_v04(dir, &dir.join("v04/ruled"), Some(&[allowed_dir.as_path()]));
+    sessions.push(session_id(&mut ruled));
+    for (name, given) in [
+        ("run-path-outside.json", outside_pano.clone()),
+        ("run-path-dotdot.json", allowed.join("../outside/pano.png")),
+        ("run-path-symlink.json", allowed.join("link.png")),
+        ("run-path-missing.json", allowed.join("missing.png")),
+    ] {
+        let r = result(
+            &mut ruled,
+            call("path", "seam", json!({ "image": path(&given) }), None),
+        );
+        assert_eq!(
+            (&r["status"], &r["error"]["code"]),
+            (&json!("invalid"), &json!("input")),
+            "{name}: {r:#}"
+        );
+        out.insert(name, r);
+    }
+    ruled.close().unwrap();
+    let mut closed = serve_v04(dir, &dir.join("v04/closed"), Some(&[]));
+    sessions.push(session_id(&mut closed));
+    let session = read(&mut closed, "rascal://session");
+    assert_eq!(session["allowed_dirs"], json!([]));
+    out.insert("session-no-allow-dir.json", session);
+    let r = result(
+        &mut closed,
+        call(
+            "closed",
+            "seam",
+            json!({ "image": path(&allowed.join("pano.png")) }),
+            None,
+        ),
+    );
+    assert_eq!(r["error"]["code"], "input", "{r:#}");
+    out.insert("run-path-no-allow-dir.json", r);
+    closed.close().unwrap();
+}
+
+/// The bundle fixture's directory and its manifest.
+const BUNDLE_DIR: &str = "bundle-line-rasterize-feather";
+const BUNDLE_MANIFEST: &str = "bundle-line-rasterize-feather/invocation.json";
+
 #[test]
 fn the_table_manners_fixtures_hold() {
     let dir = scratch();
@@ -953,6 +1441,7 @@ fn the_table_manners_fixtures_hold() {
     let mut out: BTreeMap<&'static str, Value> = BTreeMap::new();
     let mut sessions = Vec::new();
     let mut issued = Vec::new();
+    let mut raw: BTreeMap<String, Vec<u8>> = BTreeMap::new();
     m11_set(&dir, &pano, &url, &mut out, &mut sessions);
     v03_set(
         &dir,
@@ -962,6 +1451,7 @@ fn the_table_manners_fixtures_hold() {
         &mut sessions,
         &mut issued,
     );
+    v04_set(&dir, &mut out, &mut raw, &mut sessions);
 
     let runs: Vec<String> = std::fs::read_dir(dir.join("runs"))
         .unwrap()
@@ -989,17 +1479,18 @@ fn the_table_manners_fixtures_hold() {
             assert!(!text.contains(secret), "{name} carries a key's value");
         }
         conforms(name, &value);
-        // Every result records its invocation (4.8), but the run whose image is not the one it
-        // expected: its arguments did not resolve.
+        // Every result records its invocation (4.8), but the runs whose arguments did not
+        // resolve: the image that is not the one it expected, and each path the rule refuses.
         if name.starts_with("run-") {
             assert_eq!(
                 value["invocation"].is_null(),
-                *name == "run-invalid.json",
+                *name == "run-invalid.json" || name.starts_with("run-path-"),
                 "{name}: {value:#}"
             );
         }
         let path = stored.join(name);
         if update {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(&path, &text).unwrap();
         }
         let expected: Value =
@@ -1011,12 +1502,43 @@ fn the_table_manners_fixtures_hold() {
             path.display()
         );
     }
-    let mut files: Vec<String> = std::fs::read_dir(&stored)
-        .unwrap()
-        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
-        .collect();
+    // The bundle's members, byte for byte.
+    for (name, bytes) in &raw {
+        let path = stored.join(name);
+        if update {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, bytes).unwrap();
+        }
+        assert_eq!(
+            &std::fs::read(&path).unwrap(),
+            bytes,
+            "{name}: UPDATE_FIXTURES=1 regenerates it"
+        );
+    }
+    let mut files = Vec::new();
+    let mut pending = vec![stored.clone()];
+    while let Some(at) = pending.pop() {
+        for entry in std::fs::read_dir(&at).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                pending.push(path);
+            } else {
+                files.push(
+                    path.strip_prefix(&stored)
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                );
+            }
+        }
+    }
     files.sort();
-    let made: Vec<String> = out.keys().map(|k| k.to_string()).collect();
+    let mut made: Vec<String> = out
+        .keys()
+        .map(|k| k.to_string())
+        .chain(raw.keys().cloned())
+        .collect();
+    made.sort();
     assert_eq!(
         files, made,
         "fixtures/table-manners holds exactly the generated set (UPDATE_FIXTURES=1)"

@@ -1,0 +1,13 @@
+{
+  "bindings": [
+    {
+      "expected": "an artifact this store holds (any rascal type, v1)",
+      "got": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "port": null,
+      "problem": "unresolved",
+      "remedy": "Import the artifact with the import tool (rascal import), or start rascal serve on the workspace that holds it, then read again."
+    }
+  ],
+  "reason": "binding",
+  "run": null
+}

@@ -1,0 +1,12 @@
+{
+  "bindings": [
+    {
+      "expected": "rascal:Mask v1 in the frame of mask",
+      "got": "rascal:Mask v1 in frame sha256:7aa57d73caf3bc715fcb84e511f4fb54cd54da81062e60d87872ae20ae9a5635",
+      "port": "subtract",
+      "problem": "wrong_frame"
+    }
+  ],
+  "reason": "binding",
+  "run": null
+}

@@ -1,0 +1,165 @@
+{
+  "action": "feather",
+  "artifacts": {
+    "in": [
+      {
+        "artifact": {
+          "frame": "sha256:7aa57d73caf3bc715fcb84e511f4fb54cd54da81062e60d87872ae20ae9a5635",
+          "identity": "sha256:a63448926389bb8b2e29c9094b7f2a2ba1feb4a29e8a1b6cb907a2b76b9b029c",
+          "on": {
+            "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+            "height": 320,
+            "projection": "flat",
+            "topology": "bounded",
+            "width": 480
+          },
+          "resource": "rascal://artifact/sha256:a63448926389bb8b2e29c9094b7f2a2ba1feb4a29e8a1b6cb907a2b76b9b029c",
+          "schema_version": 1,
+          "tool": "rascal",
+          "type": "rascal:Mask"
+        },
+        "port": "mask",
+        "preview": null
+      }
+    ],
+    "out": [
+      {
+        "artifact": {
+          "frame": "sha256:7aa57d73caf3bc715fcb84e511f4fb54cd54da81062e60d87872ae20ae9a5635",
+          "identity": "sha256:cd41eb5dc48e861caf63a4bbfc32fcc60a09eef2eec2485a047ec996d471b6a7",
+          "on": {
+            "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+            "height": 320,
+            "projection": "flat",
+            "topology": "bounded",
+            "width": 480
+          },
+          "resource": "rascal://artifact/sha256:cd41eb5dc48e861caf63a4bbfc32fcc60a09eef2eec2485a047ec996d471b6a7",
+          "schema_version": 1,
+          "tool": "rascal",
+          "type": "rascal:Mask"
+        },
+        "port": "mask",
+        "preview": {
+          "image": {
+            "file_sha256": "56d989f6878348f8d169d0aa9fe4800bda4d493798a24eb027b28b30d2fc922e",
+            "height": 320,
+            "projection": "flat",
+            "topology": "bounded",
+            "width": 480
+          },
+          "path": "/runs/run-1767225600068-1/preview-mask.png",
+          "role": "preview"
+        }
+      }
+    ]
+  },
+  "body": {
+    "envelope": {
+      "artifacts": {
+        "mask": {
+          "artifact_type": "Mask",
+          "id": "mask",
+          "identity": "sha256:cd41eb5dc48e861caf63a4bbfc32fcc60a09eef2eec2485a047ec996d471b6a7"
+        }
+      },
+      "envelope_version": 1,
+      "measurements": [
+        {
+          "frame": "raw:480x320:flat",
+          "name": "sigma_px",
+          "unit": "px",
+          "value": 3.0
+        },
+        {
+          "frame": "raw:480x320:flat",
+          "name": "blend_px",
+          "unit": "px",
+          "value": 6272.0
+        }
+      ],
+      "provenance": {
+        "duration_ms": 0,
+        "tool": "feather",
+        "version": "1.0.0"
+      },
+      "status": "ok",
+      "summary": "feathered the core edge with sigma 3 px (6272 blend pixels)"
+    }
+  },
+  "cache": "off",
+  "contract": "0.4.0",
+  "duration_ms": 0,
+  "error": null,
+  "finished": "2026-01-01T00:00:00.000Z",
+  "images": {
+    "in": [],
+    "out": [
+      {
+        "image": {
+          "file_sha256": "56d989f6878348f8d169d0aa9fe4800bda4d493798a24eb027b28b30d2fc922e",
+          "height": 320,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "path": "/runs/run-1767225600068-1/preview-mask.png",
+        "role": "preview"
+      }
+    ]
+  },
+  "input_identity": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "invocation": {
+    "action": "feather",
+    "arguments": {
+      "constants": "feather-v1",
+      "mask": {
+        "frame": "sha256:7aa57d73caf3bc715fcb84e511f4fb54cd54da81062e60d87872ae20ae9a5635",
+        "identity": "sha256:a63448926389bb8b2e29c9094b7f2a2ba1feb4a29e8a1b6cb907a2b76b9b029c",
+        "on": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "resource": "rascal://artifact/sha256:a63448926389bb8b2e29c9094b7f2a2ba1feb4a29e8a1b6cb907a2b76b9b029c",
+        "schema_version": 1,
+        "tool": "rascal",
+        "type": "rascal:Mask"
+      },
+      "sigma_px": 3.0
+    },
+    "effective": {
+      "config_identity": "sha256:ecacf98c64387c1697e576e92ec3925051e7a4a8a16073ea901f59c5775f514d",
+      "model": null,
+      "x-rascal": {
+        "constants": "feather-v1"
+      }
+    },
+    "requirements": []
+  },
+  "locations": {
+    "found": [],
+    "used": []
+  },
+  "notes": [],
+  "run": {
+    "client_run_id": null,
+    "dir": "/runs/run-1767225600068-1",
+    "id": "run-1767225600068-1",
+    "resource": "rascal://run/run-1767225600068-1/run.json",
+    "session_id": "00000000-0000-4000-8000-000000000007"
+  },
+  "spend": {
+    "basis": "measured",
+    "unresolved_usd": 0.0,
+    "usd": 0.0
+  },
+  "started": "2026-01-01T00:00:00.000Z",
+  "status": "completed",
+  "tool": {
+    "name": "rascal",
+    "version": "0.1.1"
+  }
+}

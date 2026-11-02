@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "usage",
+    "reason": "artifact: a rascal:Plan is portable: none (CONTRACT 3.3): it cannot leave its workspace yet, so it has no export",
+    "retryable": false
+  },
+  "reason": "invalid_arguments",
+  "run": null
+}

@@ -1,0 +1,12 @@
+{
+  "bindings": [
+    {
+      "expected": "rascal:Mask v1",
+      "got": "rascal:Mask v2",
+      "port": "mask",
+      "problem": "wrong_version"
+    }
+  ],
+  "reason": "binding",
+  "run": null
+}

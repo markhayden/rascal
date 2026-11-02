@@ -1,0 +1,39 @@
+{
+  "artifact": {
+    "frame": "sha256:b99a8275191d807e2c331f13c90c23e421ebe211573b644b99fc613f5d30f95f",
+    "identity": "sha256:b504057831c636571a58941e304a192fecd9e6ada646973adfd1a19b2d51f59e",
+    "on": {
+      "file_sha256": "40ec7298d2c908c6652ebcdd96215dd45ba98c8b7d909ba1767078d63e9a7a50",
+      "height": 200,
+      "projection": "flat",
+      "topology": "bounded",
+      "width": 320
+    },
+    "resource": "rascal://artifact/sha256:b504057831c636571a58941e304a192fecd9e6ada646973adfd1a19b2d51f59e",
+    "schema_version": 1,
+    "tool": "rascal",
+    "type": "location"
+  },
+  "contract": "0.4.0",
+  "preview": {
+    "image": {
+      "file_sha256": "ba0497b0e84fd647cee5d61fb4f5a084a506a10bb6b0cea55b02a5b66fad63d3",
+      "height": 200,
+      "projection": "flat",
+      "topology": "bounded",
+      "width": 320
+    },
+    "path": "/work/cache/rascal/previews/sha256-b504057831c636571a58941e304a192fecd9e6ada646973adfd1a19b2d51f59e.png",
+    "role": "preview"
+  },
+  "record": {
+    "column": 0.5,
+    "frame": "raw:320x200:flat",
+    "kind": "line",
+    "width_px": 24.0
+  },
+  "tool": {
+    "name": "rascal",
+    "version": "0.1.1"
+  }
+}

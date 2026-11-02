@@ -1,0 +1,48 @@
+{
+  "action": "seam",
+  "artifacts": {
+    "in": [],
+    "out": []
+  },
+  "body": {
+    "recipe": "seam"
+  },
+  "cache": "off",
+  "contract": "0.4.0",
+  "duration_ms": 0,
+  "error": {
+    "code": "input",
+    "reason": "image: this path is not readable here (only files inside the directories rascal serve allows; CONTRACT 5.2)",
+    "retryable": false
+  },
+  "finished": "2026-01-01T00:00:00.000Z",
+  "images": {
+    "in": [],
+    "out": []
+  },
+  "input_identity": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "invocation": null,
+  "locations": {
+    "found": [],
+    "used": []
+  },
+  "notes": [],
+  "run": {
+    "client_run_id": null,
+    "dir": "/runs/run-1767225600077-1",
+    "id": "run-1767225600077-1",
+    "resource": "rascal://run/run-1767225600077-1/run.json",
+    "session_id": "00000000-0000-4000-8000-000000000009"
+  },
+  "spend": {
+    "basis": "estimated",
+    "unresolved_usd": 0.0,
+    "usd": 0.0
+  },
+  "started": "2026-01-01T00:00:00.000Z",
+  "status": "invalid",
+  "tool": {
+    "name": "rascal",
+    "version": "0.1.1"
+  }
+}

@@ -752,7 +752,13 @@ installation that fails, or leaves no program, exits 74 and runs nothing. Off a 
   configuration identities in their order, the estimates' and then the invocations' (the
   built-in defaults' identity is kept, being the same everywhere), the fake filler's address.
   At v0.4 (task 10.2) every action has `kind`, the session has `allowed_dirs`, and every result
-  has its `invocation`, null only in `run-invalid.json`, whose image is not the one it expected.
+  has its `invocation`, null only where the arguments did not resolve: `run-invalid.json`,
+  whose image is not the one it expected, and the `run-path-*.json` refusals. Task 10.14 adds
+  the operations set below, from servers with rascal's data and cache under the scratch
+  directory (so the export area and the preview cache read `/work/data/…` and `/work/cache/…`),
+  the file name choosing the schema as before plus `artifact-*` (the artifact resource),
+  `export-*` and `import-*` (the controls' answers) and `bundle-*/invocation.json` (the bundle
+  manifest; its members are stored byte for byte beside it).
 
   | file | what it shows |
   |---|---|
@@ -769,7 +775,18 @@ installation that fails, or leaves no program, exits 74 and runs nothing. Off a 
   | `run-claim-released.json` | the accepted retry under the id a `not_ready` refusal released |
   | `refusal-not-ready.json` | a call naming the filler whose key is unset, refused before any run |
   | `refusal-earlier-run.json`, `refusal-no-run.json`, `refusal-cancelled-before-allocation.json` | an id reused after its run ended; ids whose calls were cancelled before allocation, still refused with `run: null` |
-  | `runs.json`, `runs-page-2.json`, `session.json` | the two pages of the runs list and the session |
+  | `runs.json`, `runs-page-2.json`, `session.json` | the two pages of the runs list and the session (`allowed_dirs` the suite's two directories) |
+  | `run-op-line.json`, `run-op-rasterize.json`, `run-op-feather.json` | Line → Rasterize → Feather, one operation call each, bound by reference, with previews |
+  | `run-remove-mask.json`, `run-op-feather-from-remove.json` | a task listing its Mask, and an operation bound to it |
+  | `refusal-binding-wrong-type.json`, `-wrong-version.json`, `-wrong-frame.json`, `-unresolved.json` | each binding problem from a call (`wrong_frame`: `subtract` on Masks of two images) |
+  | `refusal-binding-estimate-*.json` | the same four from `estimate`, their `bindings` equal to the call's |
+  | `refusal-binding-many-index.json`, `run-binding-claim-released.json` | a `many` port's items named by `index`; the retry accepted under the id a `binding` refusal released |
+  | `artifact-mask.json`, `artifact-location.json`, `artifact-plan.json`, `refusal-artifact-unresolved.json` | the artifact resource with a preview, without one (a Plan), and a read of an identity the store lacks |
+  | `export-mask.json`, `import-mask.json`, `import-mask-again.json`, `import-location-inline.json` | export into the export area; import into another store, again (`already_present`), a location inline |
+  | `refusal-import-png.json`, `refusal-export-not-portable.json`, `refusal-export-unresolved.json` | the controls' refusals |
+  | `run-call-feather.json` | `rascal call` of `run-op-feather.json`'s invocation: the invocations equal |
+  | `bundle-line-rasterize-feather/` and `run-replay-line.json`, `-rasterize.json`, `-feather.json` | the chain's invocation bundle (the testkit's writer) and its replay by `rascal call --bundle` from another directory with the original store gone |
+  | `session-no-allow-dir.json`, `run-path-outside.json`, `-dotdot.json`, `-symlink.json`, `-missing.json`, `-no-allow-dir.json` | the path rule: no directory allowed, and every refused path `invalid`/`input` with the one refusal text |
 - **No provider call.** `tests/it/no_provider_call.rs` proves `describe` and `estimate` make
   none (table-manners 7): across every configuration state (none, a path naming no file, a file
   that does not load, a loaded one) and credential state (missing, present, valid, invalid),
