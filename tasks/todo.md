@@ -128,7 +128,7 @@ with green CI on both platforms, and then the tag.
 - [x] 10.12 `rascal call <action> --arguments <file>`: the MCP arguments, no session, `--allow-dir`, exit codes, refusals as JSON with 64 (← 10.2)
 - [x] 10.13 `rascal call --bundle`: the bounded reader, imports, inputs into rascal's replay area, steps in order (another tool's refused), JSON Lines out, stopping at the first step that does not complete; a later step binds to an earlier step's replayed output by port and reports the change; replayed from another directory with the original workspace gone (← 10.12, 10.10) → tag `m10.5`
 - [x] 10.14 Line → Rasterize → Feather end to end (`operations_path.rs`), v0.4 fixtures for table-manners `fixtures/rascal/` validated as table-manners validates them, ADR 0021, the 0015, 0020 and 0022 notes, docs (← 10.7 to 10.13)
-- [ ] 10.15 The pin to v0.4.0 (owner: squint's fixtures pass, tag and publish) → merged → tag `m10` (← 10.14)
+- [ ] 10.15 The pin to v0.4.0 (owner: squint's fixtures pass, tag and publish) → merged → tag `m10` (← 10.14) (pinned `=0.4.0` from crates.io 2026-11-02, fixtures unchanged; CI, the merge and `m10` remain)
 - [ ] Checkpoint M10 → tag `m10`
 
 ## M11 Table manners v0.2 (contract C4; PLAN.md M11; pinned `=0.2.0`)

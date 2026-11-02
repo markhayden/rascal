@@ -2476,6 +2476,18 @@ path; `scripts/check-contract.sh` reports it as the newest. The fixtures are reg
 published contract differs from the branch rascal built against, and the milestone branch merges
 into `main` by the checkpoint procedure.
 
+As built (2026-11-02, after the owner tagged and published v0.4.0): the workspace pins
+`table-manners = "=0.4.0"` from crates.io in place of the path (`rascal-core` takes it through
+the workspace; no other manifest names it), and `Cargo.lock` records the registry crate and its
+checksum. The draft-only wiring is gone: `scripts/check-contract.sh` reads only the exact
+`"=X"` pin and no longer warns about a path draft, and its self-tests in
+`scripts/test-checks.sh` dropped the draft cases (a path pin is still refused as no exact pin).
+No CI workflow referred to the draft checkout. The published contract matches the branch rascal
+built against: the table-manners fixtures, the contract fixtures and the description fixture
+compare equal, and `UPDATE_FIXTURES=1` rewrites nothing. `scripts/check-contract.sh` reports
+0.4.0 as the newest. What remains of the acceptance below is the coordinator's: CI on both
+platforms, the merge into `main` and the tag `m10`.
+
 **Acceptance.**
 - [ ] `just check` and CI green on both platforms on the pinned release; the milestone branch
       merged; tag `m10`.

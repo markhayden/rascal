@@ -24,17 +24,11 @@ out="$(CONTRACT_LATEST=0.0.1 scripts/check-contract.sh 2>&1)"
 if grep -q 'is the newest' <<< "$out"; then ok
 else bad "contract check warned on an older release: $out"; fi
 manifest="$(mktemp)"
-printf 'table-manners = { path = "../table-manners", version = "=0.3.0" }\n' > "$manifest"
-out="$(CONTRACT_MANIFEST="$manifest" CONTRACT_LATEST=0.3.0 scripts/check-contract.sh 2>&1)"
-if grep -q 'table-manners 0.3.0 is the newest' <<< "$out"; then ok
-else bad "contract check did not read a path pin's version: $out"; fi
-if grep -q '::warning title=table-manners draft::' <<< "$out"; then ok
-else bad "contract check did not warn that a path pin builds against a draft: $out"; fi
 printf 'table-manners = "=0.3.0"\n' > "$manifest"
 out="$(CONTRACT_MANIFEST="$manifest" CONTRACT_LATEST=0.3.0 scripts/check-contract.sh 2>&1)"
-if grep -q 'draft' <<< "$out"; then bad "contract check called a released pin a draft: $out"
-else ok; fi
-printf 'table-manners = { path = "../table-manners" }\n' > "$manifest"
+if grep -q 'table-manners 0.3.0 is the newest' <<< "$out"; then ok
+else bad "contract check did not read the pin: $out"; fi
+printf 'table-manners = { path = "../table-manners", version = "=0.3.0" }\n' > "$manifest"
 if CONTRACT_MANIFEST="$manifest" CONTRACT_LATEST=0.3.0 scripts/check-contract.sh > /dev/null 2>&1; then
   bad "contract check accepted a path pin without an exact version"; else ok; fi
 rm -f "$manifest"
