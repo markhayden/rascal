@@ -26,6 +26,8 @@ jobs:
           - name: linux-x86_64
             runner: ubuntu-latest
     runs-on: ${{ matrix.runner }}
+    # A hung test fails the job instead of holding a runner for hours.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       # rustup reads the exact version pinned in rust-toolchain.toml and installs clippy and rustfmt.
