@@ -373,6 +373,26 @@ fn the_rect_action_says_its_mask_is_hard_edged() {
 }
 
 #[test]
+fn the_seam_action_says_it_masks_the_wrap_edge_only() {
+    // The seam recipe takes only an image and masks its wrap edge: its purpose claims no other
+    // line.
+    let out = rascal(&["describe", "--json"]);
+    assert_eq!(out.status.code(), Some(0));
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let seam = doc["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["name"] == "seam")
+        .unwrap();
+    assert_eq!(
+        seam["purpose"],
+        "Masks the wrap edge of a panorama as a band, wide on smooth surfaces and thin on detail, with a tone ramp across it; with a filler, heals it."
+    );
+    assert_eq!(seam["locations"], serde_json::json!([]), "{seam}");
+}
+
+#[test]
 fn describe_is_the_contracts_document_and_matches_its_fixture() {
     let out = rascal(&["describe", "--json"]);
     assert_eq!(

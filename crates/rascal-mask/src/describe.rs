@@ -116,7 +116,7 @@ fn title_and_purpose(recipe: &str) -> (&'static str, &'static str) {
     match recipe {
         "seam" => (
             "Heal a seam",
-            "Masks the wrap edge of a panorama (or any vertical line) as a band, wide on smooth surfaces and thin on detail, with a tone ramp across it; with a filler, heals it.",
+            "Masks the wrap edge of a panorama as a band, wide on smooth surfaces and thin on detail, with a tone ramp across it; with a filler, heals it.",
         ),
         "remove" => (
             "Remove an object",

@@ -71,7 +71,7 @@ the shipped files are the acceptance fixtures:
 
 | recipe | what it masks | the location it takes |
 |---|---|---|
-| `seam` | a band across a vertical line, wide where the surface is smooth and thin where it is detailed, with a tone ramp across it; the wrap edge of a 360 or any line | a line, or the wrap edge |
+| `seam` | a band across the wrap edge of a 360, wide where the surface is smooth and thin where it is detailed, with a tone ramp across it | none: the wrap edge |
 | `remove` | an object with its shadow, minus protected zones, feathered | a click, a stroke, a polygon or a rectangle |
 | `remove-prompt` | the same, found by the Python pack's segmenter (OWLv2 and SAM 2.1, `tools/python/MODEL.md`) | a text prompt |
 | `repair` | a scratch or tear, tightened to the defect's edges and feathered | a stroke |
