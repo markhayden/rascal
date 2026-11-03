@@ -71,13 +71,13 @@ the shipped files are the acceptance fixtures:
 
 | recipe | what it masks | the location it takes |
 |---|---|---|
-| `seam` | a band across a vertical line, wide where the surface is smooth and thin where it is detailed, with a tone ramp across it; the wrap edge of a 360 or any line | a line, or the wrap edge |
-| `remove` | an object with its shadow and reflection, minus protected zones | a click, a stroke, a polygon or a rectangle |
+| `seam` | a band across the wrap edge of a 360, wide where the surface is smooth and thin where it is detailed, with a tone ramp across it | none: the wrap edge |
+| `remove` | an object with its shadow, minus protected zones, feathered | a click, a stroke, a polygon or a rectangle |
 | `remove-prompt` | the same, found by the Python pack's segmenter (OWLv2 and SAM 2.1, `tools/python/MODEL.md`) | a text prompt |
 | `repair` | a scratch or tear, tightened to the defect's edges and feathered | a stroke |
 | `repair-area` | a stain or spot, rasterized and feathered | a rectangle or polygon |
 | `protect` | the inverse of any mask, for a second pass | a mask |
-| `rect` | a plain feathered rectangle | a rectangle |
+| `rect` | a plain hard-edged rectangle; the `feather` op softens it | a rectangle |
 
 ```
 rascal run seam pano.jpg --out run/

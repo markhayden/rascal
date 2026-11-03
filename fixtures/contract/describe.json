@@ -76,7 +76,7 @@
         "required": [],
         "type": "object"
       },
-      "purpose": "A feathered rectangle as a mask.",
+      "purpose": "A hard-edged rectangle as a mask; to soften its edge, feather it afterwards (the feather operation).",
       "readiness": {
         "requirements": [],
         "state": "ready"
@@ -179,7 +179,7 @@
         "required": [],
         "type": "object"
       },
-      "purpose": "Masks the wrap edge of a panorama (or any vertical line) as a band, wide on smooth surfaces and thin on detail, with a tone ramp across it; with a filler, heals it.",
+      "purpose": "Masks the wrap edge of a panorama as a band, wide on smooth surfaces and thin on detail, with a tone ramp across it; with a filler, heals it.",
       "readiness": {
         "requirements": [],
         "state": "ready"
