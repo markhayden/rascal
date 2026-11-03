@@ -351,6 +351,28 @@ fn valid(id: &str, value: &serde_json::Value) -> Vec<String> {
 }
 
 #[test]
+fn the_rect_action_says_its_mask_is_hard_edged() {
+    // The rect recipe is a single rasterize step: its purpose claims no feather and names the
+    // follow-up that softens it.
+    let out = rascal(&["describe", "--json"]);
+    assert_eq!(out.status.code(), Some(0));
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let rect = doc["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["name"] == "mask_rect")
+        .unwrap();
+    assert_eq!(
+        rect["purpose"],
+        "A hard-edged rectangle as a mask; to soften its edge, feather it afterwards (the feather operation)."
+    );
+    let recipe =
+        std::fs::read_to_string(repo_root().join("crates/rascal-mask/recipes/rect.toml")).unwrap();
+    assert!(!recipe.contains("op = \"feather\""), "{recipe}");
+}
+
+#[test]
 fn describe_is_the_contracts_document_and_matches_its_fixture() {
     let out = rascal(&["describe", "--json"]);
     assert_eq!(
