@@ -247,6 +247,13 @@
             "array",
             "null"
           ]
+        },
+        "runs": {
+          "description": "Where the contract's action runs go when `--runs` is not given, relative to this file;\nunset, `$XDG_DATA_HOME/rascal/runs`. With `[workspace] dir`, a host can start\n`rascal serve --config <file>` alone, and `rascal call --config <file>` from a terminal\nthen uses the same workspace and runs.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"

@@ -3,6 +3,7 @@
 //! process.
 
 mod cut_put;
+mod exactly_one_of;
 mod fan;
 mod fan_thin_widths;
 mod frames;

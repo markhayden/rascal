@@ -80,7 +80,7 @@ fn assert_v04_shapes(doc: &serde_json::Value) {
         [
             ("location", "json", true),
             ("rascal:Mask", "bundle", true),
-            ("rascal:BandProfile", "none", false),
+            ("rascal:BandProfile", "none", true),
             ("rascal:Series", "none", false),
             ("rascal:Plan", "none", false),
         ]

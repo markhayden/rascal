@@ -3,6 +3,7 @@
 //! process.
 
 mod artifact_resource;
+mod band_preview;
 mod binding;
 mod call_bundle;
 mod call_cli;
@@ -43,6 +44,7 @@ mod render_cli;
 mod run_json;
 mod serve;
 mod serve_contract;
+mod serve_runs_config;
 mod table_manners_fixtures;
 mod tools_setup;
 mod transfer;

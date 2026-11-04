@@ -53,7 +53,8 @@ impl Op for Rect {
                     "[x0, y0, x1, y1] as fractions of the frame; x0 < x1 and y0 < y1",
                     ParamKind::NumberArray,
                 )
-                .length(4),
+                .length(4)
+                .titled("Box"),
             ],
         )
     }

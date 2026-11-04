@@ -38,6 +38,22 @@ pub struct ServeArgs {
 
 /// The workspace `serve` uses without `--workspace`: the configuration's `[workspace] dir`,
 /// relative to the configuration file, else `workspace` beside the default runs root.
+/// The runs root `serve` and `call` use without `--runs`: the configuration's `[serve] runs`,
+/// relative to the configuration file, else `$XDG_DATA_HOME/rascal/runs`.
+pub fn default_runs(config: &ConfigState) -> PathBuf {
+    let configured = config
+        .config()
+        .and_then(|c| c.serve.as_ref())
+        .and_then(|s| s.runs.as_deref())
+        .map(PathBuf::from);
+    match (configured, config.path()) {
+        (Some(dir), _) if dir.is_absolute() => dir,
+        (Some(dir), Some(file)) => file.parent().map(|p| p.join(&dir)).unwrap_or(dir),
+        (Some(dir), None) => dir,
+        (None, _) => crate::actions::default_runs_root(),
+    }
+}
+
 pub fn default_workspace(config: &ConfigState) -> PathBuf {
     let configured = config
         .config()
@@ -137,6 +153,7 @@ pub fn contract_actions(
             })
             .collect()
     };
+    let runs = args.runs.clone().unwrap_or_else(|| default_runs(&state));
     Ok(crate::actions::ContractActions {
         config_path: config
             .is_some()
@@ -146,10 +163,7 @@ pub fn contract_actions(
         config_state: state,
         failed_packs,
         answers: std::sync::Mutex::default(),
-        runs: args
-            .runs
-            .clone()
-            .unwrap_or_else(crate::actions::default_runs_root),
+        runs,
         ledger: std::sync::Mutex::default(),
         session,
         issued: std::sync::Mutex::default(),

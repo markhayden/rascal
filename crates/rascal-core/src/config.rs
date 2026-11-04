@@ -66,6 +66,12 @@ pub struct ServeConfig {
     /// Absolute directories; unset, the flags stand as given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allow_dirs: Option<Vec<String>>,
+    /// Where the contract's action runs go when `--runs` is not given, relative to this file;
+    /// unset, `$XDG_DATA_HOME/rascal/runs`. With `[workspace] dir`, a host can start
+    /// `rascal serve --config <file>` alone, and `rascal call --config <file>` from a terminal
+    /// then uses the same workspace and runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runs: Option<String>,
 }
 
 /// `[cache]`: where fills are kept.

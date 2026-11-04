@@ -75,6 +75,9 @@ pub enum ParamKind {
 #[serde(deny_unknown_fields)]
 pub struct Param {
     pub name: String,
+    /// How a person reads the name, where the name alone is jargon (`bbox` is a "Box").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     pub purpose: String,
     pub kind: ParamKind,
     pub required: bool,
@@ -100,6 +103,7 @@ impl Param {
     pub fn required(name: &str, purpose: &str, kind: ParamKind) -> Param {
         Param {
             name: name.to_string(),
+            title: None,
             purpose: purpose.to_string(),
             kind,
             required: true,
@@ -141,6 +145,12 @@ impl Param {
         self
     }
 
+    /// With a title a person reads in place of the name.
+    pub fn titled(mut self, title: &str) -> Param {
+        self.title = Some(title.to_string());
+        self
+    }
+
     /// With an array length.
     pub fn length(mut self, length: u32) -> Param {
         self.length = Some(length);
@@ -156,6 +166,9 @@ impl Param {
     /// The JSON Schema of one value.
     fn schema(&self) -> serde_json::Value {
         let mut schema = serde_json::Map::new();
+        if let Some(title) = &self.title {
+            schema.insert("title".into(), title.clone().into());
+        }
         schema.insert("description".into(), self.purpose.clone().into());
         match self.kind {
             ParamKind::Number | ParamKind::Integer => {
@@ -218,6 +231,20 @@ impl Param {
         }
         if let Some(default) = &self.default {
             schema.insert("default".into(), default.clone());
+        }
+        // A worked value for the shapes a person has to type as JSON, so a client can show it
+        // (a placeholder, a hint): fractions of the frame, as every location takes them.
+        let example = match self.kind {
+            ParamKind::NumberArray if self.length == Some(4) => {
+                Some(serde_json::json!([0.25, 0.25, 0.75, 0.75]))
+            }
+            ParamKind::PointList => Some(serde_json::json!([[0.2, 0.5], [0.8, 0.5]])),
+            ParamKind::BoxList => Some(serde_json::json!([[0.25, 0.25, 0.75, 0.75]])),
+            ParamKind::IntegerList => Some(serde_json::json!([0, 2])),
+            _ => None,
+        };
+        if let Some(example) = example {
+            schema.insert("examples".into(), serde_json::Value::Array(vec![example]));
         }
         serde_json::Value::Object(schema)
     }
@@ -461,6 +488,10 @@ pub struct Manifest {
     pub constants: Vec<String>,
     /// Bounds on what the envelope holds.
     pub returns: Bounds,
+    /// Groups of optional params of which exactly one must be given (`line`: `column` or
+    /// `path`); the input schema says so as a `oneOf`, so a client building a form knows.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exactly_one_of: Vec<Vec<String>>,
     /// The JSON Schema of the parameter table, derived from `params`.
     pub input_schema: serde_json::Value,
     /// The JSON Schema of the `artifacts` table, derived from `outputs`.
@@ -496,6 +527,7 @@ impl Manifest {
             params,
             constants: Vec::new(),
             returns: Bounds::standard(),
+            exactly_one_of: Vec::new(),
             input_schema: serde_json::Value::Null,
             output_schema: serde_json::Value::Null,
         };
@@ -507,6 +539,14 @@ impl Manifest {
     /// With the constant sets the op accepts.
     pub fn with_constants(mut self, constants: &[&str]) -> Manifest {
         self.constants = constants.iter().map(|c| c.to_string()).collect();
+        self
+    }
+
+    /// With params of which exactly one must be given, each name a declared param.
+    pub fn exactly_one_of(mut self, names: &[&str]) -> Manifest {
+        self.exactly_one_of
+            .push(names.iter().map(|n| n.to_string()).collect());
+        self.input_schema = self.derive_input_schema();
         self
     }
 
@@ -522,14 +562,40 @@ impl Manifest {
             .filter(|p| p.required)
             .map(|p| p.name.as_str())
             .collect();
-        serde_json::json!({
+        let mut schema = serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "title": format!("{} parameters", self.name),
             "type": "object",
             "additionalProperties": false,
             "properties": properties,
             "required": required,
-        })
+        });
+        // One group is a `oneOf` of single requirements; several are each such a `oneOf`, all of them.
+        let groups: Vec<serde_json::Value> = self
+            .exactly_one_of
+            .iter()
+            .map(|group| {
+                serde_json::Value::Array(
+                    group
+                        .iter()
+                        .map(|name| serde_json::json!({ "required": [name] }))
+                        .collect(),
+                )
+            })
+            .collect();
+        match groups.len() {
+            0 => {}
+            1 => schema["oneOf"] = groups.into_iter().next().unwrap_or_default(),
+            _ => {
+                schema["allOf"] = serde_json::Value::Array(
+                    groups
+                        .into_iter()
+                        .map(|group| serde_json::json!({ "oneOf": group }))
+                        .collect(),
+                )
+            }
+        }
+        schema
     }
 
     fn derive_output_schema(&self) -> serde_json::Value {
@@ -730,6 +796,28 @@ impl Manifest {
                 && min > max
             {
                 return Err(format!("{name}: parameter {} has min > max", param.name));
+            }
+        }
+        for group in &self.exactly_one_of {
+            if group.len() < 2 {
+                return Err(format!(
+                    "{name}: an exactly-one-of group needs two or more params"
+                ));
+            }
+            for member in group {
+                match self.params.iter().find(|p| &p.name == member) {
+                    None => {
+                        return Err(format!(
+                            "{name}: exactly-one-of names {member}, which is not a param"
+                        ));
+                    }
+                    Some(param) if param.required => {
+                        return Err(format!(
+                            "{name}: exactly-one-of names {member}, which is required on its own"
+                        ));
+                    }
+                    Some(_) => {}
+                }
             }
         }
         if self.input_schema != self.derive_input_schema()

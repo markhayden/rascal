@@ -62,6 +62,13 @@
         },
         "required": {
           "type": "boolean"
+        },
+        "title": {
+          "description": "How a person reads the name, where the name alone is jargon (`bbox` is a \"Box\").",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [

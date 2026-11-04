@@ -40,9 +40,15 @@ dir = ".rascal/fills"          # keep every fill by its request, filler and revi
 call_cap_usd = 0.50            # the most one call may spend; a call may lower it (max_spend_usd), never raise it
 session_budget_usd = 5.00      # the most one serve process may spend
 
-[serve]                        # rascal serve only
+[serve]                        # rascal serve and rascal call
 allow_dirs = ["/srv/images"]   # narrows --allow-dir to the overlap, never widens it; [] allows nothing
+runs = "runs"                  # where action runs go without --runs, relative to this file
 ```
+
+With `[workspace] dir` and `[serve] runs`, the configuration alone says where the store and the
+runs are. A host can start `rascal serve --config rascal.toml`, and `rascal call <action>
+--config rascal.toml` from a terminal then lands in the same store and runs: a host's command
+handoff carries `--config`, never flags it does not understand.
 
 A fill is cached under a key over the request's bytes (the image, the mask, the prompt) with the
 filler's name and `revision`, so one filler's pixels are never another's. A hit writes `fill from

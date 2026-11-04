@@ -29,6 +29,7 @@
   "params": [
     {
       "name": "bbox",
+      "title": "Box",
       "purpose": "[x0, y0, x1, y1] as fractions of the frame; x0 < x1 and y0 < y1",
       "kind": "number_array",
       "required": true,
@@ -52,11 +53,20 @@
     "properties": {
       "bbox": {
         "description": "[x0, y0, x1, y1] as fractions of the frame; x0 < x1 and y0 < y1",
+        "examples": [
+          [
+            0.25,
+            0.25,
+            0.75,
+            0.75
+          ]
+        ],
         "items": {
           "type": "number"
         },
         "maxItems": 4,
         "minItems": 4,
+        "title": "Box",
         "type": "array"
       }
     },
