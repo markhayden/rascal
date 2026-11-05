@@ -6,7 +6,7 @@
 use rascal_core::op::Group;
 
 /// SPEC's table, but `segment`, which a pack serves.
-const TABLE: [(&str, Group); 24] = [
+const TABLE: [(&str, Group); 25] = [
     ("line", Group::Find),
     ("rect", Group::Find),
     ("stroke", Group::Find),
@@ -15,6 +15,7 @@ const TABLE: [(&str, Group); 24] = [
     ("grow", Group::Refine),
     ("shrink", Group::Refine),
     ("close", Group::Refine),
+    ("plug", Group::Refine),
     ("subtract", Group::Refine),
     ("select", Group::Refine),
     ("invert", Group::Refine),

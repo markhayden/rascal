@@ -79,6 +79,10 @@ def test_bad_arguments_are_invalid_args(harness) -> None:
         {"prompt": "chair", "threshold": 2},
         {"prompt": ". ".join(str(n) for n in range(20))},
         {"prompt": "x" * 2000},
+        {"prompt": "chair", "pad": -0.1},
+        {"prompt": "chair", "pad": 0.6},
+        {"prompt": "chair", "outline": "largest"},
+        {"prompt": "chair", "min_cover": 1.5},
     ):
         result = segment.run(arguments, harness)
         assert result.isError is True, arguments
@@ -119,9 +123,8 @@ def test_every_instance_fits_the_declared_bounds(harness, monkeypatch) -> None:
         def embed(self, pixels):
             return None
 
-        def planes(self, features, boxes, width, height):
-            planes = [np.ones((height, width), dtype=bool) for _ in boxes]
-            return planes, [0.9 for _ in boxes]
+        def outlines(self, features, box, points, width, height):
+            return [np.ones((height, width), dtype=bool) for _ in range(3)], [0.9, 0.8, 0.7]
 
     monkeypatch.setattr(segment, "_models", (Detector(), Segmenter()))
     result = segment.run({"prompt": "collar", "max_instances": segment.MAX_INSTANCES}, harness)
@@ -176,3 +179,98 @@ def test_several_instances_decode_one_box_per_call() -> None:
     assert len(envelope["regions"]) >= 2
     assert len(envelope["images"]) == len(envelope["regions"])
     assert sum(1 for b in result.content if b.type == "image") == len(envelope["regions"])
+
+
+class _Found:
+    def __init__(self, box: tuple[float, float, float, float]) -> None:
+        self.box = box
+        self.query = 0
+        self.score = 0.9
+
+
+def _fake_models(monkeypatch, answer):
+    """A detector finding one box on the 64 by 48 harness image, and a segmenter whose
+    `outlines` is `answer(box, points)`; the calls are recorded."""
+    calls: list[tuple[tuple[float, float, float, float], list[tuple[int, int]]]] = []
+
+    class Detector:
+        def detect(self, pixels, queries, threshold, most):
+            return [_Found((10.0, 10.0, 30.0, 30.0))]
+
+    class Segmenter:
+        def embed(self, pixels):
+            return None
+
+        def outlines(self, features, box, points, width, height):
+            calls.append((box, list(points)))
+            return answer(box, points)
+
+    monkeypatch.setattr(segment, "_models", (Detector(), Segmenter()))
+    return calls
+
+
+def _rect(*boxes: tuple[int, int, int, int]) -> np.ndarray:
+    out = np.zeros((48, 64), dtype=bool)
+    for x0, y0, x1, y1 in boxes:
+        out[y0:y1, x0:x1] = True
+    return out
+
+
+def _measures(result) -> dict[str, float]:
+    return {m["name"]: m["value"] for m in result.structuredContent["measurements"]}
+
+
+def test_the_box_is_padded_and_the_whole_object_outline_is_kept(harness, monkeypatch) -> None:
+    part, whole = _rect((12, 12, 16, 16)), _rect((10, 10, 30, 30))
+    calls = _fake_models(monkeypatch, lambda box, points: ([part, part, whole], [0.9, 0.8, 0.7]))
+    result = segment.run({"prompt": "collar"}, harness)
+    assert result.structuredContent["status"] == "ok", result.structuredContent
+    # Padded by 0.05 of the 20-pixel sides: one pixel each way.
+    assert calls == [((9.0, 9.0, 31.0, 31.0), [])]
+    polygon = result.structuredContent["regions"][0]["location"]["polygon"]
+    assert polygon[0] == [round(9 / 64, 4), round(9 / 48, 4)]
+    measures = _measures(result)
+    assert measures["outline_0"] == 2 and measures["plane_px_0"] == 400
+    assert measures["retried_0"] == 0 and measures["retry_kept_0"] == 0
+
+
+def test_best_keeps_the_most_confident_outline(harness, monkeypatch) -> None:
+    part, whole = _rect((12, 12, 22, 22)), _rect((10, 10, 30, 30))
+    _fake_models(monkeypatch, lambda box, points: ([part, part, whole], [0.9, 0.8, 0.7]))
+    result = segment.run({"prompt": "collar", "outline": "best", "pad": 0.0}, harness)
+    measures = _measures(result)
+    assert measures["outline_0"] == 0 and measures["plane_px_0"] == 100
+
+
+def test_a_thin_outline_is_retried_with_a_wider_box_and_its_pieces_points(
+    harness, monkeypatch
+) -> None:
+    thin = _rect((10, 10, 30, 12))  # 40 of the box's 400 pixels: under 0.2
+    full = _rect((10, 10, 30, 30))
+
+    def answer(box, points):
+        return ([full, full, full], [0.9] * 3) if points else ([thin, thin, thin], [0.9] * 3)
+
+    calls = _fake_models(monkeypatch, answer)
+    result = segment.run({"prompt": "collar", "pad": 0.0}, harness)
+    assert len(calls) == 2
+    # The retry: the detector's box padded by 2 x pad (0 here) and the thin piece's point.
+    assert calls[1][0] == (10.0, 10.0, 30.0, 30.0) and len(calls[1][1]) == 1
+    x, y = calls[1][1][0]
+    assert thin[y, x]
+    measures = _measures(result)
+    assert measures["retried_0"] == 1 and measures["retry_kept_0"] == 1
+    assert measures["plane_px_0"] == 400
+
+
+def test_a_retry_that_spills_out_is_refused(harness, monkeypatch) -> None:
+    thin = _rect((10, 10, 30, 12))
+    spills = _rect((0, 0, 64, 48))
+
+    def answer(box, points):
+        return ([spills, spills, spills], [0.9] * 3) if points else ([thin, thin, thin], [0.9] * 3)
+
+    _fake_models(monkeypatch, answer)
+    measures = _measures(segment.run({"prompt": "collar", "pad": 0.0}, harness))
+    assert measures["retried_0"] == 1 and measures["retry_kept_0"] == 0
+    assert measures["plane_px_0"] == 40

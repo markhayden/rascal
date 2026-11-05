@@ -79,6 +79,7 @@ before accepting it.
 | `invert` | refine | Mask; `to` | a new Mask in the target frame (`to`: a frame id on the mask's chain, or `raw` for its root, the default): protect = the old support and protect mapped through the chain (a `cut:` mask lands on the two edge spans, a `crop:` mask on its bbox), core = every other pixel, blend empty | 4.2 |
 | `tighten` | refine | Location (`stroke`), Image | a Mask whose core follows the defect's edges: at each path sample (`sample_spacing_px`) the best pair of opposite-signed luminance edges inside `[−r, r]`, read at `⌈2r⌉` equal steps (`min_contrast`, `min_defect_px`, `max_defect_factor · r`), extents smoothed along the path (`path_sigma`), a crossing reverting; samples without a pair keep the full radius, so an untightened stroke equals `rasterize`'s; plus a Series `tightened` (per sample: tightened, a, b); `tighten-v1`; a radius is bounded by the frame's diagonal | 4.3 |
 | `close` | refine | Mask; `radius_px` | the same mask with its core closed (dilated then eroded) by a disc of `radius_px`, so gaps and notches narrower than the disc fill; the outer extent is unchanged, at the image border too (the closing's erosion counts outside as set); cleared under protect; blend cleared, profile and prescriptions removed | 4.1 |
+| `plug` | refine | Mask; `max_share` (default 0.1) | the same mask with each hole of its core filled when the hole is enclosed (4-connected unset pixels touching no image edge) and its area is at most `max_share` of the largest 8-connected blob beside it, all labels and areas taken before anything fills; a large enclosed area (a frame's picture) stays out; cleared under protect; blend cleared, profile and prescriptions removed; `holes_found`, `holes_filled`, `plugged_px` | 13.3 |
 
 The pixel primitives every op is built from live in `rascal_ops::primitives`: row smoothing
 (a Gaussian truncated at 3σ, renormalised at the edges), the 3×3 Sobel magnitude with edge
@@ -255,12 +256,19 @@ from one `ToolSpec` and holding its bounds under rascal's ceilings at listing ti
 `serve --debug-tools`, `echo_env` (the variable names it can see).
 
 **`segment`** takes an image and `prompt` (one or more queries separated by `.`, `,` or `;`),
-`max_instances` (default 8, at most 16) and `threshold` (the detector score a box needs,
-default 0.2), and answers one polygon region per instance (the detector's box, labelled with
-the query it answered, scored, best first) and one plane per region in the image's frame;
-`not_applicable` when nothing scores over the threshold. Two models do it, both exported to
-ONNX and run on `onnxruntime` with no PyTorch anywhere near the pack: OWLv2 base turns the
-queries into boxes with scores, SAM 2.1 Hiera-Tiny turns each kept box into a plane
+`max_instances` (default 8, at most 16), `threshold` (the detector score a box needs,
+default 0.2), `pad` (how far each box is widened before tracing, a share of its sides, default
+0.05), `outline` (`whole`, the default: the largest traced outline that stays inside the box,
+so the whole object rather than one part; or `best`, the most confident) and `min_cover`
+(default 0.2: an outline covering less of its box, or one in pieces, is traced once more with
+the box widened by twice `pad` and a point on each piece, and the retry is kept when it is
+larger and stays inside). It answers one polygon region per instance (the padded box,
+labelled with the query it answered, scored, best first) and one plane per region in the
+image's frame, with `plane_px_<n>`, `outline_<n>`, `retried_<n>` and `retry_kept_<n>` per
+instance; `not_applicable` when nothing scores over the threshold. Two models do it, both
+exported to ONNX and run on `onnxruntime` with no PyTorch anywhere near the pack: OWLv2 base
+turns the queries into boxes with scores, SAM 2.1 Hiera-Tiny gives three candidate outlines per
+box, and the rules in `rascal_tools/outline.py` (pure functions, no model) keep one
 (`tools/python/MODEL.md`: the sources, the licences, the export, the preprocessing the pack
 mirrors, the parity). The model artifacts (749 MB in all) live outside the pack: `rascal-tools
 fetch` is the one network step, downloading what `artifacts.toml` names into
@@ -320,7 +328,7 @@ uv. `setup` runs uv and the launcher with the baseline environment only (`PATH`,
 `LANG`, `LC_ALL`, `TMPDIR`), so no key and no uv setting of the shell's reaches them, and the
 environment is always `<dir>/.venv`. A bundle given as a URL (the spec's one network step)
 is built per platform by the `bundles` workflow on a version tag (`.github/workflows/bundles.yml`),
-which fetches the model files from the `models-2026-10` release (required on a version tag,
+which fetches the model files `artifacts.toml` names with `rascal-tools fetch` (required on a version tag,
 `BUNDLE_MODELS=required`, so a release bundle always carries `segment`), builds the
 bundle on that platform's runner, installs it from the packed archive with the network
 disabled, calls the pack, and uploads the archive with its `.sha256` to the tag's release.

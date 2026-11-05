@@ -11,7 +11,7 @@ pub const MODEL_FILES: [&str; 4] = [
     "owlv2-base-patch16.onnx",
     "owlv2-base-patch16.tokenizer.json",
     "sam2.1-hiera-tiny.encoder.onnx",
-    "sam2.1-hiera-tiny.decoder.onnx",
+    "sam2.1-hiera-tiny.decoder3.onnx",
 ];
 
 /// What [`write`] made.

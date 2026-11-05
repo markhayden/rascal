@@ -98,7 +98,7 @@ fn assert_v04_shapes(doc: &serde_json::Value) {
         );
         assert!(!names[..i].contains(name), "{name} is listed twice");
     }
-    assert_eq!(actions.len(), TASKS.len() + 24);
+    assert_eq!(actions.len(), TASKS.len() + 25);
     let mut tasks: Vec<&str> = of_kind(doc, "task")
         .iter()
         .map(|a| a["name"].as_str().unwrap())

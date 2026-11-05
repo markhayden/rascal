@@ -1,7 +1,7 @@
-# Remove what a prompt names: a configured pack's `segment` finds the instances, `select`
-# takes every plane as the core, then the same shaping as `remove`: grown a little and further
-# downward for the shadow, closed, kept off anything protected, feathered. Needs --config with
-# a [packs.*] entry that serves segment; `--prompt` binds inputs.prompt.
+# Remove what a prompt names: a configured pack's `segment` finds the instances, `select` takes
+# every plane as the core, then the same shaping as `remove`: grown a little and further downward
+# for the shadow, closed, small holes filled, kept off anything protected, feathered. Needs
+# --config with a [packs.*] entry that serves segment; `--prompt` binds inputs.prompt.
 version = 1
 name = "remove-prompt"
 use_case = "remove"
@@ -37,9 +37,15 @@ inputs = { mask = "grow.mask" }
 radius_px = 3.0
 
 [[step]]
+id = "plug"
+op = "plug"
+inputs = { mask = "close.mask" }
+max_share = 0.1
+
+[[step]]
 id = "subtract"
 op = "subtract"
-inputs = { mask = "close.mask", subtract = "inputs.protect" }
+inputs = { mask = "plug.mask", subtract = "inputs.protect" }
 grow_px = 2.0
 
 [[step]]

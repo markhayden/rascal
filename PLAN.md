@@ -3392,14 +3392,16 @@ merge.
 **Description.**
 
 - **Export.** `tools/python/export/export.py` exports the SAM 2.1 Hiera-Tiny decoder to the
-  spec's tensor table as the new file `sam2.1-hiera-tiny.decoder3.onnx`: `points` [1, 8, 2],
-  `point_labels` [1, 8] padded with -1, `masks` [1, 1, 3, 256, 256] and `iou` [1, 1, 3]. The
-  encoder is unchanged.
+  spec's tensor table as the new file `sam2.1-hiera-tiny.decoder3.onnx`: `points` [1, P, 2] and
+  `point_labels` [1, P] with P dynamic from 2 to 10 (the box's corners, labels 2 and 3, then the
+  positive points), `masks` [1, 3, 256, 256] and `iou` [1, 3]. The encoder is unchanged.
+  (Built 2026-11-04: a trial showed padding fixed slots moved the outlines, so the point axis is
+  dynamic.)
 - **Parity.** The export's parity check covers all three outlines (IoU ≥ 0.99 after the
   threshold) and their IoUs (within 0.02), for a box alone and for a box with 1 and with 3
   points, on the parity fixtures.
 - **Runtime.** `models/sam2.py` takes a box and up to 8 points and returns three planes with
-  their IoUs. Until 13.2, `segment` keeps the highest IoU, which is the spec's `best`.
+  their IoUs (`Segmenter.outlines`, `prompt`). Until 13.2, `segment` keeps the highest IoU, which is the spec's `best`.
 - **Release workflow.** `.github/workflows/bundles.yml` stops naming a release
   (`models-2026-10`) and fetches what `artifacts.toml` lists, so a release bundle always carries
   the manifest's models.

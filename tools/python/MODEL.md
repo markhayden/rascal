@@ -13,7 +13,7 @@ pack runs on `onnxruntime` with no PyTorch in the bundle.
 | role | model | source | licence | export | size |
 |---|---|---|---|---|---|
 | text to boxes | OWLv2 base, patch 16 | [`google/owlv2-base-patch16`](https://huggingface.co/google/owlv2-base-patch16), revision `2a1560802f8cf3c408fec9b809d705f56a2f7146` | `apache-2.0` (the card's licence tag, read 2026-10-29) | `owlv2-base-patch16.onnx`, with the CLIP tokenizer as `owlv2-base-patch16.tokenizer.json` | 622 MB and 3.6 MB |
-| box to plane | SAM 2.1 Hiera-Tiny | [`facebook/sam2.1-hiera-tiny`](https://huggingface.co/facebook/sam2.1-hiera-tiny), revision `de431c4043854a71d8101e17995dfe596bf101a5` | `apache-2.0` (the card's licence tag, read 2026-10-29) | `sam2.1-hiera-tiny.encoder.onnx`, `sam2.1-hiera-tiny.decoder.onnx` | 110 MB and 17 MB |
+| box to outlines | SAM 2.1 Hiera-Tiny | [`facebook/sam2.1-hiera-tiny`](https://huggingface.co/facebook/sam2.1-hiera-tiny), revision `de431c4043854a71d8101e17995dfe596bf101a5` | `apache-2.0` (the card's licence tag, read 2026-10-29) | `sam2.1-hiera-tiny.encoder.onnx` (2026-10-29), `sam2.1-hiera-tiny.decoder3.onnx` (2026-11-04) | 110 MB and 17 MB |
 
 The ADR named MobileSAM as the decoder with SAM 2.1 Hiera-Tiny as its drop-in. The export
 takes the drop-in: MobileSAM's code is installable only from its git repository, and the export
@@ -23,8 +23,9 @@ gives tighter planes. ADR 0018 records the refinement.
 
 The digests in `artifacts.toml` are the exported files'; `rascal-tools fetch` verifies them
 after a download and the pack verifies them once per process before an artifact is used. The
-files are published as release assets of the repository (`models-2026-10`), and a bundle
-carries them under `models/`.
+files are published as release assets of the repository (`models-2026-10` for OWLv2 and the
+SAM encoder, `models-2026-11` for the three-outline decoder), and a bundle carries them under
+`models/`.
 
 ## The export
 
@@ -32,19 +33,32 @@ carries them under `models/`.
 machine: it downloads both checkpoints from the Hub, exports the graphs below with
 `torch.onnx.export` (the dynamo exporter, opset 18, one file each, no external data), checks
 each graph against PyTorch on `fixtures/images/chair-blob.png`, and writes `export.json`
-beside the artifacts with every digest, the Hub revisions and the versions used. The last
-export, 2026-10-29: Python 3.12.15, torch 2.15.0, transformers 4.57.6, onnx 1.23.2,
+beside the artifacts with every digest, the Hub revisions and the versions used. `--only
+sam_decoder` exports and checks the decoder alone, leaving the other files as published. The
+full export ran 2026-10-29; the decoder alone was re-exported 2026-11-04 (PLAN.md 13.1) from
+the same SAM revision: Python 3.12.15, torch 2.15.0, transformers 4.57.6, onnx 1.23.2,
 onnxruntime 1.31.1.
 
 | graph | inputs | outputs |
 |---|---|---|
 | `owlv2-base-patch16.onnx` | `pixel_values` [1, 3, 960, 960] float32; `input_ids`, `attention_mask` [Q, 16] int64, Q dynamic | `logits` [1, 3600, Q]; `pred_boxes` [1, 3600, 4] as centre x, centre y, width, height, fractions of the padded square; `objectness` [1, 3600] |
 | `sam2.1-hiera-tiny.encoder.onnx` | `pixel_values` [1, 3, 1024, 1024] float32 | `feat0` [1, 256, 256, 256], `feat1` [1, 256, 128, 128], `feat2` [1, 256, 64, 64] |
-| `sam2.1-hiera-tiny.decoder.onnx` | the three features; `boxes` [1, 1, 4] float32 as x0, y0, x1, y1 in 1024-pixel coordinates (one box per call: the export fixed the box axis at 1 despite the dynamic shape it was given, so the pack decodes each kept box in its own call and reuses the features) | `masks` [1, 1, 256, 256] logits (inside where > 0); `iou` [1, 1], the decoder's own estimate |
+| `sam2.1-hiera-tiny.decoder3.onnx` | the three features; `points` [1, P, 2] float32 as x, y in 1024-pixel coordinates and `point_labels` [1, P] int64, P dynamic from 2 to 10: the box as its two corners (labels 2 and 3, the way SAM 2's own predictor passes a box), then up to eight positive points (label 1). One box per call; the pack reuses the features | `masks` [1, 3, 256, 256]: three candidate outlines as logits (inside where > 0); `iou` [1, 3], the decoder's predicted IoU of each |
 
 Export parity on the fixture (ONNX against PyTorch, same preprocessed tensors): OWLv2 logits
-within 5.1e-3 and boxes within 1.7e-4; SAM 2.1 features within 1.3e-5 and the thresholded
-mask identical (IoU 1.000; the logits differ by up to 0.21 away from the threshold).
+within 5.1e-3 and boxes within 1.7e-4; SAM 2.1 features within 1.3e-5. The decoder (gate: each
+outline's IoU ≥ 0.99 after the threshold, each predicted IoU within 0.02):
+
+| prompt | outline IoUs | predicted IoU max difference |
+|---|---|---|
+| the chair's box alone | 1.000, 1.000, 1.000 | 6.0e-8 |
+| the box and 1 point | 1.000, 1.000, 1.000 | 6.0e-8 |
+| the box and 3 points | 1.000, 1.000, 1.000 | 4.2e-7 |
+
+The box goes in as its two corner points rather than through Transformers' box input. On the
+fixture the two give the same three outlines (IoU 0.999, 0.999 and 1.000). Unused point slots
+are never padded: the graph's point axis is dynamic, because padding with "not a point" labels
+moved the outlines by up to 11% IoU in a trial.
 
 ## Preprocessing in the pack
 
@@ -60,9 +74,9 @@ The pack mirrors the upstream processors in numpy and Pillow (`rascal_tools.mode
   query after greedy suppression at IoU 0.5, then sorted by score across the queries and cut
   to `max_instances`. Boxes come back in image pixels, clipped to the image.
 - **SAM 2.1**: the image is resized to 1024 by 1024 (bilinear, antialiased), scaled and
-  normalised with the ImageNet mean and deviation; each box is scaled into those coordinates.
-  The decoder's 256 by 256 logits are resized to the image (bilinear) and thresholded at zero,
-  as upstream's post-processing does.
+  normalised with the ImageNet mean and deviation; a box's corners and its points are scaled
+  into those coordinates. Each of the three 256 by 256 outlines is resized to the image
+  (bilinear) and thresholded at zero, as upstream's post-processing does.
 
 ## Parity and the tests
 
@@ -74,7 +88,12 @@ three decimals, polygon corners to four) and the plane may differ in at most 0.5
 pixels. The fixture's chair is a drawn blob; the detector puts its box on it exactly but
 scores it 0.07 for "a wooden chair" (0.02 for "chair"), as PyTorch does on the same pixels, so
 the recorded case uses threshold 0.05. On photographs the default threshold, 0.2, is the
-right one. No test downloads anything.
+right one. `tests/test_sam2.py` covers the decoder's prompt tensors without a model and, with
+the artifacts, the three outlines for a box alone and with 1 and 8 points. The chair's stored
+case was re-recorded with the three-outline decoder and `segment`'s outline rules (2026-11-04):
+the box padded by 0.05 of its sides, the whole-object pick keeps candidate 0, 8338 pixels at
+predicted IoU 0.944 (the single-outline graph gave 8033 at 0.983); no retry runs.
+No test downloads anything.
 
 `crates/rascal-mask/tests/it/packs_real.rs` drives the pack through rascal's client and calls
 `segment` when the artifacts are present; `crates/rascal-mask/tests/it/remove_prompt.rs` runs

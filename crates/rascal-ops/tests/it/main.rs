@@ -11,6 +11,7 @@ mod groups;
 mod grow_shrink_close;
 mod measure;
 mod paste;
+mod plug;
 mod poisson;
 mod primitives;
 mod profile_feather;
