@@ -20,9 +20,12 @@ Making every caller build that loop would put the same logic in every host.
   2.4); squint's `source_fidelity` is the first. It is configured by hand in `[checker]`, like a
   filler, and called as `<command> --arguments <file> --allow-dir <dir>`; rascal holds no
   checker-specific code.
-- The ladder is fixed: at most three tries; on `fail` or `unsure`, `segment` runs again inside
-  each place the checker named (padded, half the threshold) and its planes join the mask, a place
-  where it finds nothing joins as itself, an empty answer widens the mask once; the mask is
+- The ladder is fixed: at most three tries; on `fail`, or `unsure` that names a place, `segment`
+  runs again inside each place the checker named (padded, half the threshold) and its planes join
+  the mask, a place where it finds nothing joins as itself, a `fail` that names no place widens
+  the mask once; an `unsure` that names no place ends the tries (amended 2026-11-05: in the first
+  hand check such an answer came from a tentative call about the subject, not the removed item,
+  and the widened retry repeated the same fill at the same price); the mask is
   rebuilt from the planes through the same shaping and filled again. Only the verdict comes from
   a model, and it is recorded with each try, so a run explains every step it took and replays
   without a call.

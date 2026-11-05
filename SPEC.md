@@ -962,7 +962,10 @@ raw frame (`remove-prompt` masks in the raw frame, with no `cut:`).
 2. `heal`'s graph runs on `M_k` as today, `window` included (recomputed for each try): the
    result `R_k`.
 3. The checker judges `R_k` (candidate) against the input image (source). On `pass`, stop.
-4. On `fail` or `unsure` with k < N: for each place in `where` (a location in `R_k`'s frame, the
+4. On `unsure` with an empty `where`, stop: the checker has nothing particular in mind, and
+   another fill would repeat this one (amended 2026-11-05 after the hand check).
+5. On `fail`, or `unsure` with places, with k < N: for each place in `where` (a location in
+   `R_k`'s frame, the
    raw frame, checked against `R_k`'s image reference; a mismatch is a check failure):
    - the input image is cropped exactly to the place's bbox padded by `pad` (a `crop:` frame
      with no added context; not `window`, whose crop is square and padded);
@@ -971,17 +974,18 @@ raw frame (`remove-prompt` masks in the raw frame, with no `cut:`).
      image (not through `unwindow`, which makes a composite), and added to `P`;
    - a place where it finds nothing adds its own region, rasterized, as a plane.
 
-   With an empty `where`, `M_{k+1}` takes `grow.px` doubled once. Places that overlap simply
+   With a `fail` and an empty `where`, `M_{k+1}` takes `grow.px` doubled once. Places that overlap simply
    union. The place's box is the box of its rasterized pixels; the pad snaps outward to whole
    pixels and is clamped to the image; a place in several parts is one place per part, and one
    that covers no pixel adds nothing. A try whose mask cannot be made (the shaping stops) or
    whose fill stops ends the tries, keeping those made.
-5. If `M_{k+1}` has the same identity as `M_k`, stop: another try would repeat this one.
+6. If `M_{k+1}` has the same identity as `M_k`, stop: another try would repeat this one.
 
 **The result.** The selected try is the first `pass`. Failing that, tries rank `unsure` over
 `fail` (and both over a try whose check could not run), then fewer places in `where`, then the
 earlier try. The summary is a note: "Kept try 2 of 3." and, when it did not pass, "The check
-still sees <prompt> in 1 place (unsure)."; the selected try's result is also the run directory's
+still sees <prompt> in 1 place (unsure)." (for an `unsure` with no place, "The check was not
+sure and named no place."); the selected try's result is also the run directory's
 `result.png`, its Mask the run's (`artifacts.out` port `mask`), and every other try's Mask is
 listed beside it as `mask_try_<k>`. The run's summary says which try
 was kept and, if it did not pass, "The check still sees …". `selected_try` is recorded. The
@@ -1027,7 +1031,8 @@ pack:
   - pass on the first try;
   - fail then pass;
   - unsure until exhausted (the selection rule);
-  - an empty `where`;
+  - an `unsure` with no place stopping at once;
+  - a `fail` with an empty `where`;
   - overlapping places;
   - an unchanged mask stopping early;
   - each check failure (status, missing verdict, garbage, timeout);

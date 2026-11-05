@@ -640,12 +640,12 @@ fn a_fail_then_a_pass_retries_inside_the_place() {
 }
 
 #[test]
-fn an_empty_where_widens_the_mask_once() {
+fn a_fail_with_an_empty_where_widens_the_mask_once() {
     let dir = scratch("empty-where");
     let config = config(
         &dir,
         &Setup {
-            script: json!({ "answers": [{ "verdict": "unsure", "where": [] }, { "verdict": "pass" }] }),
+            script: json!({ "answers": [{ "verdict": "fail", "where": [] }, { "verdict": "pass" }] }),
             ..Setup::default()
         },
     );
@@ -659,6 +659,34 @@ fn an_empty_where_widens_the_mask_once() {
     assert_eq!(grows[1]["params"]["px"], 8.0, "grow.px doubled");
     let stored = stored(&run_json(&dir));
     assert_eq!(stored[0]["transition"]["grow_px"], 8.0);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// An unsure that names no place ends the tries: the checker has nothing particular in mind,
+/// so another fill would repeat this one (ADR 0023, amended after the hand check). The try is
+/// kept, its verdict the run's, and the reservation for the other tries is not spent.
+#[test]
+fn an_unsure_that_names_no_place_keeps_the_try_and_stops() {
+    let dir = scratch("unsure-nowhere");
+    let config = config(
+        &dir,
+        &Setup {
+            script: json!({ "answers": [{ "verdict": "unsure", "where": [] }, { "verdict": "pass" }] }),
+            ..Setup::default()
+        },
+    );
+    let o = heal(&dir, &config, &[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(calls(&dir), 1, "no second try");
+    let result = run_json(&dir);
+    assert_eq!(result["verdict"], json!({ "value": "unsure", "where": [] }));
+    assert_eq!(result["body"]["tries"].as_array().unwrap().len(), 1);
+    assert!(
+        notes(&result)
+            .contains(&"Kept try 1 of 1. The check was not sure and named no place.".to_string()),
+        "{result:#}"
+    );
+    assert_eq!(steps(&journal(&dir), "grow").len(), 1, "no widened retry");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -1051,8 +1079,8 @@ fn an_unchanged_mask_stops_the_tries_early() {
     let (dir, result) = tried(
         "unchanged",
         json!([
-            { "verdict": "unsure", "where": [] },
-            { "verdict": "unsure", "where": [] },
+            { "verdict": "fail", "where": [] },
+            { "verdict": "fail", "where": [] },
             { "verdict": "pass" }
         ]),
         &[],

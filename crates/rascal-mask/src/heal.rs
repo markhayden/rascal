@@ -314,6 +314,9 @@ fn summary(kept: &Try, made: usize, prompt: &str) -> String {
     use rascal_core::contract::table_manners::VerdictValue;
     let kept_line = format!("Kept try {} of {made}.", kept.k);
     match &kept.verdict {
+        Some(v) if v.value == VerdictValue::Unsure && v.places.is_empty() => {
+            format!("{kept_line} The check was not sure and named no place.")
+        }
         Some(v) if v.value != VerdictValue::Pass => {
             let places = match v.places.len() {
                 0 => "nowhere in particular".to_string(),
@@ -439,7 +442,10 @@ impl Checking<'_> {
                 return Ok(true);
             };
             current.verdict = Some(verdict.clone());
-            if verdict.value == VerdictValue::Pass || k == self.tries {
+            // A pass ends the tries, and so does an unsure that names no place: the checker has
+            // nothing particular in mind, so another fill would repeat this one (ADR 0023).
+            let vague = verdict.value == VerdictValue::Unsure && verdict.places.is_empty();
+            if verdict.value == VerdictValue::Pass || vague || k == self.tries {
                 self.run.note(stored.note())?;
                 tries.push(self.settled(current, &mut from)?);
                 break;

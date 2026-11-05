@@ -200,7 +200,8 @@ could not run: …": another status (with its error's reason), a completed resul
 output that is not JSON, output over 1 MiB, or no answer within `timeout_s` (the checker is
 stopped).
 
-**The located retry.** On `fail` or `unsure` with tries left, the next try's mask is rebuilt
+**The located retry.** On `fail`, or `unsure` that names a place, with tries left, the next
+try's mask is rebuilt
 from planes, never from the shaped mask. Each place the verdict names (each part of a place in
 several parts) must be on the try's result, by its file digest and size, or the checking ends as
 a check failure ("a place it named is not usable: the location is on another image …"). The
@@ -209,18 +210,22 @@ input image is cut exactly to the box of the place's pixels padded by `segment.p
 `segment` runs there (`tries.<k>.segment.<place>` in the journal) with the run's own parameters
 and half its threshold. Each plane it returns is written at the crop's offset into an empty
 plane of the raw frame and committed as a `place` record (role `plane`); a place where it finds
-nothing joins as itself, rasterized. With no place, the next try's `grow.px` is doubled, once.
+nothing joins as itself, rasterized. A `fail` with no place doubles the next try's `grow.px`,
+once; an `unsure` with no place ends the tries, since the checker had nothing particular in mind
+and another fill would repeat this one.
 The planes so far go to `select` in place of `segment`'s (`Recipe::run_from`), the shaping runs
 from there in `tries/<k + 1>/` (its `outputs.json` and render), and the heal graph runs again. A
 try whose mask cannot be made, or whose fill stops, ends the tries with a note.
 
-**The tries and the result.** The tries stop at a pass, at the last try the limits allow, at a
+**The tries and the result.** The tries stop at a pass, at an `unsure` that names no place, at
+the last try the limits allow, at a
 check failure, or when the next try's mask would have the same identity as the last one ("Try 3
 would repeat try 2: its mask is unchanged, so the tries stop."). The run keeps the first try that
 passed; failing that, `unsure` over `fail` (and both over a try whose check could not run), then
 fewer places, then the earlier try. Its result is `result.png` in the run directory, its Mask the
 run's Mask (`artifacts.out` port `mask`), and a note says "Kept try 2 of 3." and, when it did not
-pass, "The check still sees the collar in 1 place (unsure).". `images.out` leads with the kept
+pass, "The check still sees the collar in 1 place (unsure)." (or, for an `unsure` that named
+no place, "The check was not sure and named no place."). `images.out` leads with the kept
 try's `result`, `preview` and `mask`, then every other try in order as `result_try_<k>`,
 `preview_try_<k>` and `mask_try_<k>` (its preview drawn into `tries/<k>/preview-mask.png`), each
 labelled "Try k · result" and so on; every other try's Mask is listed in `artifacts.out` as
