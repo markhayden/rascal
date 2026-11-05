@@ -1,6 +1,7 @@
 //! Task 4.2: a recipe binds a `many` output to a `many` input by prefix (`plane = "find.plane"`
 //! expands to every `find.plane_<n>`), validation refuses the mismatched forms, and the
-//! workspace delivers the artifacts as `<port>_<n>`.
+//! workspace delivers the artifacts as `<port>_<n>`. Task 13.11: a run from a step rebinds a many
+//! port to the caller's artifacts, and a rebinding of the wrong type or frame is refused.
 #![allow(clippy::unwrap_used)]
 
 use std::collections::BTreeMap;
@@ -10,8 +11,9 @@ use image::{DynamicImage, GrayImage, Luma};
 use rascal_core::artifact::{Artifact, ArtifactType};
 use rascal_core::error::Result;
 use rascal_core::image::{Image, Role};
+use rascal_core::op::Status;
 use rascal_core::op::{Context, Cost, CostTier, Inputs, Manifest, Op, Output, Params, Port};
-use rascal_core::recipe::{Recipe, Run};
+use rascal_core::recipe::{Rebind, Recipe, Run};
 use rascal_core::registry::OpRegistry;
 
 fn port(name: &str, artifact_type: ArtifactType, many: bool) -> Port {
@@ -357,5 +359,161 @@ image = "consume.image"
         1,
         "only `image` arrived"
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Two planes of the caller's in `image`'s frame, committed to the run's workspace.
+fn planes(run: &Run, image: &Artifact, count: u32) -> Vec<Artifact> {
+    let frames = run.frames().unwrap();
+    let frame = frames.require(image.frame()).unwrap();
+    (0..count)
+        .map(|i| {
+            let plane = GrayImage::from_fn(frame.width, frame.height, |x, _| {
+                Luma([if x / 7 == i { 255 } else { 0 }])
+            });
+            let image = Image::new(
+                &format!("given_{i}"),
+                DynamicImage::ImageLuma8(plane),
+                frame,
+                Role::Plane,
+                None,
+            );
+            run.workspace
+                .add_external(image, frame, "given", serde_json::json!({ "plane": i }))
+                .unwrap()
+                .1
+        })
+        .collect()
+}
+
+fn rebind(step: &str, port: &str, artifacts: Vec<Artifact>) -> Rebind {
+    Rebind {
+        step: step.to_string(),
+        port: port.to_string(),
+        artifacts,
+    }
+}
+
+#[test]
+fn a_run_from_a_step_takes_the_bound_input_in_place_of_the_recipes() {
+    let registry = registry();
+    let recipe = recipe("find.plane");
+    recipe.validate(&registry).unwrap();
+    let dir = scratch("run-from");
+    let floor = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/images/floor.png");
+    let run = Run::open(&dir).unwrap();
+    let (_, _, image) = run.workspace.import(&floor, None).unwrap();
+    let mut inputs = BTreeMap::new();
+    inputs.insert("image".to_string(), image.clone());
+    let first = recipe
+        .run(&registry, inputs, &BTreeMap::new(), &run)
+        .unwrap();
+    assert_eq!(first.status, Status::Ok, "{:?}", first.reason);
+
+    let given = planes(&run, &image, 2);
+    let again = recipe
+        .run_from(
+            &registry,
+            &first,
+            &rebind("gather", "plane", given.clone()),
+            &run,
+        )
+        .unwrap();
+    assert_eq!(again.status, Status::Ok, "{:?}", again.reason);
+    let Some(Artifact::Image(gathered)) = again.outputs.get("image") else {
+        panic!()
+    };
+    assert_eq!(
+        gathered.pixels.to_luma8().get_pixel(0, 0)[0],
+        2,
+        "the two bound planes arrived, not find's three"
+    );
+    // find ran once; the second gather took exactly the bound planes, as plane_0 and plane_1.
+    let lines = rascal_core::journal::Journal::read(&dir.join("journal.jsonl")).unwrap();
+    let ops: Vec<&str> = lines.iter().filter_map(|l| l.op.as_deref()).collect();
+    assert_eq!(
+        ops,
+        vec!["import", "find", "gather", "given", "given", "gather"]
+    );
+    let last = lines
+        .iter()
+        .rev()
+        .find(|l| l.op.as_deref() == Some("gather"))
+        .unwrap();
+    let bound: Vec<(String, String)> = last
+        .inputs
+        .iter()
+        .map(|(k, v)| (k.clone(), v.to_string()))
+        .collect();
+    let expected: Vec<(String, String)> = given
+        .iter()
+        .enumerate()
+        .map(|(n, a)| (format!("plane_{n}"), a.identity().as_str().to_string()))
+        .collect();
+    assert_eq!(bound, expected);
+    // The earlier run's bindings and texts carry over: the image input is still bound.
+    assert!(again.bindings.contains_key("inputs.image"));
+    assert!(again.bindings.contains_key("find.plane_0"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_rebinding_of_the_wrong_type_frame_count_step_or_port_is_refused_naming_the_step() {
+    let registry = registry();
+    let recipe = recipe("find.plane");
+    let dir = scratch("run-from-refused");
+    let images = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/images");
+    let run = Run::open(&dir).unwrap();
+    let (_, frame, image) = run
+        .workspace
+        .import(&images.join("floor.png"), None)
+        .unwrap();
+    let mut inputs = BTreeMap::new();
+    inputs.insert("image".to_string(), image.clone());
+    let first = recipe
+        .run(&registry, inputs, &BTreeMap::new(), &run)
+        .unwrap();
+    let refused = |r: Rebind| {
+        let e = recipe.run_from(&registry, &first, &r, &run).unwrap_err();
+        assert!(
+            matches!(&e, rascal_core::Error::Recipe { step, .. } if *step == r.step),
+            "{e}"
+        );
+        e.to_string()
+    };
+
+    // A Location where the port takes Images.
+    let location = rascal_core::location::Location::bbox(&frame.id, [0.0, 0.0, 0.5, 0.5]).unwrap();
+    let (_, location) = run.workspace.add_location(location).unwrap();
+    let e = refused(rebind("gather", "plane", vec![location]));
+    assert!(
+        e.contains("input plane must be a Image, but the bound plane_0 is a Location"),
+        "{e}"
+    );
+
+    // A plane in another image's frame.
+    let (_, _, chair) = run
+        .workspace
+        .import(&images.join("chair-blob.png"), None)
+        .unwrap();
+    let mut mixed = planes(&run, &image, 1);
+    mixed.extend(planes(&run, &chair, 1));
+    let e = refused(rebind("gather", "plane", mixed));
+    assert!(
+        e.contains(&format!(
+            "input plane takes artifacts in frame {} (what find.plane gave it), but the bound plane_1 is in {}",
+            image.frame(),
+            chair.frame()
+        )),
+        "{e}"
+    );
+
+    // Nothing bound; a step or a port the recipe does not have.
+    let e = refused(rebind("gather", "plane", vec![]));
+    assert!(e.contains("input plane was bound to nothing"), "{e}");
+    let e = refused(rebind("shape", "plane", planes(&run, &image, 1)));
+    assert!(e.contains("no such step to run from"), "{e}");
+    let e = refused(rebind("gather", "mask", planes(&run, &image, 1)));
+    assert!(e.contains("op gather has no input mask to bind"), "{e}");
     let _ = std::fs::remove_dir_all(&dir);
 }

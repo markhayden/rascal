@@ -15,6 +15,7 @@ mod describe;
 mod estimate;
 mod fillers;
 mod heal;
+mod heal_golden;
 mod heal_overrides;
 mod heal_poisson;
 mod heal_scaled;

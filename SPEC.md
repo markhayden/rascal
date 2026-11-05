@@ -704,7 +704,11 @@ measure: band set with before = I_F, after = W' in F (the mask's frame); drift w
 ```
 
 For `heal remove-prompt` with a configured checker the graph runs once per try, on each try's
-mask (see "Self-correcting remove"); every other `heal` runs it once.
+mask (see "Self-correcting remove"); every other `heal` runs it once. A try's mask comes from a
+run of the recipe from a named step with one of its input ports bound by the caller (`select`'s
+`plane` bound to `P_k`): the steps before it do not run, their outputs and the run's inputs are
+the earlier run's, and the binding is refused, naming the step, unless every artifact is the
+port's type and in the frame the recipe's own binding gave that port.
 
 The journal gains the filler call: a note when it starts with the entry's price, then the command
 or URL, request dimensions, duration, bytes, exit status and whether it may have been charged

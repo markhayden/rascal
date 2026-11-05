@@ -1,0 +1,26 @@
+version = 1
+id = "feather.mask"
+frame = "raw:480x320:flat"
+frame_identity = "sha256:7aa57d73caf3bc715fcb84e511f4fb54cd54da81062e60d87872ae20ae9a5635"
+width = 480
+height = 320
+use_case = "remove"
+identity = "sha256:5b2181ebfb3a21dc01716914999ae7dd6a35c45c3a4e813b43fce19a938174fc"
+
+[zones]
+core = "core.png"
+blend = "blend.png"
+protect = "protect.png"
+
+[source]
+locations = []
+instances = [
+    "sha256:d0e43310f54ebdb98e33860903a0ec169e4a9b8c3bd35f70f5eb700471bd8818",
+    "sha256:6e65fc60b9c696a785cde54304f407fb0238d82207ae564951641ad9522ba1cc",
+    "sha256:5bcf06e1ce46da464a259f051485b08e6d40296e3e362b380e46ba2a068c5db8",
+    "sha256:9043837c8139a198631912ee00fbf88a2b233cd3725aa352bc1501fc1a7dfd05",
+    "sha256:1c994ce70f1b3f24d303e6dea7fc5357ff8536635253364ec7693cc56edd55de",
+    "sha256:1b2e581eab2fbd6f2e53a5e55d285f0a7adb6b6bd9ae183ef65e5cba650cf33c",
+    "sha256:bbf82bf1403362220122e33d985a171c5bf7ee55b1eb71f0a8bdb10c776b39e3",
+    "sha256:3705a529c3fd4e1ea447eb89976b5c9676e98fec9fc4206b78721975606b0e4e",
+]
