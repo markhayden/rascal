@@ -99,11 +99,16 @@ fn unpath(text: &str, dir: &Path) -> String {
 }
 
 /// A journal value with its durations dropped and its paths replaced, a note's JSON body
-/// (`filler call: {...}`) included.
+/// (`filler call: {...}`) included. A pack call's `request_bytes` goes too: the request names
+/// the image by its path, so its size follows the machine's (a temporary directory's process
+/// id one digit longer is two bytes more).
 fn normalise(value: &mut serde_json::Value, dir: &Path) {
     match value {
         serde_json::Value::Object(map) => {
             map.remove("duration_ms");
+            if map.contains_key("pack") {
+                map.remove("request_bytes");
+            }
             for v in map.values_mut() {
                 normalise(v, dir);
             }
