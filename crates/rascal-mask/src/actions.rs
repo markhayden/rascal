@@ -820,6 +820,7 @@ impl ContractActions {
             }) {
                 Ok(report) => Ended {
                     verdict: report.verdict,
+                    tries: report.tries,
                     ..run_json::ended_ok(
                         recipe,
                         report.status,

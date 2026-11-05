@@ -26,6 +26,7 @@ use rascal_mask::checker::{self, Check};
 use rascal_mask::filler::{self, FillRequest, Filler, FillerCall};
 
 use crate::run::{self, RunArgs};
+use crate::run_json;
 
 /// What `heal` was asked to do: a run plus the filler.
 pub struct HealArgs {
@@ -57,9 +58,11 @@ pub struct HealReport {
     /// Whether the fill came from the cache: `Some(true)` a hit, `Some(false)` a miss (the
     /// filler was called and the fill stored), `None` no cache or no fill.
     pub cache: Option<bool>,
-    /// The checker's verdict on the result; none when it was not checked or the check could
-    /// not run.
+    /// The checker's verdict on the result (the kept try's); none when it was not checked or
+    /// the check could not run.
     pub verdict: Option<Verdict>,
+    /// A checked heal's tries, in order; empty when unchecked.
+    pub tries: Vec<crate::run_json::TryOut>,
 }
 
 /// The journal note prefix of a reusable fill: the request identity and the fill artifact.
@@ -200,6 +203,11 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         input,
     };
 
+    // Where try 1's spend starts in the journal.
+    let from = match checker {
+        Some(_) => journal_notes(&run)?.len(),
+        None => 0,
+    };
     let (out_image, cache) = match heal_once(&run, &registry, &painter, &subject)? {
         Pass::Healed { image, cache } => (image, cache),
         Pass::Stopped {
@@ -209,9 +217,10 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         } => return stopped(&run, args, status, Some(step), reason, outcome.renders),
     };
     let source = run.workspace.image_path(&subject.input);
-    let (result_image, renders, verdict) = match checker {
-        None => (out_image, outcome.renders.clone(), None),
+    let (result_image, renders, verdict, tries) = match checker {
+        None => (out_image, outcome.renders.clone(), None, Vec::new()),
         Some(checker) => {
+            let prompt = args.run.prompt.as_deref().unwrap_or("");
             let checking = Checking {
                 run: &run,
                 registry: &registry,
@@ -219,20 +228,36 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
                 recipe: &recipe,
                 outcome: &outcome,
                 checker,
-                prompt: args.run.prompt.as_deref().unwrap_or(""),
+                prompt,
                 tries: args.tries,
             };
-            let checked = checking.tries(subject, out_image)?;
-            let kept = checked
-                .tries
-                .last()
-                .ok_or_else(|| Error::op("heal", "no try"))?;
+            let checked = checking.tries(subject, out_image, from)?;
+            let kept = &checked.tries[selected(&checked.tries)];
             run.record_output("mask", &kept.mask.record.identity)?;
-            (
-                kept.result.clone(),
-                kept.renders.clone(),
-                (!checked.failed).then(|| kept.verdict.clone()).flatten(),
-            )
+            run.note(summary(kept, checked.tries.len(), prompt))?;
+            let verdict = (!checked.failed).then(|| kept.verdict.clone()).flatten();
+            let outs = checked
+                .tries
+                .iter()
+                .map(|t| run_json::TryOut {
+                    k: t.k,
+                    selected: t.k == kept.k,
+                    result: run
+                        .dir
+                        .join("tries")
+                        .join(t.k.to_string())
+                        .join("result.png"),
+                    mask: t.mask.record.identity.clone(),
+                    render: t
+                        .renders
+                        .iter()
+                        .find(|(profile, _)| profile == "grey")
+                        .map(|(_, path)| path.clone()),
+                    verdict: t.verdict.clone(),
+                    spend: t.spend,
+                })
+                .collect();
+            (kept.result.clone(), kept.renders.clone(), verdict, outs)
         }
     };
     let result = run.dir.join("result.png");
@@ -253,7 +278,31 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         renders,
         cache,
         verdict,
+        tries,
     })
+}
+
+/// The run's sentence about the try it kept, of `made`: which, and when it did not pass, what
+/// the check still sees.
+fn summary(kept: &Try, made: usize, prompt: &str) -> String {
+    use rascal_core::contract::table_manners::VerdictValue;
+    let kept_line = format!("Kept try {} of {made}.", kept.k);
+    match &kept.verdict {
+        Some(v) if v.value != VerdictValue::Pass => {
+            let places = match v.places.len() {
+                0 => "nowhere in particular".to_string(),
+                1 => "in 1 place".to_string(),
+                n => format!("in {n} places"),
+            };
+            let value = if v.value == VerdictValue::Fail {
+                "fail"
+            } else {
+                "unsure"
+            };
+            format!("{kept_line} The check still sees {prompt} {places} ({value}).")
+        }
+        _ => kept_line,
+    }
 }
 
 /// What a checked heal works with: the run and its registry, the filler, the recipe and the
@@ -270,13 +319,15 @@ struct Checking<'a> {
     tries: u32,
 }
 
-/// One try of a checked heal: its mask, its result, the renders its shaping wrote, and the
-/// checker's verdict on it (none when the check could not run).
+/// One try of a checked heal: its number, its mask, its result, the renders its shaping wrote,
+/// the checker's verdict on it (none when the check could not run) and what it spent.
 struct Try {
+    k: u32,
     mask: Arc<Mask>,
     result: Arc<Image>,
     renders: Vec<(String, PathBuf)>,
     verdict: Option<Verdict>,
+    spend: filler::Spent,
 }
 
 /// The tries a checked heal made, and whether its checking ended in a check failure.
@@ -291,7 +342,10 @@ impl Checking<'_> {
     /// make the planes of try `k + 1`, whose mask is rebuilt from every plane through the
     /// recipe's shaping (`select` onward) and healed again in `tries/<k + 1>/`. A pass, the last
     /// try, a check failure, or a try that cannot be made or filled ends them.
-    fn tries(&self, first: Subject, result: Arc<Image>) -> Result<Checked> {
+    ///
+    /// `from` is the journal's note count before try 1's fill: each try's spend is what the
+    /// notes since the try before it record.
+    fn tries(&self, first: Subject, result: Arc<Image>, mut from: usize) -> Result<Checked> {
         use checker::call::Transition;
         use rascal_core::contract::table_manners::VerdictValue;
         use rascal_core::recipe::{Rebind, Recipe};
@@ -305,10 +359,12 @@ impl Checking<'_> {
         let mut widened = false;
         let mut tries = Vec::new();
         let mut current = Try {
+            k: 1,
             mask: first.mask.clone(),
             result,
             renders: self.outcome.renders.clone(),
             verdict: None,
+            spend: filler::Spent::default(),
         };
         let mut subject = first;
         for k in 1..=self.tries {
@@ -323,7 +379,7 @@ impl Checking<'_> {
                 &current.result,
             )?
             else {
-                tries.push(current);
+                tries.push(self.settled(current, &mut from)?);
                 return Ok(Checked {
                     tries,
                     failed: true,
@@ -332,7 +388,7 @@ impl Checking<'_> {
             current.verdict = Some(verdict.clone());
             if verdict.value == VerdictValue::Pass || k == self.tries {
                 self.run.note(stored.note())?;
-                tries.push(current);
+                tries.push(self.settled(current, &mut from)?);
                 break;
             }
             let next = k + 1;
@@ -370,7 +426,7 @@ impl Checking<'_> {
                         self.run.note(stored.note())?;
                         self.run
                             .note(format!("The check could not run: {reason}."))?;
-                        tries.push(current);
+                        tries.push(self.settled(current, &mut from)?);
                         return Ok(Checked {
                             tries,
                             failed: true,
@@ -380,7 +436,7 @@ impl Checking<'_> {
             }
             stored.transition = Some(transition);
             self.run.note(stored.note())?;
-            tries.push(current);
+            tries.push(self.settled(current, &mut from)?);
             let rebuilt = shaping.run_from(
                 self.registry,
                 self.outcome,
@@ -404,6 +460,15 @@ impl Checking<'_> {
                 ))?;
                 break;
             };
+            if tries
+                .last()
+                .is_some_and(|t: &Try| t.mask.record.identity == mask.record.identity)
+            {
+                self.run.note(format!(
+                    "Try {next} would repeat try {k}: its mask is unchanged, so the tries stop."
+                ))?;
+                break;
+            }
             subject = Subject {
                 mask: mask.clone(),
                 image: image.clone(),
@@ -413,10 +478,12 @@ impl Checking<'_> {
             match heal_once(&next_run, self.registry, self.painter, &subject)? {
                 Pass::Healed { image, .. } => {
                     current = Try {
+                        k: next,
                         mask: subject.mask.clone(),
                         result: image,
                         renders: rebuilt.renders,
                         verdict: None,
+                        spend: filler::Spent::default(),
                     };
                 }
                 Pass::Stopped { step, reason, .. } => {
@@ -433,6 +500,50 @@ impl Checking<'_> {
             failed: false,
         })
     }
+}
+
+impl Checking<'_> {
+    /// `kept` with its spend: what the journal's notes since `from` record; `from` moves on.
+    fn settled(&self, mut kept: Try, from: &mut usize) -> Result<Try> {
+        let notes = journal_notes(self.run)?;
+        kept.spend = filler::spent(notes.get(*from..).unwrap_or_default());
+        *from = notes.len();
+        Ok(kept)
+    }
+}
+
+/// The journal's notes so far, in order.
+fn journal_notes(run: &Run) -> Result<Vec<String>> {
+    Ok(
+        rascal_core::journal::Journal::read(&run.workspace.journal_path())?
+            .into_iter()
+            .filter_map(|line| line.note)
+            .collect(),
+    )
+}
+
+/// The try a checked heal keeps (SPEC.md "Self-correcting remove", part 3): the first `pass`;
+/// failing that `unsure` over `fail` (and both over a try whose check could not run), then
+/// fewer places, then the earlier try. An index into `tries`.
+fn selected(tries: &[Try]) -> usize {
+    use rascal_core::contract::table_manners::VerdictValue;
+    let rank = |t: &Try| match &t.verdict {
+        Some(v) => (
+            match v.value {
+                VerdictValue::Pass => 0,
+                VerdictValue::Unsure => 1,
+                VerdictValue::Fail => 2,
+            },
+            v.places.len(),
+            t.k,
+        ),
+        None => (3, 0, t.k),
+    };
+    tries
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, t)| rank(t))
+        .map_or(0, |(i, _)| i)
 }
 
 /// Asks the checker about try `k`'s result: the result is written as `result.png` in the try's
@@ -870,6 +981,7 @@ fn stopped(
         renders,
         cache: None,
         verdict: None,
+        tries: Vec::new(),
     })
 }
 

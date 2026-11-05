@@ -214,6 +214,21 @@ The planes so far go to `select` in place of `segment`'s (`Recipe::run_from`), t
 from there in `tries/<k + 1>/` (its `outputs.json` and render), and the heal graph runs again. A
 try whose mask cannot be made, or whose fill stops, ends the tries with a note.
 
+**The tries and the result.** The tries stop at a pass, at the last try the limits allow, at a
+check failure, or when the next try's mask would have the same identity as the last one ("Try 3
+would repeat try 2: its mask is unchanged, so the tries stop."). The run keeps the first try that
+passed; failing that, `unsure` over `fail` (and both over a try whose check could not run), then
+fewer places, then the earlier try. Its result is `result.png` in the run directory, its Mask the
+run's Mask (`artifacts.out` port `mask`), and a note says "Kept try 2 of 3." and, when it did not
+pass, "The check still sees the collar in 1 place (unsure).". `images.out` leads with the kept
+try's `result`, `preview` and `mask`, then every other try in order as `result_try_<k>`,
+`preview_try_<k>` and `mask_try_<k>` (its preview drawn into `tries/<k>/preview-mask.png`), each
+labelled "Try k · result" and so on; every other try's Mask is listed in `artifacts.out` as
+`mask_try_<k>`, so a host opens it by reference after the run. The body has `selected_try` and
+`tries`: per try its Mask's identity, its result's image reference, its verdict and its spend.
+The result's `verdict` is the kept try's (its places on the kept result); an unchecked run, or one
+whose check could not run, has none.
+
 **The journal** gets `checker call started: {"spend_usd": …}` before a check, `checker call:
 {…}` after it (the command as configured, the duration, the exit code, the bytes, the outcome,
 whether it may have been charged, and the spend the result reports; never a key), and, when it

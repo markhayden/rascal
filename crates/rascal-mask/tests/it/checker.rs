@@ -836,3 +836,288 @@ fn protect_is_preserved_in_every_try() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+fn roles(result: &Value) -> Vec<(String, String)> {
+    result["images"]["out"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|o| {
+            (
+                o["role"].as_str().unwrap().to_string(),
+                o["label"].as_str().unwrap_or("").to_string(),
+            )
+        })
+        .collect()
+}
+
+/// A run whose every try is answered: `answers` in order.
+fn tried(name: &str, answers: Value, extra: &[&str]) -> (PathBuf, Value) {
+    let dir = scratch(name);
+    let config = config(
+        &dir,
+        &Setup {
+            script: json!({ "answers": answers, "spend_usd": 0.004 }),
+            filler_usd: Some(0.02),
+            ..Setup::default()
+        },
+    );
+    let o = heal(&dir, &config, extra);
+    assert_eq!(o.status.code(), Some(0), "{name}: {}", text(&o.stderr));
+    let result = run_json(&dir);
+    assert_eq!(result["status"], "completed", "{name}: {result:#}");
+    (dir, result)
+}
+
+/// The tries run out without a pass: the kept try is `unsure` over `fail`, then the one with
+/// fewer places, then the earlier; the result's verdict is the kept try's, its outputs lead,
+/// every other try follows labelled, and the summary says what the check still sees.
+#[test]
+fn unsure_until_the_tries_run_out_keeps_the_try_the_selection_rule_picks() {
+    let place = |x: f64| json!([x, 0.2, x + 0.2, 0.4]);
+    // Unsure over fail, then fewer places: try 3.
+    let (dir, result) = tried(
+        "select-fewer",
+        json!([
+            { "verdict": "fail", "where": [place(0.1)] },
+            { "verdict": "unsure", "where": [place(0.2), place(0.5)] },
+            { "verdict": "unsure", "where": [place(0.3)] }
+        ]),
+        &[],
+    );
+    assert_eq!(calls(&dir), 3);
+    assert_eq!(result["body"]["selected_try"], 3);
+    assert_eq!(result["verdict"]["value"], "unsure");
+    assert_eq!(result["verdict"]["where"].as_array().unwrap().len(), 1);
+    assert!(
+        notes(&result).contains(
+            &"Kept try 3 of 3. The check still sees the chair in 1 place (unsure).".to_string()
+        ),
+        "{:#?}",
+        notes(&result)
+    );
+    let tries = result["body"]["tries"].as_array().unwrap();
+    assert_eq!(tries.len(), 3);
+    for (i, t) in tries.iter().enumerate() {
+        assert_eq!(t["try"], i + 1);
+        assert!(t["mask"].as_str().unwrap().starts_with("sha256:"));
+        assert_eq!(
+            t["result"]["file_sha256"],
+            sha256(&dir.join(format!("run/tries/{}/result.png", i + 1)))
+        );
+        assert_eq!(t["spend"]["usd"], 0.024, "{t}");
+    }
+    assert_eq!(tries[0]["verdict"]["value"], "fail");
+    // Spend across the three tries: three fills at 0.02 and three checks at 0.004.
+    assert_eq!(result["spend"]["usd"], 0.072);
+    // The kept try's result, preview and mask first, then the others in try order.
+    let expected: Vec<(String, String)> = [
+        ("result", "Try 3 · result"),
+        ("preview", "Try 3 · preview"),
+        ("mask", "Try 3 · mask"),
+        ("result_try_1", "Try 1 · result"),
+        ("preview_try_1", "Try 1 · preview"),
+        ("mask_try_1", "Try 1 · mask"),
+        ("result_try_2", "Try 2 · result"),
+        ("preview_try_2", "Try 2 · preview"),
+        ("mask_try_2", "Try 2 · mask"),
+    ]
+    .iter()
+    .map(|(r, l)| (r.to_string(), l.to_string()))
+    .collect();
+    assert_eq!(roles(&result), expected);
+    let out = &result["images"]["out"][0];
+    assert_eq!(
+        out["image"]["file_sha256"],
+        sha256(&dir.join("run/tries/3/result.png"))
+    );
+    assert_eq!(
+        result["verdict"]["where"][0]["image"]["file_sha256"], out["image"]["file_sha256"],
+        "the verdict's places are on the kept result"
+    );
+    // The run's Mask is the kept try's; the others are listed beside it.
+    let masks: Vec<(&str, &str)> = result["artifacts"]["out"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| {
+            (
+                e["port"].as_str().unwrap(),
+                e["artifact"]["identity"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        masks,
+        vec![
+            ("mask", tries[2]["mask"].as_str().unwrap()),
+            ("mask_try_1", tries[0]["mask"].as_str().unwrap()),
+            ("mask_try_2", tries[1]["mask"].as_str().unwrap()),
+        ]
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    // Equal verdicts and places: the earlier try.
+    let (dir, result) = tried(
+        "select-earlier",
+        json!([
+            { "verdict": "unsure", "where": [place(0.1), place(0.5)] },
+            { "verdict": "fail", "where": [place(0.2)] },
+            { "verdict": "unsure", "where": [place(0.3), place(0.6)] }
+        ]),
+        &[],
+    );
+    assert_eq!(result["body"]["selected_try"], 1);
+    assert_eq!(
+        roles(&result)[0],
+        ("result".to_string(), "Try 1 · result".to_string())
+    );
+    assert_eq!(roles(&result)[3].0, "result_try_2");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_outer_verdict_is_a_pass_a_flagged_fail_or_absent() {
+    let (dir, result) = tried(
+        "outer-pass",
+        json!([{ "verdict": "fail", "where": [[0.2, 0.2, 0.5, 0.5]] }, { "verdict": "pass" }]),
+        &[],
+    );
+    assert_eq!(result["verdict"], json!({ "value": "pass", "where": [] }));
+    assert_eq!(result["body"]["selected_try"], 2);
+    assert!(notes(&result).contains(&"Kept try 2 of 2.".to_string()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let (dir, result) = tried(
+        "outer-fail",
+        json!([{ "verdict": "fail", "where": [[0.2, 0.2, 0.5, 0.5]] }]),
+        &[],
+    );
+    assert_eq!(result["verdict"]["value"], "fail");
+    assert_eq!(
+        result["body"]["selected_try"], 1,
+        "all fail alike: the earliest"
+    );
+    assert!(
+        notes(&result)
+            .iter()
+            .any(|n| n.contains("The check still sees the chair in 1 place (fail).")),
+        "{:#?}",
+        notes(&result)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    let (dir, result) = tried(
+        "outer-unchecked",
+        json!([{ "verdict": "pass" }]),
+        &["--no-check"],
+    );
+    assert!(result.get("verdict").is_none());
+    assert!(result["body"].get("tries").is_none());
+    assert!(
+        result["images"]["out"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|o| o.get("label").is_none())
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_unchanged_mask_stops_the_tries_early() {
+    let (dir, result) = tried(
+        "unchanged",
+        json!([
+            { "verdict": "unsure", "where": [] },
+            { "verdict": "unsure", "where": [] },
+            { "verdict": "pass" }
+        ]),
+        &[],
+    );
+    assert_eq!(calls(&dir), 2, "a third try would repeat the second");
+    assert_eq!(result["body"]["tries"].as_array().unwrap().len(), 2);
+    assert!(
+        notes(&result)
+            .iter()
+            .any(|n| n.starts_with("Try 3 would repeat try 2")),
+        "{:#?}",
+        notes(&result)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_cap_allows_one_and_then_two_tries() {
+    for (cap, tries) in [("0.03", 1), ("0.06", 2), ("0.09", 3)] {
+        let dir = scratch(&format!("cap-{tries}"));
+        let file = config(
+            &dir,
+            &Setup {
+                script: json!({ "answers": [{ "verdict": "fail", "where": [[0.2, 0.2, 0.5, 0.5]] }] }),
+                filler_usd: Some(0.02),
+                ..Setup::default()
+            },
+        );
+        let text_config = std::fs::read_to_string(&file).unwrap();
+        std::fs::write(
+            &file,
+            format!("{text_config}[limits]\ncall_cap_usd = {cap}\n"),
+        )
+        .unwrap();
+        let o = heal(&dir, &file, &[]);
+        assert_eq!(o.status.code(), Some(0), "{cap}: {}", text(&o.stderr));
+        assert_eq!(calls(&dir), tries, "cap {cap}");
+        let result = run_json(&dir);
+        assert_eq!(result["body"]["tries"].as_array().unwrap().len(), tries);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+/// After a served run, an earlier try's Mask opens by its reference and its preview by the
+/// run's image resource.
+#[test]
+fn an_earlier_try_s_mask_and_preview_open_by_reference_after_the_run() {
+    let dir = scratch("earlier");
+    let file = config(
+        &dir,
+        &Setup {
+            script: json!({ "answers": [
+                { "verdict": "fail", "where": [[0.2, 0.2, 0.5, 0.5]] },
+                { "verdict": "pass" }
+            ] }),
+            ..Setup::default()
+        },
+    );
+    let mut client = serve(&dir, &file);
+    let image = repo_root().join("fixtures/images/chair-blob.png");
+    let out = client
+        .call(
+            "remove_prompt",
+            json!({ "image": { "path": image.to_str().unwrap() }, "prompt": "the chair", "filler": "fake" }),
+        )
+        .unwrap();
+    let s = out.structured.unwrap();
+    assert_eq!(s["body"]["selected_try"], 2, "{s:#}");
+    let first = s["artifacts"]["out"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["port"] == "mask_try_1")
+        .unwrap()
+        .clone();
+    let resource = first["artifact"]["resource"].as_str().unwrap();
+    let read = client
+        .request("resources/read", json!({ "uri": resource }))
+        .unwrap();
+    assert!(!read["contents"].as_array().unwrap().is_empty(), "{read:#}");
+    let id = s["run"]["id"].as_str().unwrap();
+    let preview = client
+        .request(
+            "resources/read",
+            json!({ "uri": format!("rascal://run/{id}/images/preview_try_1") }),
+        )
+        .unwrap();
+    assert_eq!(
+        preview["contents"][0]["mimeType"], "image/png",
+        "{preview:#}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

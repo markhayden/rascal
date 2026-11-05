@@ -900,6 +900,7 @@ fn main() {
             let ended = match &result {
                 Ok(report) => run_json::Ended {
                     verdict: report.verdict.clone(),
+                    tries: report.tries.clone(),
                     ..run_json::ended_ok(
                         &args.run.recipe,
                         report.status,

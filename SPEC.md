@@ -979,7 +979,11 @@ raw frame (`remove-prompt` masks in the raw frame, with no `cut:`).
 5. If `M_{k+1}` has the same identity as `M_k`, stop: another try would repeat this one.
 
 **The result.** The selected try is the first `pass`. Failing that, tries rank `unsure` over
-`fail`, then fewer places in `where`, then the earlier try. The run's summary says which try
+`fail` (and both over a try whose check could not run), then fewer places in `where`, then the
+earlier try. The summary is a note: "Kept try 2 of 3." and, when it did not pass, "The check
+still sees <prompt> in 1 place (unsure)."; the selected try's result is also the run directory's
+`result.png`, its Mask the run's (`artifacts.out` port `mask`), and every other try's Mask is
+listed beside it as `mask_try_<k>`. The run's summary says which try
 was kept and, if it did not pass, "The check still sees …". `selected_try` is recorded. The
 selected try's result, preview and mask lead `images.out` with the roles `result`, `preview` and
 `mask`; every other try follows in try order as `result_try_<k>`, `preview_try_<k>` and

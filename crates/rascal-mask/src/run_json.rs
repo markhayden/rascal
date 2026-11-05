@@ -209,6 +209,26 @@ pub struct Ended {
     pub cache: Option<bool>,
     /// The checker's verdict on the result (table-manners 2.4); none when it was not judged.
     pub verdict: Option<Verdict>,
+    /// A checked heal's tries, in order; empty when unchecked.
+    pub tries: Vec<TryOut>,
+}
+
+/// One try of a checked heal, for its `run.json` (SPEC.md "Self-correcting remove", part 3):
+/// the kept try leads `images.out` as `result`, `preview` and `mask`, every other follows as
+/// `result_try_<k>`, `preview_try_<k>` and `mask_try_<k>`, and the body lists them all.
+#[derive(Debug, Clone)]
+pub struct TryOut {
+    pub k: u32,
+    /// Whether the run kept it.
+    pub selected: bool,
+    /// Its result, `tries/<k>/result.png`.
+    pub result: PathBuf,
+    /// Its Mask's identity.
+    pub mask: String,
+    /// Its mask's grey render.
+    pub render: Option<PathBuf>,
+    pub verdict: Option<Verdict>,
+    pub spend: Spent,
 }
 
 /// An output file's reference: its bytes' digest and its header's dimensions; the input's
@@ -357,7 +377,7 @@ pub fn finish(
             label: None,
         });
     }
-    let artifacts = task_artifacts(pending, workspace_dir, &mut out, &mut notes);
+    let mut artifacts = task_artifacts(pending, workspace_dir, &mut out, &mut notes);
     for (profile, path) in &ended.renders {
         if profile == "grey"
             && let Some(image) = output_reference(path, input.as_ref())
@@ -369,6 +389,18 @@ pub fn finish(
                 label: None,
             });
         }
+    }
+    let mut body = body;
+    if !ended.tries.is_empty() {
+        tries_out(
+            &ended.tries,
+            workspace_dir,
+            input.as_ref(),
+            &mut out,
+            &mut artifacts,
+            &mut body,
+            &mut notes,
+        );
     }
     if let Some(publish) = publish {
         for entry in &artifacts.out {
@@ -405,6 +437,79 @@ pub fn finish(
         produced,
     )
     .map(|()| spent)
+}
+
+/// A checked heal's tries in its result: the kept try's outs (already in `out`) labelled with
+/// its number, then every other try's result, preview and mask as `<kind>_try_<k>`, labelled
+/// "Try k · <kind>", each other Mask in `artifacts` as `mask_try_<k>`; and the body's `tries`
+/// (each with its Mask, its result's reference, its verdict and its spend) and
+/// `selected_try`.
+fn tries_out(
+    tries: &[TryOut],
+    workspace_dir: &Path,
+    input: Option<&ImageReference>,
+    out: &mut Vec<ImageOut>,
+    artifacts: &mut Artifacts,
+    body: &mut serde_json::Map<String, Value>,
+    notes: &mut Vec<String>,
+) {
+    let label = |k: u32, kind: &str| Some(format!("Try {k} · {kind}"));
+    if let Some(kept) = tries.iter().find(|t| t.selected) {
+        for o in out.iter_mut() {
+            o.label = label(kept.k, &o.role);
+        }
+        body.insert("selected_try".into(), Value::from(kept.k));
+    }
+    for t in tries.iter().filter(|t| !t.selected) {
+        if let Some(image) = output_reference(&t.result, input) {
+            out.push(ImageOut {
+                role: format!("result_try_{}", t.k),
+                image,
+                locator: Locator::Path(absolute(&t.result)),
+                label: label(t.k, "result"),
+            });
+        }
+        let dir = t.result.parent().unwrap_or(Path::new("."));
+        match try_mask_entry(workspace_dir, &t.mask, dir, &format!("mask_try_{}", t.k)) {
+            Ok(entry) => {
+                if let Some(preview) = &entry.preview {
+                    out.push(ImageOut {
+                        role: format!("preview_try_{}", t.k),
+                        label: label(t.k, "preview"),
+                        ..preview.clone()
+                    });
+                }
+                artifacts.out.push(entry);
+            }
+            Err(e) => notes.push(format!(
+                "the Mask {} of try {} could not be listed: {e}",
+                t.mask, t.k
+            )),
+        }
+        if let Some(render) = &t.render
+            && let Some(image) = output_reference(render, input)
+        {
+            out.push(ImageOut {
+                role: format!("mask_try_{}", t.k),
+                image,
+                locator: Locator::Path(absolute(render)),
+                label: label(t.k, "mask"),
+            });
+        }
+    }
+    let listed: Vec<Value> = tries
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "try": t.k,
+                "mask": t.mask,
+                "result": output_reference(&t.result, input),
+                "verdict": t.verdict,
+                "spend": { "usd": usd(t.spend.usd), "unresolved_usd": usd(t.spend.unresolved_usd) },
+            })
+        })
+        .collect();
+    body.insert("tries".into(), Value::Array(listed));
 }
 
 /// A task's artifacts (4.7; PLAN.md 10.8): in, the `mask` and `protect` references its
@@ -450,18 +555,28 @@ fn task_artifacts(
     Artifacts { taken, out }
 }
 
-/// The out entry of the Mask `identity` the run made, with its preview.
+/// The out entry of the Mask `identity` the run made, with its preview in the run directory.
 fn mask_entry(
     pending: &Pending,
     workspace_dir: &Path,
     identity: &str,
+) -> rascal_core::error::Result<ArtifactEntry> {
+    try_mask_entry(workspace_dir, identity, &pending.dir, "mask")
+}
+
+/// The out entry of the Mask `identity` through `port`, its preview written into `dir`.
+fn try_mask_entry(
+    workspace_dir: &Path,
+    identity: &str,
+    dir: &Path,
+    port: &str,
 ) -> rascal_core::error::Result<ArtifactEntry> {
     let ws = rascal_core::workspace::Workspace::open_read_only(workspace_dir)?;
     let artifact = contract::artifact_ref(&ws, identity)?;
     let ops = rascal_ops::registry()?;
     let preview = match crate::preview::draw(&ws, &ops, identity)? {
         Some((bytes, frame)) => {
-            let file = pending.dir.join(PREVIEW_FILE);
+            let file = dir.join(PREVIEW_FILE);
             std::fs::write(&file, &bytes).map_err(|e| Error::io(&file, e))?;
             Some(crate::preview::image_out(
                 &bytes,
@@ -472,7 +587,7 @@ fn mask_entry(
         None => None,
     };
     Ok(ArtifactEntry {
-        port: "mask".to_string(),
+        port: port.to_string(),
         artifact,
         preview,
     })
@@ -706,6 +821,7 @@ pub fn ended_with(recipe: &str, error: &Error) -> Ended {
             body,
             cache: None,
             verdict: None,
+            tries: Vec::new(),
         };
     }
     let (status, info) = error_of(error);
@@ -719,6 +835,7 @@ pub fn ended_with(recipe: &str, error: &Error) -> Ended {
         body,
         cache: None,
         verdict: None,
+        tries: Vec::new(),
     }
 }
 
@@ -769,6 +886,7 @@ pub fn watch_signals() {
                     body,
                     cache: None,
                     verdict: None,
+                    tries: Vec::new(),
                 },
                 None,
             );
@@ -799,6 +917,7 @@ pub fn ended_ok(
         body: body_of(recipe, status, stopped_at, reason, mask_dir, filler),
         cache,
         verdict: None,
+        tries: Vec::new(),
     }
 }
 
