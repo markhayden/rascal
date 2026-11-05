@@ -1,7 +1,8 @@
-"""`segment`: a text prompt to instances. OWLv2 proposes boxes for each query in the prompt,
-SAM 2.1 turns each kept box into a plane; the answer is one polygon region (the box) with its
-score per instance and one plane per region, in the image's frame, best score first
-(`MODEL.md`). The models load on the first call and stay loaded."""
+"""`segment`: a text prompt to instances. OWLv2 proposes boxes for each query in the prompt;
+SAM 2.1 gives three candidate outlines for each kept box and the most confident is kept. The
+answer is one polygon region (the box) with its score per instance and one plane per region, in
+the image's frame, best score first (`MODEL.md`). The models load on the first call and stay
+loaded."""
 
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ from rascal_tools.models.sam2 import Segmenter
 GRAPH = "owlv2-base-patch16.onnx"
 TOKENIZER = "owlv2-base-patch16.tokenizer.json"
 ENCODER = "sam2.1-hiera-tiny.encoder.onnx"
-DECODER = "sam2.1-hiera-tiny.decoder.onnx"
+DECODER = "sam2.1-hiera-tiny.decoder3.onnx"
 
 MAX_INSTANCES = 16
 MAX_QUERIES = 16
@@ -154,9 +155,15 @@ def run(arguments: dict[str, Any], harness: Harness) -> types.CallToolResult:
             f"no instance of {prompt!r} scores over {float(threshold):g} in {image.id}"
         )
     features = segmenter.embed(image.pixels)
-    planes, ious = segmenter.planes(
-        features, [d.box for d in detections], image.width, image.height
-    )
+    planes: list[np.ndarray] = []
+    ious: list[float] = []
+    for detection in detections:
+        outlines, predicted = segmenter.outlines(
+            features, detection.box, [], image.width, image.height
+        )
+        best = max(range(len(outlines)), key=lambda k: (predicted[k], -k))
+        planes.append(outlines[best])
+        ious.append(predicted[best])
     kept = 0
     for n, (detection, plane, predicted_iou) in enumerate(
         zip(detections, planes, ious, strict=True)

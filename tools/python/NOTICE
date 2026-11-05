@@ -13,10 +13,10 @@ SAM 2.1 Hiera-Tiny
   Source: https://huggingface.co/facebook/sam2.1-hiera-tiny, revision
   de431c4043854a71d8101e17995dfe596bf101a5, licensed Apache-2.0 by its authors (Meta).
   Changes: the PyTorch checkpoint was exported to ONNX (opset 18) through Transformers'
-  Sam2Model with torch.onnx.export on 2026-10-29, as two graphs, the image encoder
-  (sam2.1-hiera-tiny.encoder.onnx) and the prompt encoder with the mask decoder taking box
-  prompts and returning one mask per box (sam2.1-hiera-tiny.decoder.onnx). Weights are
-  unchanged.
+  Sam2Model with torch.onnx.export, as two graphs: the image encoder
+  (sam2.1-hiera-tiny.encoder.onnx, 2026-10-29) and the prompt encoder with the mask decoder
+  taking a box and up to eight positive points and returning three candidate masks with their
+  predicted IoUs (sam2.1-hiera-tiny.decoder3.onnx, 2026-11-04). Weights are unchanged.
 
 The export procedure, the graphs' interfaces and the parity checks are in MODEL.md; the
 digests of the exported files are in artifacts.toml.

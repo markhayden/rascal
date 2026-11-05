@@ -20,12 +20,12 @@
       "frame": "raw:480x320:flat",
       "name": "plane_px_0",
       "unit": "px",
-      "value": 8033.0
+      "value": 8056.0
     },
     {
       "name": "mask_iou_predicted",
       "unit": "ratio",
-      "value": 0.983
+      "value": 0.98
     }
   ],
   "regions": [

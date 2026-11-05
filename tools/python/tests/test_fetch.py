@@ -65,7 +65,7 @@ def test_artifacts_toml_is_read_and_checked(tmp_path: Path) -> None:
         "owlv2-base-patch16.onnx",
         "owlv2-base-patch16.tokenizer.json",
         "sam2.1-hiera-tiny.encoder.onnx",
-        "sam2.1-hiera-tiny.decoder.onnx",
+        "sam2.1-hiera-tiny.decoder3.onnx",
     ]
     assert all(a.licence == "Apache-2.0" and len(a.sha256) == 64 for a in shipped)
 

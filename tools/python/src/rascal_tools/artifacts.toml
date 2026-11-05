@@ -24,7 +24,7 @@ sha256 = "ed386472cf112f10464cdad2d2c786e171306cb31aeb2096c6a1da8789c35073"
 licence = "Apache-2.0"
 
 [[artifact]]
-name = "sam2.1-hiera-tiny.decoder.onnx"
-url = "https://github.com/markhayden/rascal/releases/download/models-2026-10/sam2.1-hiera-tiny.decoder.onnx"
-sha256 = "53c6457d30ffca641fab504bf647ccb7d158c60e5d6c3ca810cf735c50e8cb59"
+name = "sam2.1-hiera-tiny.decoder3.onnx"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11/sam2.1-hiera-tiny.decoder3.onnx"
+sha256 = "5e69b63545f044fcc000f12c9cefc52801091d1b07d553ad69af8505cd88809e"
 licence = "Apache-2.0"

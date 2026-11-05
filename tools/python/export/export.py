@@ -18,9 +18,14 @@ The graphs:
 - `owlv2-base-patch16.tokenizer.json`: the CLIP byte-pair tokenizer, for `tokenizers`.
 - `sam2.1-hiera-tiny.encoder.onnx`: pixel_values [1,3,1024,1024] -> feat0 [1,256,256,256],
   feat1 [1,256,128,128], feat2 [1,256,64,64].
-- `sam2.1-hiera-tiny.decoder.onnx`: feat0, feat1, feat2, boxes [1,B,4] (x0, y0, x1, y1 in
-  1024-pixel coordinates) -> masks [1,B,256,256] (logits; > 0 is inside), iou [1,B]. B is
-  dynamic.
+- `sam2.1-hiera-tiny.decoder3.onnx`: feat0, feat1, feat2, points [1,P,2] (x, y in 1024-pixel
+  coordinates), point_labels [1,P] int64 -> masks [1,3,256,256] (three candidate outlines as
+  logits; > 0 is inside), iou [1,3] (the decoder's predicted IoU of each). P is dynamic, 2 to
+  10: the box as its two corners (labels 2 and 3, the way SAM 2's own predictor passes a box)
+  followed by up to 8 positive points (label 1). One box per call; the features are reused.
+
+`--only sam_decoder` exports and checks the decoder alone, against features from PyTorch's
+encoder, leaving the other files as they are (the 2026-11 re-export, PLAN.md 13.1).
 """
 
 from __future__ import annotations
@@ -52,7 +57,7 @@ NAMES = {
     "owl": "owlv2-base-patch16.onnx",
     "tokenizer": "owlv2-base-patch16.tokenizer.json",
     "sam_encoder": "sam2.1-hiera-tiny.encoder.onnx",
-    "sam_decoder": "sam2.1-hiera-tiny.decoder.onnx",
+    "sam_decoder": "sam2.1-hiera-tiny.decoder3.onnx",
 }
 
 
@@ -86,13 +91,14 @@ class SamDecoderGraph(torch.nn.Module):
         super().__init__()
         self.model = model
 
-    def forward(self, feat0, feat1, feat2, boxes):
+    def forward(self, feat0, feat1, feat2, points, point_labels):
         out = self.model(
             image_embeddings=[feat0, feat1, feat2],
-            input_boxes=boxes,
-            multimask_output=False,
+            input_points=points[:, None],
+            input_labels=point_labels[:, None],
+            multimask_output=True,
         )
-        return out.pred_masks[:, :, 0], out.iou_scores[:, :, 0]
+        return out.pred_masks[:, 0], out.iou_scores[:, 0]
 
 
 def export(module, args, path: Path, input_names, output_names, dynamic_shapes) -> None:
@@ -186,61 +192,105 @@ def export_owl(out: Path, image: Image.Image) -> dict:
     return {"logits_max_abs_diff": logits_diff, "boxes_max_abs_diff": boxes_diff}
 
 
-def export_sam(out: Path, image: Image.Image, box_xyxy: list[float]) -> dict:
+POINT_CASES = {
+    "box": [],
+    "box+1": [[190.0, 160.0]],
+    "box+3": [[190.0, 160.0], [160.0, 120.0], [220.0, 220.0]],
+}
+
+
+def prompt(processor, box_xyxy: list[float], positives: list[list[float]], size) -> tuple:
+    """The box's corners (labels 2, 3) and the positive points (label 1), scaled into the
+    1024-pixel frame as the processor scales a box: `points` [1,P,2], `point_labels` [1,P]."""
+    width, height = size
+    sx, sy = 1024.0 / width, 1024.0 / height
+    x0, y0, x1, y1 = box_xyxy
+    pts = [[x0 * sx, y0 * sy], [x1 * sx, y1 * sy]] + [[x * sx, y * sy] for x, y in positives]
+    labels = [2, 3] + [1] * len(positives)
+    return torch.tensor([pts], dtype=torch.float32), torch.tensor([labels], dtype=torch.int64)
+
+
+def export_sam(out: Path, image: Image.Image, box_xyxy: list[float], only_decoder: bool) -> dict:
     print(f"SAM 2.1: {SAM}")
     processor = Sam2Processor.from_pretrained(SAM)
     model = Sam2Model.from_pretrained(SAM).eval()
     inputs = processor(images=image, input_boxes=[[box_xyxy]], return_tensors="pt")
     pixel_values = inputs["pixel_values"]
-    boxes = inputs["input_boxes"].float()
     assert tuple(pixel_values.shape) == (1, 3, 1024, 1024), pixel_values.shape
-    assert tuple(boxes.shape) == (1, 1, 4), boxes.shape
+    # The processor's box scaling, which `prompt` mirrors for the corners.
+    scaled = inputs["input_boxes"][0, 0].tolist()
+    points, labels = prompt(processor, box_xyxy, [], image.size)
+    assert np.allclose(points[0].flatten().tolist(), scaled, atol=1e-3), (points, scaled)
     with torch.no_grad():
         feats = model.get_image_embeddings(pixel_values)
-    export(
-        SamEncoderGraph(model),
-        (pixel_values,),
-        out / NAMES["sam_encoder"],
-        ["pixel_values"],
-        ["feat0", "feat1", "feat2"],
-        {"pixel_values": None},
-    )
-    n_boxes = torch.export.Dim("boxes", min=1, max=64)
+    checks: dict = {}
+    if not only_decoder:
+        export(
+            SamEncoderGraph(model),
+            (pixel_values,),
+            out / NAMES["sam_encoder"],
+            ["pixel_values"],
+            ["feat0", "feat1", "feat2"],
+            {"pixel_values": None},
+        )
+        enc = session(out / NAMES["sam_encoder"]).run(None, {"pixel_values": pixel_values.numpy()})
+        checks["features_max_abs_diff"] = max(
+            float(np.abs(a - b.numpy()).max()) for a, b in zip(enc, feats, strict=True)
+        )
+        assert checks["features_max_abs_diff"] < 1e-2, checks
+    n_points = torch.export.Dim("points", min=2, max=10)
+    three, three_labels = prompt(processor, box_xyxy, POINT_CASES["box+3"], image.size)
     export(
         SamDecoderGraph(model),
-        (feats[0], feats[1], feats[2], boxes),
+        (feats[0], feats[1], feats[2], three, three_labels),
         out / NAMES["sam_decoder"],
-        ["feat0", "feat1", "feat2", "boxes"],
+        ["feat0", "feat1", "feat2", "points", "point_labels"],
         ["masks", "iou"],
-        {"feat0": None, "feat1": None, "feat2": None, "boxes": {1: n_boxes}},
+        {
+            "feat0": None,
+            "feat1": None,
+            "feat2": None,
+            "points": {1: n_points},
+            "point_labels": {1: n_points},
+        },
     )
-    with torch.no_grad():
-        ref = model(image_embeddings=feats, input_boxes=boxes, multimask_output=False)
-    enc = session(out / NAMES["sam_encoder"]).run(None, {"pixel_values": pixel_values.numpy()})
-    feat_diff = max(float(np.abs(a - b.numpy()).max()) for a, b in zip(enc, feats, strict=True))
-    dec = session(out / NAMES["sam_decoder"]).run(
-        None, {"feat0": enc[0], "feat1": enc[1], "feat2": enc[2], "boxes": boxes.numpy()}
-    )
-    mask_ref = ref.pred_masks[0, 0, 0].numpy() > 0
-    mask_got = dec[0][0, 0] > 0
-    iou = float((mask_ref & mask_got).sum() / max(1, (mask_ref | mask_got).sum()))
-    mask_diff = float(np.abs(dec[0][0, 0] - ref.pred_masks[0, 0, 0].numpy()).max())
-    print(
-        f"  parity: features max |diff| {feat_diff:.2e}, mask logits max |diff| {mask_diff:.2e}, "
-        f"mask IoU {iou:.4f}, {int(mask_got.sum())} of 65536 low-res pixels inside"
-    )
-    assert feat_diff < 1e-2 and iou > 0.99, (feat_diff, iou)
-    return {
-        "features_max_abs_diff": feat_diff,
-        "mask_logits_max_abs_diff": mask_diff,
-        "mask_iou": iou,
-    }
+    decoder = session(out / NAMES["sam_decoder"])
+    feed = {f"feat{i}": feats[i].numpy() for i in range(3)}
+    # Parity (MODEL.md): every outline and its predicted IoU, for a box alone and with points,
+    # the ONNX graph against PyTorch on the same inputs.
+    for case, positives in POINT_CASES.items():
+        pts, lbl = prompt(processor, box_xyxy, positives, image.size)
+        with torch.no_grad():
+            ref = SamDecoderGraph(model)(feats[0], feats[1], feats[2], pts, lbl)
+        masks, ious = decoder.run(
+            None, {**feed, "points": pts.numpy(), "point_labels": lbl.numpy()}
+        )
+        assert masks.shape == (1, 3, 256, 256) and ious.shape == (1, 3), (masks.shape, ious.shape)
+        outlines = []
+        for k in range(3):
+            want = ref[0][0, k].numpy() > 0
+            got = masks[0, k] > 0
+            outlines.append(float((want & got).sum() / max(1, (want | got).sum())))
+        iou_diff = float(np.abs(ious[0] - ref[1][0].numpy()).max())
+        print(
+            f"  parity {case}: outline IoUs {[round(v, 4) for v in outlines]}, "
+            f"predicted IoU max |diff| {iou_diff:.2e}"
+        )
+        assert min(outlines) >= 0.99 and iou_diff <= 0.02, (case, outlines, iou_diff)
+        checks[case] = {"outline_iou": outlines, "predicted_iou_max_abs_diff": iou_diff}
+    return checks
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     default = os.environ.get("RASCAL_TOOLS_MODELS") or str(Path.home() / ".cache" / "rascal-tools")
     parser.add_argument("--out", type=Path, default=Path(default))
+    parser.add_argument(
+        "--only",
+        choices=["all", "sam_decoder"],
+        default="all",
+        help="export every graph (default), or the SAM decoder alone",
+    )
     args = parser.parse_args()
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
@@ -250,11 +300,14 @@ def main() -> int:
     revisions = {repo: api.model_info(repo).sha for repo in (OWL, SAM)}
     licences = {repo: (api.model_info(repo).card_data or {}).get("license") for repo in (OWL, SAM)}
     print(f"revisions: {revisions}\nlicences: {licences}")
-    checks = {"owlv2": export_owl(out, image)}
+    only_decoder = args.only == "sam_decoder"
+    checks = {} if only_decoder else {"owlv2": export_owl(out, image)}
     # The chair in the fixture, as a box in image pixels (x0, y0, x1, y1).
-    checks["sam2"] = export_sam(out, image, [130.0, 70.0, 250.0, 250.0])
+    checks["sam2"] = export_sam(out, image, [130.0, 70.0, 250.0, 250.0], only_decoder)
     files = {}
-    for name in NAMES.values():
+    for key, name in NAMES.items():
+        if only_decoder and key != "sam_decoder":
+            continue
         path = out / name
         files[name] = {"sha256": sha256(path), "bytes": path.stat().st_size}
     record = {

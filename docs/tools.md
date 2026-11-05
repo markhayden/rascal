@@ -320,7 +320,7 @@ uv. `setup` runs uv and the launcher with the baseline environment only (`PATH`,
 `LANG`, `LC_ALL`, `TMPDIR`), so no key and no uv setting of the shell's reaches them, and the
 environment is always `<dir>/.venv`. A bundle given as a URL (the spec's one network step)
 is built per platform by the `bundles` workflow on a version tag (`.github/workflows/bundles.yml`),
-which fetches the model files from the `models-2026-10` release (required on a version tag,
+which fetches the model files `artifacts.toml` names with `rascal-tools fetch` (required on a version tag,
 `BUNDLE_MODELS=required`, so a release bundle always carries `segment`), builds the
 bundle on that platform's runner, installs it from the packed archive with the network
 disabled, calls the pack, and uploads the archive with its `.sha256` to the tag's release.

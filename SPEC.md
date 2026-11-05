@@ -781,21 +781,22 @@ encoder is unchanged) with these tensors, which `MODEL.md` records:
 | input | shape, type | meaning |
 |---|---|---|
 | `feat0`, `feat1`, `feat2` | as the encoder emits | the image features |
-| `boxes` | [1, 1, 4] float32 | x0, y0, x1, y1 in 1024-pixel coordinates |
-| `points` | [1, 8, 2] float32 | x, y in 1024-pixel coordinates |
-| `point_labels` | [1, 8] int32 | 1 a positive point, -1 an unused slot |
+| `points` | [1, P, 2] float32, P from 2 to 10 | x, y in 1024-pixel coordinates: the box's two corners, then up to 8 positive points |
+| `point_labels` | [1, P] int64 | 2 and 3 for the box's corners (the way SAM 2's own predictor passes a box), 1 for a positive point |
 
 | output | shape, type | meaning |
 |---|---|---|
-| `masks` | [1, 1, 3, 256, 256] float32 | three candidate outlines as logits, inside where > 0 |
-| `iou` | [1, 1, 3] float32 | the decoder's predicted IoU of each |
+| `masks` | [1, 3, 256, 256] float32 | three candidate outlines as logits, inside where > 0 |
+| `iou` | [1, 3] float32 | the decoder's predicted IoU of each |
 
-Box-only calls set every label to -1. The new graph is a new file,
-`sam2.1-hiera-tiny.decoder3.onnx`; the single-outline graph's entry and the code that read it are
-removed (a cache keeps the old file until it is cleared, which lets a checkout before M13 still
-run). Parity gate, before the release is published: on the parity fixtures, each of the three
-outlines matches the PyTorch reference (IoU ≥ 0.99 after the threshold) and each predicted IoU is
-within 0.02, for a box alone and for a box with one and with three points.
+The point axis is dynamic, so a box alone is exactly its two corners; unused slots are never
+padded (in a trial, padding with "not a point" labels moved the outlines by up to 11% IoU). The
+new graph is a new file, `sam2.1-hiera-tiny.decoder3.onnx`; the single-outline graph's entry
+and the code that read it are removed (a cache keeps the old file until it is cleared, which
+lets a checkout before M13 still run). Parity gate, before the release is published: on the
+parity fixtures, each of the three outlines matches the PyTorch reference (IoU ≥ 0.99 after the
+threshold) and each predicted IoU is within 0.02, for a box alone and for a box with one and with
+three points.
 
 **`segment`'s new settings** (the manifest's bounds in brackets):
 

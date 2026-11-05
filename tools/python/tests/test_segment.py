@@ -119,9 +119,8 @@ def test_every_instance_fits_the_declared_bounds(harness, monkeypatch) -> None:
         def embed(self, pixels):
             return None
 
-        def planes(self, features, boxes, width, height):
-            planes = [np.ones((height, width), dtype=bool) for _ in boxes]
-            return planes, [0.9 for _ in boxes]
+        def outlines(self, features, box, points, width, height):
+            return [np.ones((height, width), dtype=bool) for _ in range(3)], [0.9, 0.8, 0.7]
 
     monkeypatch.setattr(segment, "_models", (Detector(), Segmenter()))
     result = segment.run({"prompt": "collar", "max_instances": segment.MAX_INSTANCES}, harness)

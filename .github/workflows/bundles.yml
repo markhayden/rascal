@@ -4,7 +4,8 @@ name: bundles
 # tag, one bundle per platform is built by scripts/build-bundle.sh on that platform's runner,
 # packed as a tar.gz with its SHA-256 beside it, smoked by scripts/bundle-acceptance.sh from
 # the packed archive, and uploaded to the tag's GitHub release (the one dist creates from the
-# same tag). The models come from the `models-2026-10` release: on a version tag they are
+# same tag). The models are the ones `tools/python/src/rascal_tools/artifacts.toml` names, fetched
+# with `rascal-tools fetch` from the releases it points at: on a version tag they are
 # required (BUNDLE_MODELS=required), so a release bundle never ships without `segment`; a manual
 # run without them builds a bundle that says so and serves echo_region only.
 on:
@@ -39,16 +40,12 @@ jobs:
           python-version: "3.12"
       - name: Sync the Python pack's environment
         run: uv sync --frozen --project tools/python
-      - name: Fetch the model artifacts from the models release, when it exists
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Fetch the model artifacts artifacts.toml names, when they are published
         run: |
-          mkdir -p "$HOME/.cache/rascal-tools"
-          if gh release view models-2026-10 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release download models-2026-10 --repo "$GITHUB_REPOSITORY" --dir "$HOME/.cache/rascal-tools" --clobber
+          if uv run --frozen --project tools/python rascal-tools fetch; then
             echo "models fetched"
           else
-            echo "no models release; the bundle serves echo_region only"
+            echo "the models artifacts.toml names could not be fetched; the bundle serves echo_region only"
           fi
       - name: Allow an unprivileged network namespace (Linux)
         if: runner.os == 'Linux'

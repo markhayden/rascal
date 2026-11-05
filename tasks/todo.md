@@ -156,8 +156,8 @@ with green CI on both platforms, and then the tag.
 
 ## M13 The self-correcting remove (PLAN.md M13; issues #14, #15, #16)
 - [ ] 13.0 Merge the walk (rascal, table-manners, Wafflery)
-- [ ] 13.4a The baseline snapshot (before 13.1 publishes)
-- [ ] 13.1 The decoder re-export, parity, release `models-2026-11`
+- [x] 13.4a The baseline snapshot (before 13.1 publishes)
+- [x] 13.1 The decoder re-export, parity, release `models-2026-11`
 - [ ] 13.2 The whole-object outline, padding and the retry (`outline.py`, `segment` settings)
 - [ ] 13.3 `plug` and the recipes; owner's collar check → merge `m13a-mask`, tag `m13.1`
 - [ ] 13.4 The candidates and their licences
