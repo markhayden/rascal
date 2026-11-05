@@ -84,7 +84,7 @@
       }
     ]
   },
-  "input_identity": "sha256:e9a2526c9081d60aeb1b0da43cf2c896591782fedf1e4176dc6aec39139264cf",
+  "input_identity": "sha256:5e71ea420db1c57eb4ef2b913ee8209205365dc80104289fded5026374d5c68c",
   "invocation": {
     "action": "remove",
     "arguments": {

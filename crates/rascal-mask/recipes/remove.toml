@@ -1,6 +1,7 @@
-# Remove an object: a location (a box, a polygon or a stroke) becomes the core, grown a little
-# and further downward for its shadow, closed, kept off anything protected, feathered. With a
-# configured pack, `--prompt` binds the finder's planes through `select` instead (M5).
+# Remove an object: a location (a box, a polygon or a stroke) becomes the core, grown a little and
+# further downward for its shadow, closed, small holes filled, kept off anything protected,
+# feathered. With a configured pack, `--prompt` binds the finder's planes through `select` instead
+# (M5).
 version = 1
 name = "remove"
 use_case = "remove"
@@ -30,9 +31,15 @@ inputs = { mask = "grow.mask" }
 radius_px = 3.0
 
 [[step]]
+id = "plug"
+op = "plug"
+inputs = { mask = "close.mask" }
+max_share = 0.1
+
+[[step]]
 id = "subtract"
 op = "subtract"
-inputs = { mask = "close.mask", subtract = "inputs.protect" }
+inputs = { mask = "plug.mask", subtract = "inputs.protect" }
 grow_px = 2.0
 
 [[step]]

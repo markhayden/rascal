@@ -15,6 +15,7 @@ pub mod invert;
 pub mod line;
 pub mod measure;
 pub mod paste;
+pub mod plug;
 pub mod poisson;
 pub mod primitives;
 pub mod profile;
@@ -56,6 +57,7 @@ pub fn register_all(registry: &mut OpRegistry) -> rascal_core::error::Result<()>
     registry.register(Box::new(grow::Grow))?;
     registry.register(Box::new(shrink::Shrink))?;
     registry.register(Box::new(close::Close))?;
+    registry.register(Box::new(plug::Plug))?;
     registry.register(Box::new(subtract::Subtract))?;
     registry.register(Box::new(select::Select))?;
     registry.register(Box::new(invert::Invert))?;

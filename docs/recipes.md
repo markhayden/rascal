@@ -118,8 +118,8 @@ when the request is the same, or fails naming the request.
 |---|---|---|
 | `rect` | 1.1 | `inputs.location` → `rasterize`; renders `grey` |
 | `seam` | 2.8 | `cut` → `line` → `fan` → `profile` → `ramp`; outputs the band mask, the cut canvas and the plan; `heal seam` consumes them (`docs/fillers.md`) |
-| `remove` | 4.4 | `inputs.location` (a box, a polygon or a stroke) → `rasterize` → `grow` (4 px, 12 px down for the shadow) → `close` (3 px) → `subtract` (optional `inputs.protect`, grown 2 px) → `feather` (4 px) |
-| `remove-prompt` | 5.2 | `inputs.prompt` (text, `--prompt`) → `segment` (a configured pack's, `max_instances` 8) → `select` (every plane) → the same `grow`, `close`, `subtract` and `feather` as `remove`; needs `--config` with a `[packs.*]` entry that serves `segment` (`docs/tools.md`) |
+| `remove` | 4.4 | `inputs.location` (a box, a polygon or a stroke) → `rasterize` → `grow` (4 px, 12 px down for the shadow) → `close` (3 px) → `plug` (holes up to 0.1 of their blob) → `subtract` (optional `inputs.protect`, grown 2 px) → `feather` (4 px) |
+| `remove-prompt` | 5.2 | `inputs.prompt` (text, `--prompt`) → `segment` (a configured pack's, `max_instances` 8) → `select` (every plane) → the same `grow`, `close`, `plug`, `subtract` and `feather` as `remove`; needs `--config` with a `[packs.*]` entry that serves `segment` (`docs/tools.md`) |
 | `repair` | 4.4 | `inputs.stroke` → `tighten` (`tighten-v1`) → `feather` (2 px) |
 | `repair-area` | 4.4 | `inputs.location` (a box or a polygon) → `rasterize` → `feather` (3 px) |
 | `protect` | 4.4 | `inputs.image` (the earlier composite, in its raw frame) and `inputs.mask` (the earlier mask, in that frame or one derived from it that the workspace knows) → `invert` into the raw frame; outputs the inverted mask and the image, no plan: the second pass edits everything the first left alone and keeps what it painted |

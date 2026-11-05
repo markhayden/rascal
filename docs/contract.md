@@ -68,7 +68,7 @@ dash {run.dir} --document`), described in `docs/diagnostics.md`. Every action's 
 and so may be paid. With `--config`, the configured fillers are the `filler` enum and a
 configured filler with a price makes a task `may_spend`.
 
-The operations (3, 4.7; `describe::operation`): each of the 24 ops of `rascal_ops::registry()`
+The operations (3, 4.7; `describe::operation`): each of the 25 ops of `rascal_ops::registry()`
 (SPEC "Operations", but `segment`, which a pack serves: a description is a local inspection and
 a pack's ops are known only by starting it, so pack operations are out of v0.4 for rascal). No op
 shares a name with a task or a reserved name. Each has:
