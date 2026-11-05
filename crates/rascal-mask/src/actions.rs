@@ -391,8 +391,13 @@ impl ContractActions {
             .transpose()?;
         let projection = match (given, described) {
             (Some(g), Some(d)) if g != d => {
+                let hint = if recipe == "seam" {
+                    " A seam heal needs a 360° panorama: describe the image as equirectangular."
+                } else {
+                    ""
+                };
                 return Err(Error::usage(format!(
-                    "projection: {} contradicts the image's expect.projection {}",
+                    "projection: the run is set to {} but the image is described as {}; make them agree.{hint}",
                     g.name(),
                     d.name()
                 )));

@@ -331,7 +331,7 @@ fn an_images_described_projection_is_used_when_the_call_names_none() {
         s["error"]["reason"]
             .as_str()
             .unwrap()
-            .contains("contradicts the image's expect.projection"),
+            .contains("projection: the run is set to equirectangular but the image is described as flat; make them agree. A seam heal needs a 360° panorama: describe the image as equirectangular."),
         "{s:#}"
     );
     client.close().unwrap();
