@@ -255,12 +255,19 @@ from one `ToolSpec` and holding its bounds under rascal's ceilings at listing ti
 `serve --debug-tools`, `echo_env` (the variable names it can see).
 
 **`segment`** takes an image and `prompt` (one or more queries separated by `.`, `,` or `;`),
-`max_instances` (default 8, at most 16) and `threshold` (the detector score a box needs,
-default 0.2), and answers one polygon region per instance (the detector's box, labelled with
-the query it answered, scored, best first) and one plane per region in the image's frame;
-`not_applicable` when nothing scores over the threshold. Two models do it, both exported to
-ONNX and run on `onnxruntime` with no PyTorch anywhere near the pack: OWLv2 base turns the
-queries into boxes with scores, SAM 2.1 Hiera-Tiny turns each kept box into a plane
+`max_instances` (default 8, at most 16), `threshold` (the detector score a box needs,
+default 0.2), `pad` (how far each box is widened before tracing, a share of its sides, default
+0.05), `outline` (`whole`, the default: the largest traced outline that stays inside the box,
+so the whole object rather than one part; or `best`, the most confident) and `min_cover`
+(default 0.2: an outline covering less of its box, or one in pieces, is traced once more with
+the box widened by twice `pad` and a point on each piece, and the retry is kept when it is
+larger and stays inside). It answers one polygon region per instance (the padded box,
+labelled with the query it answered, scored, best first) and one plane per region in the
+image's frame, with `plane_px_<n>`, `outline_<n>`, `retried_<n>` and `retry_kept_<n>` per
+instance; `not_applicable` when nothing scores over the threshold. Two models do it, both
+exported to ONNX and run on `onnxruntime` with no PyTorch anywhere near the pack: OWLv2 base
+turns the queries into boxes with scores, SAM 2.1 Hiera-Tiny gives three candidate outlines per
+box, and the rules in `rascal_tools/outline.py` (pure functions, no model) keep one
 (`tools/python/MODEL.md`: the sources, the licences, the export, the preprocessing the pack
 mirrors, the parity). The model artifacts (749 MB in all) live outside the pack: `rascal-tools
 fetch` is the one network step, downloading what `artifacts.toml` names into

@@ -90,8 +90,9 @@ scores it 0.07 for "a wooden chair" (0.02 for "chair"), as PyTorch does on the s
 the recorded case uses threshold 0.05. On photographs the default threshold, 0.2, is the
 right one. `tests/test_sam2.py` covers the decoder's prompt tensors without a model and, with
 the artifacts, the three outlines for a box alone and with 1 and 8 points. The chair's stored
-case was re-recorded with the three-outline decoder (2026-11-04): the most confident outline
-holds 8056 pixels against the single-outline graph's 8033, predicted IoU 0.980 against 0.983.
+case was re-recorded with the three-outline decoder and `segment`'s outline rules (2026-11-04):
+the box padded by 0.05 of its sides, the whole-object pick keeps candidate 0, 8338 pixels at
+predicted IoU 0.944 (the single-outline graph gave 8033 at 0.983); no retry runs.
 No test downloads anything.
 
 `crates/rascal-mask/tests/it/packs_real.rs` drives the pack through rascal's client and calls

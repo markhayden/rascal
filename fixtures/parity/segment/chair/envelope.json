@@ -20,12 +20,27 @@
       "frame": "raw:480x320:flat",
       "name": "plane_px_0",
       "unit": "px",
-      "value": 8056.0
+      "value": 8338.0
+    },
+    {
+      "name": "outline_0",
+      "unit": "index",
+      "value": 0.0
+    },
+    {
+      "name": "retried_0",
+      "unit": "flag",
+      "value": 0.0
+    },
+    {
+      "name": "retry_kept_0",
+      "unit": "flag",
+      "value": 0.0
     },
     {
       "name": "mask_iou_predicted",
       "unit": "ratio",
-      "value": 0.98
+      "value": 0.944
     }
   ],
   "regions": [
@@ -37,20 +52,20 @@
         "kind": "polygon",
         "polygon": [
           [
-            0.2795,
-            0.2221
+            0.2673,
+            0.1938
           ],
           [
-            0.5229,
-            0.2221
+            0.535,
+            0.1938
           ],
           [
-            0.5229,
-            0.788
+            0.535,
+            0.8163
           ],
           [
-            0.2795,
-            0.788
+            0.2673,
+            0.8163
           ]
         ]
       },
