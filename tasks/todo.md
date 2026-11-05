@@ -173,6 +173,6 @@ with green CI on both platforms, and then the tag.
 - [x] 13.12c N tries, the selection and the outputs
 - [x] 13.13 Replay and cancellation → tag `m13.3`
 - [ ] 13.14 Wafflery shows checks → tag `m13.4`
-- [ ] 13.15 Version 0.5.0 everywhere at once; publish; pins from crates.io (2026-11-05: pinned `=0.5.0` by path, the v0.5 fixtures regenerated with the loop's four and copied to the contract; the publish and the crates.io pins remain)
+- [x] 13.15 Version 0.5.0 everywhere at once; publish; pins from crates.io (2026-11-05: the v0.5 fixtures regenerated with the loop's four; table-manners 0.5.0 published; pinned `=0.5.0` from crates.io)
 - [ ] 13.16 Merge and the by-hand check
 - [ ] Checkpoint M13 → tag `m13`
