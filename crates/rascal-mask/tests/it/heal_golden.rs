@@ -3,7 +3,9 @@
 //! unwindow and put, and a `remove-prompt` heal through the fake pack. Each is healed again and
 //! compared: the result and the mask byte for byte, and the journal line for line after the
 //! durations and the machine's paths are normalised away (every op, step, identity, parameter,
-//! envelope and note equal). `UPDATE_FIXTURES=1` rewrites the golden, which only a change that
+//! envelope and note equal). A measurement is compared to nine significant digits and a
+//! `Series`'s identity not at all: `measure`'s statistics differ in the last digits between
+//! platforms' maths libraries (macOS and Linux), and a Series hashes those values. `UPDATE_FIXTURES=1` rewrites the golden, which only a change that
 //! means to alter heal's output should do.
 #![cfg(feature = "testkit")]
 #![allow(clippy::unwrap_used)]
@@ -106,6 +108,13 @@ fn normalise(value: &mut serde_json::Value, dir: &Path) {
     match value {
         serde_json::Value::Object(map) => {
             map.remove("duration_ms");
+            // A measurement's value, to nine significant digits.
+            if map.contains_key("name")
+                && map.contains_key("unit")
+                && let Some(v) = map.get("value").and_then(serde_json::Value::as_f64)
+            {
+                map.insert("value".into(), serde_json::json!(format!("{v:.8e}")));
+            }
             if map.contains_key("pack") {
                 map.remove("request_bytes");
             }
@@ -138,9 +147,38 @@ fn normalised_journal(run: &Path, dir: &Path) -> String {
         .map(|line| {
             let mut value: serde_json::Value = serde_json::from_str(line).unwrap();
             normalise(&mut value, dir);
+            series_unidentified(&mut value);
             serde_json::to_string(&value).unwrap() + "\n"
         })
         .collect()
+}
+
+/// A journal line's `Series` artifacts with their identities replaced, in the envelope and in
+/// `outputs`: a Series hashes `measure`'s values, which differ in the last digits by platform.
+fn series_unidentified(line: &mut serde_json::Value) {
+    let Some(artifacts) = line
+        .pointer_mut("/envelope/artifacts")
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return;
+    };
+    let mut series = Vec::new();
+    for (id, artifact) in artifacts.iter_mut() {
+        if artifact["artifact_type"] == "Series" {
+            artifact["identity"] = serde_json::json!("<series>");
+            series.push(id.clone());
+        }
+    }
+    if let Some(outputs) = line
+        .get_mut("outputs")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        for id in series {
+            if outputs.contains_key(&id) {
+                outputs.insert(id, serde_json::json!("<series>"));
+            }
+        }
+    }
 }
 
 /// The files of the Mask the run recorded as its output, by name.
@@ -235,7 +273,18 @@ fn a_heal_reproduces_the_golden_recorded_before_the_split() {
         for ((name, a), (_, b)) in mask.iter().zip(&stored) {
             assert!(a == b, "{}: mask {name} differs from the golden", case.name);
         }
-        let expected = std::fs::read_to_string(golden.join("journal.jsonl")).unwrap();
+        // The golden as recorded, under the same rules as the run's journal (its paths already
+        // stand as placeholders).
+        let expected: String = std::fs::read_to_string(golden.join("journal.jsonl"))
+            .unwrap()
+            .lines()
+            .map(|line| {
+                let mut value: serde_json::Value = serde_json::from_str(line).unwrap();
+                normalise(&mut value, &dir);
+                series_unidentified(&mut value);
+                serde_json::to_string(&value).unwrap() + "\n"
+            })
+            .collect();
         for (n, (a, b)) in journal.lines().zip(expected.lines()).enumerate() {
             assert_eq!(a, b, "{}: journal line {}", case.name, n + 1);
         }
