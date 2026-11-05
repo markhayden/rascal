@@ -1205,6 +1205,43 @@ fn a_replay_of_a_three_try_run_makes_no_call_and_gives_the_same_outputs() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A replay needs no checker key: it never calls the checker, so a recording that holds checks
+/// is replayed checked even when the key is not in the environment.
+#[test]
+fn a_replay_without_the_checkers_key_still_answers_from_the_recording() {
+    let dir = scratch("replay-keyless");
+    let answers: Value = serde_json::from_str(THREE_TRIES).unwrap();
+    let file = config(
+        &dir,
+        &Setup {
+            script: json!({ "answers": answers }),
+            ..Setup::default()
+        },
+    );
+    let o = heal(&dir, &file, &[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(calls(&dir), 3);
+    let keyed = dir.join("keyed.toml");
+    std::fs::write(
+        &keyed,
+        std::fs::read_to_string(&file).unwrap().replace(
+            "timeout_s = 30",
+            "timeout_s = 30\nkey_env = \"RASCAL_TEST_ABSENT_KEY\"",
+        ),
+    )
+    .unwrap();
+    let replay = dir.join("run").to_str().unwrap().to_string();
+    let o = heal_into(&dir, &keyed, "again", &["--replay", &replay]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(calls(&dir), 3, "the checker was not called");
+    assert_eq!(outputs(&dir.join("run")), outputs(&dir.join("again")));
+    let again: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("again/run.json")).unwrap())
+            .unwrap();
+    assert_eq!(again["body"]["selected_try"], 3);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn a_replay_whose_recording_lacks_a_check_is_refused_never_called() {
     let dir = scratch("replay-missing");

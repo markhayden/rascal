@@ -163,6 +163,18 @@ pub fn recorded(dir: &Path, request: &str, attempt: u32) -> Result<Option<Stored
     }))
 }
 
+/// Whether the recorded run in `dir` holds any check (`checker stored:`): a replay of it is
+/// checked from the recording, needing no checker key.
+pub fn any_recorded(dir: &Path) -> Result<bool> {
+    let workspace = rascal_core::workspace::Workspace::open_read_only(dir)?;
+    let lines = rascal_core::journal::Journal::read(&workspace.journal_path())?;
+    Ok(lines.iter().any(|line| {
+        line.note
+            .as_deref()
+            .is_some_and(|n| n.starts_with(STORED_PREFIX))
+    }))
+}
+
 /// Copies the source and the candidate into `dir` and writes the rendered arguments there.
 pub fn stage(config: &CheckerConfig, request: &Request, dir: &Path) -> Result<Staged> {
     std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;

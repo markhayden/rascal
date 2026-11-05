@@ -243,7 +243,8 @@ unresolved (`docs/contract.md`, "Spend").
 **Replay and cancellation.** `heal --replay <recorded run>` answers each check from that run's
 `checker stored:` note with the same request identity and the same try, noting "checker call
 replayed from the recorded check …"; the checker is never called, and a check the recording
-lacks ends the heal with a usage error (exit 64). A cancelled run (a `serve` client's
+lacks ends the heal with a usage error (exit 64). A replay needs no checker key: when the
+recording holds checks, the replay is checked from it even with the key missing. A cancelled run (a `serve` client's
 cancellation, or SIGINT or SIGTERM on the command line) stops a check under way: its stdin is
 closed, then after five seconds SIGTERM, then after five more SIGKILL, and it is counted at its
 price as unresolved. The run ends `cancelled`, its `run.json` listing the tries completed before

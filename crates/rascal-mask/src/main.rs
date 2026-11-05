@@ -884,7 +884,18 @@ fn main() {
                 filler: &filler,
                 no_check,
             };
-            let (pending, price) = start("heal", &run, Some(healing));
+            let (pending, mut price) = start("heal", &run, Some(healing));
+            // A replay never calls the checker, so it needs no key: a recording that holds
+            // checks is replayed checked, answered from the recording.
+            if let (
+                Some(dir),
+                rascal_mask::checker::Check::Off(rascal_mask::checker::Off::KeyMissing(_)),
+            ) = (&replay, &price.check)
+                && rascal_mask::checker::call::any_recorded(dir).unwrap_or(false)
+            {
+                price.check = rascal_mask::checker::Check::On;
+                price.max_tries = rascal_mask::checker::MAX_TRIES;
+            }
             // The command line has no session: the tries are the most the call's cap allows.
             let tries = price.tries(None).map_or(1, |(tries, _)| tries);
             let args = heal::HealArgs {
