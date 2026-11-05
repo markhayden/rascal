@@ -1,8 +1,9 @@
 # table-manners: rascal's side of the shared contract
 
-rascal conforms to [table-manners](https://github.com/markhayden/table-manners) v0.4 (milestones
-M8 and M9 for v0.1.0, M11 for v0.2.0, M12 for v0.3.0, M10 for v0.4.0), pinned `=0.4.0` from
-crates.io on the M10 branch (PLAN.md 10.15; `main` keeps `=0.3.0` until the branch merges); the shared contract of
+rascal conforms to [table-manners](https://github.com/markhayden/table-manners) v0.5 (milestones
+M8 and M9 for v0.1.0, M11 for v0.2.0, M12 for v0.3.0, M10 for v0.4.0, M13 for v0.5.0), pinned
+`=0.5.0` on the M13 branch, by path to the contract's `v0.5` checkout until the release is
+published (PLAN.md 13.15), then from crates.io; the shared contract of
 the owner's tools (ADR 0020, decisions 13 and 14): what an agent, a script or the playground sees
 from outside is the same for squint, rascal and the tools after them. The contract's text is the
 specification; this page is what rascal does under it (PLAN.md M8 to M12), as built on the M10
@@ -10,9 +11,13 @@ branch.
 
 ## The pin
 
-`table-manners = "=0.4.0"` in the workspace `Cargo.toml`, the published crate: its serde types
-and embedded schemas, no logic (PLAN.md 10.15; M10 built against the contract's `v0.4` branch by
-path until the release, and the fixtures generated then match the release unchanged).
+`table-manners = { path = "../table-manners", version = "=0.5.0" }` in the workspace
+`Cargo.toml` on the M13 branch until 0.5.0 is published, then `"=0.5.0"` from crates.io: its serde
+types and embedded schemas, no logic (PLAN.md 13.15; M10 pinned `=0.4.0` the same way). v0.5's
+fixtures add the checked `remove_prompt`: `describe-checker-optional-missing.json` (`answers:
+verdict`, `ready` with the checker's key optional and missing), `run-remove-prompt-checked-pass.json`,
+`run-remove-prompt-three-tries.json` (labelled outs, the kept try's verdict) and
+`run-remove-prompt-not-checked.json` (no `verdict`; the note says why).
 `scripts/check-contract.sh` warns in CI when crates.io has a newer release; moving the pin is a
 deliberate commit that also refreshes `fixtures/contract/` and `fixtures/table-manners/`.
 

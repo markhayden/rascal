@@ -51,7 +51,7 @@ fn of_kind<'a>(doc: &'a serde_json::Value, kind: &str) -> Vec<&'a serde_json::Va
 
 /// The v0.4 shapes every description has, whatever the configuration.
 fn assert_v04_shapes(doc: &serde_json::Value) {
-    assert_eq!(doc["contract"], "0.4.0");
+    assert_eq!(doc["contract"], "0.5.0");
     assert_eq!(doc["profiles"], serde_json::json!(["images", "operations"]));
     // The core's word lists: the operations' groups, and the images profile's four.
     assert_eq!(

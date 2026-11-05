@@ -203,7 +203,7 @@ fn read_inside(path: &Path, allow_dir: &Path) -> Result<Value, String> {
 /// A table-manners result header with the given status, error reason, spend and verdict.
 fn header(status: &str, reason: Option<String>, spend: f64, verdict: Option<Value>) -> Value {
     let mut result = json!({
-        "contract": "0.4.0",
+        "contract": rascal_core::contract::CONTRACT_VERSION,
         "tool": { "name": "fake-checker", "version": "0" },
         "action": "check",
         "run": { "id": "check-1", "resource": "fake-checker://run/check-1/run.json",

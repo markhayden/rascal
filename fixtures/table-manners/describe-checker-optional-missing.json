@@ -1,0 +1,3189 @@
+{
+  "actions": [
+    {
+      "cost": {
+        "basis": "estimated",
+        "may_spend": true
+      },
+      "duration": {
+        "max_s": 180.0,
+        "typical_s": 5.0
+      },
+      "images": [
+        {
+          "required": true,
+          "role": "source",
+          "slot": "image"
+        }
+      ],
+      "kind": "task",
+      "locations": [
+        {
+          "kinds": [
+            "bbox"
+          ],
+          "required": true,
+          "slot": "location"
+        }
+      ],
+      "name": "mask_rect",
+      "outputs": {
+        "images": [
+          "result",
+          "mask"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "filler": {
+            "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone.",
+            "enum": [
+              "fake"
+            ],
+            "type": "string"
+          },
+          "max_spend_usd": {
+            "description": "Lower the per-call spend cap for this call (USD, above zero).",
+            "exclusiveMinimum": 0,
+            "type": "number"
+          },
+          "projection": {
+            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "enum": [
+              "flat",
+              "equirectangular"
+            ],
+            "type": "string"
+          },
+          "set": {
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "description": "Step overrides for this run, `<step>.<param>` to a value (`fan.constants`: `fan-v1`, `grow.px`: 8); journaled.",
+            "propertyNames": {
+              "pattern": "^[a-z_][a-z0-9_-]*\\.[a-z_][a-z0-9_]*$"
+            },
+            "type": "object"
+          },
+          "strict": {
+            "default": false,
+            "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "purpose": "A hard-edged rectangle as a mask; to soften its edge, feather it afterwards (the feather operation).",
+      "readiness": {
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          }
+        ],
+        "state": "ready"
+      },
+      "renders": [
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--serve",
+            "--port",
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
+          ],
+          "kind": "server",
+          "name": "dash",
+          "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
+        }
+      ],
+      "title": "Mask a rectangle"
+    },
+    {
+      "cost": {
+        "basis": "estimated",
+        "may_spend": true
+      },
+      "duration": {
+        "max_s": 180.0,
+        "typical_s": 5.0
+      },
+      "images": [
+        {
+          "required": true,
+          "role": "source",
+          "slot": "image"
+        }
+      ],
+      "kind": "task",
+      "locations": [],
+      "name": "seam",
+      "outputs": {
+        "images": [
+          "result",
+          "mask"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "filler": {
+            "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone.",
+            "enum": [
+              "fake"
+            ],
+            "type": "string"
+          },
+          "max_spend_usd": {
+            "description": "Lower the per-call spend cap for this call (USD, above zero).",
+            "exclusiveMinimum": 0,
+            "type": "number"
+          },
+          "projection": {
+            "default": "equirectangular",
+            "description": "The image's projection; equirectangular unless the call names another.",
+            "enum": [
+              "flat",
+              "equirectangular"
+            ],
+            "type": "string"
+          },
+          "set": {
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "description": "Step overrides for this run, `<step>.<param>` to a value (`fan.constants`: `fan-v1`, `grow.px`: 8); journaled.",
+            "propertyNames": {
+              "pattern": "^[a-z_][a-z0-9_-]*\\.[a-z_][a-z0-9_]*$"
+            },
+            "type": "object"
+          },
+          "strict": {
+            "default": false,
+            "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "purpose": "Masks the wrap edge of a panorama as a band, wide on smooth surfaces and thin on detail, with a tone ramp across it; with a filler, heals it.",
+      "readiness": {
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          }
+        ],
+        "state": "ready"
+      },
+      "renders": [
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--serve",
+            "--port",
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
+          ],
+          "kind": "server",
+          "name": "dash",
+          "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
+        }
+      ],
+      "title": "Heal a seam"
+    },
+    {
+      "cost": {
+        "basis": "estimated",
+        "may_spend": true
+      },
+      "duration": {
+        "max_s": 180.0,
+        "typical_s": 5.0
+      },
+      "images": [
+        {
+          "required": true,
+          "role": "source",
+          "slot": "image"
+        }
+      ],
+      "kind": "task",
+      "locations": [
+        {
+          "kinds": [
+            "bbox",
+            "polygon",
+            "stroke"
+          ],
+          "required": true,
+          "slot": "location"
+        }
+      ],
+      "name": "remove",
+      "outputs": {
+        "images": [
+          "result",
+          "mask"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "filler": {
+            "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone.",
+            "enum": [
+              "fake"
+            ],
+            "type": "string"
+          },
+          "max_spend_usd": {
+            "description": "Lower the per-call spend cap for this call (USD, above zero).",
+            "exclusiveMinimum": 0,
+            "type": "number"
+          },
+          "projection": {
+            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "enum": [
+              "flat",
+              "equirectangular"
+            ],
+            "type": "string"
+          },
+          "protect": {
+            "$comment": "urn:table-manners:operations:artifact-ref",
+            "additionalProperties": false,
+            "description": "A rascal:Mask artifact reference (CONTRACT 3.4); it resolves by identity in this server's workspace (rascal serve --workspace).",
+            "properties": {
+              "frame": {
+                "minLength": 1,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "identity": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "on": {
+                "description": "The image reference (CONTRACT 8) of the image it was made on.",
+                "type": "object"
+              },
+              "resource": {
+                "pattern": "^[a-z][a-z0-9+.-]*://artifact/",
+                "type": "string"
+              },
+              "schema_version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "tool": {
+                "pattern": "^[a-z][a-z0-9-]*$",
+                "type": "string"
+              },
+              "type": {
+                "pattern": "^(image|location|[a-z][a-z0-9-]*:[A-Z][A-Za-z0-9]*)$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "schema_version",
+              "tool",
+              "identity",
+              "frame",
+              "resource"
+            ],
+            "type": "object"
+          },
+          "set": {
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "description": "Step overrides for this run, `<step>.<param>` to a value (`fan.constants`: `fan-v1`, `grow.px`: 8); journaled.",
+            "propertyNames": {
+              "pattern": "^[a-z_][a-z0-9_-]*\\.[a-z_][a-z0-9_]*$"
+            },
+            "type": "object"
+          },
+          "strict": {
+            "default": false,
+            "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "purpose": "Masks an object at a location with its shadow, kept off protected regions and feathered; with a filler, removes it.",
+      "readiness": {
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          }
+        ],
+        "state": "ready"
+      },
+      "renders": [
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--serve",
+            "--port",
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
+          ],
+          "kind": "server",
+          "name": "dash",
+          "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
+        }
+      ],
+      "title": "Remove an object"
+    },
+    {
+      "answers": "verdict",
+      "cost": {
+        "basis": "estimated",
+        "may_spend": true
+      },
+      "duration": {
+        "max_s": 180.0,
+        "typical_s": 20.0
+      },
+      "images": [
+        {
+          "required": true,
+          "role": "source",
+          "slot": "image"
+        }
+      ],
+      "kind": "task",
+      "locations": [],
+      "name": "remove_prompt",
+      "outputs": {
+        "images": [
+          "result",
+          "mask"
+        ],
+        "locations": [
+          "found"
+        ]
+      },
+      "params_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "check": {
+            "default": true,
+            "description": "After the fill, ask the configured checker whether any of the prompt's object is still visible, and when it is, add what it points at to the mask and fill again (at most 3 tries in all, within the spending limit). Applies when a filler is chosen.",
+            "title": "Check the result",
+            "type": "boolean"
+          },
+          "filler": {
+            "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone.",
+            "enum": [
+              "fake"
+            ],
+            "type": "string"
+          },
+          "max_spend_usd": {
+            "description": "Lower the per-call spend cap for this call (USD, above zero).",
+            "exclusiveMinimum": 0,
+            "type": "number"
+          },
+          "projection": {
+            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "enum": [
+              "flat",
+              "equirectangular"
+            ],
+            "type": "string"
+          },
+          "prompt": {
+            "description": "The recipe's prompt (text).",
+            "minLength": 1,
+            "type": "string"
+          },
+          "protect": {
+            "$comment": "urn:table-manners:operations:artifact-ref",
+            "additionalProperties": false,
+            "description": "A rascal:Mask artifact reference (CONTRACT 3.4); it resolves by identity in this server's workspace (rascal serve --workspace).",
+            "properties": {
+              "frame": {
+                "minLength": 1,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "identity": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "on": {
+                "description": "The image reference (CONTRACT 8) of the image it was made on.",
+                "type": "object"
+              },
+              "resource": {
+                "pattern": "^[a-z][a-z0-9+.-]*://artifact/",
+                "type": "string"
+              },
+              "schema_version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "tool": {
+                "pattern": "^[a-z][a-z0-9-]*$",
+                "type": "string"
+              },
+              "type": {
+                "pattern": "^(image|location|[a-z][a-z0-9-]*:[A-Z][A-Za-z0-9]*)$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "schema_version",
+              "tool",
+              "identity",
+              "frame",
+              "resource"
+            ],
+            "type": "object"
+          },
+          "set": {
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "description": "Step overrides for this run, `<step>.<param>` to a value (`fan.constants`: `fan-v1`, `grow.px`: 8); journaled.",
+            "propertyNames": {
+              "pattern": "^[a-z_][a-z0-9_-]*\\.[a-z_][a-z0-9_]*$"
+            },
+            "type": "object"
+          },
+          "strict": {
+            "default": false,
+            "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "type": "object"
+      },
+      "purpose": "Finds the objects a text prompt names with the segmenter pack and masks them as remove does; with a filler, removes them.",
+      "readiness": {
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "packs.fake",
+            "state": "present"
+          },
+          {
+            "kind": "file",
+            "name": "owlv2-base-patch16.onnx",
+            "state": "present"
+          },
+          {
+            "kind": "file",
+            "name": "owlv2-base-patch16.tokenizer.json",
+            "state": "present"
+          },
+          {
+            "kind": "file",
+            "name": "sam2.1-hiera-tiny.encoder.onnx",
+            "state": "present"
+          },
+          {
+            "kind": "file",
+            "name": "sam2.1-hiera-tiny.decoder3.onnx",
+            "state": "present"
+          },
+          {
+            "for": "checking the result",
+            "kind": "dependency",
+            "name": "checker",
+            "optional": true,
+            "state": "present"
+          },
+          {
+            "for": "checking the result",
+            "kind": "credential",
+            "name": "RASCAL_FIXTURE_CHECKER_KEY",
+            "optional": true,
+            "setup": "Set `RASCAL_FIXTURE_CHECKER_KEY` in the environment rascal is started with.",
+            "state": "missing"
+          }
+        ],
+        "state": "ready"
+      },
+      "renders": [
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--serve",
+            "--port",
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
+          ],
+          "kind": "server",
+          "name": "dash",
+          "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
+        }
+      ],
+      "title": "Remove what a prompt names"
+    },
+    {
+      "cost": {
+        "basis": "estimated",
+        "may_spend": true
+      },
+      "duration": {
+        "max_s": 180.0,
+        "typical_s": 5.0
+      },
+      "images": [
+        {
+          "required": true,
+          "role": "source",
+          "slot": "image"
+        }
+      ],
+      "kind": "task",
+      "locations": [
+        {
+          "kinds": [
+            "stroke"
+          ],
+          "required": true,
+          "slot": "stroke"
+        }
+      ],
+      "name": "repair",
+      "outputs": {
+        "images": [
+          "result",
+          "mask"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "filler": {
+            "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone.",
+            "enum": [
+              "fake"
+            ],
+            "type": "string"
+          },
+          "max_spend_usd": {
+            "description": "Lower the per-call spend cap for this call (USD, above zero).",
+            "exclusiveMinimum": 0,
+            "type": "number"
+          },
+          "projection": {
+            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "enum": [
+              "flat",
+              "equirectangular"
+            ],
+            "type": "string"
+          },
+          "set": {
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "description": "Step overrides for this run, `<step>.<param>` to a value (`fan.constants`: `fan-v1`, `grow.px`: 8); journaled.",
+            "propertyNames": {
+              "pattern": "^[a-z_][a-z0-9_-]*\\.[a-z_][a-z0-9_]*$"
+            },
+            "type": "object"
+          },
+          "strict": {
+            "default": false,
+            "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "purpose": "Tightens a stroke drawn along a scratch or tear to the defect's edges and feathers it; with a filler, repairs it.",
+      "readiness": {
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          }
+        ],
+        "state": "ready"
+      },
+      "renders": [
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--serve",
+            "--port",
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
+          ],
+          "kind": "server",
+          "name": "dash",
+          "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
+        }
+      ],
+      "title": "Repair a scratch"
+    },
+    {
+      "cost": {
+        "basis": "estimated",
+        "may_spend": true
+      },
+      "duration": {
+        "max_s": 180.0,
+        "typical_s": 5.0
+      },
+      "images": [
+        {
+          "required": true,
+          "role": "source",
+          "slot": "image"
+        }
+      ],
+      "kind": "task",
+      "locations": [
+        {
+          "kinds": [
+            "bbox",
+            "polygon"
+          ],
+          "required": true,
+          "slot": "location"
+        }
+      ],
+      "name": "repair_area",
+      "outputs": {
+        "images": [
+          "result",
+          "mask"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "filler": {
+            "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone.",
+            "enum": [
+              "fake"
+            ],
+            "type": "string"
+          },
+          "max_spend_usd": {
+            "description": "Lower the per-call spend cap for this call (USD, above zero).",
+            "exclusiveMinimum": 0,
+            "type": "number"
+          },
+          "projection": {
+            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "enum": [
+              "flat",
+              "equirectangular"
+            ],
+            "type": "string"
+          },
+          "set": {
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "description": "Step overrides for this run, `<step>.<param>` to a value (`fan.constants`: `fan-v1`, `grow.px`: 8); journaled.",
+            "propertyNames": {
+              "pattern": "^[a-z_][a-z0-9_-]*\\.[a-z_][a-z0-9_]*$"
+            },
+            "type": "object"
+          },
+          "strict": {
+            "default": false,
+            "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "purpose": "Masks a stain or spot as drawn, feathered; with a filler, repairs it.",
+      "readiness": {
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          }
+        ],
+        "state": "ready"
+      },
+      "renders": [
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--serve",
+            "--port",
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
+          ],
+          "kind": "server",
+          "name": "dash",
+          "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
+        }
+      ],
+      "title": "Repair a stain"
+    },
+    {
+      "cost": {
+        "basis": "estimated",
+        "may_spend": true
+      },
+      "duration": {
+        "max_s": 180.0,
+        "typical_s": 5.0
+      },
+      "images": [
+        {
+          "required": true,
+          "role": "source",
+          "slot": "image"
+        }
+      ],
+      "kind": "task",
+      "locations": [],
+      "name": "protect",
+      "outputs": {
+        "images": [
+          "result",
+          "mask"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "filler": {
+            "description": "A filler from the configuration to paint the mask; without one the run returns the mask alone.",
+            "enum": [
+              "fake"
+            ],
+            "type": "string"
+          },
+          "mask": {
+            "$comment": "urn:table-manners:operations:artifact-ref",
+            "additionalProperties": false,
+            "description": "A rascal:Mask artifact reference (CONTRACT 3.4); it resolves by identity in this server's workspace (rascal serve --workspace).",
+            "properties": {
+              "frame": {
+                "minLength": 1,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "identity": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "on": {
+                "description": "The image reference (CONTRACT 8) of the image it was made on.",
+                "type": "object"
+              },
+              "resource": {
+                "pattern": "^[a-z][a-z0-9+.-]*://artifact/",
+                "type": "string"
+              },
+              "schema_version": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "tool": {
+                "pattern": "^[a-z][a-z0-9-]*$",
+                "type": "string"
+              },
+              "type": {
+                "pattern": "^(image|location|[a-z][a-z0-9-]*:[A-Z][A-Za-z0-9]*)$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "schema_version",
+              "tool",
+              "identity",
+              "frame",
+              "resource"
+            ],
+            "type": "object"
+          },
+          "max_spend_usd": {
+            "description": "Lower the per-call spend cap for this call (USD, above zero).",
+            "exclusiveMinimum": 0,
+            "type": "number"
+          },
+          "projection": {
+            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "enum": [
+              "flat",
+              "equirectangular"
+            ],
+            "type": "string"
+          },
+          "set": {
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "description": "Step overrides for this run, `<step>.<param>` to a value (`fan.constants`: `fan-v1`, `grow.px`: 8); journaled.",
+            "propertyNames": {
+              "pattern": "^[a-z_][a-z0-9_-]*\\.[a-z_][a-z0-9_]*$"
+            },
+            "type": "object"
+          },
+          "strict": {
+            "default": false,
+            "description": "Fail (exit 1) when the recipe stops at a step that is not applicable.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mask"
+        ],
+        "type": "object"
+      },
+      "purpose": "Inverts an earlier mask so a second pass may change everything else.",
+      "readiness": {
+        "requirements": [
+          {
+            "kind": "config",
+            "name": "rascal.toml",
+            "state": "present"
+          },
+          {
+            "kind": "model",
+            "name": "fillers.fake",
+            "state": "present"
+          },
+          {
+            "kind": "dependency",
+            "name": "/rascal/target/debug/rascal",
+            "state": "present"
+          }
+        ],
+        "state": "ready"
+      },
+      "renders": [
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--serve",
+            "--port",
+            "0",
+            "--frame-ancestor",
+            "{frame_ancestor}"
+          ],
+          "kind": "server",
+          "name": "dash",
+          "ready_timeout_s": 10
+        },
+        {
+          "command": [
+            "rascal",
+            "dash",
+            "{run.dir}",
+            "--document"
+          ],
+          "kind": "document",
+          "name": "page"
+        }
+      ],
+      "title": "Protect an earlier edit"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.01
+      },
+      "group": "find",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "line",
+      "outputs": {
+        "images": [
+          "preview"
+        ],
+        "locations": [
+          "found"
+        ]
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "column"
+            ]
+          },
+          {
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "properties": {
+          "column": {
+            "description": "The column as a fraction of the width, for a whole-column line.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "path": {
+            "description": "Two or more [x, y] points as fractions of the frame, for a path.",
+            "examples": [
+              [
+                [
+                  0.2,
+                  0.5
+                ],
+                [
+                  0.8,
+                  0.5
+                ]
+              ]
+            ],
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "minItems": 2,
+            "type": "array"
+          },
+          "width_px": {
+            "description": "The line's full width in pixels of its frame.",
+            "maximum": 1000000000.0,
+            "minimum": 1e-9,
+            "type": "number"
+          }
+        },
+        "required": [
+          "width_px"
+        ],
+        "title": "line parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "image",
+            "purpose": "The image whose frame the line is in.",
+            "required": true,
+            "type": "image"
+          }
+        ],
+        "out": [
+          {
+            "name": "location",
+            "purpose": "The line location.",
+            "required": true,
+            "type": "location"
+          }
+        ]
+      },
+      "purpose": "A line location: a whole column or a path, with its full width in pixels. When to use: When the region to mask follows a line: the wrap edge at the centre of a cut canvas (column 0.5), a seam, a crease, a scratch that fan will later widen row by row. When not to use: When the mark is a rough hand-drawn stroke to be tightened to the defect (use stroke), or an area (use rect or a polygon).",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Line"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.01
+      },
+      "group": "find",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "rect",
+      "outputs": {
+        "images": [
+          "preview"
+        ],
+        "locations": [
+          "found"
+        ]
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "bbox": {
+            "description": "[x0, y0, x1, y1] as fractions of the frame; x0 < x1 and y0 < y1",
+            "examples": [
+              [
+                0.25,
+                0.25,
+                0.75,
+                0.75
+              ]
+            ],
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "title": "Box",
+            "type": "array"
+          }
+        },
+        "required": [
+          "bbox"
+        ],
+        "title": "rect parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "image",
+            "purpose": "The image whose frame the box is in.",
+            "required": true,
+            "type": "image"
+          }
+        ],
+        "out": [
+          {
+            "name": "location",
+            "purpose": "The box as a bbox location.",
+            "required": true,
+            "type": "location"
+          }
+        ]
+      },
+      "purpose": "A rectangle as a location, from four fractions of the image's frame. When to use: When the region to mask is a known box: a caller's coordinates, a detector's bbox, a plain test shape. When not to use: When the region has a shape (use a polygon or a stroke) or must be found (use a finder).",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Rect"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.01
+      },
+      "group": "find",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "stroke",
+      "outputs": {
+        "images": [
+          "preview"
+        ],
+        "locations": [
+          "found"
+        ]
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "description": "Two or more [x, y] points as fractions of the frame.",
+            "examples": [
+              [
+                [
+                  0.2,
+                  0.5
+                ],
+                [
+                  0.8,
+                  0.5
+                ]
+              ]
+            ],
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "minItems": 2,
+            "type": "array"
+          },
+          "radius_px": {
+            "description": "The stroke's radius in pixels of its frame.",
+            "maximum": 1000000000.0,
+            "minimum": 1e-9,
+            "type": "number"
+          }
+        },
+        "required": [
+          "path",
+          "radius_px"
+        ],
+        "title": "stroke parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "image",
+            "purpose": "The image whose frame the stroke is in.",
+            "required": true,
+            "type": "image"
+          }
+        ],
+        "out": [
+          {
+            "name": "location",
+            "purpose": "The stroke location.",
+            "required": true,
+            "type": "location"
+          }
+        ]
+      },
+      "purpose": "A stroke location: a rough mark along a path with a radius in pixels. When to use: When a person or an evaluator marks a scratch, a tear or a thin defect with a brush: the path and radius are the brush. When not to use: When the region is a box or a shape (use rect or a polygon), or a line with a known width (use line).",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Stroke"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.1
+      },
+      "group": "refine",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "close",
+      "outputs": {
+        "images": [
+          "preview"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "radius_px": {
+            "description": "The disc's radius in pixels of the mask's frame.",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "radius_px"
+        ],
+        "title": "close parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "mask",
+            "purpose": "The mask whose core to close.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ],
+        "out": [
+          {
+            "name": "mask",
+            "purpose": "The mask with the closed core.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ]
+      },
+      "purpose": "Closes the core: dilation then erosion by one disc, so gaps and notches narrower than the disc fill in. When to use: On a blob with holes or ragged bites (a segmenter's instance through a chair back, a stroke that skipped). When not to use: To make the core larger overall (use grow) or smaller (use shrink).",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Close"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.05
+      },
+      "group": "refine",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "fan",
+      "outputs": {
+        "images": [
+          "preview"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "constants": {
+            "default": "fan-v3",
+            "description": "The constant set; the first is the default: fan-v3, fan-v1, fan-thin-v1, fan-v2",
+            "enum": [
+              "fan-v3",
+              "fan-v1",
+              "fan-thin-v1",
+              "fan-v2"
+            ],
+            "type": "string"
+          },
+          "gate": {
+            "default": true,
+            "description": "Whether the tone step across the line gates the opening (a row whose sides already agree stays thin).",
+            "type": "boolean"
+          },
+          "object_edge": {
+            "default": 8.0,
+            "description": "The object cap: a horizontal luminance step (levels per pixel) at and above which a column inside the opening counts as a solid object's edge, beyond the seam's own gap; the row stops short of it, and stays thin when edges stand on both sides. 0 turns the cap off.",
+            "maximum": 255.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "object_margin_px": {
+            "default": 3.0,
+            "description": "How far short of an object's edge the band stops, in pixels at ref_width.",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "ref_width": {
+            "default": 1620,
+            "description": "The frame width the pixel constants were fitted at.",
+            "maximum": 1000000.0,
+            "minimum": 1.0,
+            "type": "integer"
+          },
+          "row_sigma": {
+            "default": 0.012,
+            "description": "Row smoothing of the two rulers, as a fraction of the height.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "tex_high": {
+            "default": 2.0,
+            "description": "Texture at and above which the band stays at its minimum width.",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "tex_low": {
+            "default": 0.5,
+            "description": "Texture (contrast, percent per pixel) at and below which the surface counts as fully smooth.",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "thin_px": {
+            "default": 15.0,
+            "description": "The minimum half-width in pixels at ref_width, scaled by the frame width.",
+            "maximum": 10000.0,
+            "minimum": 0.5,
+            "type": "number"
+          },
+          "wide_max": {
+            "default": 0.15,
+            "description": "The widest half-width, as a fraction of the frame width; 0 fixes every row at thin.",
+            "maximum": 0.5,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "width_sigma": {
+            "default": 0.02,
+            "description": "Row smoothing of the half-width, as a fraction of the height.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "type": "number"
+          }
+        },
+        "required": [],
+        "title": "fan parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "image",
+            "purpose": "The image, in a bounded frame.",
+            "required": true,
+            "type": "image"
+          },
+          {
+            "name": "line",
+            "purpose": "The line location in column form, in the image's frame.",
+            "required": true,
+            "type": "location"
+          }
+        ],
+        "out": [
+          {
+            "name": "band",
+            "purpose": "The band profile.",
+            "required": true,
+            "type": "rascal:BandProfile"
+          }
+        ]
+      },
+      "purpose": "The band profile along a column line: a half-width per row, wide where the surface beside the line is smooth and the two sides differ in tone, thin where it is detailed, and stopping short of a solid object the opening would cross (the object cap, fan-v2; fan-v3 removes a straddling object whole and tapers the cap). When to use: On a cut canvas whose centre column is the wrap edge of a panorama, or any image with a vertical line to heal: the step before profile and ramp. When not to use: When the line is a path or the region is an area (use rasterize); on an uncut equirectangular image (cut it first).",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Fan"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.1
+      },
+      "group": "refine",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "feather",
+      "outputs": {
+        "images": [
+          "preview"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "constants": {
+            "default": "feather-v1",
+            "description": "The constant set; the first is the default: feather-v1",
+            "enum": [
+              "feather-v1"
+            ],
+            "type": "string"
+          },
+          "sigma_px": {
+            "description": "The feather's sigma in pixels of the mask's frame.",
+            "maximum": 10000.0,
+            "minimum": 0.1,
+            "type": "number"
+          }
+        },
+        "required": [
+          "sigma_px"
+        ],
+        "title": "feather parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "mask",
+            "purpose": "The mask whose core to feather.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ],
+        "out": [
+          {
+            "name": "mask",
+            "purpose": "The mask with the new blend.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ]
+      },
+      "purpose": "The blend as a half-Gaussian feather of the core's boundary outward, with one sigma. When to use: On any mask whose edge should fade: a rasterized box, a grown blob, a mask whose core was just replaced by a refinement (the recipe re-feathers afterwards). When not to use: On a band along a line, where the sigma follows the row (use profile).",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Feather"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.1
+      },
+      "group": "refine",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "grow",
+      "outputs": {
+        "images": [
+          "preview"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "down_px": {
+            "default": 0.0,
+            "description": "How far down, in pixels, the grown core is extended for a shadow.",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "px": {
+            "description": "The disc's radius in pixels of the mask's frame.",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "px"
+        ],
+        "title": "grow parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "mask",
+            "purpose": "The mask whose core to grow.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ],
+        "out": [
+          {
+            "name": "mask",
+            "purpose": "The mask with the grown core.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ]
+      },
+      "purpose": "Grows the core by a disc, and further downward for a shadow. When to use: On a blob that must cover a little more than it was found to (a segmenter's instance, a rasterized shape), and on an object that casts a shadow below it. When not to use: On a band along a line (its width is the fan's), or to soften an edge (use feather).",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Grow"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.1
+      },
+      "group": "refine",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "invert",
+      "outputs": {
+        "images": [
+          "preview"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "to": {
+            "default": "raw",
+            "description": "The target frame: a frame id on the mask's chain, or raw for its root.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "title": "invert parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "mask",
+            "purpose": "The first pass's mask.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ],
+        "out": [
+          {
+            "name": "mask",
+            "purpose": "The second pass's mask, in the target frame.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ]
+      },
+      "purpose": "The mask for a second pass: everything the first mask reached becomes protect, everything else the core, in the target frame. When to use: After a heal, to edit the rest of the image while keeping the first edit: heal seam then heal protect. When not to use: To shrink or grow a mask (use shrink, grow) or to protect one more thing in the same pass (use subtract).",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Invert"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.1
+      },
+      "group": "refine",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "plug",
+      "outputs": {
+        "images": [
+          "preview"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "max_share": {
+            "default": 0.1,
+            "description": "The largest hole filled, as a share of the area of the shape around it.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "type": "number"
+          }
+        },
+        "required": [],
+        "title": "plug parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "mask",
+            "purpose": "The mask whose holes to fill.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ],
+        "out": [
+          {
+            "name": "mask",
+            "purpose": "The mask with its small holes filled.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ]
+      },
+      "purpose": "Fills the core's small holes: every enclosed gap no larger than max_share of the shape around it. When to use: On a mask with gaps inside an object (the leather inside a buckle, a ring's middle), after grow and close, before subtract and feather. When not to use: To keep a large enclosed area out of the mask (a picture inside a frame stays out at the default), or to make the core larger overall (use grow).",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Plug"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.1
+      },
+      "group": "refine",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "profile",
+      "outputs": {
+        "images": [
+          "preview"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "constants": {
+            "default": "profile-v1",
+            "description": "The constant set; the first is the default: profile-v1",
+            "enum": [
+              "profile-v1"
+            ],
+            "type": "string"
+          },
+          "feather_ratio": {
+            "default": 0.55,
+            "description": "The feather sigma of a row as a share of its half-width.",
+            "maximum": 2.0,
+            "minimum": 0.05,
+            "type": "number"
+          }
+        },
+        "required": [],
+        "title": "profile parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "band",
+            "purpose": "The band profile fan produced.",
+            "required": true,
+            "type": "rascal:BandProfile"
+          }
+        ],
+        "out": [
+          {
+            "name": "mask",
+            "purpose": "The band mask.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ]
+      },
+      "purpose": "The band mask of a band profile: the core at each row's half-width about the line, the blend a feather whose sigma follows the row. When to use: After fan, to turn its profile into the seam mask that ramp, the filler and paste use. When not to use: On a mask that is not a band along a line (use feather).",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Profile"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.05
+      },
+      "group": "refine",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "rasterize",
+      "outputs": {
+        "images": [
+          "preview"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "use_case": {
+            "default": "custom",
+            "description": "The use case recorded on the mask.",
+            "enum": [
+              "seam",
+              "remove",
+              "repair",
+              "protect",
+              "custom"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [],
+        "title": "rasterize parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "location",
+            "purpose": "The location to rasterize.",
+            "required": true,
+            "type": "location"
+          },
+          {
+            "name": "image",
+            "purpose": "An image in the location's frame, for the frame.",
+            "required": true,
+            "type": "image"
+          }
+        ],
+        "out": [
+          {
+            "name": "mask",
+            "purpose": "The mask with the interior as its core.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ]
+      },
+      "purpose": "A location's interior as the core of a new mask in its frame: boxes and polygons as drawn, a line as a band of its width, a stroke as its path dilated by its radius. When to use: When a location (a box, a polygon, a line, a stroke, the whole image) should become a mask as drawn, before any refinement. When not to use: When the mark is rough and should be tightened to the defect's edges (use tighten), or when the location is a view or absent, which have no interior.",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Rasterize"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.1
+      },
+      "group": "refine",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "select",
+      "outputs": {
+        "images": [
+          "preview"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "drop": {
+            "default": [],
+            "description": "The instance indices to leave out.",
+            "examples": [
+              [
+                0,
+                2
+              ]
+            ],
+            "items": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "exclude": {
+            "default": [],
+            "description": "Boxes, as fractions of the frame, cleared from the core.",
+            "examples": [
+              [
+                [
+                  0.25,
+                  0.25,
+                  0.75,
+                  0.75
+                ]
+              ]
+            ],
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "keep": {
+            "default": [],
+            "description": "The instance indices to keep; empty keeps every instance not dropped.",
+            "examples": [
+              [
+                0,
+                2
+              ]
+            ],
+            "items": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "use_case": {
+            "default": "remove",
+            "description": "The use case recorded on the mask.",
+            "enum": [
+              "seam",
+              "remove",
+              "repair",
+              "protect",
+              "custom"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [],
+        "title": "select parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "many": true,
+            "name": "plane",
+            "purpose": "The instance planes (plane role), in one frame: plane_0, plane_1, …",
+            "required": true,
+            "type": "image"
+          }
+        ],
+        "out": [
+          {
+            "name": "mask",
+            "purpose": "The selection as a mask.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ]
+      },
+      "purpose": "A mask from a finder's instance planes: the kept instances' union as the core, minus exclude boxes. When to use: After segment: to turn its planes into the mask to remove, keeping some instances and dropping others. When not to use: On a single shape (rasterize a location) or to trim a mask (use shrink or subtract).",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Select"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.1
+      },
+      "group": "refine",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "shrink",
+      "outputs": {
+        "images": [
+          "preview"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "px": {
+            "description": "The disc's radius in pixels of the mask's frame.",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "px"
+        ],
+        "title": "shrink parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "mask",
+            "purpose": "The mask whose core to shrink.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ],
+        "out": [
+          {
+            "name": "mask",
+            "purpose": "The mask with the shrunk core.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ]
+      },
+      "purpose": "Shrinks the core by a disc. When to use: On a mask whose core reaches past what should be repainted: a loose segmentation, a box drawn generously. When not to use: To keep pixels for good (use subtract, which protects them) or to soften an edge (use feather).",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Shrink"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.1
+      },
+      "group": "refine",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "subtract",
+      "outputs": {
+        "images": [
+          "preview"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "grow_px": {
+            "default": 0.0,
+            "description": "How far the protected shape is dilated, in pixels of the mask's frame.",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "type": "number"
+          }
+        },
+        "required": [],
+        "title": "subtract parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "mask",
+            "purpose": "The mask to protect pixels in.",
+            "required": true,
+            "type": "rascal:Mask"
+          },
+          {
+            "name": "subtract",
+            "purpose": "A mask whose support (core or blend) becomes protect; in the mask's frame.",
+            "required": false,
+            "type": "rascal:Mask"
+          },
+          {
+            "name": "location",
+            "purpose": "A location whose interior becomes protect; in the mask's frame.",
+            "required": false,
+            "type": "location"
+          }
+        ],
+        "out": [
+          {
+            "name": "mask",
+            "purpose": "The mask with the larger protect.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ]
+      },
+      "purpose": "Protects pixels: the second mask's support or a location, grown by a margin, joins protect; core and blend are cleared under it. When to use: To keep something the mask would otherwise repaint: a person in front of the object, a logo, a previous edit. When not to use: To make the core smaller for its own sake (use shrink): protected pixels are kept for good, by every later step.",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Subtract"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.1
+      },
+      "group": "refine",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "tighten",
+      "outputs": {
+        "images": [
+          "preview"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "constants": {
+            "default": "tighten-v1",
+            "description": "The constant set; the first is the default: tighten-v1",
+            "enum": [
+              "tighten-v1"
+            ],
+            "type": "string"
+          },
+          "max_defect_factor": {
+            "default": 2.0,
+            "description": "The widest defect, as a multiple of the stroke's radius (2 means the whole stroke).",
+            "maximum": 10.0,
+            "minimum": 0.01,
+            "type": "number"
+          },
+          "min_contrast": {
+            "default": 12.0,
+            "description": "The least |g| (luminance levels per pixel) an edge must have to count.",
+            "maximum": 255.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "min_defect_px": {
+            "default": 1.0,
+            "description": "The narrowest defect, in pixels between its two edges.",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "path_sigma": {
+            "default": 4.0,
+            "description": "The sigma, in samples, of the smoothing of the tightened extents along the path.",
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "sample_spacing_px": {
+            "default": 1.0,
+            "description": "The spacing of the samples along the path, in pixels.",
+            "maximum": 1000.0,
+            "minimum": 0.25,
+            "type": "number"
+          }
+        },
+        "required": [],
+        "title": "tighten parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "stroke",
+            "purpose": "The stroke location, in the image's frame.",
+            "required": true,
+            "type": "location"
+          },
+          {
+            "name": "image",
+            "purpose": "The image the edges are read from.",
+            "required": true,
+            "type": "image"
+          }
+        ],
+        "out": [
+          {
+            "name": "mask",
+            "purpose": "The tightened stroke as a mask.",
+            "required": true,
+            "type": "rascal:Mask"
+          },
+          {
+            "name": "tightened",
+            "purpose": "Per sample: tightened (0/1), a, b.",
+            "required": true,
+            "type": "rascal:Series"
+          }
+        ]
+      },
+      "purpose": "Tightens a stroke to the defect's edges: at each sample the two strongest opposite-signed luminance edges inside the stroke bound the core. When to use: On a scratch, a tear or a thin defect a person marked roughly with a brush. When not to use: On a stain or an area (rasterize a box or a polygon), or where the defect has no edges (the stroke stays as drawn).",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Tighten"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.1
+      },
+      "group": "prep",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "apply",
+      "outputs": {
+        "images": [
+          "image"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "title": "apply parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "image",
+            "purpose": "The canvas.",
+            "required": true,
+            "type": "image"
+          },
+          {
+            "name": "mask",
+            "purpose": "The mask carrying the prescriptions.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ],
+        "out": [
+          {
+            "name": "image",
+            "purpose": "The canvas with the prescriptions performed.",
+            "required": true,
+            "type": "image"
+          }
+        ]
+      },
+      "purpose": "The mask's prescriptions performed on the canvas, once each, in order. When to use: After ramp, to meet the two sides of a seam in colour before or instead of a filler; before paste in the heal graph. When not to use: On a mask without prescriptions (nothing to do; not applicable), or to paint a filler's result (use paste).",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Apply"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.1
+      },
+      "group": "prep",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "cut",
+      "outputs": {
+        "images": [
+          "image"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "strip": {
+            "default": 0.07,
+            "description": "The strip fraction f in (0, 0.5]: s = min(max(2, 2·round_half_up(f·W/2)), 2·floor(W/4)).",
+            "maximum": 0.5,
+            "minimum": 1e-9,
+            "type": "number"
+          }
+        },
+        "required": [],
+        "title": "cut parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "image",
+            "purpose": "A canonical or working image in a wrapped raw frame, at least 4 columns wide.",
+            "required": true,
+            "type": "image"
+          }
+        ],
+        "out": [
+          {
+            "name": "image",
+            "purpose": "The canvas, in the cut frame.",
+            "required": true,
+            "type": "image"
+          },
+          {
+            "name": "plan",
+            "purpose": "The strip width and the source spans, for put.",
+            "required": true,
+            "type": "rascal:Plan"
+          }
+        ]
+      },
+      "purpose": "The two edge strips of a wrapped image side by side, so its wrap edge is the centre column of a bounded canvas. When to use: Before any work on the wrap seam of an equirectangular image: the seam becomes an ordinary vertical line in the middle of a small canvas. When not to use: On a flat image, or on a frame that is already a cut canvas; and when the edit is not near the wrap edge.",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Cut"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.1
+      },
+      "group": "prep",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "put",
+      "outputs": {
+        "images": [
+          "image"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "title": "put parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "image",
+            "purpose": "The parent image, in the raw frame the plan was made for.",
+            "required": true,
+            "type": "image"
+          },
+          {
+            "name": "canvas",
+            "purpose": "The canvas, in the cut frame.",
+            "required": true,
+            "type": "image"
+          },
+          {
+            "name": "plan",
+            "purpose": "The plan cut produced.",
+            "required": true,
+            "type": "rascal:Plan"
+          }
+        ],
+        "out": [
+          {
+            "name": "image",
+            "purpose": "The parent with the canvas put back.",
+            "required": true,
+            "type": "image"
+          }
+        ]
+      },
+      "purpose": "A cut canvas written back onto its parent image; nothing outside the two strips changes. When to use: After work on a cut canvas, to return to the full wrapped image. When not to use: When the canvas was not made from this parent by this plan: the sizes will not agree and put refuses.",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Put"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.05
+      },
+      "group": "prep",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "ramp",
+      "outputs": {
+        "images": [
+          "preview"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "constants": {
+            "default": "ramp-v1",
+            "description": "The constant set; the first is the default: ramp-v1",
+            "enum": [
+              "ramp-v1"
+            ],
+            "type": "string"
+          },
+          "ramp_sigma": {
+            "default": 0.02,
+            "description": "Row smoothing of the step, as a fraction of the height.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "share": {
+            "default": 0.5,
+            "description": "The share of the step each side moves toward the other at the line.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "type": "number"
+          }
+        },
+        "required": [],
+        "title": "ramp parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "image",
+            "purpose": "The canvas the band was measured on.",
+            "required": true,
+            "type": "image"
+          },
+          {
+            "name": "mask",
+            "purpose": "The band mask, with its profile.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ],
+        "out": [
+          {
+            "name": "mask",
+            "purpose": "The mask with the prescription added.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ]
+      },
+      "purpose": "The per-row colour step across a band's line, as a tone-ramp prescription on the mask. When to use: After profile, on the canvas the band was measured on, so apply or the filler's composite can meet the two sides in colour at the line. When not to use: On a mask without a band profile (the step windows come from it), or when the sides already agree.",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Ramp"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.05
+      },
+      "group": "prep",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "unwindow",
+      "outputs": {
+        "images": [
+          "image"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "title": "unwindow parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "image",
+            "purpose": "The parent image.",
+            "required": true,
+            "type": "image"
+          },
+          {
+            "name": "crop",
+            "purpose": "The crop, in a crop: frame of the parent.",
+            "required": true,
+            "type": "image"
+          }
+        ],
+        "out": [
+          {
+            "name": "image",
+            "purpose": "The parent with the crop written back.",
+            "required": true,
+            "type": "image"
+          }
+        ]
+      },
+      "purpose": "A crop written back into exactly its bbox of the parent image. When to use: After work on a windowed crop (a filler's composite, an apply), to return to the full image. When not to use: When the crop is not in a crop: frame of this parent: the frames will not agree and unwindow refuses.",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Unwindow"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.05
+      },
+      "group": "prep",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "window",
+      "outputs": {
+        "images": [
+          "image",
+          "preview"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "constants": {
+            "default": "window-v1",
+            "description": "The constant set; the first is the default: window-v1",
+            "enum": [
+              "window-v1"
+            ],
+            "type": "string"
+          },
+          "context": {
+            "default": 0.5,
+            "description": "The context on each side of the support, as a share of its width and height.",
+            "maximum": 4.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "max_side": {
+            "description": "The largest side of the window in pixels; a support larger than it is not applicable. Unset: no cap but the image.",
+            "maximum": 1000000.0,
+            "minimum": 1.0,
+            "type": "integer"
+          }
+        },
+        "required": [],
+        "title": "window parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "image",
+            "purpose": "The image to window.",
+            "required": true,
+            "type": "image"
+          },
+          {
+            "name": "mask",
+            "purpose": "The mask whose support the window is built around.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ],
+        "out": [
+          {
+            "name": "image",
+            "purpose": "The crop of the image, in the crop: frame.",
+            "required": true,
+            "type": "image"
+          },
+          {
+            "name": "mask",
+            "purpose": "The mask's planes cropped by the same bbox, in the crop: frame.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ]
+      },
+      "purpose": "An integer crop around the mask's support, with context, as a new crop: frame holding the image and the mask. When to use: Before a filler whose max_side is smaller than the image, or to work on the region alone; the heal graph windows before the filler call and unwindows after. When not to use: When the support itself is larger than max_side (scaled windows are a later milestone), or when the whole frame is wanted.",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Window"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.2
+      },
+      "group": "out",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "measure",
+      "outputs": {
+        "images": [],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "constants": {
+            "default": "measures-v1",
+            "description": "The constant set; the first is the default: measures-v1",
+            "enum": [
+              "measures-v1"
+            ],
+            "type": "string"
+          },
+          "set": {
+            "default": "continuity,tone_step,transition,texture_match,drift",
+            "description": "The measures to run, comma-separated: continuity, tone_step, transition, texture_match, drift.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "title": "measure parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "after",
+            "purpose": "The image to measure (the composite).",
+            "required": true,
+            "type": "image"
+          },
+          {
+            "name": "before",
+            "purpose": "The image before (for drift).",
+            "required": false,
+            "type": "image"
+          },
+          {
+            "name": "mask",
+            "purpose": "The mask, with its profile for the band measures.",
+            "required": true,
+            "type": "rascal:Mask"
+          },
+          {
+            "name": "line",
+            "purpose": "The line (column form) for continuity; the profile's column when absent.",
+            "required": false,
+            "type": "location"
+          }
+        ],
+        "out": [
+          {
+            "name": "continuity",
+            "purpose": "The per-row `continuity` series (ratio); absent when the measure was not in the set, not applicable or measured nothing.",
+            "required": false,
+            "type": "rascal:Series"
+          },
+          {
+            "name": "tone_step_dl",
+            "purpose": "The per-row `tone_step.dL` series (L); absent when the measure was not in the set, not applicable or measured nothing.",
+            "required": false,
+            "type": "rascal:Series"
+          },
+          {
+            "name": "tone_step_dchroma",
+            "purpose": "The per-row `tone_step.dchroma` series (chroma); absent when the measure was not in the set, not applicable or measured nothing.",
+            "required": false,
+            "type": "rascal:Series"
+          },
+          {
+            "name": "tone_step_dhue",
+            "purpose": "The per-row `tone_step.dhue` series (degrees); absent when the measure was not in the set, not applicable or measured nothing.",
+            "required": false,
+            "type": "rascal:Series"
+          },
+          {
+            "name": "transition",
+            "purpose": "The per-row `transition` series (ratio); absent when the measure was not in the set, not applicable or measured nothing.",
+            "required": false,
+            "type": "rascal:Series"
+          },
+          {
+            "name": "texture_match",
+            "purpose": "The per-row `texture_match` series (ratio); absent when the measure was not in the set, not applicable or measured nothing.",
+            "required": false,
+            "type": "rascal:Series"
+          }
+        ]
+      },
+      "purpose": "The seam and composite measures: continuity, tone step, transition, texture match and drift, per row and summarised. When to use: After a heal or a paste, on the before and after images in the mask's frame, to describe what changed at the line and what did not; none of them is a verdict. When not to use: On images of different frames or sizes (window or put first).",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Measure"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.1
+      },
+      "group": "out",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "paste",
+      "outputs": {
+        "images": [
+          "image"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "constants": {
+            "default": "poisson-v1",
+            "description": "The constant set; the first is the default: poisson-v1",
+            "enum": [
+              "poisson-v1"
+            ],
+            "type": "string"
+          },
+          "mode": {
+            "default": "feather",
+            "description": "feather: blend by the effective weight; hard: the fill where the core is set; poisson: the gradient-domain blend, then the feather of its solution.",
+            "enum": [
+              "feather",
+              "hard",
+              "poisson"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [],
+        "title": "paste parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "base",
+            "purpose": "The image to paste onto.",
+            "required": true,
+            "type": "image"
+          },
+          {
+            "name": "fill",
+            "purpose": "The filler's result, in the same frame and size.",
+            "required": true,
+            "type": "image"
+          },
+          {
+            "name": "mask",
+            "purpose": "The mask whose effective weight decides what is written.",
+            "required": true,
+            "type": "rascal:Mask"
+          }
+        ],
+        "out": [
+          {
+            "name": "image",
+            "purpose": "The composite.",
+            "required": true,
+            "type": "image"
+          }
+        ]
+      },
+      "purpose": "A fill composited onto the base through the mask: feather blends by the effective weight, hard writes the core, poisson blends in the gradient domain. When to use: After a filler returns its result for the mask's frame, or after apply, to produce the composite; the last step of the heal graph before put. poisson when the fill's tone or level does not match the base at the mask's edge: it keeps the fill's gradients and takes its values from the base around the mask. When not to use: When the fill is not the mask's frame and size (window or put first); poisson on a wrap frame (cut the band first; the seam canvas is bounded) or on a mask whose every w > 0 pixel is cut off from the base (nothing to anchor to).",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Paste"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.05
+      },
+      "group": "out",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "render",
+      "outputs": {
+        "images": [
+          "image"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "colour": {
+            "default": "#ff00ff",
+            "description": "tinted and overlay: the tint as #rrggbb; the default is a magenta no photograph has.",
+            "type": "string"
+          },
+          "for": {
+            "description": "The profile.",
+            "enum": [
+              "grey",
+              "binary",
+              "alpha",
+              "tinted",
+              "overlay"
+            ],
+            "type": "string"
+          },
+          "strength": {
+            "default": 0.7,
+            "description": "tinted: how far the core moves toward the colour.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "threshold": {
+            "default": 127,
+            "description": "binary: 255 where w ≥ threshold / 255; protected pixels are 0 whatever it is.",
+            "maximum": 255.0,
+            "minimum": 1.0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "for"
+        ],
+        "title": "render parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "mask",
+            "purpose": "The mask to render.",
+            "required": true,
+            "type": "rascal:Mask"
+          },
+          {
+            "name": "image",
+            "purpose": "The image to draw on, required by alpha, tinted and overlay; in the mask's frame.",
+            "required": false,
+            "type": "image"
+          }
+        ],
+        "out": [
+          {
+            "name": "image",
+            "purpose": "The rendering.",
+            "required": true,
+            "type": "image"
+          }
+        ]
+      },
+      "purpose": "A mask rendered for one consumer; the record stays the truth. When to use: When a filler, a viewer or a test needs to see a mask as pixels: a grey weight map, a binary at a threshold, the photo tinted or cut out, or an overlay for the eye. When not to use: When an op needs the mask itself: a rendering is an Image and is never accepted where a Mask is declared. There is no protect rendering; a second pass uses invert.",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Render"
+    },
+    {
+      "cost": {
+        "may_spend": false
+      },
+      "duration": {
+        "max_s": 60.0,
+        "typical_s": 0.1
+      },
+      "group": "inspect",
+      "images": [],
+      "kind": "operation",
+      "locations": [],
+      "name": "inspect",
+      "outputs": {
+        "images": [
+          "overlay"
+        ],
+        "locations": []
+      },
+      "params_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "title": "inspect parameters",
+        "type": "object"
+      },
+      "ports": {
+        "in": [
+          {
+            "name": "mask",
+            "purpose": "The mask to inspect.",
+            "required": true,
+            "type": "rascal:Mask"
+          },
+          {
+            "name": "image",
+            "purpose": "The image to draw the overlay on; in the mask's frame.",
+            "required": true,
+            "type": "image"
+          }
+        ],
+        "out": [
+          {
+            "name": "overlay",
+            "purpose": "The overlay, an inspection image.",
+            "required": true,
+            "type": "image"
+          },
+          {
+            "name": "widths",
+            "purpose": "The core's width per row, in pixels.",
+            "required": true,
+            "type": "rascal:Series"
+          }
+        ]
+      },
+      "purpose": "A mask for the eye: the overlay on its image and the per-row width of its core. When to use: When a person wants to see what a mask covers and how its width varies row by row; the run page uses it too. When not to use: When a filler needs a rendering (use render), or when an op needs the mask itself.",
+      "readiness": {
+        "requirements": [],
+        "state": "ready"
+      },
+      "renders": [],
+      "title": "Inspect"
+    }
+  ],
+  "artifact_types": [
+    {
+      "portable": "json",
+      "preview": true,
+      "purpose": "Where something is in an image: a box, a polygon, a line, a stroke or the whole image.",
+      "schema_versions": [
+        1
+      ],
+      "type": "location"
+    },
+    {
+      "portable": "bundle",
+      "preview": true,
+      "purpose": "A mask: what to change (core), how it fades (blend) and what to keep (protect), in the frame it was drawn in, with the band profile, sigmas and prescriptions it carries.",
+      "schema_versions": [
+        1
+      ],
+      "type": "rascal:Mask"
+    },
+    {
+      "portable": "none",
+      "preview": true,
+      "purpose": "A band along a line: its half-width per row, wide on smooth surfaces and thin on detail, from which a mask is drawn.",
+      "schema_versions": [
+        1
+      ],
+      "type": "rascal:BandProfile"
+    },
+    {
+      "portable": "none",
+      "preview": false,
+      "purpose": "Values along a mask or a line, one per row or sample (widths, sigmas, measures).",
+      "schema_versions": [
+        1
+      ],
+      "type": "rascal:Series"
+    },
+    {
+      "portable": "none",
+      "preview": false,
+      "purpose": "How a cut canvas maps back onto the image it was cut from: the strips and where each lies.",
+      "schema_versions": [
+        1
+      ],
+      "type": "rascal:Plan"
+    }
+  ],
+  "contract": "0.5.0",
+  "limits": {
+    "inline_bytes": 67108864
+  },
+  "profiles": [
+    "images",
+    "operations"
+  ],
+  "progress_interval_s": 10,
+  "resources": [
+    "rascal://runs{?cursor}",
+    "rascal://run/{id}/run.json",
+    "rascal://run/{id}/journal",
+    "rascal://session",
+    "rascal://artifact/{identity}",
+    "rascal://artifact/{identity}/preview"
+  ],
+  "tool": {
+    "name": "rascal",
+    "purpose": "Finds, masks and composites regions of an image.",
+    "version": "0.1.1"
+  },
+  "vocabulary": {
+    "confidence": [],
+    "disposition": [],
+    "evidence": [],
+    "group": [
+      "find",
+      "refine",
+      "prep",
+      "out",
+      "inspect"
+    ],
+    "score_kind": [
+      "owlv2-detection"
+    ]
+  }
+}

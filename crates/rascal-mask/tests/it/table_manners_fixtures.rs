@@ -2,6 +2,8 @@
 //! contract's `fixtures/rascal/`, produced by `rascal serve` and `rascal estimate` through the
 //! independent client and never written by hand.
 //!
+//! v0.5 (task 13.15) adds the checked `remove_prompt` (see [`v05_set`]).
+//!
 //! v0.4 (task 10.2) adds `kind` to every action, `allowed_dirs` to the session and `invocation`
 //! to every result. M11's set: the description, a run per status (an unresolved charge among them), two pages of
 //! the runs list, the session, and both reuse refusals. v0.3's: the description with no
@@ -38,6 +40,9 @@ use serde_json::{Value, json};
 const KEY_ENV: &str = "RASCAL_FIXTURE_KEY";
 const KEY: &str = "fixture-key-value";
 const WRONG_KEY: &str = "wrong-key-value";
+/// The variable the checker's key is read from (v0.5), and its value when set.
+const CHECKER_KEY_ENV: &str = "RASCAL_FIXTURE_CHECKER_KEY";
+const CHECKER_KEY: &str = "fixture-checker-key-value";
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -112,6 +117,7 @@ fn serve(dir: &Path, config: Option<&Path>, env: &[(&str, &str)]) -> Client {
         ])
         .env_remove("RASCAL_LOG")
         .env_remove(KEY_ENV)
+        .env_remove(CHECKER_KEY_ENV)
         .env_remove("RASCAL_TESTKIT_ESTIMATE_TTL_MS");
     if let Some(config) = config {
         command.args(["--config", config.to_str().unwrap()]);
@@ -554,6 +560,26 @@ impl Normalise {
             rest = tail.trim_start_matches(|c: char| c.is_ascii_digit());
         }
         fixed.push_str(rest);
+        // A pack call's request names the image by its path, so its size follows the machine's
+        // (as in heal_golden.rs): a stand-in.
+        if fixed.starts_with("pack call: ")
+            && let Some(at) = fixed.find("\"request_bytes\":")
+        {
+            let start = at + "\"request_bytes\":".len();
+            let digits = fixed[start..]
+                .chars()
+                .take_while(char::is_ascii_digit)
+                .count();
+            fixed.replace_range(start..start + digits, "0");
+        }
+        // A stored check's request identity digests the checker's command, which names the
+        // script under this run's scratch directory: a stand-in, as for `input_identity`.
+        if fixed.starts_with("checker stored: ")
+            && let Some(at) = fixed.find("\"request\":\"sha256:")
+        {
+            let start = at + "\"request\":\"sha256:".len();
+            fixed.replace_range(start..start + 64, &"0".repeat(64));
+        }
         times(&fixed)
     }
 }
@@ -1441,6 +1467,123 @@ fn v04_set(
     closed.close().unwrap();
 }
 
+/// v0.5's set (PLAN.md 13.15): `remove_prompt` with a checker configured, served over the fake
+/// pack, the fake `exact` filler and the testkit's scripted checker (SPEC.md "Self-correcting
+/// remove"). With the checker's key unset: the description, where `remove_prompt` declares
+/// `answers: verdict` and stays `ready` with its optional checker requirement missing, and a run
+/// not judged (no `verdict`) whose note says why. With the key set: a run whose first try passes,
+/// and a run of three tries whose outs carry labels and whose verdict is the kept try's.
+fn v05_set(dir: &Path, out: &mut BTreeMap<&'static str, Value>, sessions: &mut Vec<String>) {
+    let bin = env!("CARGO_BIN_EXE_rascal");
+    let v05 = dir.join("v05");
+    let install =
+        rascal_testkit::fake_install::write(&v05.join("pack"), &[bin, "fake-pack", "exact"], true)
+            .unwrap();
+    let script = v05.join("script.json");
+    let answer = |answers: Value| {
+        std::fs::write(
+            &script,
+            json!({ "answers": answers, "spend_usd": 0.004 }).to_string(),
+        )
+        .unwrap();
+        let _ = std::fs::remove_file(script.with_extension("calls"));
+    };
+    let config = v05.join("rascal.toml");
+    std::fs::write(
+        &config,
+        format!(
+            "config_version = 1\n[limits]\nsession_budget_usd = 1.0\n\n\
+             [packs.fake]\ncommand = {}\nrevision = \"fake 1\"\n\n\
+             [fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\nrevision = \"fake exact\"\nspend_usd_per_call = 0.02\n\n\
+             [checker]\ncommand = [{bin:?}, \"fake-checker\", {:?}]\n\
+             arguments = {{ source = {{ path = \"{{source}}\" }}, candidate = {{ path = \"{{candidate}}\" }}, requirements = [{{ id = \"RQ1\", kind = \"must_not\", text = \"Any part of {{prompt}} is visible.\" }}] }}\n\
+             key_env = \"{CHECKER_KEY_ENV}\"\nspend_usd_per_call = 0.01\ntimeout_s = 30\nrevision = \"fake checker\"\n",
+            install.command_toml(),
+            script.display().to_string(),
+        ),
+    )
+    .unwrap();
+    let chair = repo_root().join("fixtures/images/chair-blob.png");
+    let remove = json!({ "image": { "path": chair.to_str().unwrap() }, "prompt": "the chair", "filler": "fake" });
+    let checker_requirement = |doc: &Value| -> Value {
+        let action = doc["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|a| a["name"] == "remove_prompt")
+            .unwrap()
+            .clone();
+        assert_eq!(action["answers"], "verdict", "{action:#}");
+        assert_eq!(action["readiness"]["state"], "ready", "{action:#}");
+        action["readiness"]["requirements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["optional"] == true && r["kind"] == "credential")
+            .cloned()
+            .unwrap_or_else(|| panic!("no optional key: {action:#}"))
+    };
+
+    // The checker's key unset: remove_prompt is ready, the checker's key optional and missing, and a call fills once unchecked and says why.
+    answer(json!([{ "verdict": "pass" }]));
+    let mut client = serve(dir, Some(&config), &[]);
+    sessions.push(session_id(&mut client));
+    let described = describe(&mut client);
+    let optional = checker_requirement(&described);
+    assert_eq!(optional["state"], "missing", "{optional:#}");
+    out.insert("describe-checker-optional-missing.json", described);
+    let unchecked = result(
+        &mut client,
+        call("unchecked", "remove_prompt", remove.clone(), None),
+    );
+    assert_eq!(unchecked["status"], "completed", "{unchecked:#}");
+    assert!(unchecked.get("verdict").is_none(), "{unchecked:#}");
+    assert!(
+        unchecked["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n.as_str().unwrap().starts_with("Not checked: ")),
+        "{unchecked:#}"
+    );
+    out.insert("run-remove-prompt-not-checked.json", unchecked);
+    client.close().unwrap();
+
+    // The key set: a pass on the first try, then three tries without one.
+    let mut client = serve(dir, Some(&config), &[(CHECKER_KEY_ENV, CHECKER_KEY)]);
+    sessions.push(session_id(&mut client));
+    let passed = result(
+        &mut client,
+        call("checked-pass", "remove_prompt", remove.clone(), None),
+    );
+    assert_eq!(passed["status"], "completed", "{passed:#}");
+    assert_eq!(passed["verdict"], json!({ "value": "pass", "where": [] }));
+    out.insert("run-remove-prompt-checked-pass.json", passed);
+    let place = |x: f64| json!([x, 0.2, x + 0.2, 0.4]);
+    answer(json!([
+        { "verdict": "fail", "where": [place(0.1)] },
+        { "verdict": "unsure", "where": [place(0.2), place(0.5)] },
+        { "verdict": "unsure", "where": [place(0.3)] }
+    ]));
+    let tried = result(
+        &mut client,
+        call("checked-tries", "remove_prompt", remove, None),
+    );
+    assert_eq!(tried["status"], "completed", "{tried:#}");
+    assert_eq!(tried["verdict"]["value"], "unsure", "{tried:#}");
+    assert_eq!(tried["body"]["tries"].as_array().unwrap().len(), 3);
+    assert!(
+        tried["images"]["out"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|o| o["label"].is_string()),
+        "{tried:#}"
+    );
+    out.insert("run-remove-prompt-three-tries.json", tried);
+    client.close().unwrap();
+}
+
 /// The bundle fixture's directory and its manifest.
 const BUNDLE_DIR: &str = "bundle-line-rasterize-feather";
 const BUNDLE_MANIFEST: &str = "bundle-line-rasterize-feather/invocation.json";
@@ -1465,6 +1608,7 @@ fn the_table_manners_fixtures_hold() {
         &mut issued,
     );
     v04_set(&dir, &mut out, &mut raw, &mut sessions, &mut issued);
+    v05_set(&dir, &mut out, &mut sessions);
 
     let runs: Vec<String> = std::fs::read_dir(dir.join("runs"))
         .unwrap()
@@ -1488,7 +1632,7 @@ fn the_table_manners_fixtures_hold() {
     for (name, value) in &out {
         let value = normalise.apply(value);
         let text = serde_json::to_string_pretty(&value).unwrap() + "\n";
-        for secret in [KEY, WRONG_KEY] {
+        for secret in [KEY, WRONG_KEY, CHECKER_KEY] {
             assert!(!text.contains(secret), "{name} carries a key's value");
         }
         conforms(name, &value);

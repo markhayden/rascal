@@ -39,7 +39,7 @@
     "stopped_before": "paste"
   },
   "cache": "off",
-  "contract": "0.4.0",
+  "contract": "0.5.0",
   "duration_ms": 0,
   "error": null,
   "finished": "2026-01-01T00:00:00.000Z",

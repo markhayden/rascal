@@ -1376,7 +1376,7 @@ behind the tool.
 
 rascal conforms to **table-manners** v0.4 (milestone M10, after v0.3.0 in M12 and v0.2.0 in M11),
 pinned `=0.4.0` from crates.io (PLAN.md 10.15); M13 moves to `=0.5.0` (the result's `verdict` and
-optional requirements)
+optional requirements; by path until the release is published, PLAN.md 13.15)
 (https://github.com/markhayden/table-manners; ADR 0020, decisions 13 and 14), the shared contract of the owner's tools: what an agent, a script or the
 playground sees from outside is the same for squint, rascal and the tools after them, so they
 chain in one pipeline without glue code. The contract's text is the specification of that
