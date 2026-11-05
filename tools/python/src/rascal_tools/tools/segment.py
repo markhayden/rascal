@@ -86,7 +86,8 @@ SPEC = ToolSpec(
         max_long_edge=8192,
         max_image_bytes=8 << 20,
         max_regions=MAX_INSTANCES,
-        max_measurements=4,
+        # `queries`, `mask_iou_predicted` and one `plane_px_<n>` per instance kept.
+        max_measurements=MAX_INSTANCES + 2,
     ),
 )
 

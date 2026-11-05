@@ -64,17 +64,6 @@
     "out": [
       {
         "image": {
-          "file_sha256": "b5dfa6acb21fbf4a6ed2b7961ec840f20495e0e2c6a225fb2e95dbaed14d9013",
-          "height": 400,
-          "projection": "flat",
-          "topology": "bounded",
-          "width": 112
-        },
-        "path": "/runs/run-1767225600001-1/seam-grey.png",
-        "role": "mask"
-      },
-      {
-        "image": {
           "file_sha256": "b84225f6ed513c4835102b9b8f8a7c5a0dea2e4791bd06b44650839f12bf2916",
           "height": 400,
           "projection": "flat",
@@ -83,6 +72,17 @@
         },
         "path": "/runs/run-1767225600001-1/preview-mask.png",
         "role": "preview"
+      },
+      {
+        "image": {
+          "file_sha256": "b5dfa6acb21fbf4a6ed2b7961ec840f20495e0e2c6a225fb2e95dbaed14d9013",
+          "height": 400,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 112
+        },
+        "path": "/runs/run-1767225600001-1/seam-grey.png",
+        "role": "mask"
       }
     ]
   },

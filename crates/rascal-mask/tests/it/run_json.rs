@@ -131,9 +131,9 @@ fn a_completed_heal_names_its_input_its_mask_and_its_result() {
         .iter()
         .map(|o| o["role"].as_str().unwrap())
         .collect();
-    // The Mask's preview follows the renders (10.8).
-    assert_eq!(roles, ["mask", "result", "preview"]);
-    let result = &r["images"]["out"][1];
+    // Most telling first (table-manners 11.1): the result, the Mask's preview, the bare mask.
+    assert_eq!(roles, ["result", "preview", "mask"]);
+    let result = &r["images"]["out"][0];
     assert_eq!(result["image"]["width"], 800);
     assert_eq!(
         result["image"]["topology"], "wrap",

@@ -29,8 +29,8 @@
       "name": "mask_rect",
       "outputs": {
         "images": [
-          "mask",
-          "result"
+          "result",
+          "mask"
         ],
         "locations": []
       },
@@ -175,8 +175,8 @@
       "name": "seam",
       "outputs": {
         "images": [
-          "mask",
-          "result"
+          "result",
+          "mask"
         ],
         "locations": []
       },
@@ -332,8 +332,8 @@
       "name": "remove",
       "outputs": {
         "images": [
-          "mask",
-          "result"
+          "result",
+          "mask"
         ],
         "locations": []
       },
@@ -525,8 +525,8 @@
       "name": "remove_prompt",
       "outputs": {
         "images": [
-          "mask",
-          "result"
+          "result",
+          "mask"
         ],
         "locations": [
           "found"
@@ -741,8 +741,8 @@
       "name": "repair",
       "outputs": {
         "images": [
-          "mask",
-          "result"
+          "result",
+          "mask"
         ],
         "locations": []
       },
@@ -896,8 +896,8 @@
       "name": "repair_area",
       "outputs": {
         "images": [
-          "mask",
-          "result"
+          "result",
+          "mask"
         ],
         "locations": []
       },
@@ -1042,8 +1042,8 @@
       "name": "protect",
       "outputs": {
         "images": [
-          "mask",
-          "result"
+          "result",
+          "mask"
         ],
         "locations": []
       },
