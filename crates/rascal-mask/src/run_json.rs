@@ -14,6 +14,7 @@ use rascal_core::contract::table_manners::images::{
 use rascal_core::contract::table_manners::operations::{ArtifactEntry, ArtifactRef, Artifacts};
 use rascal_core::contract::table_manners::{
     Cache, ErrorCode, ErrorInfo, Invocation, Run, RunResult, Spend, SpendBasis, Status, Tool,
+    Verdict,
 };
 use rascal_core::contract::{self, LocationMeta, location_out};
 use rascal_mask::filler::{self, Spent};
@@ -206,6 +207,8 @@ pub struct Ended {
     pub body: serde_json::Map<String, Value>,
     /// The fill cache: `Some(true)` a hit, `Some(false)` a miss, `None` not consulted.
     pub cache: Option<bool>,
+    /// The checker's verdict on the result (table-manners 2.4); none when it was not judged.
+    pub verdict: Option<Verdict>,
 }
 
 /// An output file's reference: its bytes' digest and its header's dimensions; the input's
@@ -327,7 +330,7 @@ pub fn finish(
     let body = ended.body;
     if spent.unresolved_usd > 0.0 {
         notes.push(format!(
-            "{:.4} USD of the spend is unresolved: a filler call was sent and no answer settles whether it was charged; it is counted at its price",
+            "{:.4} USD of the spend is unresolved: a filler or checker call was sent and no answer settles whether it was charged; it is counted at its price",
             spent.unresolved_usd
         ));
     }
@@ -391,6 +394,7 @@ pub fn finish(
         locations,
         notes,
         spent,
+        verdict: ended.verdict,
     };
     finish_with(
         pending,
@@ -485,6 +489,8 @@ pub struct Produced {
     pub locations: Locations,
     pub notes: Vec<String>,
     pub spent: Spent,
+    /// The verdict a judged run carries in its header (table-manners 2.4).
+    pub verdict: Option<Verdict>,
 }
 
 /// Writes `run.json` into the run directory from its parts, atomically: the header from
@@ -545,7 +551,7 @@ pub fn finish_with(
             .chain(produced.notes)
             .collect(),
         body,
-        verdict: None,
+        verdict: produced.verdict,
     };
     write(&pending.dir, &result)
 }
@@ -699,6 +705,7 @@ pub fn ended_with(recipe: &str, error: &Error) -> Ended {
             result: None,
             body,
             cache: None,
+            verdict: None,
         };
     }
     let (status, info) = error_of(error);
@@ -711,6 +718,7 @@ pub fn ended_with(recipe: &str, error: &Error) -> Ended {
         result: None,
         body,
         cache: None,
+        verdict: None,
     }
 }
 
@@ -760,6 +768,7 @@ pub fn watch_signals() {
                     result: None,
                     body,
                     cache: None,
+                    verdict: None,
                 },
                 None,
             );
@@ -789,6 +798,7 @@ pub fn ended_ok(
         result,
         body: body_of(recipe, status, stopped_at, reason, mask_dir, filler),
         cache,
+        verdict: None,
     }
 }
 

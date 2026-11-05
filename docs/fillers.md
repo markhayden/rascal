@@ -177,13 +177,47 @@ revision = "squint 0.1, claude-haiku-5-5"
   `max_spend_usd`. `{source}` and `{candidate}` are required; any other `{…}` is refused.
 - The check runs for `remove_prompt` with a filler when a checker is configured, its key is
   present, and the call has not turned it off (`"check": false`; `--no-check` on the command
-  line). The description then offers `check` (default true) and says `answers: verdict`.
+  line, `rascal heal … --no-check`). The description then offers `check` (default true) and says
+`answers: verdict`.
 - The checker's program and key are **optional** requirements of `remove_prompt`, `for` "checking
   the result": missing, the action stays `ready` and a call fills once, unchecked, saying why.
 - A checked call reserves its tries up front: the most of three whose total (each try the
   filler's price plus the checker's) fits the call's cap and the session's balance, at least one.
   The estimate's `worst_case_usd` is that total; `effective["x-rascal"].check` says whether the
-  result is checked, or why not.
+  result is checked, or why not. The run's notes say "Checked: up to N tries within the spend
+  limits.", or why it was not checked ("Not checked: the checker needs ANTHROPIC_API_KEY.").
+
+**One check.** Each try's result is written as `tries/<k>/result.png` in the run directory, and
+its check is staged in `tries/<k>/check/`: the input image as `source.png`, the result as
+`candidate.png` and the rendered arguments as `arguments.json`. The checker runs there as
+`<command> --arguments <that file> --allow-dir <that directory>`, its working directory the same,
+so it reads nothing else wherever the workspace lives; its environment is rascal's (the key
+passes through), its stderr is dropped. rascal reads the table-manners result it prints (kept as
+`result.json`), never its exit code (squint exits 1 on `fail` and 2 on `unsure`): a `completed`
+result with a `verdict` is the answer, and the run's `verdict` is the selected try's. Anything
+else is a **check failure**, which ends the checking with the tries made and a note "The check
+could not run: …": another status (with its error's reason), a completed result with no verdict,
+output that is not JSON, output over 1 MiB, or no answer within `timeout_s` (the checker is
+stopped).
+
+**The journal** gets `checker call started: {"spend_usd": …}` before a check, `checker call:
+{…}` after it (the command as configured, the duration, the exit code, the bytes, the outcome,
+whether it may have been charged, and the spend the result reports; never a key), and, when it
+answered, `checker stored: {…}`: the try, the request's identity (over the checker's command and
+revision, the source's and the candidate's file digests and the arguments with digests in place
+of the paths), the checker's `revision`, both digests, the arguments as sent and the verdict.
+A check's spend is what its result reports; a check that printed none counts its price as
+unresolved (`docs/contract.md`, "Spend").
+
+**The scripted checker.** The testkit's `rascal fake-checker <script>` (a `--features testkit`
+build) is a checker command that answers from a JSON script: `{"answers": [{"verdict": "fail",
+"where": [[x0, y0, x1, y1]]}, {"verdict": "pass"}], "spend_usd": 0.004}`, the `n`th call taking
+the `n`th answer (the last once they run out). An answer may add `delay_ms`, `foreign` (its places
+name another image) or a `failure`: `status`, `no-verdict`, `garbage`, `oversize` or `outside`
+(it reads a path outside `--allow-dir` and refuses itself, as a real tool refuses one). Like
+squint it reads both images and exits 1 on `fail` and 2 on `unsure`. The tests in
+`crates/rascal-mask/tests/it/checker.rs` drive it, and one runs the real `squint` with its
+scripted provider when `../squint/target/debug/squint` is a testkit build.
 
 ## The fake fillers
 

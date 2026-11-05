@@ -2,7 +2,9 @@
 //! 0023). One function settles it, before readiness, the estimate and the run, so all three
 //! agree: a check runs only for `remove_prompt` with a configured `[checker]`, a filler, its
 //! key present and `check` not turned off. Every other case says why it is off, so the run can
-//! say "Not checked: …" and the invocation can record it.
+//! say "Not checked: …" and the invocation can record it. [`call`] makes one check.
+
+pub mod call;
 
 use rascal_core::config::Config;
 use serde_json::{Map, Value};

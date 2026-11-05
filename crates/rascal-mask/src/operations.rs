@@ -417,7 +417,7 @@ impl ContractActions {
             config_identity: config_identity.clone(),
             filler: Value::Null,
             constants: BTreeMap::new(),
-            check: None,
+            check: rascal_mask::checker::Check::Off(rascal_mask::checker::Off::NotChecked),
             try_usd: Some(0.0),
             max_tries: 1,
             cap_usd,
@@ -686,6 +686,7 @@ impl ContractActions {
                 unresolved_usd: 0.0,
                 measured: true,
             },
+            verdict: None,
         };
         run_json::finish_with(
             &pending,

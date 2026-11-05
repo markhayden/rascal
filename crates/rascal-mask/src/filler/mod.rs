@@ -242,56 +242,84 @@ pub const STARTED_PREFIX: &str = "filler call started: ";
 /// The prefix of a [`FillerCall`] note.
 pub const CALL_PREFIX: &str = "filler call: ";
 
-/// What a run's filler calls cost, from its journal notes.
+/// What a run's filler and checker calls cost, from its journal notes.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Spent {
     /// Every known and unresolved call at its price, an answer that refused before any work
-    /// at zero.
+    /// at zero, a check at what its result reports.
     pub usd: f64,
     /// The part of `usd` no answer settled.
     pub unresolved_usd: f64,
-    /// The total is a known zero, not read from a price (`spend.basis: measured`, table-manners
-    /// 4.5): at least one answer refused before any work, and no call counted at its price.
+    /// The total is measured, not read from a price (`spend.basis: measured`, table-manners
+    /// 4.5): at least one answer settled its own figure (a filler's that refused before any
+    /// work, a check's measured spend), and no call counted at its price.
     pub measured: bool,
 }
 
-/// The spend in a run's notes: each started call is settled by the call record that follows it
-/// (in order), at its price unless not sent or refused before any work; a started call with no
-/// record, or a record that does not parse, is unresolved.
+/// The spend in a run's notes: each started call is settled by the call record of its kind that
+/// follows it (in order). A filler call counts its price unless not sent or refused before any
+/// work; a check counts what its result reports (`checker::call::CheckerCall::spend`), or its
+/// price when it printed none. A started call with no record, or a record that does not parse,
+/// is unresolved at its price.
 pub fn spent(notes: &[String]) -> Spent {
-    let mut open: std::collections::VecDeque<f64> = std::collections::VecDeque::new();
+    use crate::checker::call::{self as check, CheckerCall};
+    use rascal_core::contract::table_manners::SpendBasis;
+    let mut open_fills: std::collections::VecDeque<f64> = std::collections::VecDeque::new();
+    let mut open_checks: std::collections::VecDeque<f64> = std::collections::VecDeque::new();
     let mut spent = Spent::default();
-    let mut answered_free = false;
+    let mut answered = false;
     let mut priced = false;
+    let unresolved = |spent: &mut Spent, priced: &mut bool, price: f64| {
+        spent.usd += price;
+        spent.unresolved_usd += price;
+        *priced = true;
+    };
     for note in notes {
         if let Some(json) = note.strip_prefix(STARTED_PREFIX) {
             let price = serde_json::from_str::<CallStarted>(json)
                 .map(|s| s.spend_usd)
                 .unwrap_or(0.0);
-            open.push_back(price);
+            open_fills.push_back(price);
         } else if let Some(json) = note.strip_prefix(CALL_PREFIX) {
-            let price = open.pop_front().unwrap_or(0.0);
+            let price = open_fills.pop_front().unwrap_or(0.0);
             match serde_json::from_str::<FillerCall>(json) {
                 Ok(call) if call.charge == Charge::NotSent => {}
-                Ok(call) if call.refused_before_work() => answered_free = true,
+                Ok(call) if call.refused_before_work() => answered = true,
                 Ok(call) if call.charge == Charge::Known => {
                     spent.usd += price;
                     priced = true;
                 }
-                Ok(_) | Err(_) => {
-                    spent.usd += price;
-                    spent.unresolved_usd += price;
-                    priced = true;
+                Ok(_) | Err(_) => unresolved(&mut spent, &mut priced, price),
+            }
+        } else if let Some(json) = note.strip_prefix(check::STARTED_PREFIX) {
+            let price = serde_json::from_str::<check::CallStarted>(json)
+                .map(|s| s.spend_usd)
+                .unwrap_or(0.0);
+            open_checks.push_back(price);
+        } else if let Some(json) = note.strip_prefix(check::CALL_PREFIX) {
+            let price = open_checks.pop_front().unwrap_or(0.0);
+            match serde_json::from_str::<CheckerCall>(json) {
+                Ok(call) if call.charge == Charge::NotSent => {}
+                Ok(CheckerCall {
+                    charge: Charge::Known,
+                    spend: Some(reported),
+                    ..
+                }) => {
+                    spent.usd += reported.usd;
+                    spent.unresolved_usd += reported.unresolved_usd;
+                    match reported.basis {
+                        SpendBasis::Measured => answered = true,
+                        SpendBasis::Estimated => priced = true,
+                    }
                 }
+                Ok(_) | Err(_) => unresolved(&mut spent, &mut priced, price),
             }
         }
     }
-    for price in open {
-        spent.usd += price;
-        spent.unresolved_usd += price;
-        priced = true;
+    for price in open_fills.into_iter().chain(open_checks) {
+        unresolved(&mut spent, &mut priced, price);
     }
-    spent.measured = answered_free && !priced;
+    spent.measured = answered && !priced;
     spent
 }
 
@@ -420,6 +448,7 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
+    use rascal_core::contract::table_manners::SpendBasis;
 
     fn started(price: f64) -> String {
         CallStarted {
@@ -447,6 +476,61 @@ mod tests {
             charge,
         }
         .note()
+    }
+
+    fn check_started(price: f64) -> String {
+        crate::checker::call::CallStarted { spend_usd: price }.note()
+    }
+
+    fn checked(charge: Charge, reported: Option<(f64, SpendBasis)>) -> String {
+        crate::checker::call::CheckerCall {
+            target: "t".into(),
+            duration_ms: 0,
+            exit: Some(1),
+            response_bytes: 0,
+            outcome: "fail".into(),
+            charge,
+            spend: reported.map(|(usd, basis)| rascal_core::contract::table_manners::Spend {
+                usd,
+                unresolved_usd: 0.0,
+                basis,
+            }),
+        }
+        .note()
+    }
+
+    /// SPEC.md "Self-correcting remove" (spend): a check counts what its result reports, a
+    /// check that printed none its price as unresolved, and the fill beside it its own price.
+    #[test]
+    fn a_check_counts_what_it_reports_or_its_price_unresolved() {
+        let measured = spent(&[
+            check_started(0.01),
+            checked(Charge::Known, Some((0.004, SpendBasis::Measured))),
+        ]);
+        assert_eq!(
+            measured,
+            Spent {
+                usd: 0.004,
+                unresolved_usd: 0.0,
+                measured: true
+            }
+        );
+        let with_fill = spent(&[
+            started(0.02),
+            call(Charge::Known),
+            check_started(0.01),
+            checked(Charge::Known, Some((0.004, SpendBasis::Measured))),
+            check_started(0.01),
+            checked(Charge::Unresolved, None),
+            check_started(0.01),
+            checked(Charge::NotSent, None),
+        ]);
+        assert!((with_fill.usd - 0.034).abs() < 1e-9, "{with_fill:?}");
+        assert!((with_fill.unresolved_usd - 0.01).abs() < 1e-9);
+        assert!(!with_fill.measured, "the fill counts its configured price");
+        // A check under way when the run stopped: its price, unresolved.
+        let open = spent(&[check_started(0.01)]);
+        assert!((open.unresolved_usd - 0.01).abs() < 1e-9);
     }
 
     /// Table-manners 4.5: a 401 or 403 is an answer, so the call is known, not unsent; it

@@ -329,9 +329,9 @@ pub struct Price {
     pub filler: Value,
     /// `x-rascal`: the constant set in force at each recipe step whose op has sets.
     pub constants: BTreeMap<String, String>,
-    /// `x-rascal.check`: whether the result is checked and why not (`checker::Check::record`);
-    /// none for an action that is never checked.
-    pub check: Option<Value>,
+    /// Whether the result is checked and why not; `x-rascal.check` is its record
+    /// (`checker::Check::record`), none for an action that is never checked.
+    pub check: rascal_mask::checker::Check,
     /// What one try may spend (its filler, and its check when one runs); none when the call
     /// cannot be priced.
     pub try_usd: Option<f64>,
@@ -405,7 +405,7 @@ pub fn price(
         .filter(|_| check.on())
         .map_or(0.0, |c| c.spend_usd_per_call);
     Ok(Price {
-        check: check.record(),
+        check: check.clone(),
         constants: constants(recipe, &overrides, args.get("set"))?,
         model: entry.map(|(name, _)| format!("fillers.{name}")),
         config_identity,
@@ -477,8 +477,8 @@ pub fn constants(
 pub fn effective(price: &Price) -> Effective {
     let mut extensions = BTreeMap::new();
     let mut rascal = json!({ "filler": price.filler, "constants": price.constants });
-    if let Some(check) = &price.check {
-        rascal["check"] = check.clone();
+    if let Some(check) = price.check.record() {
+        rascal["check"] = check;
     }
     extensions.insert("x-rascal".to_string(), rascal);
     Effective {
@@ -770,7 +770,7 @@ mod tests {
             config_identity: None,
             filler: Value::Null,
             constants: BTreeMap::new(),
-            check: None,
+            check: rascal_mask::checker::Check::Off(rascal_mask::checker::Off::NotChecked),
             try_usd: Some(try_usd),
             max_tries,
             cap_usd,

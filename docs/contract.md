@@ -519,8 +519,11 @@ the total and `spend.unresolved_usd` the part no answer settled, with a note (ta
 4.5). `spend.basis` is `estimated` when any amount comes from a price (a known or unresolved
 call, at its configured price) and `measured` when the spend is a known zero: a call answered
 with 401 or 403 and none counted at its price (`run-credential-rejected.json`). A run with no
-call, or only calls not sent, stays `estimated` at zero. The call's reservation is settled at
-what it spent, so a rejected key holds nothing back from the budget.
+call, or only calls not sent, stays `estimated` at zero. A check (`docs/fillers.md`, "The
+checker") is journaled the same way (`checker call started`, `checker call`) and counts what its
+result reports, `measured` or `estimated` as the checker says, or its price as unresolved when it
+printed no result. The call's reservation is settled at what it spent, so a rejected key holds
+nothing back from the budget and the tries a checked call reserved and never made come back.
 `[limits]` holds `serve` to `call_cap_usd` per call and `session_budget_usd` across the process's
 calls (4.5). A call's `max_spend_usd` lowers the cap: the effective cap is the configured one
 lowered by it, or the caller's value when no cap is configured. It is an argument like any other,

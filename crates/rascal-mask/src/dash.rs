@@ -704,23 +704,27 @@ fn read_request_head(stream: &mut std::net::TcpStream) -> bool {
     }
 }
 
-/// The filler and pack call rows, from the journal's `filler call:` and `pack call:` notes.
+/// The filler, pack and checker call rows, from the journal's `filler call:`, `pack call:` and
+/// `checker call:` notes.
 fn calls_table(lines: &[JournalLine]) -> String {
     let calls: Vec<(u64, &str, serde_json::Value)> = lines
         .iter()
         .filter_map(|l| {
             let note = l.note.as_deref()?;
-            let (kind, text) = match note.strip_prefix("filler call: ") {
-                Some(text) => ("filler", text),
-                None => ("pack", note.strip_prefix("pack call: ")?),
-            };
+            let (kind, text) = [
+                ("filler", "filler call: "),
+                ("pack", "pack call: "),
+                ("checker", rascal_mask::checker::call::CALL_PREFIX),
+            ]
+            .into_iter()
+            .find_map(|(kind, prefix)| Some((kind, note.strip_prefix(prefix)?)))?;
             serde_json::from_str::<serde_json::Value>(text)
                 .ok()
                 .map(|v| (l.seq, kind, v))
         })
         .collect();
     if calls.is_empty() {
-        return "<p class=\"empty\" data-calls=\"0\">No filler or pack calls in this journal.</p>"
+        return "<p class=\"empty\" data-calls=\"0\">No filler, pack or checker calls in this journal.</p>"
             .to_string();
     }
     let rows: Vec<String> = calls
@@ -734,6 +738,7 @@ fn calls_table(lines: &[JournalLine]) -> String {
                     format!("{}x{}", n("request_width"), n("request_height")),
                     n("status").to_string(),
                 ),
+                "checker" => ("checker".to_string(), String::new(), n("exit").to_string()),
                 _ => (
                     format!("{} {}", s("pack"), s("tool")),
                     format!("{} bytes", n("request_bytes")),

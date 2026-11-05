@@ -988,8 +988,11 @@ files live under `tries/<k>/` in the run directory and are never overwritten by 
 Masks are committed artifacts like any other, so a host can open an earlier try's mask and
 preview after the run.
 
-**Recording and replay.** Each check call is journaled like a pack call: `checker call:` (the
-command, duration, exit, spend; never a key) and `checker stored:`. The stored record holds the
+**Recording and replay.** Each check call is journaled like a filler call: `checker call
+started:` (its price) before it, so a run stopped mid-check counts it, `checker call:` (the
+command, duration, exit, spend; never a key) after it, and `checker stored:`. The checker runs
+with `tries/<k>/check/` as its working directory, and its printed result is kept there as
+`result.json`. The stored record holds the
 request identity (source, candidate and resolved arguments), the result and the try's
 transition (the places used, the planes added). `heal --replay` answers checks from the
 recording, as it does pack steps; a check the recording lacks is an error, never a call. A run's

@@ -24,9 +24,9 @@ built from `journal.jsonl` and the operation records, from the template in
   duration and a waterfall bar. A step that ran more than once is marked `repeat n`; a
   `not_applicable` or `measured_nothing` step is amber, a failed (`invalid_args`) one red; a
   journal note is grey.
-- **Filler and pack calls**: one row per `filler call:` or `pack call:` note in the journal
-  (the kind, the entry or the pack and tool, its command or URL, the request's size, the
-  bytes, the duration, the exit code, HTTP status or call status, and the outcome).
+- **Filler and pack calls**: one row per `filler call:`, `pack call:` or `checker call:` note in
+  the journal (the kind, the entry or the pack and tool, its command or URL, the request's size,
+  the bytes, the duration, the exit code, HTTP status or call status, and the outcome).
 - **Steps**: a section per journal line with every panel's rendering for it.
 
 The page names every journal line and no other, and embeds every artifact the journal names as

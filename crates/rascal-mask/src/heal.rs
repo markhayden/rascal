@@ -2,7 +2,8 @@
 //! typed graph of SPEC.md "Recipes" ("heal"), executed literally over the recipe's declared
 //! outputs: apply, window, render, the filler call, paste, unwindow, put, the preservation
 //! check and the measures. Every step is an op invocation in the journal; the filler call is
-//! a journal note without its key.
+//! a journal note without its key. A checked `remove_prompt` (SPEC.md "Self-correcting remove",
+//! part 3) asks the configured checker about each try's result.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -11,7 +12,8 @@ use std::sync::Arc;
 use image::DynamicImage;
 use rascal_core::Error;
 use rascal_core::artifact::Artifact;
-use rascal_core::config::{Config, FillerConfig};
+use rascal_core::config::{CheckerConfig, Config, FillerConfig};
+use rascal_core::contract::table_manners::Verdict;
 use rascal_core::error::Result;
 use rascal_core::frame::{Frame, FrameKind, FrameTable, Plan};
 use rascal_core::image::{Image, RenderingRole, Role};
@@ -20,6 +22,7 @@ use rascal_core::op::{Inputs, Params, Status};
 use rascal_core::recipe::Run;
 use rascal_core::registry::OpRegistry;
 use rascal_core::rendering::Profile;
+use rascal_mask::checker::{self, Check};
 use rascal_mask::filler::{self, FillRequest, Filler, FillerCall};
 
 use crate::run::{self, RunArgs};
@@ -35,6 +38,10 @@ pub struct HealArgs {
     /// The fill cache's directory, over the configuration's `[cache] dir` (the lab gives its
     /// own, so arms with the same request share one fill).
     pub cache: Option<PathBuf>,
+    /// Whether the result is checked (`checker::resolve`, settled before the run), and why not.
+    pub check: Check,
+    /// The most tries the limits allow (`estimate::Price::tries`); 1 when unchecked.
+    pub tries: u32,
 }
 
 /// What `heal` did.
@@ -50,6 +57,9 @@ pub struct HealReport {
     /// Whether the fill came from the cache: `Some(true)` a hit, `Some(false)` a miss (the
     /// filler was called and the fill stored), `None` no cache or no fill.
     pub cache: Option<bool>,
+    /// The checker's verdict on the result; none when it was not checked or the check could
+    /// not run.
+    pub verdict: Option<Verdict>,
 }
 
 /// The journal note prefix of a reusable fill: the request identity and the fill artifact.
@@ -131,6 +141,24 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
             .clone()
             .or_else(|| config.cache.as_ref().map(|c| c.dir.clone())),
     };
+    // A configured checker that will not run says why (a missing key, `--no-check`).
+    let checker = match (&args.check, &config.checker) {
+        (Check::On, Some(checker)) => {
+            run.note(format!(
+                "Checked: up to {} {} within the spend limits.",
+                args.tries,
+                if args.tries == 1 { "try" } else { "tries" }
+            ))?;
+            Some(checker)
+        }
+        (Check::Off(off), _) => {
+            if let Some(sentence) = off.sentence() {
+                run.note(sentence)?;
+            }
+            None
+        }
+        (Check::On, None) => None,
+    };
     if outcome.status != Status::Ok {
         return stopped(
             &run,
@@ -182,6 +210,17 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
     };
     let result = run.dir.join("result.png");
     rascal_core::canonical::write_png(&result, &out_image.pixels)?;
+    let verdict = match checker {
+        Some(checker) => check_try(
+            &run,
+            checker,
+            &subject.input,
+            args.run.prompt.as_deref().unwrap_or(""),
+            1,
+            &out_image,
+        )?,
+        None => None,
+    };
     run.write_tables()?;
     let dash = if args.no_dash {
         None
@@ -197,7 +236,70 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         dash,
         renders: outcome.renders,
         cache,
+        verdict,
     })
+}
+
+/// Asks the checker about try `k`'s result: the result is written as `tries/<k>/result.png`,
+/// the check staged in `tries/<k>/check/` and called, and the call journaled. The verdict, or
+/// none when the check could not run, which the journal says ("The check could not run: …").
+fn check_try(
+    run: &Run,
+    config: &CheckerConfig,
+    input: &Image,
+    prompt: &str,
+    k: u32,
+    result: &Image,
+) -> Result<Option<Verdict>> {
+    use checker::call::{self, CallStarted, Request, StoredCheck};
+    let dir = run.dir.join("tries").join(k.to_string());
+    std::fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
+    let candidate = dir.join("result.png");
+    rascal_core::canonical::write_png(&candidate, &result.pixels)?;
+    let staged = call::stage(
+        config,
+        &Request {
+            source: &run.workspace.image_path(input),
+            candidate: &candidate,
+            prompt,
+        },
+        &dir.join("check"),
+    )?;
+    if run.cancelled() {
+        return Err(Error::Cancelled {
+            step: "checker".to_string(),
+        });
+    }
+    run.note(
+        CallStarted {
+            spend_usd: config.spend_usd_per_call,
+        }
+        .note(),
+    )?;
+    let called =
+        tracing::info_span!("checker", attempt = k).in_scope(|| call::call(config, &staged));
+    run.note(called.call.note())?;
+    match called.answer {
+        Ok(verdict) => {
+            run.note(
+                StoredCheck {
+                    attempt: k,
+                    request: staged.identity,
+                    revision: config.revision.clone(),
+                    source: staged.source,
+                    candidate: staged.candidate,
+                    arguments: staged.arguments,
+                    verdict: verdict.clone(),
+                }
+                .note(),
+            )?;
+            Ok(Some(verdict))
+        }
+        Err(reason) => {
+            run.note(format!("The check could not run: {reason}."))?;
+            Ok(None)
+        }
+    }
 }
 
 /// The filler a heal paints with, read from the configuration: what every pass of the graph
@@ -573,6 +675,7 @@ fn stopped(
         dash,
         renders,
         cache: None,
+        verdict: None,
     })
 }
 

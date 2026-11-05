@@ -72,16 +72,26 @@ pub fn of_call(
     })
 }
 
-/// The invocation of a `rascal run` or `heal` (with `filler`): the flags as the matching action's
-/// arguments (the image by its reference; `--bbox`, `--location` and `--stroke` as contract
-/// locations on it, a contract location file as given; `--set` as `set`; `--mask` and `--protect`
-/// as Mask references), then [`record`], priced as `estimate::price` prices the call under the
-/// run's configuration (no session: no provider has answered anything).
-pub fn of_command(args: &RunArgs, filler: Option<&str>) -> Result<Invocation> {
-    resolving(|| {
-        run::check_flags(args, &load_recipe(&args.recipe)?, filler.is_some())?;
+/// What a command-line `heal` adds to its run's flags: the filler, and whether `--no-check`
+/// turned the check off.
+#[derive(Debug, Clone, Copy)]
+pub struct Healing<'a> {
+    pub filler: &'a str,
+    pub no_check: bool,
+}
+
+/// The invocation of a `rascal run` or `heal` (with `healing`): the flags as the matching
+/// action's arguments (the image by its reference; `--bbox`, `--location` and `--stroke` as
+/// contract locations on it, a contract location file as given; `--set` as `set`; `--mask` and
+/// `--protect` as Mask references; `--no-check` as `check: false`), then [`record`], priced as
+/// `estimate::price` prices the call under the run's configuration (no session: no provider has
+/// answered anything). The price comes back too: a `heal` runs the tries it allows.
+pub fn of_command(args: &RunArgs, healing: Option<Healing>) -> Result<(Invocation, Price)> {
+    let mut priced = None;
+    let invocation = resolving(|| {
+        run::check_flags(args, &load_recipe(&args.recipe)?, healing.is_some())?;
         let action = run_json::action_of(&args.recipe);
-        let arguments = command_arguments(args, filler)?;
+        let arguments = command_arguments(args, healing)?;
         let state = ConfigState::read(args.config.as_deref());
         let price = estimate::price(
             &Setup {
@@ -118,17 +128,25 @@ pub fn of_command(args: &RunArgs, filler: Option<&str>) -> Result<Invocation> {
                 contract_location(location, &reference)?,
             );
         }
-        record(&args.recipe, &action, arguments, &frame, &price)
-    })
+        let invocation = record(&args.recipe, &action, arguments, &frame, &price)?;
+        priced = Some(price);
+        Ok(invocation)
+    })?;
+    let price = priced.ok_or_else(|| Error::usage("the command was not priced"))?;
+    Ok((invocation, price))
 }
 
-/// The flags of a run that need no image read, as an action's arguments: `filler`, `prompt`,
-/// `set`, `projection`, `strict`, `mask` and `protect`. The arguments `estimate::price` reads
-/// (`filler`, `set`) are here, so a command line prices its call from them.
-fn command_arguments(args: &RunArgs, filler: Option<&str>) -> Result<Map<String, Value>> {
+/// The flags of a run that need no image read, as an action's arguments: `filler`, `check`,
+/// `prompt`, `set`, `projection`, `strict`, `mask` and `protect`. The arguments
+/// `estimate::price` reads (`filler`, `check`, `set`) are here, so a command line prices its
+/// call from them.
+fn command_arguments(args: &RunArgs, healing: Option<Healing>) -> Result<Map<String, Value>> {
     let mut arguments = Map::new();
-    if let Some(filler) = filler {
-        arguments.insert("filler".to_string(), json!(filler));
+    if let Some(healing) = healing {
+        arguments.insert("filler".to_string(), json!(healing.filler));
+        if healing.no_check {
+            arguments.insert(rascal_mask::checker::ARGUMENT.to_string(), json!(false));
+        }
     }
     if let Some(prompt) = &args.prompt {
         arguments.insert("prompt".to_string(), json!(prompt));

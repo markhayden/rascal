@@ -152,6 +152,9 @@ enum Command {
         /// Exit 1 when a step is not applicable.
         #[arg(long)]
         strict: bool,
+        /// Do not ask the configured checker about the result: fill once, unchecked.
+        #[arg(long)]
+        no_check: bool,
     },
     /// The MCP server over stdio: the table-manners actions (the recipes as tasks, the ops as
     /// operations) as tools (SPEC "The MCP server").
@@ -219,6 +222,14 @@ enum Command {
     #[cfg(feature = "testkit")]
     #[command(hide = true)]
     FakePack {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// The testkit's scripted checker (test builds only): `<script> --arguments <file>
+    /// --allow-dir <dir>`.
+    #[cfg(feature = "testkit")]
+    #[command(hide = true)]
+    FakeChecker {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
@@ -661,6 +672,7 @@ const RESERVED: &[&str] = &[
     "measure",
     "fake-filler",
     "fake-pack",
+    "fake-checker",
     "tools",
     "dash",
     "ops",
@@ -771,7 +783,7 @@ fn main() {
                 eprintln!("rascal run: {error}");
                 std::process::exit(exit::code_for(&error));
             }
-            let pending = start("run", &args, None);
+            let (pending, _) = start("run", &args, None);
             let result = run::run(&args);
             let ended = match &result {
                 Ok(report) => run_json::ended_ok(
@@ -839,57 +851,66 @@ fn main() {
             no_dash,
             replay,
             strict,
+            no_check,
         } => {
-            let args = heal::HealArgs {
-                run: run::RunArgs {
-                    recipe,
-                    image,
-                    out,
-                    bbox,
-                    location,
-                    stroke,
-                    protect: protect.map(run::MaskIn::Dir),
-                    mask: mask.map(run::MaskIn::Dir),
-                    prompt,
-                    config: Some(config),
-                    workspace,
-                    projection: projection.map(Into::into),
-                    strict,
-                    replay: replay.clone(),
-                    overrides: BTreeMap::new(),
-                    overrides_from: None,
-                    sets: set,
-                    cancel: None,
-                },
-                filler,
-                no_dash,
-                replay,
-                cache: None,
+            let run = run::RunArgs {
+                recipe,
+                image,
+                out,
+                bbox,
+                location,
+                stroke,
+                protect: protect.map(run::MaskIn::Dir),
+                mask: mask.map(run::MaskIn::Dir),
+                prompt,
+                config: Some(config),
+                workspace,
+                projection: projection.map(Into::into),
+                strict,
+                replay: replay.clone(),
+                overrides: BTreeMap::new(),
+                overrides_from: None,
+                sets: set,
+                cancel: None,
             };
-            if args.replay.is_none()
-                && let Err(error) = ready_for(
-                    &args.run.recipe,
-                    args.run.config.as_deref(),
-                    Some(&args.filler),
-                )
+            if replay.is_none()
+                && let Err(error) = ready_for(&run.recipe, run.config.as_deref(), Some(&filler))
             {
                 eprintln!("rascal heal: {error}");
                 std::process::exit(exit::code_for(&error));
             }
-            let pending = start("heal", &args.run, Some(&args.filler));
+            let healing = invocation::Healing {
+                filler: &filler,
+                no_check,
+            };
+            let (pending, price) = start("heal", &run, Some(healing));
+            // The command line has no session: the tries are the most the call's cap allows.
+            let tries = price.tries(None).map_or(1, |(tries, _)| tries);
+            let args = heal::HealArgs {
+                run,
+                filler,
+                no_dash,
+                replay,
+                cache: None,
+                check: price.check,
+                tries,
+            };
             let result = heal::heal(&args);
             let ended = match &result {
-                Ok(report) => run_json::ended_ok(
-                    &args.run.recipe,
-                    report.status,
-                    report.stopped_at.as_deref(),
-                    report.reason.as_deref(),
-                    None,
-                    Some(&args.filler),
-                    report.renders.clone(),
-                    report.result.clone(),
-                    report.cache,
-                ),
+                Ok(report) => run_json::Ended {
+                    verdict: report.verdict.clone(),
+                    ..run_json::ended_ok(
+                        &args.run.recipe,
+                        report.status,
+                        report.stopped_at.as_deref(),
+                        report.reason.as_deref(),
+                        None,
+                        Some(&args.filler),
+                        report.renders.clone(),
+                        report.result.clone(),
+                        report.cache,
+                    )
+                },
                 Err(error) => run_json::ended_with(&args.run.recipe, error),
             };
             run_json::conclude(&pending, ended);
@@ -1014,6 +1035,8 @@ fn main() {
         }
         #[cfg(feature = "testkit")]
         Command::FakePack { args } => rascal_testkit::fake_pack::main(&args),
+        #[cfg(feature = "testkit")]
+        Command::FakeChecker { args } => rascal_testkit::fake_checker::run(&args),
         Command::Corpus { command } => {
             let result = match command {
                 CorpusCommand::Verify { manifest, root } => {
@@ -1518,17 +1541,23 @@ fn estimate_cmd(
     Ok(())
 }
 
-/// Starts a command-line `run` or `heal` (with `filler`): its flags resolve to the invocation
+/// Starts a command-line `run` or `heal` (with `healing`): its flags resolve to the invocation
 /// (4.8) first, and only then is the run registered and the signal watcher started, so a
 /// signal can only ever cancel a run that records what it was asked. Flags that do not resolve
 /// end the command `invalid` before anything runs: `run.json` with a null invocation (the one
-/// status that may lack it) when `--out` is the caller's, and exit 64.
-fn start(command: &str, args: &run::RunArgs, filler: Option<&str>) -> run_json::Pending {
-    match invocation::of_command(args, filler) {
-        Ok(invocation) => {
+/// status that may lack it) when `--out` is the caller's, and exit 64. The call's price comes
+/// back with the run.
+fn start(
+    command: &str,
+    args: &run::RunArgs,
+    healing: Option<invocation::Healing>,
+) -> (run_json::Pending, estimate::Price) {
+    let filler = healing.map(|h| h.filler);
+    match invocation::of_command(args, healing) {
+        Ok((invocation, price)) => {
             let pending = run_json::begin(run_json::pending_for(args, filler), invocation);
             run_json::watch_signals();
-            pending
+            (pending, price)
         }
         Err(error) => {
             let pending = run_json::pending_for(args, filler);

@@ -7,6 +7,7 @@ mod band_preview;
 mod binding;
 mod call_bundle;
 mod call_cli;
+mod checker;
 mod cli;
 mod contract_locations;
 mod corpus_cli;
