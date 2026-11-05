@@ -293,6 +293,51 @@ fn an_image_that_is_not_the_one_expected_is_an_invalid_result() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// An image exactly 2:1 that its reference describes as flat is taken as flat: the `expect`
+/// reference's projection stands in for an absent `projection` argument, so the run's
+/// `images.in` agrees with what the caller submitted. A `projection` that contradicts it is
+/// refused.
+#[test]
+fn an_images_described_projection_is_used_when_the_call_names_none() {
+    let dir = scratch("described-projection");
+    let mut client = start(&dir);
+    let pano = repo_root().join("fixtures/images/step-pano.png");
+    let bytes = std::fs::read(&pano).unwrap();
+    let flat = serde_json::json!({ "file_sha256": rascal_core::contract::file_sha256(&bytes),
+                                   "width": 800, "height": 400,
+                                   "projection": "flat", "topology": "bounded" });
+    let out = client
+        .call(
+            "seam",
+            serde_json::json!({ "image": { "path": pano, "expect": flat } }),
+        )
+        .unwrap();
+    let s = out.structured.unwrap();
+    assert_eq!(s["status"], "completed", "{s:#}");
+    assert_eq!(s["images"]["in"][0]["image"]["projection"], "flat", "{s:#}");
+    assert!(
+        !s["notes"].to_string().contains("projection assumed"),
+        "{s:#}"
+    );
+    let out = client
+        .call(
+            "seam",
+            serde_json::json!({ "image": { "path": pano, "expect": flat }, "projection": "equirectangular" }),
+        )
+        .unwrap();
+    let s = out.structured.unwrap();
+    assert_eq!(s["status"], "invalid", "{s:#}");
+    assert!(
+        s["error"]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("contradicts the image's expect.projection"),
+        "{s:#}"
+    );
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn a_cancelled_call_gets_no_result_and_its_run_says_cancelled() {
     let dir = scratch("cancel");

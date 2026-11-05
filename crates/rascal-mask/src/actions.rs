@@ -372,11 +372,32 @@ impl ContractActions {
                 sets.push(format!("{key}={rendered}"));
             }
         }
-        let projection = match text("projection").as_deref() {
-            Some("flat") => Some(rascal_core::frame::Projection::Flat),
-            Some("equirectangular") => Some(rascal_core::frame::Projection::Equirectangular),
-            Some(other) => return Err(Error::usage(format!("projection: {other}"))),
-            None => None,
+        // The projection is the call's `projection`, else the one the image's `expect` reference
+        // states (table-manners 3.4): a caller that describes the image as flat is never second-
+        // guessed by the 2:1 rule. The two must agree when both are given.
+        let parse = |name: &str, value: &str| match value {
+            "flat" => Ok(rascal_core::frame::Projection::Flat),
+            "equirectangular" => Ok(rascal_core::frame::Projection::Equirectangular),
+            other => Err(Error::usage(format!("{name}: {other}"))),
+        };
+        let given = text("projection")
+            .map(|v| parse("projection", &v))
+            .transpose()?;
+        let described = args
+            .get("image")
+            .and_then(|i| i.pointer("/expect/projection"))
+            .and_then(|v| v.as_str())
+            .map(|v| parse("image.expect.projection", v))
+            .transpose()?;
+        let projection = match (given, described) {
+            (Some(g), Some(d)) if g != d => {
+                return Err(Error::usage(format!(
+                    "projection: {} contradicts the image's expect.projection {}",
+                    g.name(),
+                    d.name()
+                )));
+            }
+            (given, described) => given.or(described),
         };
         Ok(run::RunArgs {
             recipe: recipe.to_string(),
