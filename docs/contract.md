@@ -63,8 +63,9 @@ it does not take the `rect` op's name), each `kind: "task"` (a whole job) with n
 `source`), the location slots and the kinds each takes, the text and mask inputs and the common
 arguments (`filler`, `set`, `projection`, `strict`) as `params_schema`, each with the default a
 call that leaves it out runs with where there is one (`strict: false`; `seam`'s projection
-`equirectangular`, the projection its recipe declares; without one the image's shape decides,
-2:1 being equirectangular), the outputs (`mask`,
+`equirectangular`, the projection its recipe declares; without one the projection the image's
+`expect` reference states, which a `projection` argument must agree with, and without that the
+image's shape decides, 2:1 being equirectangular), the outputs (`mask`,
 `result`; `remove_prompt` fills `locations.found`), the cost, the readiness, the duration and the
 two renders (3.2): `dash` (`kind: "server"`, `ready_timeout_s: 10`, `rascal dash {run.dir}
 --serve --port 0 --frame-ancestor {frame_ancestor}`) and `page` (`kind: "document"`, `rascal
@@ -175,8 +176,11 @@ Every `run` and `heal` writes `run.json` into its run directory, last and atomic
 temporary name, then a rename), whatever the outcome, when the directory was new or empty at the
 start; an `--out` that held something is refused untouched. It is the contract's result: the
 header (`status`, `error`, `run` with `rascal://run/<id>/run.json` and the absolute directory,
-`started`, `finished`, `duration_ms`, `input_identity`, `spend`, `cache`, `notes` from the
-journal) and rascal's body (`recipe`, `outcome` in rascal's own statuses, `stopped_at`,
+`started`, `finished`, `duration_ms`, `input_identity`, `spend`, `cache`, `notes`: the
+journal's sentences, without its machine records (`pack manifest:`, `pack call:`, `pack stored:`,
+`pack stderr:`, `filler call started:`, `filler call:`, `fill stored:`, `checker call started:`,
+`checker call:`, `checker stored:`), which stay in `journal.jsonl` for the replay, the spend and
+the report) and rascal's body (`recipe`, `outcome` in rascal's own statuses, `stopped_at`,
 `reason`, `mask_dir`, `filler`).
 
 | rascal | `status` | `error.code` |

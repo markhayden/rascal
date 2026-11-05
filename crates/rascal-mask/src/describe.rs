@@ -187,7 +187,7 @@ fn common_properties(recipe: &Recipe, fillers: &[String]) -> serde_json::Map<Str
                 "additionalProperties": { "type": ["string", "number", "boolean"] } }),
     );
     let mut projection = json!({ "type": "string", "enum": ["flat", "equirectangular"],
-                "description": "The image's projection; without it an exactly 2:1 image is equirectangular." });
+                "description": "The image's projection; without it, the projection the image's reference states, else an exactly 2:1 image is equirectangular." });
     if let Some(declared) = recipe.projection {
         // A recipe that declares its projection runs with it unless the call names another.
         projection["default"] = json!(declared.name());

@@ -50,7 +50,7 @@
             "type": "number"
           },
           "projection": {
-            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "description": "The image's projection; without it, the projection the image's reference states, else an exactly 2:1 image is equirectangular.",
             "enum": [
               "flat",
               "equirectangular"
@@ -305,7 +305,7 @@
             "type": "number"
           },
           "projection": {
-            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "description": "The image's projection; without it, the projection the image's reference states, else an exactly 2:1 image is equirectangular.",
             "enum": [
               "flat",
               "equirectangular"
@@ -483,7 +483,7 @@
             "type": "number"
           },
           "projection": {
-            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "description": "The image's projection; without it, the projection the image's reference states, else an exactly 2:1 image is equirectangular.",
             "enum": [
               "flat",
               "equirectangular"
@@ -707,7 +707,7 @@
             "type": "number"
           },
           "projection": {
-            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "description": "The image's projection; without it, the projection the image's reference states, else an exactly 2:1 image is equirectangular.",
             "enum": [
               "flat",
               "equirectangular"
@@ -838,7 +838,7 @@
             "type": "number"
           },
           "projection": {
-            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "description": "The image's projection; without it, the projection the image's reference states, else an exactly 2:1 image is equirectangular.",
             "enum": [
               "flat",
               "equirectangular"
@@ -1007,7 +1007,7 @@
             "type": "number"
           },
           "projection": {
-            "description": "The image's projection; without it an exactly 2:1 image is equirectangular.",
+            "description": "The image's projection; without it, the projection the image's reference states, else an exactly 2:1 image is equirectangular.",
             "enum": [
               "flat",
               "equirectangular"

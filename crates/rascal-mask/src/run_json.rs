@@ -257,6 +257,28 @@ fn absolute(path: &Path) -> String {
         .to_string()
 }
 
+/// The journal notes that are machine records, kept for replay and the report, not sentences
+/// for a person: a pack's manifest, call, stderr and stored answer, a filler's and a checker's
+/// call and stored answer. A result's notes are human sentences (table-manners 2), so these stay
+/// in the journal.
+const RECORD_NOTES: &[&str] = &[
+    rascal_mcp::client::CALL_NOTE,
+    rascal_mcp::client::STDERR_NOTE,
+    rascal_mcp::client::replay::MANIFEST_NOTE,
+    rascal_mcp::client::replay::STORED_NOTE,
+    filler::STARTED_PREFIX,
+    filler::CALL_PREFIX,
+    crate::heal::FILL_NOTE,
+    rascal_mask::checker::call::STARTED_PREFIX,
+    rascal_mask::checker::call::CALL_PREFIX,
+    rascal_mask::checker::call::STORED_PREFIX,
+];
+
+/// Whether a journal note is a machine record rather than a sentence.
+fn is_record(note: &str) -> bool {
+    RECORD_NOTES.iter().any(|prefix| note.starts_with(prefix))
+}
+
 /// The run's input image, the locations it took in and found, and its notes, from the
 /// workspace when the run got as far as making one.
 fn from_workspace(
@@ -458,6 +480,17 @@ fn tries_out(
         for o in out.iter_mut() {
             o.label = label(kept.k, &o.role);
         }
+        // The kept Mask's preview is that same image out, label included (table-manners 4.7:
+        // every preview appears in `images.out`).
+        for entry in artifacts.out.iter_mut() {
+            if let Some(preview) = &mut entry.preview
+                && let Some(listed) = out
+                    .iter()
+                    .find(|o| o.role == preview.role && o.image == preview.image)
+            {
+                preview.label = listed.label.clone();
+            }
+        }
         body.insert("selected_try".into(), Value::from(kept.k));
     }
     for t in tries.iter().filter(|t| !t.selected) {
@@ -472,10 +505,13 @@ fn tries_out(
         let dir = t.result.parent().unwrap_or(Path::new("."));
         match try_mask_entry(workspace_dir, &t.mask, dir, &format!("mask_try_{}", t.k)) {
             Ok(entry) => {
-                if let Some(preview) = &entry.preview {
+                let mut entry = entry;
+                if let Some(preview) = &mut entry.preview {
+                    // Listed under its own role (its resource address); the Mask's preview is the
+                    // same image at the same place, labelled alike.
+                    preview.label = label(t.k, "preview");
                     out.push(ImageOut {
                         role: format!("preview_try_{}", t.k),
-                        label: label(t.k, "preview"),
                         ..preview.clone()
                     });
                 }
@@ -664,6 +700,7 @@ pub fn finish_with(
             .iter()
             .cloned()
             .chain(produced.notes)
+            .filter(|note| !is_record(note))
             .collect(),
         body,
         verdict: produced.verdict,
