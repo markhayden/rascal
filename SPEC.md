@@ -4,7 +4,8 @@ The find-and-mask step of an image pipeline. Draft 8, 2026-10-28, from the owner
 five external reviews (`docs/reviews/`); drafts 7 and 8 add what plan drafts 2 to 4 needed: the `rect`
 utility recipe, `inspect --json`, `workspace list`, `ops list` and `ops describe`, `tools call`,
 the `--out` rule, the `fan-thin-v1` set, the tighten tangent and cap rules, and the Diagnostics
-section. The spec is the source of truth; `PLAN.md` orders the
+section. Draft 9, 2026-11-04, adds the self-correcting remove (M13): the whole-object outline, `plug`, the
+lab round on segmenters and the checker loop. The spec is the source of truth; `PLAN.md` orders the
 work; `docs/adr/` records each decision.
 
 ## Assumptions
@@ -22,7 +23,8 @@ Stated so they can be struck.
    authored here; no other project is cited as the origin of a rule or a constant.
 4. rascal contains no model-driven controller and no in-process inference. Models run only in
    explicitly configured finder packs and filler plugins, out of process, and their outputs are
-   recorded as data.
+   recorded as data. One exception (ADR 0023, M13): `heal remove-prompt` may ask a configured
+   checker about its result and retry on a fixed, bounded ladder ("Self-correcting remove").
 5. Files are the state. Every op reads and writes files, and every other surface (the MCP
    server, a future binding) is a thin wrapper over the same functions and the same files.
 6. The contracts for tool manifests, result envelopes and locations are the shapes an evaluation
@@ -108,7 +110,8 @@ Each has an ADR. The interview of 2026-10-28 settled them; the reviews refined 5
    steps' outputs, and typed outputs. rascal ships one recipe per v1 use case and the literal
    shipped recipes are acceptance fixtures.
 7. **No model-driven loop inside rascal** in v1. Agents drive its tools. The door stays open:
-   if a loop is ever needed it is an ADR, and nothing in the workspace model forbids it.
+   if a loop is ever needed it is an ADR, and nothing in the workspace model forbids it. ADR 0023
+   opens it once: the bounded check-and-retry of `heal remove-prompt` (M13).
 8. **Shared contracts by copied schema, exported on request.** `schemas/copied/` holds the
    manifest and envelope schemas unchanged (the location definition is embedded in the envelope
    schema and is referenced from rascal's location schema by `$ref`). Native output follows
@@ -448,11 +451,12 @@ the standard normal CDF):
 | find | `line` | Image; `column` or `path` + `width_px` | Location(`line`) |
 | find | `rect` | Image; bbox | Location(`bbox`) |
 | find | `stroke` | Image; path, `radius_px` | Location(`stroke`) |
-| find | `segment` (pack) | Image; text prompt or points; `max_instances` | Location(`polygon`)[] with scores, plus one `plane` Image per instance |
+| find | `segment` (pack) | Image; text prompt; `max_instances`, `threshold`, `pad`, `outline`, `min_cover` | Location(`polygon`)[] with scores, plus one `plane` Image per instance |
 | refine | `rasterize` | Location, Image (for the frame) | Mask: core = the interior; `bbox`, `polygon` as drawn; `whole_image` all; `line` column form = a band `width_px` wide centred on the column, path form = the path dilated by `width_px / 2`; `stroke` = the path dilated by `radius_px`; `view` and `absent` → `not_applicable` |
 | refine | `tighten` | Location(`stroke`), Image | Mask (algorithm below) with `tightened` per sample in the envelope |
 | refine | `grow` / `shrink` | Mask; `px`; `grow` also `down_px` | Mask: core dilated or eroded by a disc of radius `px` (outside the image unset, so `shrink` erodes from the border), `grow` then also shifted-union downward by `down_px` (a shadow), minus protect; blend cleared |
 | refine | `close` | Mask; `radius_px` | Mask: core closed (dilate then erode, outside the image counting as set so a shape against the border keeps its edge); blend cleared |
+| refine | `plug` | Mask; `max_share` | Mask: every hole the core encloses (not touching the border) filled when its area is at most `max_share` of the blob around it; blend cleared |
 | refine | `subtract` | Mask; Mask or Location; `grow_px` | Mask: protect ∪= the second input (rasterized if a location) dilated by `grow_px`; core and blend cleared there |
 | refine | `select` | Image[] (`plane` role); keep or drop lists; exclude boxes | Mask: the union of the kept instances as core |
 | refine | `invert` | Mask; optional target frame (default the mask's root raw frame) | Mask in the target frame: the old mask's nonzero support and protect are mapped into the target through the frame chain (a `cut:` mask lands on the panorama's two edge spans; a `crop:` mask on its bbox); pixels outside the mapped extent count as untouched; core = untouched and unprotected pixels; blend = 0; protect = mapped support ∪ mapped protect |
@@ -699,6 +703,9 @@ check:   for every raw pixel whose mapped w = 0, and every protected pixel, Out 
 measure: band set with before = I_F, after = W' in F (the mask's frame); drift with before = I_F, after = W'
 ```
 
+For `heal remove-prompt` with a configured checker the graph runs once per try, on each try's
+mask (see "Self-correcting remove"); every other `heal` runs it once.
+
 The journal gains the filler call: a note when it starts with the entry's price, then the command
 or URL, request dimensions, duration, bytes, exit status and whether it may have been charged
 (not sent, known or unresolved); never a key. A run's spend is the journal's, whatever its status.
@@ -707,10 +714,11 @@ Shipped recipes, embedded and addressable by name as well as by path:
 
 - `seam`: as above. Input: an equirectangular image.
 - `remove`: `inputs.image`, `inputs.location` (a `bbox`, `polygon` or `stroke`) → `rasterize`
-  → `grow` (`px`, `down_px`) → `close` → `subtract` (optional `inputs.protect`) → `feather`.
+  → `grow` (`px`, `down_px`) → `close` → `plug` → `subtract` (optional `inputs.protect`) → `feather`.
 - `remove-prompt`: `inputs.image`, `inputs.prompt` (text, `--prompt`) → `segment` (a configured
-  pack's) → `select` (every plane) → the same `grow`, `close`, `subtract` and `feather`.
-  Requires a pack that serves `segment`.
+  pack's) → `select` (every plane) → the same `grow`, `close`, `plug`, `subtract` and `feather`.
+  Requires a pack that serves `segment`. Under `heal` with a configured checker, the fill is
+  checked and retried ("Self-correcting remove").
 - `repair`: `inputs.stroke` → `tighten` → `feather`. For an area, `repair-area`: `inputs.location`
   (`bbox` or `polygon`) → `rasterize` → `feather`. The path fan is a later milestone.
 - `rect`: `inputs.image`, `inputs.location` (a `bbox`) → `rasterize`, one step. The utility
@@ -753,6 +761,269 @@ A filler receives an image (and a mask for `mask_input` profiles) of exactly the
 rascal chose and must return a PNG of those dimensions; any other size, a non-zero exit, a
 timeout or a non-PNG body is an operational error. There is no automatic resize of a filler's
 output, and no scaled request in v1.
+
+### Self-correcting remove (draft 9, M13)
+
+The owner's goal (2026-11-04): a mask made from a prompt fixes itself, the same way on every
+run, with no painting and no large model. The walk that started it: "leather collar. dog tags."
+on a dog photo left the leather inside the buckle, the tongue and the ring out of the mask, and
+the fill showed them as a ghost. Three parts (issues #14, #15, #16): part 1 first; parts 2 and 3
+follow it, and part 3 does not wait for part 2 (the loop calls whatever `segment` the pack serves). The
+first review (Codex, 2026-11-04) is folded in.
+
+#### 1. The mask fixes itself (#14)
+
+Fixed rules; no model judges anything.
+
+**The decoder.** SAM 2.1 Hiera-Tiny's decoder is re-exported (release `models-2026-11`; the
+encoder is unchanged) with these tensors, which `MODEL.md` records:
+
+| input | shape, type | meaning |
+|---|---|---|
+| `feat0`, `feat1`, `feat2` | as the encoder emits | the image features |
+| `boxes` | [1, 1, 4] float32 | x0, y0, x1, y1 in 1024-pixel coordinates |
+| `points` | [1, 8, 2] float32 | x, y in 1024-pixel coordinates |
+| `point_labels` | [1, 8] int32 | 1 a positive point, -1 an unused slot |
+
+| output | shape, type | meaning |
+|---|---|---|
+| `masks` | [1, 1, 3, 256, 256] float32 | three candidate outlines as logits, inside where > 0 |
+| `iou` | [1, 1, 3] float32 | the decoder's predicted IoU of each |
+
+Box-only calls set every label to -1. The new graph is a new file,
+`sam2.1-hiera-tiny.decoder3.onnx`; the single-outline graph's entry and the code that read it are
+removed (a cache keeps the old file until it is cleared, which lets a checkout before M13 still
+run). Parity gate, before the release is published: on the parity fixtures, each of the three
+outlines matches the PyTorch reference (IoU ≥ 0.99 after the threshold) and each predicted IoU is
+within 0.02, for a box alone and for a box with one and with three points.
+
+**`segment`'s new settings** (the manifest's bounds in brackets):
+
+- `pad` [0, 0.5], default 0.05: each side of a detector box moves out by `pad` times the box's
+  side on that axis, clamped to the image. The padded box is what SAM sees and what the region
+  reports.
+- `outline` (`whole` | `best`), default `whole`. `whole`: of the three candidates, skipping empty
+  ones, the largest with at least 95% of its pixels inside the padded box and a predicted IoU of
+  at least 0.5; ties by higher predicted IoU, then lower index; if none qualifies, `best`.
+  `best`: the highest predicted IoU, ties by lower index. Both are new behaviour: the old graph's
+  single-outline token is gone.
+- `min_cover` [0, 1], default 0.2.
+
+**The coverage check and one retry.** Pieces are 8-connected components of the kept outline,
+ordered by area (largest first), then by their first pixel in row-major order. An outline is
+retried once when it covers less than `min_cover` of its padded box, or its largest piece holds
+under 80% of its pixels. The retry: the original detector box padded by 2 × `pad`, one positive
+point per piece (the first 8 pieces), each the piece's pixel nearest its centroid (ties by
+smaller y, then smaller x), and the same `outline` rule. The retry's outline replaces the first
+when it has more pixels and at least 95% of them inside its own box; otherwise the first stands.
+
+**Measurements**, per kept instance `n`: `plane_px_<n>`, `outline_<n>` (the candidate index
+kept, 0 to 2), `retried_<n>` (0 or 1, the retry was run) and `retry_kept_<n>` (0 or 1); plus
+`queries` and `mask_iou_predicted` as today. The manifest's `max_measurements` becomes
+`4 × MAX_INSTANCES + 2`.
+
+**`plug`**, a new refine op (`max_share` [0, 1], default 0.1):
+
+1. On the input core, before anything changes: foreground components are 8-connected; holes are
+   4-connected components of unset pixels that touch no image edge.
+2. A hole's owner is the largest foreground component among those 8-adjacent to the hole (ties
+   by the component's first pixel in row-major order). The owner's area is its own pixels only:
+   no holes, no islands.
+3. Every hole whose area is at most `max_share` × its owner's area is filled. Labels and areas
+   are frozen in step 1, so the fill order changes nothing.
+4. It is a refinement like `close` (`refine::replaced_core`): the core is cleared under protect,
+   the blend cleared, protect preserved. Measurements `holes_found`, `holes_filled`,
+   `plugged_px`.
+
+`remove` and `remove-prompt` run `plug` after `close`; `plug.max_share` is a step override like
+the others.
+
+**Shared code.** The pad, pick, piece and retry rules are pure functions in `rascal_tools`
+(`rascal_tools/outline.py`) with no model in them, so the lab runs the same code over other
+segmenters' candidates.
+
+#### 2. The lab round (#15)
+
+Measure before choosing a model. Lab material stays private in `../rascal-lab` and is never
+committed here.
+
+- **Corpus.** About 20 generated images, each with a written "mask this" note: whole objects,
+  objects with parts, thin parts, holes that must stay. The owner draws each correct mask by hand
+  (Photoshop, a binary PNG the image's size). The prompt per image is written once and frozen.
+  The generation spend is the lab's and is asked first.
+- **Licences.** For every candidate, the code and weights licences are read on their primary
+  pages on the day, before a cell runs, and recorded with the date. A copyleft (AGPL) model is
+  out.
+- **Harness.** A lab-only script (`../rascal-lab`, its own uv project) runs each candidate as
+  published (PyTorch is fine there). A small adapter per candidate turns its output into
+  candidate outlines with scores. Where a candidate has no three-outline output, or no point
+  input, the pick or the retry is recorded as `n/a` for that cell and its single outline is
+  used. Then the same `rascal_tools` rules apply, and the same rascal shaping with the shipped
+  `remove-prompt` settings frozen for the round (`select` onward, through `rascal call`). The
+  fill is not part of the score.
+- **Cells.** Today's Tiny as shipped (the baseline); Tiny with part 1; SAM 2.1 Small and Base+
+  with part 1; SAM 3 and HQ-SAM if their licences allow; Grounding DINO or Florence-2 ahead of
+  SAM 2.1 Tiny with part 1.
+- **Scores.** With T the correct mask and F the final mask's core (before the feather):
+  - **IoU** = |T ∩ F| / |T ∪ F|;
+  - **missed** = |T \ F| / |T|, what shows as a ghost;
+  - **spill** = |F \ grow(T)| / |T|, with grow(T) being T grown by the recipe's own `grow.px`
+    and `down_px`;
+  - **CPU seconds**: one cold run, then the median of three warm runs, on the owner's laptop;
+  - **download size** and **licence**.
+  - An empty F scores missed 1 and spill 0.
+- **Output.** A results page the owner reads, per cell and per image, with the overlays. There
+  is no fixed speed or size limit. The owner picks the default from the trade-offs.
+- **Adoption.** The pick is adopted only once it is exported to ONNX, its parity holds on the
+  corpus (the exported masks' IoU ≥ 0.99 against the lab's), and the offline pack acceptance
+  passes. A change is an ADR 0018 section. Candidates that do well and are not picked are
+  listed in the catalog page as bring-your-own options.
+
+#### 3. Check the fill and retry (#16)
+
+ADR 0023 amends ADR 0008, Assumption 4 and Decision 7 for this one bounded loop, and nothing
+else. The loop runs only in `heal` of the shipped `remove-prompt` recipe.
+
+**The contract (table-manners 0.5.0)** adds three small things:
+
+- **A verdict on the result header.** An action whose description says
+  `"answers": "verdict"` puts `verdict` on a completed result it judged: `{"value": "pass" |
+  "fail" | "unsure", "where": [location, …]}`. `where` holds only the places tied to a failed or
+  unsure requirement of this call, in the judged image's frame; it may be empty, and on a `pass`
+  it is empty. A completed result with no `verdict` was not judged, and its summary says why. A
+  `verdict` from an action that does not declare `answers` is a conformance failure (a semantic
+  test across the description and the result; a schema cannot see both). A tool's own body is
+  untouched.
+- **Optional requirements.** A readiness requirement may say `"optional": true` with a `for`
+  line ("checking the result"). A missing optional requirement leaves the action `ready`.
+- **A label on an image out.** An optional `label` in plain words ("Try 2 · result") that a host
+  shows in its output menu in place of the role.
+
+squint adopts 0.5.0: its five check actions answer `verdict`, and `where` is the locations of
+the findings on the job's requirements.
+
+**The checker in `rascal.toml`.** It is configured by hand, like a filler, and there is at most
+one:
+
+```toml
+[checker]
+command = ["/Users/me/.local/bin/squint", "call", "source_fidelity"]   # a table-manners tool's call, by absolute path (a host runs tools with a fixed PATH); rascal adds --arguments and --allow-dir
+arguments = { source = { path = "{source}" }, candidate = { path = "{candidate}" }, requirements = [{ id = "RQ1", kind = "must_not", text = "Any part of {prompt} is visible." }] }
+key_env = "ANTHROPIC_API_KEY"                    # declared so readiness lists it (optional) and the host passes it; never stored
+spend_usd_per_call = 0.01                        # the worst case per check; passed as the call's max_spend_usd
+timeout_s = 120
+revision = "squint 0.x, claude-haiku-5-5"
+```
+
+rascal fills the `{source}`, `{candidate}` and `{prompt}` placeholders and adds `max_spend_usd`.
+Before each check it copies the source and the candidate into the try's own directory
+(`tries/<k>/check/`) and passes that directory alone as `--allow-dir`, so the checker reads
+nothing else, wherever the workspace lives.
+The arguments are the checker's own, so rascal holds no squint-specific code.
+
+**When it runs.** All of these must hold:
+
+- the command is `heal remove-prompt`;
+- a filler is configured;
+- a checker is configured;
+- the checker's key is present;
+- `check` is on. It is a boolean setting, default true, that a host shows as "Check the result";
+  it is turned off with `--no-check` or `"check": false`.
+
+Whether a check will run is settled before readiness and the estimate, and the invocation
+records `check` as resolved. When the key is missing, the run fills once and says "Not checked:
+the checker needs ANTHROPIC_API_KEY", and the invocation records why.
+
+**Spend, reserved up front.** Let a try's price be the filler's price plus the checker's. The
+number of tries `N` is the most of 3 whose total fits under `max_spend_usd` and the session
+budget's remaining balance, always at least 1 (the plain remove); when even one does not fit,
+the call is refused as today. `N` is chosen and reserved in one step under the session ledger's
+lock, so two calls cannot both count the same balance. The
+spend of every try (actual, estimated, unresolved, cached) adds into the run's spend.
+
+**Reading an answer.** rascal reads the checker's printed result, never its exit code (squint
+exits 1 on `fail` and 2 on `unsure`). A `completed` result with a `verdict` is an answer. Any
+other outcome is a **check failure**: another status, no verdict, unparseable output, over 1 MiB,
+over `timeout_s`, or cancelled. A check failure ends the loop: the run completes with the tries
+made, flagged "The check could not run: …". A cancellation of the run cancels the check and
+the run ends as cancelled, keeping the completed tries as evidence.
+
+**One try, k = 1 … N.** The state carried between tries is the set of planes `P` in the image's
+raw frame (`remove-prompt` masks in the raw frame, with no `cut:`).
+
+1. `P₁` is `segment`'s planes. `M_k` is `P_k` through the recipe's shaping with the run's
+   resolved settings and overrides (`select`, `grow`, `close`, `plug`, `subtract`, `feather`),
+   always from the planes, never from an earlier shaped mask. Protect applies in each try.
+2. `heal`'s graph runs on `M_k` as today, `window` included (recomputed for each try): the
+   result `R_k`.
+3. The checker judges `R_k` (candidate) against the input image (source). On `pass`, stop.
+4. On `fail` or `unsure` with k < N: for each place in `where` (a location in `R_k`'s frame, the
+   raw frame, checked against `R_k`'s image reference; a mismatch is a check failure):
+   - the input image is cropped exactly to the place's bbox padded by `pad` (a `crop:` frame
+     with no added context; not `window`, whose crop is square and padded);
+   - `segment` runs there with the same prompt and half the threshold; each plane is written
+     into an empty plane of the raw frame at the crop's offset and committed as a `plane`
+     image (not through `unwindow`, which makes a composite), and added to `P`;
+   - a place where it finds nothing adds its own region, rasterized, as a plane.
+
+   With an empty `where`, `M_{k+1}` takes `grow.px` doubled once. Places that overlap simply
+   union.
+5. If `M_{k+1}` has the same identity as `M_k`, stop: another try would repeat this one.
+
+**The result.** The selected try is the first `pass`. Failing that, tries rank `unsure` over
+`fail`, then fewer places in `where`, then the earlier try. The run's summary says which try
+was kept and, if it did not pass, "The check still sees …". `selected_try` is recorded. The
+selected try's result, preview and mask lead `images.out` with the roles `result`, `preview` and
+`mask`; every other try follows in try order as `result_try_<k>`, `preview_try_<k>` and
+`mask_try_<k>`. Every image out carries a `label` ("Try 2 · result", "Try 2 · mask"). With a checker
+configured, `remove_prompt` declares `"answers": "verdict"`; its result's `verdict` is the
+selected try's (its `where` on the selected result), and a run that was not checked, or whose
+check could not run, carries none and says why in its summary. Each try's
+files live under `tries/<k>/` in the run directory and are never overwritten by a later try; the
+Masks are committed artifacts like any other, so a host can open an earlier try's mask and
+preview after the run.
+
+**Recording and replay.** Each check call is journaled like a pack call: `checker call:` (the
+command, duration, exit, spend; never a key) and `checker stored:`. The stored record holds the
+request identity (source, candidate and resolved arguments), the result and the try's
+transition (the places used, the planes added). `heal --replay` answers checks from the
+recording, as it does pack steps; a check the recording lacks is an error, never a call. A run's
+`run.json` lists the tries, each with its mask identity, its result's image reference, its
+verdict and its spend.
+
+#### Acceptance (M13)
+
+All offline, with a scripted checker (a testkit command that answers from a script) and the fake
+pack:
+
+- `plug`: a ring with a small hole is filled; a frame with a large hole is kept; a hole touching
+  the edge is kept; a pocket open to the outside only diagonally is a hole (holes are
+  4-connected) while one with an orthogonal opening is not; two merged blobs with several holes;
+  a protected hole stays empty.
+- The `outline` and retry rules on synthetic candidates, in Python: the largest inside the box,
+  the spill-out rejection, ties, empty candidates, a U-shaped piece's point lying on the piece,
+  the cap of 8 points, a retry kept and a retry refused.
+- Re-export parity, which runs when the models are fetched: all three outlines and IoUs, box
+  only and with points.
+- The loop:
+  - pass on the first try;
+  - fail then pass;
+  - unsure until exhausted (the selection rule);
+  - an empty `where`;
+  - overlapping places;
+  - an unchanged mask stopping early;
+  - each check failure (status, missing verdict, garbage, timeout);
+  - cancellation;
+  - the missing key (one try, the reason recorded, readiness `ready`);
+  - `--no-check`;
+  - a spend cap that allows 1 and then 2 tries;
+  - replay from a recording, and a replay refused when a check is missing;
+  - protect preserved in every try.
+- The contract: table-manners 0.5.0's fixtures for `verdict`, optional requirements and image
+  out labels, with
+  rascal's and squint's fixtures generated by their own tests.
+- By hand: the owner's collar photo, kept private, masks the collar, buckle and tag with the
+  default settings, then passes the check.
 
 ### Workspace
 
@@ -1086,7 +1357,8 @@ behind the tool.
 ## External interface (table-manners)
 
 rascal conforms to **table-manners** v0.4 (milestone M10, after v0.3.0 in M12 and v0.2.0 in M11),
-pinned `=0.4.0` from crates.io (PLAN.md 10.15)
+pinned `=0.4.0` from crates.io (PLAN.md 10.15); M13 moves to `=0.5.0` (the result's `verdict` and
+optional requirements)
 (https://github.com/markhayden/table-manners; ADR 0020, decisions 13 and 14), the shared contract of the owner's tools: what an agent, a script or the
 playground sees from outside is the same for squint, rascal and the tools after them, so they
 chain in one pipeline without glue code. The contract's text is the specification of that
@@ -1411,6 +1683,7 @@ Each names the command that proves it.
 | M5 | the Python pack: bundle, offline install test, `echo_region`, `segment` under branch A, parity tests; remove with a prompt |
 | M6 | the lab: matrix, per-image bindings, cells and identity, attempts, ledger, assignment and picks, protocol, decode, corpus manifest and verify |
 | M7 | the Poisson paste as specified |
+| M13 | the self-correcting remove: `segment`'s whole-object outline and retry, `plug`, the segmenter lab round, the checker loop (ADR 0023) |
 | later | Node (`@markhayden/rascal`), Swift, WASM; the path fan; replace with homography; retouch; extend; isolate; `segment` under branch B |
 
 ## Open questions

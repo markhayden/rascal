@@ -35,6 +35,7 @@ fan-and-ramp mask on the owner's corpus, and last the Poisson paste.
 | M10 Operations | table-manners v0.4: the path rule first; every op an action with `kind`, `group` and typed ports, a call a run; artifacts by reference and identity, the `binding` refusal, previews, the artifact resource; `export` and `import` over the mask bundles (10.5); `invocation` on every result, `rascal call` and bundle replay (R3) | `m10` |
 | M11 Table manners v0.2 | run association (ids in `_meta`, correlation ids, the paged runs list) and the session ledger | `m11` |
 | M12 Table manners v0.3 | readiness without configuration, the estimate bound to its call, the cap and budget apart, `credential`, claims released with no run, renders a host can embed | `m12` |
+| M13 Self-correcting remove | the whole-object outline and retry, `plug`, the segmenter lab round and pick, table-manners 0.5.0 (verdict, optional requirements), the checker loop in `heal remove-prompt` (ADR 0023), Wafflery showing checks | `m13` |
 
 Deferred past M7 with their own ADRs: the Node, Swift and WASM bindings; the path fan; scaled
 windows; replace with homography; retouch; extend; isolate; `segment` under branch B.
@@ -3249,6 +3250,734 @@ into `main` by the checkpoint procedure.
 - Estimates expire after one hour. Recommended, assumed.
 - A server render exits on stdin's end of file by default, not behind a flag. Recommended,
   assumed.
+
+## Milestone M13: The self-correcting remove
+
+**Scope.** The spec is `SPEC.md` "Self-correcting remove (draft 9, M13)", covering issues #14,
+#15 and #16. M13 has three tracks:
+
+- **Track A:** a mask made from a prompt fixes itself before the fill.
+- **Track B:** the lab measures segmenters on hand-drawn masks so the owner can pick the
+  default.
+- **Track C:** `heal remove-prompt` asks a checker about its result and retries on a fixed,
+  bounded ladder (ADR 0023, table-manners 0.5.0).
+
+**Sources.** The interview of 2026-11-04, the Codex spec review, and Codex plan review round 1
+(13 findings) and round 2 (11 findings) all folded in.
+
+**Repositories and branches.**
+
+| repo | branch | from | merges |
+|---|---|---|---|
+| rascal | `m13a-mask` (track A) | `main` after 13.0 | into `main` at `m13.1`, on its own |
+| rascal | `m13c-checker` (track C) | `main` after `m13.1` | into `main` at 13.16 |
+| table-manners | `v0.5` | `main` after 13.0 | into `main` at 13.15; that merge commit is tagged `v0.5.0` and published |
+| squint | `m13-verdict` | `main` | into `main` at 13.16 |
+| wafflery | `m13-checker` | `main` after 13.0 | into `main` at 13.16 |
+| `../rascal-lab` | not a git repository | | lab material stays private; manifests and results land in rascal (`labs/segment-01/`, `docs/results/segment-01.md`), and track B's rascal commits go on `main` directly (documents only, except 13.7) |
+
+**The contract version.** Track C builds against table-manners by path, keeping the crate's
+version at `0.4.0` while the draft grows. A path dependency with `version = "=0.4.0"` then
+resolves to the local crate, and every fixture keeps `"contract": "0.4.0"`, so the contract's
+version check (`tests/fixtures.rs`) stays green on every commit:
+
+```toml
+# M13 builds against the v0.5 draft by path until 13.15 bumps and publishes it (PLAN.md 13.15).
+table-manners = { path = "../table-manners", version = "=0.4.0" }
+```
+
+13.15 bumps every repository to `0.5.0` in one coordinated step. In that step each producer
+regenerates its own complete fixture set and copies it into the contract, and the contract runs
+full conformance before publishing. `scripts/check-contract.sh` needs an exact published pin, so
+it is not run on track-C commits; it runs again from 13.15 on. **Track-C branches are local
+until 13.15:** CI checks out no sibling repository, so a path pin can't build there; each
+track-C commit is verified locally with the gates below, and the branches are pushed once their
+pins come from crates.io.
+
+**Order.**
+
+1. 13.0 first.
+2. **Track A:** `13.1 → 13.2 → 13.3`. 13.3's op needs only 13.0, but its by-hand check needs
+   13.2. The `m13.1` checkpoint merges track A into `main` on its own.
+3. **Track B:**
+   - 13.4 (licences) and 13.5 (the corpus) start at once;
+   - 13.4a (the baseline snapshot) must land before 13.1 publishes;
+   - 13.6 needs 13.3, 13.4 and 13.5;
+   - 13.7 needs the owner's pick.
+4. **Track C** starts from `main` after `m13.1`:
+   - `13.8 → 13.9`;
+   - `13.10` needs 13.8;
+   - `13.11` needs only `m13.1`;
+   - `13.12a → 13.12b → 13.12c` need 13.10 and 13.11;
+   - `13.13` follows 13.12c;
+   - `13.14` needs 13.8 and 13.12c;
+   - `13.15` needs every track-C task;
+   - `13.16` follows 13.15.
+5. Track C does not wait on the lab: the loop calls whatever `segment` the pack serves. A pick
+   in 13.7 that changes the model lands on `main` like any change and is merged into
+   `m13c-checker`.
+
+**Commits and rollback.**
+
+- **One commit per task, per repository it touches, each with that repository's gate green:**
+  - rascal: `just check`;
+  - table-manners: `cargo test`;
+  - squint: `just check`;
+  - Wafflery, from its root: `cargo test --locked`, `bun run --cwd ui typecheck`,
+    `bun run --cwd ui test:unit`, `bun run scripts/build-ui.ts` then `bun run scripts/check-ui.ts`
+    (the prebuilt UI regenerated and checked), and `bun run --cwd ui test:browser` for UI tasks.
+- **Conventional scope:** `feat(pack)`, `feat(ops)`, `feat(mask)`, `contract`, `docs`, `lab`.
+- **Docs and checklist.** `SPEC.md`, this plan, `docs/` and the README change in the same commit
+  as the behaviour, and the task's line in `tasks/todo.md` is ticked in that commit.
+- **Cross-repository commits.** A commit that depends on another repository's commit names it
+  ("against table-manners `<sha>`").
+- **Rollback checkpoints** are annotated tags on rascal. Each tag's message records the matching
+  commit of table-manners, squint and Wafflery, plus the decoder file its `artifacts.toml` names.
+  - `m13.1`: the merge of `m13a-mask` into `main` (track A alone, pinned `=0.4.0` from crates.io,
+    no path dependency; the tag lists its commits);
+  - `m13.2`: after 13.11 on `m13c-checker` (the refactor, behaviour unchanged);
+  - `m13.3`: after 13.13 (the loop, against the draft);
+  - `m13.4`: after 13.14 lands on Wafflery's branch.
+- **Rollback rules.**
+  1. A task group that goes wrong is reverted on its branch with `git revert --no-commit`,
+     newest first (13.13, then 13.12c, 13.12b, 13.12a, then 13.10).
+  2. A branch can be reset to its last tag after a `rescue/` reference.
+  3. If v0.5 is abandoned, `m13c-checker` and the other repositories' M13 branches are never
+     merged; `main` already holds track A from `m13.1`.
+  4. After 13.16, undoing track C means reverting each repository's merge commit. Undoing track A
+     means reverting the `m13.1` merge.
+- **External state** stays whatever is reverted: the model release, the published crate, the
+  contract's fixtures.
+- **Restoring a working install** at a checkpoint, in isolation, so the live checkouts are
+  untouched:
+  1. **Worktrees.** `git worktree add ../m13-restore/<tag>/<repo> <sha>` for rascal and each
+     sibling at the SHAs the tag records. A path pin of `=0.4.0` then finds a sibling still at
+     0.4.0.
+  2. **Binary.** `cargo install --path crates/rascal-mask --locked --root ../m13-restore/<tag>`.
+  3. **Pack.** `uv sync --frozen` in that worktree's `tools/python`. The tag's `artifacts.toml`
+     names its decoder; the old `sam2.1-hiera-tiny.decoder.onnx` stays in the model cache because
+     the new graph is a new file.
+  4. **Config.** A copy of `rascal.toml` whose `[packs.rascal-tools]` command points at that
+     worktree's `.venv/bin/rascal-tools serve` and that has no `[checker]` before 13.10 (an older
+     `Config` refuses unknown keys).
+
+  The Op Book records these commands. 13.16 runs them once against `m13.1` to prove restoring
+  works.
+- **Track B** commits documents only, except 13.7 when a new model is picked. That task is code
+  and follows rules 1 and 4.
+
+### Task 13.0: Merge the walk
+
+**Description.** The 2026-11-04 hand-test walk is committed on three branches:
+
+| repo | branch | commits |
+|---|---|---|
+| rascal | `serve-runs-config` | 2 |
+| table-manners | `images-out-order` | 1 |
+| Wafflery | `button-patterns` | 4 |
+
+The owner reviewed it live during the walk. Each branch merges into its `main` with CI green and
+is pushed (push policy, 2026-10-28). The table-manners change is an editorial clarification of
+11.1, listed in 0.5.0's changes.
+
+**Acceptance.** Each `main` holds its branch, and CI is green.
+
+**Verification.** Each repository's gate above, `just ci-local` for rascal, and CI on each
+merge.
+
+**Dependencies.** The owner's go. **Size.** XS.
+
+### Task 13.1: The decoder re-export
+
+**Description.**
+
+- **Export.** `tools/python/export/export.py` exports the SAM 2.1 Hiera-Tiny decoder to the
+  spec's tensor table as the new file `sam2.1-hiera-tiny.decoder3.onnx`: `points` [1, 8, 2],
+  `point_labels` [1, 8] padded with -1, `masks` [1, 1, 3, 256, 256] and `iou` [1, 1, 3]. The
+  encoder is unchanged.
+- **Parity.** The export's parity check covers all three outlines (IoU ≥ 0.99 after the
+  threshold) and their IoUs (within 0.02), for a box alone and for a box with 1 and with 3
+  points, on the parity fixtures.
+- **Runtime.** `models/sam2.py` takes a box and up to 8 points and returns three planes with
+  their IoUs. Until 13.2, `segment` keeps the highest IoU, which is the spec's `best`.
+- **Release workflow.** `.github/workflows/bundles.yml` stops naming a release
+  (`models-2026-10`) and fetches what `artifacts.toml` lists, so a release bundle always carries
+  the manifest's models.
+- **Release and docs.** `MODEL.md` records the shapes and the parity. Release `models-2026-11`
+  is published on markhayden/rascal (owner-authorised 2026-11-04) after the parity passes and
+  13.4a has taken its snapshot. `artifacts.toml` names the new decoder and its digest. The old
+  decoder's entry is removed, with no fallback.
+
+**Acceptance.**
+- The parity table is in `MODEL.md`.
+- `rascal-tools fetch` downloads and verifies the new file.
+- The segmenter-marked tests pass with the real models.
+- The bundle builds with the models required.
+
+**Verification.**
+- `uv run --frozen pytest -m segmenter`, after a fetch;
+- `scripts/check-python.sh`;
+- `BUNDLE_MODELS=required scripts/bundle-acceptance.sh target/release/rascal <scratch>`, so
+  `segment` is exercised from a bundle built from empty model caches, not skipped;
+- the bundles workflow run by hand on the branch (`workflow_dispatch`) for both platforms.
+
+**Dependencies.** 13.0, 13.4a.
+
+**Files.** `tools/python/export/export.py`, `tools/python/src/rascal_tools/models/sam2.py`,
+`tools/python/src/rascal_tools/artifacts.toml`, `tools/python/MODEL.md`, `tools/python/tests/*`.
+
+**Size.** M.
+
+### Task 13.2: The whole-object outline, padding and the retry
+
+**Description.**
+
+- **`rascal_tools/outline.py` (new)** holds the spec's pure rules:
+  - pad a box;
+  - pick an outline, `whole` or `best`;
+  - split into pieces and order them;
+  - one point per piece;
+  - the coverage check;
+  - accept or refuse the retry.
+- **`segment`** gains `pad`, `outline` and `min_cover`, with the manifest's bounds and text a
+  user can read. It applies the rules per instance, reports the padded box as the region, and
+  records the spec's measurements under `max_measurements = 4 × MAX_INSTANCES + 2`.
+- **Docs.** `docs/tools.md` follows.
+
+**Acceptance.** Unit tests on synthetic candidates cover:
+- the largest-inside pick;
+- an outline spilling out of its box is refused;
+- an IoU under 0.5 is skipped;
+- empty candidates;
+- each tie;
+- a U-shaped piece whose point lies on the piece;
+- nine pieces give 8 points;
+- a retry kept, and a retry refused;
+- the bounds test with the new measurements.
+
+**Verification.** `scripts/check-python.sh`; `uv run --frozen pytest -m segmenter`.
+
+**Dependencies.** 13.1.
+
+**Files.** `tools/python/src/rascal_tools/outline.py`, `tools/segment.py`,
+`tests/test_outline.py`, `tests/test_segment.py`, `docs/tools.md`.
+
+**Size.** M.
+
+### Task 13.3: `plug` and the recipes
+
+**Description.**
+
+- **The op.** A new refine op, `plug` (`crates/rascal-ops/src/plug.rs`), as the spec defines it.
+  It is registered in the catalogue, and the action description, the op list and the docs
+  follow.
+- **The recipes.** `remove.toml` and `remove-prompt.toml` add a `plug` step after `close` (the
+  owner approved both in the spec, 2026-11-04).
+- **Fixtures.** The description and contract fixtures are regenerated (contract still
+  `0.4.0`), and the copies are synced into table-manners' `fixtures/rascal/` on its `main`.
+
+**Acceptance.**
+- Unit tests:
+  - a ring's small hole is filled;
+  - a frame's large hole is kept;
+  - a hole touching the edge is kept;
+  - a pocket open only diagonally is a hole (holes are 4-connected), and one with an orthogonal
+    opening is not;
+  - merged blobs with several holes, in any order;
+  - a protected hole stays empty;
+  - `max_share` at 0 and at 1.
+- The shipped recipes pass as acceptance fixtures.
+- `docs/` coverage names `plug`.
+
+**Verification.**
+- `just check`; `scripts/acceptance.sh`.
+- By hand, after 13.2: Wafflery's `remove-prompt` on the owner's dog photo with "leather
+  collar. dog tags.", no Set overrides, no filler. The owner looks at the mask.
+
+**Dependencies.** 13.0, plus 13.2 for the by-hand check.
+
+**Files.** `crates/rascal-ops/src/plug.rs`, `crates/rascal-ops/src/lib.rs`,
+`crates/rascal-mask/recipes/remove*.toml`, `docs/masks.md`, `docs/recipes.md`, `fixtures/**`.
+
+**Size.** M.
+
+→ **Checkpoint `m13.1`:**
+1. The owner's collar check.
+2. `just ci-local`.
+3. `m13a-mask` merges into `main` (still `=0.4.0` from crates.io) and is pushed.
+4. CI goes green.
+5. The tag is created.
+
+### Task 13.4: The candidates and their licences
+
+**Description.**
+
+- **Candidates:** SAM 2.1 Small and Base+, SAM 3, HQ-SAM, Grounding DINO, Florence-2, and any
+  other the survey finds that takes text or a box and gives outlines.
+- **Each row records:**
+  - the code and weights licences, read on the primary pages on the day;
+  - the sizes;
+  - the outputs (three outlines or one, points or not);
+  - the dependencies.
+- **AGPL is out.**
+- **Where it goes:** `labs/segment-01/candidates.md`, plus a "Segmenters" section with the same
+  rows on the filler catalog artifact.
+
+**Acceptance.** Every row has a dated licence from a primary page. The owner reads the list
+before 13.6 runs.
+
+**Verification.** By reading.
+
+**Dependencies.** None. **Size.** S.
+
+### Task 13.4a: The baseline snapshot
+
+**Description.** Before 13.1 publishes, the lab keeps the shipped baseline so the round can
+compare against it:
+
+- a git worktree of rascal at `main` after 13.0, at `../rascal-lab/segment-lab/baseline/`;
+- its pack environment synced there;
+- a copy of today's decoder with its digest checked.
+
+The harness's baseline cell runs that pack through its own `rascal call`.
+
+**Acceptance.** `segment` from the snapshot reproduces a recorded answer on one fixture.
+
+**Verification.** By running.
+
+**Dependencies.** 13.0. **Size.** XS.
+
+### Task 13.5: The corpus
+
+**Description.**
+
+- **A flat generator.** `generate.py` makes panoramas: it adds spherical instructions, asks for
+  21:9 and resizes to 2:1. A flat mode is added (`--flat`) that sends the prompt as written,
+  keeps the model's native size and does not resize. It has tests beside the existing ones.
+- **The scenes.** Twenty object scenes go in `../rascal-lab/generate/objects.json`. Each has:
+  - the image prompt;
+  - the frozen segment prompt;
+  - a "mask this" note;
+  - its group: whole, parts, thin, or keep-the-hole.
+- **Approval and generation.** The owner approves the list and the spend (asked first; about
+  $0.04 an image at seam-03's model), then the images are generated.
+- **Bytes and masks.** The stored PNG bytes are the corpus: what the owner masks and what the
+  harness scores. The owner draws each correct mask (binary, the image's size, white = remove)
+  into `../rascal-lab/segment-01/truth/`.
+- **Manifest and checker.** `labs/segment-01/manifest.toml` holds each image's digest, its
+  mask's digest, the prompts and the group, never a path or an image. The harness's
+  `verify-corpus` command checks the digests and the dimensions.
+
+**Acceptance.**
+- The flat mode's tests pass.
+- There are 20 images, each with an approved mask.
+- `verify-corpus` passes.
+
+**Verification.** `pytest` in `generate/`; `verify-corpus`; the owner's sign-off.
+
+**Dependencies.** The owner's spend and drawing time. **Size.** S, plus the owner's time.
+
+### Task 13.6: The harness and the round
+
+**Description.** A lab-only uv project, `../rascal-lab/segment-lab/`.
+
+- **Adapters.** One small adapter per candidate (outlines with scores), with PyTorch allowed
+  here. The baseline cell uses 13.4a's snapshot.
+- **Rules.** The pick and retry rules come from `rascal_tools.outline`, imported from the rascal
+  checkout and never copied. A cell without three outlines or without points records that
+  stage as `n/a`.
+- **The bridge.** Each cell is a lab-only pack. A small MCP server built on `rascal_tools`'
+  harness serves `segment`: it runs the candidate's adapter, applies the `rascal_tools` rules and
+  answers with planes. `rascal run remove-prompt --config <cell>.toml` then runs the shipped
+  recipe (13.3, with `plug`) unchanged, with the settings frozen. The scored F is the run's Mask
+  core. The baseline cell's config points at 13.4a's snapshot pack. Before any adapter beyond
+  the first, one offline smoke test runs a stub adapter through the bridge to the scored core.
+- **Scores.** IoU, missed, spill, cold and warm CPU seconds, download size and licence, by the
+  spec's formulas.
+- **Outputs.** Overlays per image and cell, one results page published as an artifact, and
+  `docs/results/segment-01.md`.
+
+**Acceptance.**
+- Every cell runs on every image or records why not.
+- Formula tests on synthetic masks: an empty F, a perfect F, half missed, spill past the
+  growth.
+- The page is published and the results document committed.
+
+**Verification.** The harness's tests; the owner reads the page.
+
+**Dependencies.** 13.3, 13.4, 13.4a, 13.5. **Size.** M (the bridge S, then the adapters).
+
+### Task 13.7: The pick
+
+**Description.** The owner picks the default from the results.
+
+- **Today's Tiny with part 1:** an ADR 0018 section records it.
+- **Another model:**
+  - its export under `tools/python/export/`;
+  - parity on the corpus (the exported masks' IoU ≥ 0.99 against the lab's);
+  - its release, owner-authorised;
+  - `artifacts.toml`, `MODEL.md`, the runtime and the bundle updated, with the old model's entry
+    removed;
+  - the offline pack acceptance with models required.
+
+  This is code, on a branch merged into `main`, then into `m13c-checker`.
+- **Either way:** the candidates that did well and weren't picked are listed in the catalog as
+  bring-your-own options.
+
+**Acceptance.** The ADR section; for a new model, its parity and the acceptance.
+
+**Verification.** As in 13.1.
+
+**Dependencies.** The owner's pick. **Size.** XS, or M with an export.
+
+### Task 13.8: table-manners v0.5 draft
+
+**Description.** On branch `v0.5`, the spec's three additions, with the crate staying at
+`0.4.0` until 13.15:
+
+- the description's `"answers": "verdict"`;
+- `verdict` (`value`, `where`) on a completed result's header;
+- `optional` and `for` on a readiness requirement;
+- `label` on an image out.
+
+The changes cover:
+- `CONTRACT.md` (a "0.5.0, draft" change list, including 11.1's clarification from 13.0);
+- `MAPPING.md` and `PROPOSALS.md`;
+- the JSON schemas;
+- the crate's types with serde round trips;
+- new vectors.
+
+**Acceptance.**
+- `cargo test`.
+- The schemas accept the new vectors and refuse:
+  - `optional` without `for`;
+  - an empty `label`;
+  - a non-empty `where` on a `pass` (an empty one is valid).
+- A semantic conformance test, reading a description and a result together, refuses a
+  `verdict` from an action that doesn't declare `answers`.
+- Every existing fixture still validates.
+
+**Verification.** `cargo test`.
+
+**Dependencies.** 13.0. **Files.** table-manners. **Size.** S.
+
+### Task 13.9: squint answers with a verdict
+
+**Description.** On squint's `m13-verdict` branch, pinned to the draft by path:
+
+- **The actions.** squint's five check actions declare `"answers": "verdict"`.
+- **The verdict.** A completed result carries the header's `verdict`. `where` holds the
+  locations of findings on the call's own requirements, in the candidate's frame.
+- **Unchanged.** squint's body, and its requirement shape (`id`, `kind`, `text`), which the
+  spec's checker example uses as is.
+- **Docs.** `docs/agents.md` follows.
+
+**Acceptance.**
+- Tests with the scripted provider:
+  - a pass;
+  - a fail with a located finding;
+  - an unsure;
+  - a fail whose finding concerns a built-in rule, which is not in `where`.
+- An integration test runs the real `squint call source_fidelity --arguments <file> --allow-dir
+  <dir>` with the scripted provider and the spec's checker arguments exactly as written (the
+  images as `{ "path": … }` objects inside the allowed directory). It checks the printed result's
+  verdict. This test is what 13.12a's checker
+  call is built against.
+
+**Verification.** `just check` in squint.
+
+**Dependencies.** 13.8. **Files.** squint. **Size.** S.
+
+### Task 13.10: The checker's configuration, readiness, `check` and the reservation
+
+**Description.**
+
+- **Config.** `[checker]` in `rascal.toml` (`rascal-core/src/config.rs`): `command`,
+  `arguments` with the three placeholders, `key_env`, `spend_usd_per_call`, `timeout_s` and
+  `revision`. It is validated (known placeholders; a price of 0 or above), and
+  `schemas/rascal/config-v1.json` is regenerated.
+- **Readiness.** The checker's key is an `optional` credential, `for` "checking the result", on
+  `remove_prompt` only.
+- **The setting.** `check` (boolean, default true) is in `remove_prompt`'s `params_schema` when
+  a checker is configured, and `--no-check` on the CLI.
+- **Resolution.** One function settles whether a check will run (the spec's five conditions)
+  before readiness and the estimate. The invocation records `check` and the reason when it is
+  off.
+- **The reservation.** The estimate prices `N` tries and binds `check`. In `serve`, `N` is
+  chosen and reserved in one step under the ledger's lock (`actions.rs`, where the reservation is
+  made today): the most of 3 that fits the per-call cap and the remaining balance, refused only
+  when 1 doesn't fit. The command line uses the same function with no session.
+- **Pin.** The table-manners pin moves to the path draft.
+- **ADR 0023**, "A bounded check-and-retry for remove", amending 0008, is written here.
+- **Docs.** `docs/fillers.md` gains a "Checker" section.
+
+**Acceptance.**
+- Tests:
+  - the config's refusals;
+  - readiness stays `ready` with the key missing, and the requirement is listed as optional;
+  - `check` appears in the description only when a checker is configured;
+  - each of the five conditions;
+  - `N` under caps that allow 1, 2 and 3;
+  - a depleted balance gives fewer tries;
+  - two concurrent calls on one balance never over-reserve (a threaded test on the ledger);
+  - a balance under one try is refused.
+- The description and contract fixtures are regenerated.
+
+**Verification.** `just check`.
+
+**Dependencies.** 13.8. **Size.** M.
+
+### Task 13.11: `heal`, one try at a time (refactor)
+
+**Description.**
+
+- **The split.** `heal()` is one 400-line function (`heal.rs:69`). The graph from a mask to a
+  result becomes its own function, `heal_once`: apply, window, render, filler, paste, unwindow,
+  put, the preservation check and the measures. The recipe run and the report sit around it.
+- **The rebinding.** The recipe engine gains a run from a named step, with that step's input
+  bound by the caller: for `remove-prompt`, `select`'s `plane` from P_k. A short spike settles
+  whether that or a recipe input is cleaner, and the commit records the choice.
+- **No behaviour changes.**
+
+**Acceptance.**
+- Every existing `heal`, `run` and replay test passes unchanged.
+- A golden comparison of a recorded heal, before and after:
+  - the produced image and mask bytes are identical;
+  - the journal is compared after normalising durations, timestamps and machine paths, with
+    every op, identity, parameter and envelope equal.
+- Rebinding tests: a bound input replaces the step's input, and a type or frame mismatch is
+  refused.
+
+**Verification.** `just check`.
+
+**Dependencies.** `m13.1`. **Size.** M.
+
+→ Tag **`m13.2`**.
+
+### Task 13.12a: One checked try
+
+**Description.**
+
+- **The testkit checker.** A scripted command that answers from a script file: a verdict per
+  try, places, a delay, a failure.
+- **The checker call.**
+  1. Copy the source and the candidate into `tries/<k>/check/`, render the arguments with those
+     paths, and write the `--arguments` file there.
+  2. Pass `--allow-dir` set to that directory alone and `max_spend_usd` set to the checker's
+     price.
+  3. Read the printed result: never the exit code, at most 1 MiB, within `timeout_s`.
+  4. Record `checker call:` and `checker stored:`.
+- **The answer.** A `pass` ends the run. Anything other than a completed verdict is a check
+  failure, flagged in the summary.
+- **Spend.** `run_json`'s spend sums the filler and checker records (actual, estimated,
+  unresolved, cached), and the session settles the reservation, returning the unused part.
+- **The unchecked case.** A missing key or `--no-check` runs one fill, unchecked, and says why.
+
+**Acceptance.**
+- A pass on the first try.
+- Under `serve` with the workspace outside the run directory, the checker still reads both
+  images, and a scripted checker that tries a path outside `--allow-dir` is refused.
+- Each check failure: another status, no verdict, garbage output, oversize output, a timeout.
+- A missing key; `--no-check`.
+- Spend: the totals after a pass and after a check failure, and the unused reservation returned
+  to the session.
+- One end-to-end test through the real `squint` binary from 13.9 with its scripted provider. It
+  is gated on that binary being on `PATH`, as the segmenter tests are gated on the models.
+
+**Verification.** `just check`.
+
+**Dependencies.** 13.9, 13.10, 13.11. **Size.** M.
+
+### Task 13.12b: The located retry
+
+**Description.** On `fail` or `unsure`, one retry:
+
+1. Check each place against `R_k`'s image reference.
+2. Crop the input image exactly to the place's bbox padded by `pad` (a `crop:` frame with no
+   added context; a small helper beside `window`, not `window` itself).
+3. Run `segment` there at half the threshold.
+4. Write each plane into an empty raw-frame plane at the crop's offset and commit it as a
+   `plane` image (not `unwindow`, which makes a composite `select` refuses). A find that comes
+   back empty is rasterized as the place itself.
+5. With an empty `where`, double `grow.px`.
+6. Rebuild `M₂` from `P₂` through the shaping (13.11's rebinding), then run `heal_once` and the
+   check.
+
+Each try's files go under `tries/<k>/`, and its Mask is committed.
+
+**Acceptance.**
+- A fail, then a pass.
+- An empty `where`.
+- Overlapping places.
+- A place outside the image's reference is a check failure.
+- Protect is preserved in both tries.
+- Try 1's files are untouched after try 2.
+- A non-square place at an offset maps back to the exact raw-frame pixels.
+
+**Verification.** `just check`.
+
+**Dependencies.** 13.12a. **Size.** M.
+
+### Task 13.12c: N tries, the selection and the outputs
+
+**Description.**
+- **Tries.** Up to `N` tries; the run stops when a mask's identity is unchanged.
+- **Selection.** The spec's rule, recorded as `selected_try`.
+- **Outputs.** `images.out` in the spec's order and roles, each with its `label`; the tries in
+  `run.json`; the summaries ("The check still sees …").
+- **The outer verdict.** `remove_prompt` declares `"answers": "verdict"` when a checker is
+  configured. The result's `verdict` is the selected try's; an unchecked run, or one whose check
+  could not run, has none and says why.
+
+**Acceptance.**
+- Unsure until the tries run out, and the selection rule.
+- An unchanged mask stops early.
+- Caps that allow 1 and 2 tries.
+- Spend totals across three tries.
+- The outer verdict on a pass, on a flagged fail, and absent on an unchecked run.
+- The outputs are ordered with the selected try first.
+- An earlier try's mask and preview open by reference after the run.
+
+**Verification.** `just check`; the end-to-end `heal` tests.
+
+**Dependencies.** 13.12b. **Size.** M.
+
+### Task 13.13: Replay and cancellation
+
+**Description.**
+
+- **Replay.** `heal --replay` answers each check from `checker stored:` by request identity. A
+  check the recording lacks is an error, never a call.
+- **Cancellation.** A cancelled run cancels the checker process (stdin closed, then SIGTERM,
+  then SIGKILL, as for packs). The run ends cancelled, the completed tries are kept as evidence,
+  and the reservation is settled. `serve` passes cancellation through, as it does for fillers.
+
+**Acceptance.**
+- Replaying a three-try run makes no call and gives byte-identical outputs.
+- A replay with a deleted record is refused.
+- A cancellation mid-check: the run is cancelled, the tries are kept, the process is gone, and
+  the spend is settled.
+
+**Verification.** `just check`.
+
+**Dependencies.** 13.12c. **Size.** S.
+
+→ Tag **`m13.3`**.
+
+### Task 13.14: Wafflery shows checks
+
+**Description.** On `m13-checker`, pinned to the draft by path (version `=0.4.0`). Wafflery
+renders what the tools report and holds no logic about checkers:
+
+- **Readiness.** An optional requirement shows in Tool setup as "Needed for checking the result
+  (optional)" and never marks an action as needing setup.
+- **The check setting.** `check` appears as an ordinary boolean setting.
+- **The verdict.** A result with a `verdict` shows it in plain words: "Check passed", or "The
+  check still sees it", with the places drawn on the result.
+- **Labels.** The Show menu uses each image out's `label` when it has one, and the role
+  otherwise. The label is kept through capture (`src/tools/evidence.rs`), storage and the UI's
+  `SavedImage` type, so a reopened run shows the same names.
+- **The sample peer** (`examples/sample-lab`) gains a check action and a three-try run, so the
+  browser tests need no real tool.
+
+Components get stories.
+
+**Acceptance.**
+- Browser tests in Chromium and WebKit:
+  - an optional requirement missing with the action ready;
+  - a verdict pass;
+  - a fail with places;
+  - three tries in the Show menu, with try 1's mask opened after the run;
+  - a saved run reopened after a host restart keeps its labels and verdict.
+- Unit tests for the wording.
+- Checked by eye at desktop and phone width.
+
+**Verification.** Wafflery's gate, including `bun run test:browser`.
+
+**Dependencies.** 13.8, 13.12c. **Size.** M.
+
+→ Tag **`m13.4`**.
+
+### Task 13.15: Version 0.5.0, everywhere at once
+
+**Description.**
+
+- **The bump.** table-manners' crate becomes `0.5.0`.
+- **Producers.**
+  - rascal and squint move their path pins to `version = "=0.5.0"`.
+  - Each regenerates its complete fixture set with its own test and copies it into the contract
+    repository (`fixtures/rascal/`, `fixtures/squint/`).
+  - The loop's fixtures are included: a pass, three tries, and an optional requirement.
+- **Wafflery's adoption** is a full slice:
+  - its validators and every place that names the version (`src/tools/mod.rs`, the bundle and
+    handoff code, `ui/src/api/tool-session.ts`, `encodeBindings()`);
+  - the sample peer and its fixtures;
+  - its docs.
+
+  The old version is replaced directly, with no dual support.
+- **Conformance** runs in table-manners with every fixture.
+- **Publish.** `v0.5` merges into table-manners' `main`. That merge commit, the one tested, is
+  tagged `v0.5.0`, pushed, and published (owner-authorised 2026-11-04).
+- **The pins** move from path to `=0.5.0` from crates.io in the three repositories, and
+  `scripts/check-contract.sh` runs again.
+
+**Acceptance.**
+- `cargo test` in table-manners with every producer's fixtures.
+- Every repository's gate is green, pinned from crates.io.
+
+**Verification.** The gates; `scripts/check-contract.sh`; `cargo publish --dry-run` before the
+publish.
+
+**Dependencies.** 13.9, 13.13, 13.14. **Size.** M.
+
+### Task 13.16: Merge and the by-hand check
+
+**Description.**
+
+1. **Merge.** rascal's `m13c-checker`, squint's and Wafflery's M13 branches are pushed (pins
+   from crates.io now), go green in CI, merge into their `main`s and are pushed. table-manners
+   merged in 13.15.
+2. **Install.** The owner's install is updated from `main` (binary, pack, Wafflery).
+3. **Configure.** `~/.config/rascal/rascal.toml` gains `[checker]` for squint on Claude Haiku
+   5.5, written by hand like the fillers, with the key from the owner's environment.
+4. **The by-hand check in Wafflery:**
+   - `remove-prompt` on the collar photo with bria-erase passes, or retries and then passes;
+   - a deliberately vague prompt shows the tries and the flag;
+   - with the key unset, the run is unchecked and says why.
+5. **Restore drill.** The isolated restore of `m13.1` is run once and its `remove-prompt` works.
+6. **Docs.** `README.md` (the remove story), `docs/fillers.md` and the Op Book (including the
+   install commands for each checkpoint).
+
+**Acceptance.** The by-hand check is recorded in the Op Book, and the four `main`s are green.
+
+**Verification.** CI on each merge; by hand.
+
+**Dependencies.** 13.15. **Size.** S.
+
+### Checkpoint M13
+- [ ] Tasks 13.0 to 13.16 done and CI green; tag `m13` on rascal.
+
+### Owner decisions for M13
+
+**Decided** in the interview of 2026-11-04:
+- The decoder is re-exported, with no fallback.
+- Only small holes are filled.
+- The corpus is generated images, masks drawn by the owner.
+- The pick is made from the trade-offs, with no fixed limits.
+- The lab runs candidates in a script, and only the winner is exported.
+- The loop lives in rascal as a fixed ladder (ADR 0023).
+- squint on a cheap model is the first checker.
+- The retry uses the checker's places.
+- The check is on whenever a checker is set up, and can be turned off.
+- When nothing passes, the best try is returned and flagged.
+- The checker is any tool that speaks the contract's verdict.
+- A missing key never blocks the remove.
+- Publishing the model release and table-manners 0.5.0 at their steps is authorised.
+
+**Open:**
+- 13.0's merge: assumed yes, since the owner reviewed the walk live.
+- 13.5's scene list and generation spend.
+- 13.7's pick.
 
 ## Risks and mitigations
 

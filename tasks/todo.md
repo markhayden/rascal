@@ -153,3 +153,26 @@ with green CI on both platforms, and then the tag.
 - [x] 12.9 Fixtures for table-manners `fixtures/rascal/` at v0.3 (with `refusal-not-ready.json`; no missing-credential run), the no-provider-call proof, docs and the ADR 0020 amendment (← 12.2 to 12.8) (done against table-manners `e503a23`; 31 files in `fixtures/table-manners/`, each held to the contract as its `tests/fixtures.rs` holds it, and that test passes on them; `refusal-no-run.json` kept beside `refusal-cancelled-before-allocation.json`; the copy into the contract's branch and rascal's MAPPING column are the coordinator's)
 - [x] 12.10 The pin to v0.3.0 (owner: squint's fixtures pass, tag and publish) → merged → tag `m12` (← 12.9) (2026-11-01: `table-manners = "=0.3.0"` from crates.io)
 - [x] Checkpoint M12 → tag `m12` (2026-11-01)
+
+## M13 The self-correcting remove (PLAN.md M13; issues #14, #15, #16)
+- [ ] 13.0 Merge the walk (rascal, table-manners, Wafflery)
+- [ ] 13.4a The baseline snapshot (before 13.1 publishes)
+- [ ] 13.1 The decoder re-export, parity, release `models-2026-11`
+- [ ] 13.2 The whole-object outline, padding and the retry (`outline.py`, `segment` settings)
+- [ ] 13.3 `plug` and the recipes; owner's collar check → merge `m13a-mask`, tag `m13.1`
+- [ ] 13.4 The candidates and their licences
+- [ ] 13.5 The corpus: flat generator, scenes (owner: spend), owner's masks, manifest
+- [ ] 13.6 The harness and the round; results page
+- [ ] 13.7 The pick (owner); ADR 0018 section, export if needed
+- [ ] 13.8 table-manners v0.5 draft: verdict, optional requirements, image out labels
+- [ ] 13.9 squint answers with a verdict; real `squint call` integration test
+- [ ] 13.10 The checker's configuration, readiness, `check`, the reservation; ADR 0023
+- [ ] 13.11 `heal`, one try at a time (refactor) → tag `m13.2`
+- [ ] 13.12a One checked try
+- [ ] 13.12b The located retry
+- [ ] 13.12c N tries, the selection and the outputs
+- [ ] 13.13 Replay and cancellation → tag `m13.3`
+- [ ] 13.14 Wafflery shows checks → tag `m13.4`
+- [ ] 13.15 Version 0.5.0 everywhere at once; publish; pins from crates.io
+- [ ] 13.16 Merge and the by-hand check
+- [ ] Checkpoint M13 → tag `m13`
