@@ -13,14 +13,14 @@ use rascal_core::Error;
 use rascal_core::artifact::Artifact;
 use rascal_core::config::{Config, FillerConfig};
 use rascal_core::error::Result;
-use rascal_core::frame::{Frame, FrameKind, FrameTable};
-use rascal_core::image::{Image, Role};
+use rascal_core::frame::{Frame, FrameKind, FrameTable, Plan};
+use rascal_core::image::{Image, RenderingRole, Role};
 use rascal_core::mask::Mask;
 use rascal_core::op::{Inputs, Params, Status};
 use rascal_core::recipe::Run;
 use rascal_core::registry::OpRegistry;
 use rascal_core::rendering::Profile;
-use rascal_mask::filler::{self, FillRequest, FillerCall};
+use rascal_mask::filler::{self, FillRequest, Filler, FillerCall};
 
 use crate::run::{self, RunArgs};
 
@@ -113,13 +113,24 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         overrides_from: Some(args.filler.clone()),
         ..args.run.clone()
     })?;
-    // A prompt the recipe bound (a finder's) is not the filler's.
-    let filler_prompt = if run::declares_prompt(&recipe) {
-        None
-    } else {
-        args.run.prompt.as_deref()
+    let painter = Painter {
+        name: &args.filler,
+        entry,
+        filler,
+        profile,
+        role,
+        // A prompt the recipe bound (a finder's) is not the filler's.
+        prompt: if run::declares_prompt(&recipe) {
+            None
+        } else {
+            args.run.prompt.as_deref()
+        },
+        replay: args.replay.as_deref(),
+        cache: args
+            .cache
+            .clone()
+            .or_else(|| config.cache.as_ref().map(|c| c.dir.clone())),
     };
-    let registry = &registry;
     if outcome.status != Status::Ok {
         return stopped(
             &run,
@@ -134,13 +145,14 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         Some(Artifact::Mask(m)) => m.clone(),
         _ => return Err(Error::usage("heal needs the recipe's outputs.mask")),
     };
-    let image_f = match outcome.outputs.get("image") {
+    let image = match outcome.outputs.get("image") {
         Some(Artifact::Image(i)) => i.clone(),
         _ => return Err(Error::usage("heal needs the recipe's outputs.image")),
     };
-    let frames = run.frames()?;
-    let frame_f = frames.require(&mask.record.frame)?.clone();
-    let plan = match (frame_f.kind, outcome.outputs.get("plan")) {
+    let plan = match (
+        run.frames()?.require(&mask.record.frame)?.kind,
+        outcome.outputs.get("plan"),
+    ) {
         (FrameKind::Cut, Some(Artifact::Plan(p))) => Some(p.clone()),
         (FrameKind::Cut, _) => {
             return Err(Error::usage(
@@ -149,10 +161,104 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         }
         _ => None,
     };
-    let input_b = match &input_image {
+    let input = match &input_image {
         Artifact::Image(i) => i.clone(),
         _ => unreachable!("bound by run"),
     };
+    let subject = Subject {
+        mask,
+        image,
+        plan,
+        input,
+    };
+
+    let (out_image, cache) = match heal_once(&run, &registry, &painter, &subject)? {
+        Pass::Healed { image, cache } => (image, cache),
+        Pass::Stopped {
+            status,
+            step,
+            reason,
+        } => return stopped(&run, args, status, Some(step), reason, outcome.renders),
+    };
+    let result = run.dir.join("result.png");
+    rascal_core::canonical::write_png(&result, &out_image.pixels)?;
+    run.write_tables()?;
+    let dash = if args.no_dash {
+        None
+    } else {
+        Some(crate::dash::write(&run.dir, &run.dir.join("dash.html"))?)
+    };
+    Ok(HealReport {
+        status: Status::Ok,
+        stopped_at: None,
+        reason: None,
+        result: Some(result),
+        source: Some(run.workspace.image_path(&subject.input)),
+        dash,
+        renders: outcome.renders,
+        cache,
+    })
+}
+
+/// The filler a heal paints with, read from the configuration: what every pass of the graph
+/// renders, requests and pastes with.
+struct Painter<'a> {
+    /// The entry's name, `fillers.<name>`.
+    name: &'a str,
+    entry: &'a FillerConfig,
+    filler: Box<dyn Filler>,
+    profile: Profile,
+    role: RenderingRole,
+    /// The prompt the filler is sent: `--prompt`, unless the recipe bound it.
+    prompt: Option<&'a str>,
+    /// A previous run whose recorded fill answers the same request.
+    replay: Option<&'a Path>,
+    /// The fill cache's directory, when there is one.
+    cache: Option<PathBuf>,
+}
+
+/// What one pass of the graph heals: the mask `M` and the image `I_F` in the mask's frame `F`,
+/// the plan when `F` is a cut, and this invocation's input image `B` (raw).
+struct Subject {
+    mask: Arc<Mask>,
+    image: Arc<Image>,
+    plan: Option<Arc<Plan>>,
+    input: Arc<Image>,
+}
+
+/// How one pass of the graph ended.
+enum Pass {
+    /// The result in raw, and whether its fill came from the cache (as [`HealReport::cache`]).
+    Healed {
+        image: Arc<Image>,
+        cache: Option<bool>,
+    },
+    /// A step that was not ok, and why: nothing was healed.
+    Stopped {
+        status: Status,
+        step: String,
+        reason: Option<String>,
+    },
+}
+
+/// One pass of `heal`'s graph (SPEC.md "Recipes"), from a mask to a result: apply, window,
+/// render, the filler call, paste, unwindow, put, the preservation check and the measures, each
+/// an op invocation (the filler call a journal note) in the run's workspace.
+fn heal_once(
+    run: &Run,
+    registry: &OpRegistry,
+    painter: &Painter,
+    subject: &Subject,
+) -> Result<Pass> {
+    let Subject {
+        mask,
+        image: image_f,
+        plan,
+        input: input_b,
+    } = subject;
+    let entry = painter.entry;
+    let frames = run.frames()?;
+    let frame_f = frames.require(&mask.record.frame)?.clone();
 
     // W = apply(I_F, M): the working image; a mask without a prescription leaves it as is.
     let working = {
@@ -182,18 +288,12 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
             let mut params = Params::new();
             params.insert("max_side".into(), toml::Value::Integer(i64::from(max_side)));
             let out = run.invoke("window", "window", registry, &inputs, &params)?;
-            match out.envelope.status {
-                Status::Ok => {}
-                status => {
-                    return stopped(
-                        &run,
-                        args,
-                        status,
-                        Some("window".into()),
-                        out.envelope.reason,
-                        outcome.renders,
-                    );
-                }
+            if out.envelope.status != Status::Ok {
+                return Ok(Pass::Stopped {
+                    status: out.envelope.status,
+                    step: "window".into(),
+                    reason: out.envelope.reason,
+                });
             }
             let (Some(Artifact::Image(wc)), Some(Artifact::Mask(mc))) =
                 (out.outputs.get("image"), out.outputs.get("mask"))
@@ -205,21 +305,22 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
     };
 
     // Rend = render(Mc [, Wc], profile), and the grey rendering when the filler also wants it.
-    let rendering = render(registry, &run, &mask_c, &working_c, profile)?;
+    let profile = painter.profile;
+    let rendering = render(registry, run, &mask_c, &working_c, profile)?;
     let grey = if entry.send_mask && profile != Profile::Grey {
-        Some(render(registry, &run, &mask_c, &working_c, Profile::Grey)?)
+        Some(render(registry, run, &mask_c, &working_c, Profile::Grey)?)
     } else {
         None
     };
 
     // Fill = filler(...): the request as the matrix says; a recorded fill replays it.
     let request = FillRequest::build(
-        role,
+        painter.role,
         entry.send_mask,
         &working_c,
         &rendering,
         grey.as_deref(),
-        filler_prompt,
+        painter.prompt,
     )?;
     // A filler with fill_max_side is sent a downscaled request and its fill is scaled back.
     let (request, scaled_from) = match entry
@@ -235,7 +336,7 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
                 scaled.height,
                 from.0,
                 from.1,
-                args.filler,
+                painter.name,
                 entry.fill_max_side.unwrap_or_default()
             ))?;
             (scaled, Some(from))
@@ -247,18 +348,13 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
     let wanted = StoredFill {
         request: request_identity.clone(),
         fill: String::new(),
-        filler: args.filler.clone(),
+        filler: painter.name.to_string(),
         revision: entry.revision.clone(),
     };
-    let cache_dir = args
-        .cache
-        .clone()
-        .or_else(|| config.cache.as_ref().map(|c| c.dir.clone()));
     let mut cache_use: Option<bool> = None;
-    let mut origin = serde_json::json!({ "filler": args.filler, "profile": entry.profile, "request": request_identity, "scaled_from": scaled_from.map(|(w, h)| format!("{w}x{h}")) });
-    let fill = match args
+    let mut origin = serde_json::json!({ "filler": painter.name, "profile": entry.profile, "request": request_identity, "scaled_from": scaled_from.map(|(w, h)| format!("{w}x{h}")) });
+    let fill = match painter
         .replay
-        .as_deref()
         .map(|dir| recorded_fill(dir, &wanted))
         .transpose()?
         .flatten()
@@ -280,7 +376,7 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
                 ));
             }
             origin["replayed_from"] =
-                serde_json::json!(args.replay.as_deref().map(|d| d.display().to_string()));
+                serde_json::json!(painter.replay.map(|d| d.display().to_string()));
             origin["recorded_fill"] = serde_json::json!(stored.fill);
             run.note(format!(
                 "filler call replayed from the recorded fill {} of fillers.{} for request {request_identity}; the filler was not called",
@@ -288,7 +384,8 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
             ))?;
             pixels
         }
-        None => match cache_dir
+        None => match painter
+            .cache
             .as_deref()
             .map(|dir| cached_fill(dir, &wanted))
             .transpose()?
@@ -313,7 +410,7 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
                 origin["cached"] = serde_json::json!(key);
                 run.note(format!(
                     "fill from the cache ({key}) for request {request_identity} by fillers.{}; the filler was not called",
-                    args.filler
+                    painter.name
                 ))?;
                 pixels
             }
@@ -327,23 +424,23 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
                 std::fs::create_dir_all(&scratch).map_err(|e| Error::io(&scratch, e))?;
                 let span = tracing::info_span!(
                     "filler",
-                    filler = %args.filler,
+                    filler = %painter.name,
                     request_bytes = request.bytes(),
                     width = request.width,
                     height = request.height
                 );
                 run.note(
                     filler::CallStarted {
-                        filler: args.filler.clone(),
+                        filler: painter.name.to_string(),
                         spend_usd: entry.spend_usd_per_call.unwrap_or(0.0),
                     }
                     .note(),
                 )?;
-                let outcome = span.in_scope(|| filler.call(&request, &scratch));
+                let outcome = span.in_scope(|| painter.filler.call(&request, &scratch));
                 let _ = std::fs::remove_dir_all(&scratch);
-                note_call(&run, &outcome.call)?;
+                note_call(run, &outcome.call)?;
                 let fill = outcome.fill?;
-                if let Some(dir) = &cache_dir {
+                if let Some(dir) = &painter.cache {
                     store_fill(dir, &wanted, &fill)?;
                     cache_use = Some(false);
                 }
@@ -382,14 +479,11 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         match (out.envelope.status, out.outputs.get("image")) {
             (Status::Ok, Some(Artifact::Image(p))) => p.clone(),
             (status, _) => {
-                return stopped(
-                    &run,
-                    args,
+                return Ok(Pass::Stopped {
                     status,
-                    Some("paste".into()),
-                    out.envelope.reason,
-                    outcome.renders,
-                );
+                    step: "paste".into(),
+                    reason: out.envelope.reason,
+                });
             }
         }
     };
@@ -437,7 +531,7 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
 
     // The preservation check in raw coordinates: every raw pixel whose mapped w = 0, and
     // every protected pixel, equals this invocation's input image.
-    preservation_check(&input_b, &out_image, &mask, &frames, plan.as_deref())?;
+    preservation_check(input_b, &out_image, mask, &frames, plan.as_deref())?;
 
     // The measures in F: the band set and drift with before = I_F and after = W'.
     {
@@ -448,22 +542,8 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         let _ = run.invoke("measure", "measure", registry, &inputs, &Params::new())?;
     }
 
-    let result = run.dir.join("result.png");
-    rascal_core::canonical::write_png(&result, &out_image.pixels)?;
-    run.write_tables()?;
-    let dash = if args.no_dash {
-        None
-    } else {
-        Some(crate::dash::write(&run.dir, &run.dir.join("dash.html"))?)
-    };
-    Ok(HealReport {
-        status: Status::Ok,
-        stopped_at: None,
-        reason: None,
-        result: Some(result),
-        source: Some(run.workspace.image_path(&input_b)),
-        dash,
-        renders: outcome.renders,
+    Ok(Pass::Healed {
+        image: out_image,
         cache: cache_use,
     })
 }
