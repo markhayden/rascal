@@ -200,12 +200,28 @@ could not run: …": another status (with its error's reason), a completed resul
 output that is not JSON, output over 1 MiB, or no answer within `timeout_s` (the checker is
 stopped).
 
+**The located retry.** On `fail` or `unsure` with tries left, the next try's mask is rebuilt
+from planes, never from the shaped mask. Each place the verdict names (each part of a place in
+several parts) must be on the try's result, by its file digest and size, or the checking ends as
+a check failure ("a place it named is not usable: the location is on another image …"). The
+input image is cut exactly to the box of the place's pixels padded by `segment.pad` on each side
+(snapped outward, clamped to the image) and committed as a `crop` record in a new `crop:` frame;
+`segment` runs there (`tries.<k>.segment.<place>` in the journal) with the run's own parameters
+and half its threshold. Each plane it returns is written at the crop's offset into an empty
+plane of the raw frame and committed as a `place` record (role `plane`); a place where it finds
+nothing joins as itself, rasterized. With no place, the next try's `grow.px` is doubled, once.
+The planes so far go to `select` in place of `segment`'s (`Recipe::run_from`), the shaping runs
+from there in `tries/<k + 1>/` (its `outputs.json` and render), and the heal graph runs again. A
+try whose mask cannot be made, or whose fill stops, ends the tries with a note.
+
 **The journal** gets `checker call started: {"spend_usd": …}` before a check, `checker call:
 {…}` after it (the command as configured, the duration, the exit code, the bytes, the outcome,
 whether it may have been charged, and the spend the result reports; never a key), and, when it
 answered, `checker stored: {…}`: the try, the request's identity (over the checker's command and
 revision, the source's and the candidate's file digests and the arguments with digests in place
-of the paths), the checker's `revision`, both digests, the arguments as sent and the verdict.
+of the paths), the checker's `revision`, both digests, the arguments as sent, the verdict and,
+when another try follows, the `transition`: the `crops` segmented, the `planes` added by identity
+and the widened `grow_px`.
 A check's spend is what its result reports; a check that printed none counts its price as
 unresolved (`docs/contract.md`, "Spend").
 

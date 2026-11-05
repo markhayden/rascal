@@ -26,7 +26,8 @@
 //! Like squint it reads both images (each `{"path": …}` in the arguments, which must lie inside
 //! `--allow-dir`, else the run is `invalid`), prints its result on stdout and exits 1 on `fail`
 //! and 2 on `unsure`, so a caller that reads the exit code is wrong. Each call's arguments, the
-//! allowed directory and the working directory are written to `<script>.seen-<n>.json`.
+//! allowed directory, the working directory and the candidate's file digest are written to
+//! `<script>.seen-<n>.json`.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -74,9 +75,14 @@ fn call(args: &[String]) -> Result<i32, String> {
     let arguments: Value = serde_json::from_str(&read(&arguments)?).map_err(|e| e.to_string())?;
     let seen = script.with_extension(format!("seen-{n}.json"));
     let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
+    let candidate_sha256 = arguments["candidate"]["path"]
+        .as_str()
+        .and_then(|p| std::fs::read(p).ok())
+        .map(|bytes| rascal_core::contract::file_sha256(&bytes));
     std::fs::write(
         &seen,
-        json!({ "arguments": arguments, "allow_dir": allow_dir, "cwd": cwd }).to_string(),
+        json!({ "arguments": arguments, "allow_dir": allow_dir, "cwd": cwd, "candidate_sha256": candidate_sha256 })
+            .to_string(),
     )
     .map_err(|e| e.to_string())?;
     if let Some(ms) = answer["delay_ms"].as_u64() {

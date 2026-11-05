@@ -22,6 +22,7 @@ mod paste;
 mod playground;
 mod preview;
 mod render;
+mod retry;
 mod run;
 mod run_json;
 mod serve;

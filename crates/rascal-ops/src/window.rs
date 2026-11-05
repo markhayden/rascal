@@ -238,6 +238,25 @@ pub fn crop_frame(frames: &FrameTable, parent: &Frame, bbox: [u32; 4]) -> Result
         .unwrap_or(fresh))
 }
 
+/// `image` cut exactly to `bbox` of its frame `parent`, with no context and nothing resampled,
+/// into the crop frame of that bbox ([`crop_frame`]): what the located retry of a checked
+/// remove segments (SPEC.md "Self-correcting remove", part 3), where `window`'s crop would be
+/// square and padded.
+pub fn crop_exact(
+    frames: &FrameTable,
+    parent: &Frame,
+    image: &Image,
+    bbox: [u32; 4],
+) -> Result<(Image, Frame)> {
+    let frame = crop_frame(frames, parent, bbox)?;
+    let [l, t, r, b] = bbox;
+    let pixels = image.pixels.crop_imm(l, t, r - l, b - t);
+    Ok((
+        Image::new("crop.image", pixels, &frame, image.record.role, None),
+        frame,
+    ))
+}
+
 /// The mask's three planes cut by the bbox into the crop frame; the use case and the source
 /// carry over, the profile and the prescriptions do not (they were measured in the parent).
 pub fn crop_mask(mask: &Mask, frame: &Frame, bbox: [u32; 4]) -> Result<Mask> {

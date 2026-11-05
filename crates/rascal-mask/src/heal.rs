@@ -208,19 +208,35 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
             reason,
         } => return stopped(&run, args, status, Some(step), reason, outcome.renders),
     };
-    let result = run.dir.join("result.png");
-    rascal_core::canonical::write_png(&result, &out_image.pixels)?;
-    let verdict = match checker {
-        Some(checker) => check_try(
-            &run,
-            checker,
-            &subject.input,
-            args.run.prompt.as_deref().unwrap_or(""),
-            1,
-            &out_image,
-        )?,
-        None => None,
+    let source = run.workspace.image_path(&subject.input);
+    let (result_image, renders, verdict) = match checker {
+        None => (out_image, outcome.renders.clone(), None),
+        Some(checker) => {
+            let checking = Checking {
+                run: &run,
+                registry: &registry,
+                painter: &painter,
+                recipe: &recipe,
+                outcome: &outcome,
+                checker,
+                prompt: args.run.prompt.as_deref().unwrap_or(""),
+                tries: args.tries,
+            };
+            let checked = checking.tries(subject, out_image)?;
+            let kept = checked
+                .tries
+                .last()
+                .ok_or_else(|| Error::op("heal", "no try"))?;
+            run.record_output("mask", &kept.mask.record.identity)?;
+            (
+                kept.result.clone(),
+                kept.renders.clone(),
+                (!checked.failed).then(|| kept.verdict.clone()).flatten(),
+            )
+        }
     };
+    let result = run.dir.join("result.png");
+    rascal_core::canonical::write_png(&result, &result_image.pixels)?;
     run.write_tables()?;
     let dash = if args.no_dash {
         None
@@ -232,16 +248,196 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         stopped_at: None,
         reason: None,
         result: Some(result),
-        source: Some(run.workspace.image_path(&subject.input)),
+        source: Some(source),
         dash,
-        renders: outcome.renders,
+        renders,
         cache,
         verdict,
     })
 }
 
-/// Asks the checker about try `k`'s result: the result is written as `tries/<k>/result.png`,
-/// the check staged in `tries/<k>/check/` and called, and the call journaled. The verdict, or
+/// What a checked heal works with: the run and its registry, the filler, the recipe and the
+/// outcome of its first run (whose planes and inputs every try's mask is rebuilt from), the
+/// checker, the prompt and the most tries the limits allow.
+struct Checking<'a> {
+    run: &'a Run,
+    registry: &'a OpRegistry,
+    painter: &'a Painter<'a>,
+    recipe: &'a rascal_core::recipe::Recipe,
+    outcome: &'a rascal_core::recipe::Outcome,
+    checker: &'a CheckerConfig,
+    prompt: &'a str,
+    tries: u32,
+}
+
+/// One try of a checked heal: its mask, its result, the renders its shaping wrote, and the
+/// checker's verdict on it (none when the check could not run).
+struct Try {
+    mask: Arc<Mask>,
+    result: Arc<Image>,
+    renders: Vec<(String, PathBuf)>,
+    verdict: Option<Verdict>,
+}
+
+/// The tries a checked heal made, and whether its checking ended in a check failure.
+struct Checked {
+    tries: Vec<Try>,
+    failed: bool,
+}
+
+impl Checking<'_> {
+    /// The tries (SPEC.md "Self-correcting remove", part 3): try `k`'s result is checked; on a
+    /// `fail` or `unsure` with tries left, the places it names (or, with none, a wider grow)
+    /// make the planes of try `k + 1`, whose mask is rebuilt from every plane through the
+    /// recipe's shaping (`select` onward) and healed again in `tries/<k + 1>/`. A pass, the last
+    /// try, a check failure, or a try that cannot be made or filled ends them.
+    fn tries(&self, first: Subject, result: Arc<Image>) -> Result<Checked> {
+        use checker::call::Transition;
+        use rascal_core::contract::table_manners::VerdictValue;
+        use rascal_core::recipe::{Rebind, Recipe};
+        let raw = self
+            .run
+            .frames()?
+            .require(&first.input.record.frame)?
+            .clone();
+        let mut planes = crate::retry::first_planes(&self.outcome.bindings);
+        let mut shaping: Recipe = self.recipe.clone();
+        let mut widened = false;
+        let mut tries = Vec::new();
+        let mut current = Try {
+            mask: first.mask.clone(),
+            result,
+            renders: self.outcome.renders.clone(),
+            verdict: None,
+        };
+        let mut subject = first;
+        for k in 1..=self.tries {
+            let dir = self.run.dir.join("tries").join(k.to_string());
+            let Some((verdict, mut stored)) = check_try(
+                self.run,
+                self.checker,
+                &subject.input,
+                self.prompt,
+                k,
+                &dir,
+                &current.result,
+            )?
+            else {
+                tries.push(current);
+                return Ok(Checked {
+                    tries,
+                    failed: true,
+                });
+            };
+            current.verdict = Some(verdict.clone());
+            if verdict.value == VerdictValue::Pass || k == self.tries {
+                self.run.note(stored.note())?;
+                tries.push(current);
+                break;
+            }
+            let next = k + 1;
+            let next_run = Run::open_in(
+                &self.run.dir.join("tries").join(next.to_string()),
+                self.run.workspace.clone(),
+            )?
+            .with_cancel(self.run.cancel.clone());
+            let mut transition = Transition::default();
+            if verdict.places.is_empty() {
+                if !widened {
+                    let (wider, px) = crate::retry::widened(&shaping, self.registry)?;
+                    shaping = wider;
+                    widened = true;
+                    transition.grow_px = Some(px);
+                }
+            } else {
+                let candidate = rascal_core::contract::reference(
+                    &current.result,
+                    &raw,
+                    stored.candidate.clone(),
+                );
+                let retry = crate::retry::Retry {
+                    run: &next_run,
+                    registry: self.registry,
+                    recipe: &shaping,
+                    texts: &self.outcome.texts,
+                    input: &subject.input,
+                    raw: &raw,
+                };
+                match retry.locate(next, &candidate, &verdict.places, &mut transition)? {
+                    Ok(added) => planes.extend(added),
+                    Err(reason) => {
+                        stored.transition = Some(transition);
+                        self.run.note(stored.note())?;
+                        self.run
+                            .note(format!("The check could not run: {reason}."))?;
+                        tries.push(current);
+                        return Ok(Checked {
+                            tries,
+                            failed: true,
+                        });
+                    }
+                }
+            }
+            stored.transition = Some(transition);
+            self.run.note(stored.note())?;
+            tries.push(current);
+            let rebuilt = shaping.run_from(
+                self.registry,
+                self.outcome,
+                &Rebind {
+                    step: crate::retry::SELECT.to_string(),
+                    port: "plane".to_string(),
+                    artifacts: planes.clone(),
+                },
+                &next_run,
+            )?;
+            let (Status::Ok, Some(Artifact::Mask(mask)), Some(Artifact::Image(image))) = (
+                rebuilt.status,
+                rebuilt.outputs.get("mask"),
+                rebuilt.outputs.get("image"),
+            ) else {
+                self.run.note(format!(
+                    "Try {next} could not be made: {}",
+                    rebuilt
+                        .reason
+                        .unwrap_or_else(|| "its mask was not produced".into())
+                ))?;
+                break;
+            };
+            subject = Subject {
+                mask: mask.clone(),
+                image: image.clone(),
+                plan: None,
+                input: subject.input,
+            };
+            match heal_once(&next_run, self.registry, self.painter, &subject)? {
+                Pass::Healed { image, .. } => {
+                    current = Try {
+                        mask: subject.mask.clone(),
+                        result: image,
+                        renders: rebuilt.renders,
+                        verdict: None,
+                    };
+                }
+                Pass::Stopped { step, reason, .. } => {
+                    self.run.note(format!(
+                        "Try {next} could not be filled: {step} stopped{}",
+                        reason.map(|r| format!(": {r}")).unwrap_or_default()
+                    ))?;
+                    break;
+                }
+            }
+        }
+        Ok(Checked {
+            tries,
+            failed: false,
+        })
+    }
+}
+
+/// Asks the checker about try `k`'s result: the result is written as `result.png` in the try's
+/// directory `dir`, the check staged in `dir/check/` and called, and the call journaled. The
+/// verdict with its record (journaled by the caller once the try's transition is known), or
 /// none when the check could not run, which the journal says ("The check could not run: …").
 fn check_try(
     run: &Run,
@@ -249,11 +445,11 @@ fn check_try(
     input: &Image,
     prompt: &str,
     k: u32,
+    dir: &Path,
     result: &Image,
-) -> Result<Option<Verdict>> {
+) -> Result<Option<(Verdict, checker::call::StoredCheck)>> {
     use checker::call::{self, CallStarted, Request, StoredCheck};
-    let dir = run.dir.join("tries").join(k.to_string());
-    std::fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
+    std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
     let candidate = dir.join("result.png");
     rascal_core::canonical::write_png(&candidate, &result.pixels)?;
     let staged = call::stage(
@@ -281,19 +477,17 @@ fn check_try(
     run.note(called.call.note())?;
     match called.answer {
         Ok(verdict) => {
-            run.note(
-                StoredCheck {
-                    attempt: k,
-                    request: staged.identity,
-                    revision: config.revision.clone(),
-                    source: staged.source,
-                    candidate: staged.candidate,
-                    arguments: staged.arguments,
-                    verdict: verdict.clone(),
-                }
-                .note(),
-            )?;
-            Ok(Some(verdict))
+            let stored = StoredCheck {
+                attempt: k,
+                request: staged.identity,
+                revision: config.revision.clone(),
+                source: staged.source,
+                candidate: staged.candidate,
+                arguments: staged.arguments,
+                verdict: verdict.clone(),
+                transition: None,
+            };
+            Ok(Some((verdict, stored)))
         }
         Err(reason) => {
             run.note(format!("The check could not run: {reason}."))?;

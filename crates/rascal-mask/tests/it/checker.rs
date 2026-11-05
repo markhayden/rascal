@@ -33,6 +33,8 @@ struct Setup<'a> {
     checker: &'a str,
     /// `spend_usd_per_call` of the filler, when it is priced.
     filler_usd: Option<f64>,
+    /// The fake pack's behaviour.
+    pack: &'a str,
 }
 
 impl Default for Setup<'_> {
@@ -41,6 +43,7 @@ impl Default for Setup<'_> {
             script: json!({ "answers": [{ "verdict": "pass" }] }),
             checker: "spend_usd_per_call = 0.01\ntimeout_s = 30\nrevision = \"fake checker\"",
             filler_usd: None,
+            pack: "exact",
         }
     }
 }
@@ -49,9 +52,12 @@ impl Default for Setup<'_> {
 /// checker with the spec's arguments; returns the configuration's path.
 fn config(dir: &Path, setup: &Setup) -> PathBuf {
     let bin = env!("CARGO_BIN_EXE_rascal");
-    let install =
-        rascal_testkit::fake_install::write(&dir.join("pack"), &[bin, "fake-pack", "exact"], true)
-            .unwrap();
+    let install = rascal_testkit::fake_install::write(
+        &dir.join("pack"),
+        &[bin, "fake-pack", setup.pack],
+        true,
+    )
+    .unwrap();
     let script = dir.join("script.json");
     std::fs::write(&script, setup.script.to_string()).unwrap();
     let path = dir.join("rascal.toml");
@@ -356,6 +362,7 @@ fn the_spend_sums_the_fill_and_the_check_after_a_pass_and_after_a_check_failure(
             script: json!({ "answers": [{ "verdict": "pass", "delay_ms": 5000 }], "spend_usd": 0.004 }),
             checker: "spend_usd_per_call = 0.01\ntimeout_s = 1",
             filler_usd: Some(0.02),
+            ..Setup::default()
         },
     );
     let o = heal(&dir, &file, &[]);
@@ -519,4 +526,313 @@ fn one_check_through_the_real_squint_with_its_scripted_provider() {
         assert_eq!(result["verdict"]["value"], value, "{script}: {result:#}");
         let _ = std::fs::remove_dir_all(&dir);
     }
+}
+
+/// The journal's lines, parsed.
+fn journal(dir: &Path) -> Vec<Value> {
+    std::fs::read_to_string(dir.join("run/journal.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect()
+}
+
+/// The journal lines of op `op` (invocations, not notes), in order.
+fn steps<'a>(journal: &'a [Value], op: &str) -> Vec<&'a Value> {
+    journal.iter().filter(|l| l["op"] == op).collect()
+}
+
+fn sha256(path: &Path) -> String {
+    rascal_core::contract::file_sha256(&std::fs::read(path).unwrap())
+}
+
+fn stored(result: &Value) -> Vec<Value> {
+    note_with(&notes(result), "checker stored: ")
+        .iter()
+        .map(|t| serde_json::from_str(t).unwrap())
+        .collect()
+}
+
+/// Two tries, a fail with one place and then a pass: the place is segmented again in a crop
+/// of the input, at half the threshold, its planes join the first ones, the mask is rebuilt
+/// through the shaping and filled again; try 1's files stay as they were.
+#[test]
+fn a_fail_then_a_pass_retries_inside_the_place() {
+    let dir = scratch("retry");
+    let config = config(
+        &dir,
+        &Setup {
+            script: json!({ "answers": [
+                { "verdict": "fail", "where": [[0.25, 0.5, 0.75, 0.625]] },
+                { "verdict": "pass" }
+            ] }),
+            ..Setup::default()
+        },
+    );
+    let o = heal(&dir, &config, &[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let result = run_json(&dir);
+    assert_eq!(result["status"], "completed", "{result:#}");
+    assert_eq!(calls(&dir), 2);
+    assert_eq!(result["verdict"]["value"], "pass");
+    let journal = journal(&dir);
+    // The retry's segment: in a crop frame, the same prompt, half the threshold.
+    let segments = steps(&journal, "segment");
+    assert_eq!(segments.len(), 2, "the first find and one per place");
+    assert_eq!(segments[1]["params"]["prompt"], "the chair");
+    assert_eq!(segments[1]["params"]["threshold"], 0.1);
+    let selects = steps(&journal, "select");
+    assert_eq!(selects.len(), 2);
+    assert_eq!(selects[0]["inputs"].as_object().unwrap().len(), 8);
+    assert_eq!(selects[1]["inputs"].as_object().unwrap().len(), 16);
+    // The stored check of try 1 holds its transition: the place used and the planes added.
+    let stored = stored(&result);
+    assert_eq!(stored.len(), 2);
+    let transition = &stored[0]["transition"];
+    assert_eq!(
+        transition["crops"],
+        json!([[108, 158, 372, 202]]),
+        "{transition:#}"
+    );
+    assert_eq!(transition["planes"].as_array().unwrap().len(), 8);
+    assert!(stored[1].get("transition").is_none());
+    // Each try's files are its own, and try 1's were not overwritten by try 2.
+    for k in [1, 2] {
+        let try_dir = dir.join(format!("run/tries/{k}"));
+        assert!(try_dir.join("result.png").is_file(), "try {k}");
+        assert_eq!(
+            seen(&dir, k - 1)["candidate_sha256"],
+            sha256(&try_dir.join("result.png")),
+            "try {k}'s result is what was checked"
+        );
+    }
+    assert_ne!(
+        sha256(&dir.join("run/tries/1/result.png")),
+        sha256(&dir.join("run/tries/2/result.png"))
+    );
+    assert!(dir.join("run/tries/2/remove-prompt-grey.png").is_file());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_empty_where_widens_the_mask_once() {
+    let dir = scratch("empty-where");
+    let config = config(
+        &dir,
+        &Setup {
+            script: json!({ "answers": [{ "verdict": "unsure", "where": [] }, { "verdict": "pass" }] }),
+            ..Setup::default()
+        },
+    );
+    let o = heal(&dir, &config, &[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let journal = journal(&dir);
+    assert_eq!(steps(&journal, "segment").len(), 1, "no place to segment");
+    let grows = steps(&journal, "grow");
+    assert_eq!(grows.len(), 2);
+    assert_eq!(grows[0]["params"]["px"], 4.0);
+    assert_eq!(grows[1]["params"]["px"], 8.0, "grow.px doubled");
+    let stored = stored(&run_json(&dir));
+    assert_eq!(stored[0]["transition"]["grow_px"], 8.0);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn overlapping_places_each_add_their_planes() {
+    let dir = scratch("overlap");
+    let config = config(
+        &dir,
+        &Setup {
+            script: json!({ "answers": [
+                { "verdict": "fail", "where": [[0.2, 0.2, 0.6, 0.6], [0.4, 0.4, 0.8, 0.8]] },
+                { "verdict": "pass" }
+            ] }),
+            ..Setup::default()
+        },
+    );
+    let o = heal(&dir, &config, &[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let journal = journal(&dir);
+    assert_eq!(steps(&journal, "segment").len(), 3);
+    let selects = steps(&journal, "select");
+    assert_eq!(selects[1]["inputs"].as_object().unwrap().len(), 24);
+    assert_eq!(run_json(&dir)["verdict"]["value"], "pass");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_place_on_another_image_is_a_check_failure() {
+    let dir = scratch("foreign");
+    let config = config(
+        &dir,
+        &Setup {
+            script: json!({ "answers": [
+                { "verdict": "fail", "where": [[0.2, 0.2, 0.6, 0.6]], "foreign": true },
+                { "verdict": "pass" }
+            ] }),
+            ..Setup::default()
+        },
+    );
+    let o = heal(&dir, &config, &[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let result = run_json(&dir);
+    assert_eq!(calls(&dir), 1, "no second try");
+    assert!(result.get("verdict").is_none(), "{result:#}");
+    let notes = notes(&result);
+    let flagged = note_with(&notes, "The check could not run: ");
+    assert_eq!(flagged.len(), 1, "{notes:#?}");
+    assert!(flagged[0].contains("another image"), "{}", flagged[0]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The planes a run committed for its places (`place` records), as their set pixels' boxes.
+fn place_planes(dir: &Path) -> Vec<[u32; 4]> {
+    let ws = rascal_core::workspace::Workspace::open_read_only(&dir.join("run")).unwrap();
+    ws.records()
+        .unwrap()
+        .iter()
+        .filter(|r| r.op == "place")
+        .map(|r| {
+            let id = &r.envelope.artifacts["image"].identity;
+            let rascal_core::artifact::Artifact::Image(image) = ws.load(id).unwrap() else {
+                panic!("not an image");
+            };
+            assert_eq!(image.record.role, rascal_core::image::Role::Plane);
+            assert_eq!(image.record.frame, "raw:480x320:flat");
+            let grey = image.pixels.to_luma8();
+            let set: Vec<(u32, u32)> = grey
+                .enumerate_pixels()
+                .filter(|(_, _, p)| p[0] != 0)
+                .map(|(x, y, _)| (x, y))
+                .collect();
+            let x0 = set.iter().map(|p| p.0).min().unwrap();
+            let y0 = set.iter().map(|p| p.1).min().unwrap();
+            let x1 = set.iter().map(|p| p.0).max().unwrap() + 1;
+            let y1 = set.iter().map(|p| p.1).max().unwrap() + 1;
+            assert_eq!(set.len() as u32, (x1 - x0) * (y1 - y0), "a filled box");
+            [x0, y0, x1, y1]
+        })
+        .collect()
+}
+
+/// A non-square place at an offset, unpadded: the fake's one instance in the crop (its box
+/// [0.1, 0.1, 0.35, 0.25] of the crop, by pixel centres) lands on exactly those raw pixels.
+#[test]
+fn a_non_square_place_at_an_offset_maps_back_to_the_exact_raw_pixels() {
+    let dir = scratch("offset");
+    let config = config(
+        &dir,
+        &Setup {
+            script: json!({ "answers": [
+                { "verdict": "fail", "where": [[0.25, 0.5, 0.75, 0.625]] },
+                { "verdict": "pass" }
+            ] }),
+            ..Setup::default()
+        },
+    );
+    let o = heal(
+        &dir,
+        &config,
+        &["--set", "segment.pad=0", "--set", "segment.max_instances=1"],
+    );
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    // The place is x 120..360, y 160..200 of 480x320: a 240x40 crop at (120, 160).
+    let inside = |i: u32, size: u32, a: f64, b: f64| {
+        let c = (f64::from(i) + 0.5) / f64::from(size);
+        c >= a && c < b
+    };
+    let xs: Vec<u32> = (0..240).filter(|&i| inside(i, 240, 0.1, 0.35)).collect();
+    let ys: Vec<u32> = (0..40).filter(|&j| inside(j, 40, 0.1, 0.25)).collect();
+    let expected = [
+        120 + xs[0],
+        160 + ys[0],
+        120 + xs[xs.len() - 1] + 1,
+        160 + ys[ys.len() - 1] + 1,
+    ];
+    assert_eq!(place_planes(&dir), vec![expected]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_place_where_segment_finds_nothing_joins_as_itself() {
+    let dir = scratch("nothing");
+    let config = config(
+        &dir,
+        &Setup {
+            script: json!({ "answers": [
+                { "verdict": "fail", "where": [[0.25, 0.5, 0.75, 0.625]] },
+                { "verdict": "pass" }
+            ] }),
+            pack: "empty-crops",
+            ..Setup::default()
+        },
+    );
+    let o = heal(&dir, &config, &[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(place_planes(&dir), vec![[120, 160, 360, 200]]);
+    let journal = journal(&dir);
+    assert_eq!(
+        steps(&journal, "select")[1]["inputs"]
+            .as_object()
+            .unwrap()
+            .len(),
+        9
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn protect_is_preserved_in_every_try() {
+    let dir = scratch("protect");
+    let image = repo_root().join("fixtures/images/chair-blob.png");
+    let protect = Command::new(env!("CARGO_BIN_EXE_rascal"))
+        .args([
+            "run",
+            "rect",
+            image.to_str().unwrap(),
+            "--bbox",
+            "0.2,0.45,0.5,0.7",
+            "--out",
+            dir.join("protect-run").to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(protect.status.success(), "{}", text(&protect.stderr));
+    let mask_dir = text(&protect.stdout)
+        .lines()
+        .find_map(|l| l.strip_prefix("mask: ").map(PathBuf::from))
+        .unwrap();
+    let config = config(
+        &dir,
+        &Setup {
+            script: json!({ "answers": [
+                { "verdict": "fail", "where": [[0.1, 0.4, 0.6, 0.8]] },
+                { "verdict": "pass" }
+            ] }),
+            ..Setup::default()
+        },
+    );
+    let o = heal(&dir, &config, &["--protect", mask_dir.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(calls(&dir), 2);
+    let input = image::open(&image).unwrap().to_rgb8();
+    let protect = rascal_core::mask::Mask::read(&mask_dir).unwrap();
+    for k in [1, 2] {
+        let result = image::open(dir.join(format!("run/tries/{k}/result.png")))
+            .unwrap()
+            .to_rgb8();
+        let mut covered = 0;
+        for (x, y, p) in protect.core.enumerate_pixels() {
+            if p[0] != 0 {
+                covered += 1;
+                assert_eq!(
+                    result.get_pixel(x, y),
+                    input.get_pixel(x, y),
+                    "try {k} at {x},{y}"
+                );
+            }
+        }
+        assert!(covered > 0);
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }

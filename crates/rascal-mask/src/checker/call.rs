@@ -102,6 +102,23 @@ pub struct StoredCheck {
     /// The arguments as the checker was given them.
     pub arguments: Value,
     pub verdict: Verdict,
+    /// What the try changed for the next one (the located retry); none for the last try.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transition: Option<Transition>,
+}
+
+/// What one try changed for the next, recorded with its check (`checker stored:`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Transition {
+    /// The crops segmented, one per place, as raw-frame pixel boxes `[x0, y0, x1, y1)`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub crops: Vec<[u32; 4]>,
+    /// The planes added, by identity.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub planes: Vec<String>,
+    /// The next try's `grow.px`, when an empty answer widened the mask.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grow_px: Option<f64>,
 }
 
 impl CallStarted {

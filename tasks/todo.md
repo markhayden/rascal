@@ -169,7 +169,7 @@ with green CI on both platforms, and then the tag.
 - [x] 13.10 The checker's configuration, readiness, `check`, the reservation; ADR 0023
 - [x] 13.11 `heal`, one try at a time (refactor) → tag `m13.2`
 - [x] 13.12a One checked try
-- [ ] 13.12b The located retry
+- [x] 13.12b The located retry
 - [ ] 13.12c N tries, the selection and the outputs
 - [ ] 13.13 Replay and cancellation → tag `m13.3`
 - [ ] 13.14 Wafflery shows checks → tag `m13.4`

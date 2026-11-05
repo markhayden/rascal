@@ -6,6 +6,7 @@
 //! | behaviour | what `segment` does |
 //! |---|---|
 //! | `exact` | `max_instances` polygon regions labelled with the prompt, one plane PNG each, in the image's frame; sleeps `delay_ms` first |
+//! | `empty-crops` | as `exact` on a raw image; in a `crop:` frame (the located retry's) it finds nothing: `not_applicable` |
 //! | `bad-schema` | the envelope carries a field the schema does not know |
 //! | `over-bounds` | more regions than the manifest's `max_regions` |
 //! | `block-mismatch` | one image block more than `images` lists |
@@ -72,8 +73,9 @@ image = "inputs.image"
 "#;
 
 /// The behaviours by name, as the first argument selects them.
-pub const BEHAVIOURS: [&str; 17] = [
+pub const BEHAVIOURS: [&str; 18] = [
     "exact",
+    "empty-crops",
     "bad-schema",
     "over-bounds",
     "block-mismatch",
@@ -141,6 +143,8 @@ fn annotation() -> serde_json::Value {
         "params": [
             { "name": "prompt", "purpose": "What to find, in words.", "kind": "string", "required": false, "default": "" },
             { "name": "max_instances", "purpose": "The most instances to return.", "kind": "integer", "required": false, "default": 2, "min": 1, "max": 8 },
+            { "name": "threshold", "purpose": "The detector score a box needs (the fake finds the same whatever it is).", "kind": "number", "required": false, "default": 0.2, "min": 0.0, "max": 1.0 },
+            { "name": "pad", "purpose": "How far each found box is widened (the fake ignores it).", "kind": "number", "required": false, "default": 0.05, "min": 0.0, "max": 0.5 },
             { "name": "delay_ms", "purpose": "A pause before answering, for tests of timing.", "kind": "integer", "required": false, "default": 0, "min": 0, "max": 60000 }
         ]
     })
@@ -154,6 +158,8 @@ fn tool(fake: &Fake) -> Tool {
                 "image": { "type": "string" },
                 "prompt": { "type": "string" },
                 "max_instances": { "type": "integer" },
+                "threshold": { "type": "number" },
+                "pad": { "type": "number" },
                 "delay_ms": { "type": "integer" }
             }
         }))
@@ -320,6 +326,18 @@ impl Fake {
     ) -> Result<CallToolResult, ErrorData> {
         let (width, height, frame) = first_image(args)?;
         let prompt = args["prompt"].as_str().unwrap_or("").to_string();
+        if self.behaviour == "empty-crops" && frame.starts_with("crop:") {
+            let mut result = CallToolResult::success(vec![ContentBlock::text("nothing found")]);
+            result.structured_content = Some(serde_json::json!({
+                "envelope_version": 1,
+                "status": "not_applicable",
+                "summary": format!("no instance of {prompt:?} in {frame}"),
+                "reason": format!("no instance of {prompt:?} in {frame}"),
+                "provenance": { "tool": "segment", "version": "0.1.0", "duration_ms": 1 }
+            }));
+            result.is_error = Some(false);
+            return Ok(result);
+        }
         let max_instances = args["max_instances"].as_u64().unwrap_or(2) as usize;
         let count = match self.behaviour.as_str() {
             "over-bounds" => 9,

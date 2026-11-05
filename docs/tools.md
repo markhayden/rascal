@@ -337,7 +337,9 @@ disabled, calls the pack, and uploads the archive with its `.sha256` to the tag'
 `fake-pack` binary) serves `segment` with one selectable behaviour: `exact`, `bad-schema`,
 `over-bounds`, `block-mismatch`, `foreign-frame`, `wrong-size`, `non-png`, `slow`,
 `big-plane`, `die`, `ignore-signals`, `mutate <marker>`, `stderr`, `mute`, `env`,
-`no-annotation`, `old-version`; `--concurrent` marks its manifest concurrent and `--name=<tool>` renames the
+`no-annotation`, `old-version`, and `empty-crops` (as `exact`, but nothing found in a `crop:`
+frame, as the located retry segments one); it takes `threshold` and `pad` and ignores them.
+`--concurrent` marks its manifest concurrent and `--name=<tool>` renames the
 tool.
 `crates/rascal-mask/tests/it/packs.rs` drives each through the client; `tests/it/isolation.rs` is the
 isolation suite (G5): instruction-like filenames, prompts and tool output never alter control

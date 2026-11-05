@@ -920,6 +920,39 @@ impl Recipe {
         )
     }
 
+    /// The parameters step `id` runs with, as a run passes them: a string parameter naming a
+    /// text input takes its value (an absent optional text leaves it out, so the op's default
+    /// applies), and the step's constant set as `constants`. None when there is no such step.
+    pub fn step_params(&self, id: &str, texts: &BTreeMap<String, String>) -> Option<Params> {
+        self.step
+            .iter()
+            .find(|s| s.id == id)
+            .map(|step| self.params_of(step, texts))
+    }
+
+    fn params_of(&self, step: &Step, texts: &BTreeMap<String, String>) -> Params {
+        let mut params = step.params.clone();
+        for (name, value) in &step.params {
+            if let Some((text, _)) = self.text_binding(value) {
+                match texts.get(text) {
+                    Some(given) => {
+                        params.insert(name.clone(), toml::Value::String(given.clone()));
+                    }
+                    None => {
+                        params.remove(name);
+                    }
+                }
+            }
+        }
+        if let Some(constants) = &step.constants {
+            params.insert(
+                "constants".to_string(),
+                toml::Value::String(constants.clone()),
+            );
+        }
+        params
+    }
+
     /// Runs the steps from `from` on over `bindings`, the step at `from` taking `rebound`
     /// (a port and its artifacts) over the recipe's binding of that port.
     fn execute(
@@ -1010,27 +1043,7 @@ impl Recipe {
                 }
                 break;
             }
-            // A string parameter naming a text input takes its value; an absent optional
-            // text leaves the parameter out, so the op's default applies.
-            let mut params = step.params.clone();
-            for (name, value) in &step.params {
-                if let Some((text, _)) = self.text_binding(value) {
-                    match texts.get(text) {
-                        Some(given) => {
-                            params.insert(name.clone(), toml::Value::String(given.clone()));
-                        }
-                        None => {
-                            params.remove(name);
-                        }
-                    }
-                }
-            }
-            if let Some(constants) = &step.constants {
-                params.insert(
-                    "constants".to_string(),
-                    toml::Value::String(constants.clone()),
-                );
-            }
+            let params = self.params_of(step, texts);
             let output = run.invoke(&step.id, &step.op, registry, &step_inputs, &params)?;
             if output.envelope.status != Status::Ok {
                 let reason = output.envelope.reason.clone().unwrap_or_default();

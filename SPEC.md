@@ -972,7 +972,10 @@ raw frame (`remove-prompt` masks in the raw frame, with no `cut:`).
    - a place where it finds nothing adds its own region, rasterized, as a plane.
 
    With an empty `where`, `M_{k+1}` takes `grow.px` doubled once. Places that overlap simply
-   union.
+   union. The place's box is the box of its rasterized pixels; the pad snaps outward to whole
+   pixels and is clamped to the image; a place in several parts is one place per part, and one
+   that covers no pixel adds nothing. A try whose mask cannot be made (the shaping stops) or
+   whose fill stops ends the tries, keeping those made.
 5. If `M_{k+1}` has the same identity as `M_k`, stop: another try would repeat this one.
 
 **The result.** The selected try is the first `pass`. Failing that, tries rank `unsure` over
