@@ -417,7 +417,9 @@ impl ContractActions {
             config_identity: config_identity.clone(),
             filler: Value::Null,
             constants: BTreeMap::new(),
-            worst_case_usd: Some(0.0),
+            check: None,
+            try_usd: Some(0.0),
+            max_tries: 1,
             cap_usd,
         };
         let mut document = estimate::document(
@@ -1136,6 +1138,7 @@ impl ContractActions {
                         role: port.name.clone(),
                         image: contract::image_reference(&self.store, id)?,
                         locator: Locator::Path(absolute(&file)),
+                        label: None,
                     });
                 }
                 if let Artifact::Location { .. } = &artifact

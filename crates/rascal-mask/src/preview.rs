@@ -109,6 +109,7 @@ pub fn image_out(bytes: &[u8], frame: &Frame, locator: Locator) -> Result<ImageO
             pixel_sha256: None,
         },
         locator,
+        label: None,
     })
 }
 

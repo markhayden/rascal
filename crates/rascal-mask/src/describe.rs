@@ -12,7 +12,7 @@ use rascal_core::contract::table_manners::images::{
 };
 use rascal_core::contract::table_manners::operations::Ports;
 use rascal_core::contract::table_manners::{
-    Action, ActionKind, Cost, DescribedTool, Description, Duration, Profile, Readiness,
+    Action, ActionKind, Answers, Cost, DescribedTool, Description, Duration, Profile, Readiness,
     ReadinessState, Render, RenderKind, SpendBasis, Vocabulary,
 };
 use rascal_core::error::Result;
@@ -263,6 +263,7 @@ fn operation(op: &dyn Op) -> Action {
             "{} When to use: {} When not to use: {}",
             manifest.purpose, manifest.when_to_use, manifest.when_not_to_use
         ),
+        answers: None,
         params_schema: manifest.params_schema(),
         images: Some(vec![]),
         locations: Some(vec![]),
@@ -332,7 +333,11 @@ pub fn description(setup: &Setup<'_>) -> Result<Description> {
         c.fillers
             .values()
             .any(|f| f.spend_usd_per_call.is_some_and(|p| p > 0.0))
+            || c.checker
+                .as_ref()
+                .is_some_and(|k| k.spend_usd_per_call > 0.0)
     });
+    let checker = config.is_some_and(|c| c.checker.is_some());
     let max_s = config
         .and_then(|c| c.fillers.values().map(|f| f.timeout_s).max())
         .unwrap_or(0)
@@ -384,6 +389,18 @@ pub fn description(setup: &Setup<'_>) -> Result<Description> {
             }
         }
         properties.extend(common_properties(&recipe, &fillers));
+        // With a checker configured, remove_prompt asks it whether the object is gone after a
+        // fill and tries again (ADR 0023); `check` turns that off for one call.
+        let checked = checker && action_name(name) == readiness::SEGMENTER_ACTION;
+        if checked {
+            properties.insert(
+                crate::checker::ARGUMENT.to_string(),
+                json!({ "type": "boolean", "default": true, "title": "Check the result",
+                        "description": format!(
+                            "After the fill, ask the configured checker whether any of the prompt's object is still visible, and when it is, add what it points at to the mask and fill again (at most {} tries in all, within the spending limit). Applies when a filler is chosen.",
+                            crate::checker::MAX_TRIES) }),
+            );
+        }
         let found = recipe.step.iter().any(|s| s.op == "segment");
         actions.push(Action {
             name: action_name(name),
@@ -391,6 +408,7 @@ pub fn description(setup: &Setup<'_>) -> Result<Description> {
             kind: ActionKind::Task,
             group: None,
             purpose: purpose.to_string(),
+            answers: checked.then_some(Answers::Verdict),
             params_schema: json!({
                 "type": "object",
                 "properties": Value::Object(properties),

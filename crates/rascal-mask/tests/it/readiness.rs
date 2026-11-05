@@ -346,3 +346,181 @@ fn describing_starts_no_pack_and_sends_no_request() {
     assert!(seen.lock().unwrap().is_empty(), "describing sent a request");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Task 13.10 (ADR 0023, table-manners 3.1): with a filler and a `[checker]`, `remove_prompt`
+/// takes a `check` setting, declares `answers: verdict`, and lists the checker's program and key
+/// as optional requirements for checking the result. A missing key leaves it `ready`: the remove
+/// runs and fills, unchecked. Without a checker, none of this appears.
+#[test]
+fn a_checkers_missing_key_is_optional_and_leaves_remove_prompt_ready() {
+    let dir = scratch("checker");
+    let home = dir.join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    let bin = env!("CARGO_BIN_EXE_rascal");
+    let install_dir = dir.join("pack");
+    fake_install::write(&install_dir, &[bin, "fake-pack", "exact"], false).unwrap();
+    fake_install::write_models(&install_dir.join("models")).unwrap();
+    let launcher = install_dir.join(".venv/bin/rascal-tools");
+    let pack = std::fs::read_to_string(pack_config(&dir, &launcher, &[])).unwrap();
+    let filler = format!(
+        "[fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\n"
+    );
+    let checker = format!(
+        "[checker]\ncommand = [{bin:?}, \"--version\"]\narguments = {{ source = {{ path = \"{{source}}\" }}, candidate = {{ path = \"{{candidate}}\" }} }}\nkey_env = \"CHECKER_TEST_KEY\"\nspend_usd_per_call = 0.01\n"
+    );
+    let describe = |config: &str| -> serde_json::Value {
+        let path = dir.join("rascal.toml");
+        std::fs::write(&path, config).unwrap();
+        let out = rascal(
+            &home,
+            &["describe", "--json", "--config", path.to_str().unwrap()],
+            &[],
+        );
+        let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        doc["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|a| a["name"] == "remove_prompt")
+            .unwrap()
+            .clone()
+    };
+
+    let with = describe(&format!("{pack}{filler}{checker}"));
+    assert_eq!(with["readiness"]["state"], "ready", "{with:#}");
+    assert_eq!(with["answers"], "verdict");
+    assert_eq!(
+        with["params_schema"]["properties"]["check"]["type"],
+        "boolean"
+    );
+    assert_eq!(
+        with["params_schema"]["properties"]["check"]["default"],
+        true
+    );
+    let requirements = with["readiness"]["requirements"].as_array().unwrap();
+    let key = requirements
+        .iter()
+        .find(|r| r["name"] == "CHECKER_TEST_KEY")
+        .unwrap();
+    assert_eq!(key["kind"], "credential");
+    assert_eq!(key["state"], "missing");
+    assert_eq!(key["optional"], true);
+    assert_eq!(key["for"], "checking the result");
+    let program = requirements
+        .iter()
+        .find(|r| r["name"] == "checker")
+        .unwrap();
+    assert_eq!(
+        (program["state"].as_str(), program["optional"].as_bool()),
+        (Some("present"), Some(true))
+    );
+
+    // No filler configured: nothing to check, so no checker requirement and no `check`.
+    let no_filler = describe(&format!("{pack}{checker}"));
+    assert!(
+        no_filler["readiness"]["requirements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["name"] != "CHECKER_TEST_KEY")
+    );
+
+    // No checker: no `check`, no `answers`, no optional requirement.
+    let without = describe(&format!("{pack}{filler}"));
+    assert!(
+        without["params_schema"]["properties"]
+            .get("check")
+            .is_none()
+    );
+    assert!(without.get("answers").is_none());
+    assert!(
+        without["readiness"]["requirements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r.get("optional").is_none())
+    );
+    // Other actions never take `check`.
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Task 13.10: `check` is an argument of `remove_prompt` only with a checker configured; the
+/// estimate records whether the result will be checked (`effective["x-rascal"].check`) and
+/// prices the tries: with a 0.04 filler and a 0.01 check, three tries are 0.15, and a cap of
+/// 0.12 leaves two (0.10). With the check turned off, one try is the filler's 0.04.
+#[test]
+fn the_estimate_prices_the_tries_and_records_the_check() {
+    let dir = scratch("checker-estimate");
+    let home = dir.join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    let bin = env!("CARGO_BIN_EXE_rascal");
+    let install_dir = dir.join("pack");
+    fake_install::write(&install_dir, &[bin, "fake-pack", "exact"], false).unwrap();
+    fake_install::write_models(&install_dir.join("models")).unwrap();
+    let launcher = install_dir.join(".venv/bin/rascal-tools");
+    let pack = std::fs::read_to_string(pack_config(&dir, &launcher, &[])).unwrap();
+    let filler = format!(
+        "[fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\nspend_usd_per_call = 0.04\n"
+    );
+    let checker = format!(
+        "[checker]\ncommand = [{bin:?}, \"--version\"]\narguments = {{ source = {{ path = \"{{source}}\" }}, candidate = {{ path = \"{{candidate}}\" }} }}\nkey_env = \"CHECKER_TEST_KEY\"\nspend_usd_per_call = 0.01\n"
+    );
+    let image = repo_root().join("fixtures/images/chair-blob.png");
+    let estimate = |config: &str, extra: serde_json::Value| -> (Option<i32>, serde_json::Value) {
+        let path = dir.join("rascal.toml");
+        std::fs::write(&path, config).unwrap();
+        let mut arguments = serde_json::json!({
+            "image": { "path": image }, "prompt": "chair", "filler": "fake",
+        });
+        for (k, v) in extra.as_object().unwrap() {
+            arguments[k] = v.clone();
+        }
+        let request = dir.join("request.json");
+        std::fs::write(
+            &request,
+            serde_json::json!({ "action": "remove_prompt", "arguments": arguments }).to_string(),
+        )
+        .unwrap();
+        let out = rascal(
+            &home,
+            &[
+                "estimate",
+                "--json",
+                "--config",
+                path.to_str().unwrap(),
+                request.to_str().unwrap(),
+            ],
+            &[("CHECKER_TEST_KEY", "set")],
+        );
+        let doc = serde_json::from_slice(&out.stdout).unwrap_or(serde_json::Value::Null);
+        (out.status.code(), doc)
+    };
+    let all = format!("{pack}{filler}{checker}");
+
+    let (code, e) = estimate(&all, serde_json::json!({}));
+    assert_eq!(code, Some(0), "{e:#}");
+    assert_eq!(
+        e["effective"]["x-rascal"]["check"],
+        serde_json::json!({ "on": true })
+    );
+    assert_eq!(e["worst_case_usd"], 0.15);
+
+    let (_, capped) = estimate(&all, serde_json::json!({ "max_spend_usd": 0.12 }));
+    assert_eq!(capped["worst_case_usd"], 0.1, "two tries fit 0.12");
+    assert_eq!(capped["allowed"], true);
+
+    let (_, off) = estimate(&all, serde_json::json!({ "check": false }));
+    assert_eq!(
+        off["effective"]["x-rascal"]["check"],
+        serde_json::json!({ "on": false, "reason": "turned_off" })
+    );
+    assert_eq!(off["worst_case_usd"], 0.04);
+
+    // Without a checker, `check` is not an argument of remove_prompt.
+    let (code, _) = estimate(
+        &format!("{pack}{filler}"),
+        serde_json::json!({ "check": false }),
+    );
+    assert_eq!(code, Some(64), "check without a checker is a usage error");
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -257,6 +257,13 @@ pub fn check_arguments(
                 Some("flat" | "equirectangular") => {}
                 _ => return Err(Error::usage(format!("projection: {value}"))),
             },
+            rascal_mask::checker::ARGUMENT
+                if action == SEGMENTER_ACTION && config.is_some_and(|c| c.checker.is_some()) =>
+            {
+                if !value.is_boolean() {
+                    return Err(Error::usage(format!("{key}: not true or false")));
+                }
+            }
             "strict" | "image_blocks" => {
                 if !value.is_boolean() {
                     return Err(Error::usage(format!("{key}: not true or false")));
@@ -322,9 +329,43 @@ pub struct Price {
     pub filler: Value,
     /// `x-rascal`: the constant set in force at each recipe step whose op has sets.
     pub constants: BTreeMap<String, String>,
-    /// What the limits check reserves; none when the call cannot be priced.
-    pub worst_case_usd: Option<f64>,
+    /// `x-rascal.check`: whether the result is checked and why not (`checker::Check::record`);
+    /// none for an action that is never checked.
+    pub check: Option<Value>,
+    /// What one try may spend (its filler, and its check when one runs); none when the call
+    /// cannot be priced.
+    pub try_usd: Option<f64>,
+    /// The most tries the call makes: [`rascal_mask::checker::MAX_TRIES`] when its result is checked,
+    /// else 1.
+    pub max_tries: u32,
     pub cap_usd: Option<f64>,
+}
+
+impl Price {
+    /// How many tries the limits allow and what they may spend (SPEC.md "Self-correcting
+    /// remove": spend, reserved up front): the most tries, up to `max_tries`, whose total fits
+    /// the call's cap and what the session's budget has left (`held`, none on the command
+    /// line); always at least one, which the limits check then refuses when even it does not
+    /// fit. None when the call cannot be priced.
+    pub fn tries(&self, held: Option<Held>) -> Option<(u32, f64)> {
+        let one = self.try_usd?;
+        let fits = |total: f64| {
+            self.cap_usd.is_none_or(|cap| total <= cap)
+                && held.is_none_or(|h| h.budget_usd.is_none_or(|b| usd(h.held_usd + total) <= b))
+        };
+        // Dollars to six decimals (table-manners 4.6), so three 0.05 tries are 0.15, not more.
+        let total = |k: u32| usd(one * f64::from(k));
+        let tries = (1..=self.max_tries.max(1))
+            .rev()
+            .find(|&k| fits(total(k)))
+            .unwrap_or(1);
+        Some((tries, total(tries)))
+    }
+
+    /// The worst case of the call as the limits allow it: [`Price::tries`]' total.
+    pub fn worst_case_usd(&self, held: Option<Held>) -> Option<f64> {
+        self.tries(held).map(|(_, total)| total)
+    }
 }
 
 /// Prices a call of `action` (running `recipe`) whose arguments are checked: the one function
@@ -357,7 +398,14 @@ pub fn price(
     };
     let priced = !config_unmet && !pack_unmet && (filler.is_none() || entry.is_some());
     let overrides = entry.map(|(_, e)| e.overrides.clone()).unwrap_or_default();
+    let check = rascal_mask::checker::resolve(config, action, args);
+    let fill_usd = entry.and_then(|(_, e)| e.spend_usd_per_call).unwrap_or(0.0);
+    let check_usd = config
+        .and_then(|c| c.checker.as_ref())
+        .filter(|_| check.on())
+        .map_or(0.0, |c| c.spend_usd_per_call);
     Ok(Price {
+        check: check.record(),
         constants: constants(recipe, &overrides, args.get("set"))?,
         model: entry.map(|(name, _)| format!("fillers.{name}")),
         config_identity,
@@ -370,8 +418,12 @@ pub fn price(
                 "fill_max_side": e.fill_max_side,
             })
         }),
-        worst_case_usd: priced
-            .then(|| entry.and_then(|(_, e)| e.spend_usd_per_call).unwrap_or(0.0)),
+        try_usd: priced.then_some(fill_usd + check_usd),
+        max_tries: if check.on() {
+            rascal_mask::checker::MAX_TRIES
+        } else {
+            1
+        },
         cap_usd: effective_cap(config, args)?,
         readiness,
     })
@@ -424,10 +476,11 @@ pub fn constants(
 /// scaled side) or null, and the constant set in force by step ([`constants`]).
 pub fn effective(price: &Price) -> Effective {
     let mut extensions = BTreeMap::new();
-    extensions.insert(
-        "x-rascal".to_string(),
-        json!({ "filler": price.filler, "constants": price.constants }),
-    );
+    let mut rascal = json!({ "filler": price.filler, "constants": price.constants });
+    if let Some(check) = &price.check {
+        rascal["check"] = check.clone();
+    }
+    extensions.insert("x-rascal".to_string(), rascal);
     Effective {
         model: price.model.clone(),
         config_identity: price.config_identity.clone(),
@@ -459,7 +512,7 @@ impl Limits {
             });
         }
         if let Some(budget) = self.session_budget_usd
-            && self.session_held_usd + self.worst_case_usd > budget
+            && usd(self.session_held_usd + self.worst_case_usd) > budget
         {
             return Err(Error::Budget {
                 reason: format!(
@@ -487,7 +540,7 @@ pub fn refusal(price: &Price, held: Option<Held>) -> Option<EstimateRefusal> {
         return Some(EstimateRefusal::Readiness);
     }
     let limits = Limits {
-        worst_case_usd: price.worst_case_usd.unwrap_or(0.0),
+        worst_case_usd: price.worst_case_usd(held).unwrap_or(0.0),
         call_cap_usd: price.cap_usd,
         session_budget_usd: held.and_then(|h| h.budget_usd),
         session_held_usd: held.map_or(0.0, |h| h.held_usd),
@@ -637,6 +690,7 @@ pub fn document(
     expires_ms: u128,
 ) -> Estimate {
     let refused = refusal(&price, held);
+    let worst_case_usd = price.worst_case_usd(held);
     Estimate {
         contract: rascal_core::contract::CONTRACT_VERSION.to_string(),
         tool: TmTool {
@@ -647,7 +701,7 @@ pub fn document(
         binding: bound.binding.clone(),
         session_id: session.as_ref().map(|s| s.id.clone()),
         effective: effective(&price),
-        worst_case_usd: price.worst_case_usd.map(usd),
+        worst_case_usd: worst_case_usd.map(usd),
         cap_usd: price.cap_usd.map(usd),
         allowed: refused.is_none(),
         refused,
@@ -703,6 +757,66 @@ mod tests {
             .join("../../fixtures/images/step-pano.png")
             .display()
             .to_string()
+    }
+
+    /// A price of one try at `try_usd`, checked (3 tries) or not, under a per-call cap.
+    fn priced(try_usd: f64, max_tries: u32, cap_usd: Option<f64>) -> Price {
+        Price {
+            readiness: Readiness {
+                state: ReadinessState::Ready,
+                requirements: vec![],
+            },
+            model: None,
+            config_identity: None,
+            filler: Value::Null,
+            constants: BTreeMap::new(),
+            check: None,
+            try_usd: Some(try_usd),
+            max_tries,
+            cap_usd,
+        }
+    }
+
+    /// PLAN.md 13.10: the number of tries is the most of `max_tries` that fits the cap and the
+    /// session's balance, never fewer than one (which the limits check then refuses when it does
+    /// not fit), and a call that is not checked makes one.
+    #[test]
+    fn the_tries_are_the_most_the_cap_and_the_balance_allow() {
+        let held = |budget: f64, held: f64| {
+            Some(Held {
+                budget_usd: Some(budget),
+                held_usd: held,
+            })
+        };
+        // A try is a 0.04 fill plus a 0.01 check.
+        assert_eq!(priced(0.05, 3, None).tries(None), Some((3, 0.15)));
+        assert_eq!(
+            priced(0.05, 3, Some(0.05)).tries(None).map(|t| t.0),
+            Some(1)
+        );
+        assert_eq!(
+            priced(0.05, 3, Some(0.12)).tries(None).map(|t| t.0),
+            Some(2)
+        );
+        assert_eq!(
+            priced(0.05, 3, Some(0.15)).tries(None).map(|t| t.0),
+            Some(3)
+        );
+        // The session's budget left: 0.30 with 0.20 held leaves room for two.
+        assert_eq!(
+            priced(0.05, 3, None).tries(held(0.30, 0.20)).map(|t| t.0),
+            Some(2)
+        );
+        // Under one try: still one, and the limits check refuses it.
+        let short = priced(0.05, 3, Some(0.02));
+        assert_eq!(short.tries(None), Some((1, 0.05)));
+        assert!(refusal(&short, None).is_some());
+        // Not checked: one try whatever the room.
+        assert_eq!(priced(0.04, 1, None).tries(None), Some((1, 0.04)));
+        // Unpriced: none.
+        let mut unpriced = priced(0.0, 3, None);
+        unpriced.try_usd = None;
+        assert_eq!(unpriced.tries(None), None);
     }
 
     /// The tool version is part of the binding: one call, one configuration, one session, two

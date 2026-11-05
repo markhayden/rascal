@@ -486,10 +486,14 @@ impl ContractActions {
             let images = estimate::slots(recipe)?.images;
             self.check_estimate(named, &action, &now, &images)?;
         }
+        // The number of tries and their total are chosen and reserved in one step under the
+        // ledger's lock (SPEC.md "Self-correcting remove"), so two calls never count the same
+        // balance.
         let mut ledger = self.ledger.lock().unwrap_or_else(|e| e.into_inner());
         let held = self.held(&ledger);
+        let worst_case_usd = price.worst_case_usd(Some(held)).unwrap_or(0.0);
         let limits = estimate::Limits {
-            worst_case_usd: price.worst_case_usd.unwrap_or(0.0),
+            worst_case_usd,
             call_cap_usd: price.cap_usd,
             session_budget_usd: held.budget_usd,
             session_held_usd: held.held_usd,

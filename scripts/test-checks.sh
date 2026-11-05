@@ -17,13 +17,16 @@ else bad "crate-graph check did not name the missing edge: $out"; fi
 rm -f "$empty" "$one"
 
 # --- contract pin -----------------------------------------------------------------------------
-out="$(CONTRACT_LATEST=999.0.0 scripts/check-contract.sh 2>&1)"
+# On a fixed manifest, not this branch's Cargo.toml: a milestone branch built against a contract
+# draft pins it by path, which CI's real check refuses so it cannot merge (below).
+manifest="$(mktemp)"
+printf 'table-manners = "=0.4.0"\n' > "$manifest"
+out="$(CONTRACT_MANIFEST="$manifest" CONTRACT_LATEST=999.0.0 scripts/check-contract.sh 2>&1)"
 if grep -q '::warning title=table-manners::' <<< "$out"; then ok
 else bad "contract check did not warn on a newer release: $out"; fi
-out="$(CONTRACT_LATEST=0.0.1 scripts/check-contract.sh 2>&1)"
+out="$(CONTRACT_MANIFEST="$manifest" CONTRACT_LATEST=0.0.1 scripts/check-contract.sh 2>&1)"
 if grep -q 'is the newest' <<< "$out"; then ok
 else bad "contract check warned on an older release: $out"; fi
-manifest="$(mktemp)"
 printf 'table-manners = "=0.3.0"\n' > "$manifest"
 out="$(CONTRACT_MANIFEST="$manifest" CONTRACT_LATEST=0.3.0 scripts/check-contract.sh 2>&1)"
 if grep -q 'table-manners 0.3.0 is the newest' <<< "$out"; then ok

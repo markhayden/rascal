@@ -351,6 +351,7 @@ pub fn finish(
             role: "result".to_string(),
             image,
             locator: Locator::Path(absolute(path)),
+            label: None,
         });
     }
     let artifacts = task_artifacts(pending, workspace_dir, &mut out, &mut notes);
@@ -362,6 +363,7 @@ pub fn finish(
                 role: "mask".to_string(),
                 image,
                 locator: Locator::Path(absolute(path)),
+                label: None,
             });
         }
     }
@@ -543,6 +545,7 @@ pub fn finish_with(
             .chain(produced.notes)
             .collect(),
         body,
+        verdict: None,
     };
     write(&pending.dir, &result)
 }

@@ -155,6 +155,36 @@ directory holding the previous journal: the run directory, or the workspace when
 page; every filler call, failed ones included, keeps its status, duration and bytes in the
 journal.
 
+## The checker (ADR 0023)
+
+`heal remove-prompt` can ask a **checker** whether the object is still visible after the fill and
+try again when it is (SPEC.md "Self-correcting remove", part 3). A checker is any table-manners
+tool action that answers with a verdict (contract 0.5.0, 2.4); squint's `source_fidelity` is the
+first. At most one, written by hand like a filler:
+
+```toml
+[checker]
+command = ["/Users/me/.local/bin/squint", "call", "source_fidelity"]   # by absolute path; rascal adds --arguments and --allow-dir
+arguments = { source = { path = "{source}" }, candidate = { path = "{candidate}" }, requirements = [{ id = "RQ1", kind = "must_not", text = "Any part of {prompt} is visible." }] }
+key_env = "ANTHROPIC_API_KEY"   # declared so readiness lists it and a host passes it; never read or stored
+spend_usd_per_call = 0.01       # the most one check costs: reserved per try, sent as the call's max_spend_usd
+timeout_s = 120
+revision = "squint 0.1, claude-haiku-5-5"
+```
+
+- `arguments` are the checker's own call arguments; rascal replaces `{source}` (the input image),
+  `{candidate}` (the try's result) and `{prompt}` in their string values and adds
+  `max_spend_usd`. `{source}` and `{candidate}` are required; any other `{…}` is refused.
+- The check runs for `remove_prompt` with a filler when a checker is configured, its key is
+  present, and the call has not turned it off (`"check": false`; `--no-check` on the command
+  line). The description then offers `check` (default true) and says `answers: verdict`.
+- The checker's program and key are **optional** requirements of `remove_prompt`, `for` "checking
+  the result": missing, the action stays `ready` and a call fills once, unchecked, saying why.
+- A checked call reserves its tries up front: the most of three whose total (each try the
+  filler's price plus the checker's) fits the call's cap and the session's balance, at least one.
+  The estimate's `worst_case_usd` is that total; `effective["x-rascal"].check` says whether the
+  result is checked, or why not.
+
 ## The fake fillers
 
 The testkit's fake filler is one implementation with six behaviours, reachable as a command
