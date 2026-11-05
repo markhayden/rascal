@@ -979,6 +979,27 @@ fn unsure_until_the_tries_run_out_keeps_the_try_the_selection_rule_picks() {
     .map(|(r, l)| (r.to_string(), l.to_string()))
     .collect();
     assert_eq!(roles(&result), expected);
+    // Every Mask's preview is one of the image outs: the same image at the same place, labelled
+    // alike (table-manners 4.7). The kept Mask's matches it exactly; another try's is listed
+    // under its own role.
+    for entry in result["artifacts"]["out"].as_array().unwrap() {
+        let preview = &entry["preview"];
+        assert_eq!(preview["role"], "preview", "{entry}");
+        let listed = result["images"]["out"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|o| o["path"] == preview["path"])
+            .unwrap_or_else(|| panic!("{} is not in images.out", preview["path"]));
+        assert_eq!(listed["image"], preview["image"]);
+        assert_eq!(listed["label"], preview["label"], "{entry}");
+        if entry["port"] == "mask" {
+            assert_eq!(
+                listed, preview,
+                "the kept Mask's preview is listed as it is"
+            );
+        }
+    }
     let out = &result["images"]["out"][0];
     assert_eq!(
         out["image"]["file_sha256"],

@@ -480,6 +480,17 @@ fn tries_out(
         for o in out.iter_mut() {
             o.label = label(kept.k, &o.role);
         }
+        // The kept Mask's preview is that same image out, label included (table-manners 4.7:
+        // every preview appears in `images.out`).
+        for entry in artifacts.out.iter_mut() {
+            if let Some(preview) = &mut entry.preview
+                && let Some(listed) = out
+                    .iter()
+                    .find(|o| o.role == preview.role && o.image == preview.image)
+            {
+                preview.label = listed.label.clone();
+            }
+        }
         body.insert("selected_try".into(), Value::from(kept.k));
     }
     for t in tries.iter().filter(|t| !t.selected) {
@@ -494,10 +505,13 @@ fn tries_out(
         let dir = t.result.parent().unwrap_or(Path::new("."));
         match try_mask_entry(workspace_dir, &t.mask, dir, &format!("mask_try_{}", t.k)) {
             Ok(entry) => {
-                if let Some(preview) = &entry.preview {
+                let mut entry = entry;
+                if let Some(preview) = &mut entry.preview {
+                    // Listed under its own role (its resource address); the Mask's preview is the
+                    // same image at the same place, labelled alike.
+                    preview.label = label(t.k, "preview");
                     out.push(ImageOut {
                         role: format!("preview_try_{}", t.k),
-                        label: label(t.k, "preview"),
                         ..preview.clone()
                     });
                 }

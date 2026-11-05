@@ -28,6 +28,7 @@
             "topology": "bounded",
             "width": 480
           },
+          "label": "Try 3 · preview",
           "path": "/runs/run-1767225600083-1/preview-mask.png",
           "role": "preview"
         }
@@ -57,6 +58,7 @@
             "topology": "bounded",
             "width": 480
           },
+          "label": "Try 1 · preview",
           "path": "/runs/run-1767225600083-1/tries/1/preview-mask.png",
           "role": "preview"
         }
@@ -86,6 +88,7 @@
             "topology": "bounded",
             "width": 480
           },
+          "label": "Try 2 · preview",
           "path": "/runs/run-1767225600083-1/tries/2/preview-mask.png",
           "role": "preview"
         }

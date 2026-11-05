@@ -28,6 +28,7 @@
             "topology": "bounded",
             "width": 480
           },
+          "label": "Try 1 · preview",
           "path": "/runs/run-1767225600082-1/preview-mask.png",
           "role": "preview"
         }
