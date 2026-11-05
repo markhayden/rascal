@@ -112,6 +112,18 @@ or all at once to a `many` input (`select`'s `plane = "segment.plane"`). `--repl
 names a recorded run: no pack is started and each pack step is answered from that run's journal
 when the request is the same, or fails naming the request.
 
+The engine can also run a recipe again from a named step, after a run of it in the same
+workspace, with one of that step's input ports bound by the caller (`Recipe::run_from`; no
+command-line flag). The steps before it do not run: their outputs, the declared inputs and the
+text inputs are the earlier run's. The bound port takes the caller's artifacts in place of the
+recipe's binding (every artifact of a `many` port, delivered as `<port>_0`, `<port>_1`, …), and
+the steps from it on run, journal and render as in any run. This is how `heal remove-prompt`
+rebuilds a mask from a set of planes: from `select`, its `plane` bound, through the same
+shaping, without running `segment` again ("Self-correcting remove" in SPEC.md). The rebinding is
+refused, naming the step, when the step or port is not the recipe's, when nothing is bound or a
+single port is given several, when an artifact is not the port's type, or when one is in another
+frame than what the recipe's binding gave that port in the earlier run.
+
 ## The shipped recipes
 
 | recipe | since | steps |

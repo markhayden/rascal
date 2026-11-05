@@ -167,7 +167,7 @@ with green CI on both platforms, and then the tag.
 - [ ] 13.8 table-manners v0.5 draft: verdict, optional requirements, image out labels
 - [ ] 13.9 squint answers with a verdict; real `squint call` integration test
 - [ ] 13.10 The checker's configuration, readiness, `check`, the reservation; ADR 0023
-- [ ] 13.11 `heal`, one try at a time (refactor) → tag `m13.2`
+- [x] 13.11 `heal`, one try at a time (refactor) → tag `m13.2`
 - [ ] 13.12a One checked try
 - [ ] 13.12b The located retry
 - [ ] 13.12c N tries, the selection and the outputs
