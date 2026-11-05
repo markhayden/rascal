@@ -28,5 +28,6 @@ decision's shape without reversing it. Format: Context, Decision, Alternatives, 
 | 0020 | rascal conforms to table-manners, the shared contract of the waffle tools | accepted 2026-10-30 |
 | 0021 | Operations are actions: references by identity, the binding refusal, the store, previews, export and import | accepted 2026-11-01 |
 | 0022 | A Mask travels as a canonical tar bundle, checked whole before it is imported | accepted 2026-11-01 |
+| 0023 | A bounded check-and-retry for `heal remove-prompt`: one configured checker, a fixed ladder of at most three tries (amends 0008) | accepted 2026-11-04 |
 
 Every decision the plan named by ADR is made.

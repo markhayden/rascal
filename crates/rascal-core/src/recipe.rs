@@ -554,10 +554,22 @@ pub struct Outcome {
     pub reason: Option<String>,
     /// Every binding produced, `inputs.*` included.
     pub bindings: BTreeMap<String, Artifact>,
+    /// The text inputs the run was given, by declared name.
+    pub texts: BTreeMap<String, String>,
     /// The named outputs: `mask`, `image`, `plan`.
     pub outputs: BTreeMap<String, Artifact>,
     /// Files written for `outputs.render`, by profile.
     pub renders: Vec<(String, PathBuf)>,
+}
+
+/// Where [`Recipe::run_from`] starts and what the caller binds there: the step `step`, with its
+/// input `port` taking `artifacts` in place of the recipe's binding (for `remove-prompt`,
+/// `select`'s `plane` taking a set of planes, so the shaping rebuilds a mask from them).
+#[derive(Debug, Clone)]
+pub struct Rebind {
+    pub step: String,
+    pub port: String,
+    pub artifacts: Vec<Artifact>,
 }
 
 /// The file in a run directory naming the outputs the run made, by output name
@@ -776,24 +788,204 @@ impl Recipe {
                 )));
             }
         }
-        let mut bindings: BTreeMap<String, Artifact> = BTreeMap::new();
-        for (name, artifact) in inputs {
-            bindings.insert(format!("inputs.{name}"), artifact);
+        let bindings = inputs
+            .into_iter()
+            .map(|(name, artifact)| (format!("inputs.{name}"), artifact))
+            .collect();
+        self.execute(registry, bindings, texts, 0, None, run)
+    }
+
+    /// Runs the validated recipe again from the step `rebind.step`, after an earlier run of it
+    /// (`earlier`, in the same workspace): the steps before it do not run, and their outputs,
+    /// the declared inputs and the text inputs are the earlier run's. The step's input
+    /// `rebind.port` takes the caller's artifacts in place of the recipe's binding: one
+    /// artifact, or for a many port every artifact, delivered as `<port>_0`, `<port>_1`, …
+    /// The steps from it on run as [`Recipe::run`] runs them, outputs and renders included.
+    ///
+    /// The rebinding is refused, naming the step, when the step or the port is not the
+    /// recipe's, when the artifacts are not the port's type or count, or when any is in another
+    /// frame than what the recipe's binding gave that port in the earlier run.
+    pub fn run_from(
+        &self,
+        registry: &OpRegistry,
+        earlier: &Outcome,
+        rebind: &Rebind,
+        run: &Run,
+    ) -> Result<Outcome> {
+        let index = self
+            .step
+            .iter()
+            .position(|s| s.id == rebind.step)
+            .ok_or_else(|| self.fail(&rebind.step, "no such step to run from"))?;
+        let step = &self.step[index];
+        let manifest = registry.require(&step.op)?.manifest();
+        let port = manifest
+            .inputs
+            .iter()
+            .find(|p| p.name == rebind.port)
+            .ok_or_else(|| {
+                self.fail(
+                    &step.id,
+                    format!("op {} has no input {} to bind", step.op, rebind.port),
+                )
+            })?;
+        match (port.many, rebind.artifacts.len()) {
+            (_, 0) => {
+                return Err(self.fail(
+                    &step.id,
+                    format!("input {} was bound to nothing", port.name),
+                ));
+            }
+            (false, n) if n > 1 => {
+                return Err(self.fail(
+                    &step.id,
+                    format!("input {} takes one artifact, but {n} were bound", port.name),
+                ));
+            }
+            _ => {}
         }
+        // The frame the recipe's own binding gave the port in the earlier run.
+        let binding = step.inputs.get(&port.name).ok_or_else(|| {
+            self.fail(
+                &step.id,
+                format!(
+                    "input {} has no binding in the recipe, so there is none to replace",
+                    port.name
+                ),
+            )
+        })?;
+        let replaced = earlier.bindings.get(binding).or_else(|| {
+            earlier.bindings.iter().find_map(|(name, a)| {
+                let n = name.strip_prefix(binding.as_str())?.strip_prefix('_')?;
+                n.parse::<usize>().ok().map(|_| a)
+            })
+        });
+        let frame = replaced.map(Artifact::frame).ok_or_else(|| {
+            self.fail(
+                &step.id,
+                format!(
+                    "input {} is bound to {binding}, which the earlier run did not produce",
+                    port.name
+                ),
+            )
+        })?;
+        let mut given: Inputs = BTreeMap::new();
+        for (n, artifact) in rebind.artifacts.iter().enumerate() {
+            let name = if port.many {
+                port.nth(n)
+            } else {
+                port.name.clone()
+            };
+            if artifact.artifact_type() != port.artifact_type {
+                return Err(self.fail(
+                    &step.id,
+                    format!(
+                        "input {} must be a {}, but the bound {name} is a {}",
+                        port.name,
+                        port.artifact_type,
+                        artifact.artifact_type()
+                    ),
+                ));
+            }
+            if artifact.frame() != frame {
+                return Err(self.fail(
+                    &step.id,
+                    format!(
+                        "input {} takes artifacts in frame {frame} (what {binding} gave it), but the bound {name} is in {}",
+                        port.name,
+                        artifact.frame()
+                    ),
+                ));
+            }
+            given.insert(name, artifact.clone());
+        }
+        // Only what the steps before this one made, and the inputs, carry over.
+        let before: Vec<&str> = self.step[..index].iter().map(|s| s.id.as_str()).collect();
+        let bindings = earlier
+            .bindings
+            .iter()
+            .filter(|(name, _)| {
+                name.split_once('.')
+                    .is_some_and(|(source, _)| source == "inputs" || before.contains(&source))
+            })
+            .map(|(name, a)| (name.clone(), a.clone()))
+            .collect();
+        self.execute(
+            registry,
+            bindings,
+            &earlier.texts,
+            index,
+            Some((&port.name, given)),
+            run,
+        )
+    }
+
+    /// The parameters step `id` runs with, as a run passes them: a string parameter naming a
+    /// text input takes its value (an absent optional text leaves it out, so the op's default
+    /// applies), and the step's constant set as `constants`. None when there is no such step.
+    pub fn step_params(&self, id: &str, texts: &BTreeMap<String, String>) -> Option<Params> {
+        self.step
+            .iter()
+            .find(|s| s.id == id)
+            .map(|step| self.params_of(step, texts))
+    }
+
+    fn params_of(&self, step: &Step, texts: &BTreeMap<String, String>) -> Params {
+        let mut params = step.params.clone();
+        for (name, value) in &step.params {
+            if let Some((text, _)) = self.text_binding(value) {
+                match texts.get(text) {
+                    Some(given) => {
+                        params.insert(name.clone(), toml::Value::String(given.clone()));
+                    }
+                    None => {
+                        params.remove(name);
+                    }
+                }
+            }
+        }
+        if let Some(constants) = &step.constants {
+            params.insert(
+                "constants".to_string(),
+                toml::Value::String(constants.clone()),
+            );
+        }
+        params
+    }
+
+    /// Runs the steps from `from` on over `bindings`, the step at `from` taking `rebound`
+    /// (a port and its artifacts) over the recipe's binding of that port.
+    fn execute(
+        &self,
+        registry: &OpRegistry,
+        mut bindings: BTreeMap<String, Artifact>,
+        texts: &BTreeMap<String, String>,
+        from: usize,
+        rebound: Option<(&str, Inputs)>,
+        run: &Run,
+    ) -> Result<Outcome> {
         let mut outcome = Outcome {
             status: Status::Ok,
             stopped_at: None,
             reason: None,
             bindings: BTreeMap::new(),
+            texts: texts.clone(),
             outputs: BTreeMap::new(),
             renders: Vec::new(),
         };
         let mut unmet: BTreeMap<String, String> = BTreeMap::new(); // step id -> reason
-        for step in &self.step {
+        for (index, step) in self.step.iter().enumerate().skip(from) {
             let manifest = registry.require(&step.op)?.manifest();
             let mut step_inputs: Inputs = BTreeMap::new();
             let mut blocked: Option<String> = None;
             for (port, binding) in &step.inputs {
+                if index == from
+                    && let Some((rebound_port, given)) = &rebound
+                    && *rebound_port == port.as_str()
+                {
+                    step_inputs.extend(given.clone());
+                    continue;
+                }
                 // A many input binds every `<step>.<port>_<n>` of an earlier step's many
                 // output, renamed to `<port>_<n>`; only a many port expands, and only from a
                 // step's output (a declared input is never many).
@@ -851,27 +1043,7 @@ impl Recipe {
                 }
                 break;
             }
-            // A string parameter naming a text input takes its value; an absent optional
-            // text leaves the parameter out, so the op's default applies.
-            let mut params = step.params.clone();
-            for (name, value) in &step.params {
-                if let Some((text, _)) = self.text_binding(value) {
-                    match texts.get(text) {
-                        Some(given) => {
-                            params.insert(name.clone(), toml::Value::String(given.clone()));
-                        }
-                        None => {
-                            params.remove(name);
-                        }
-                    }
-                }
-            }
-            if let Some(constants) = &step.constants {
-                params.insert(
-                    "constants".to_string(),
-                    toml::Value::String(constants.clone()),
-                );
-            }
+            let params = self.params_of(step, texts);
             let output = run.invoke(&step.id, &step.op, registry, &step_inputs, &params)?;
             if output.envelope.status != Status::Ok {
                 let reason = output.envelope.reason.clone().unwrap_or_default();

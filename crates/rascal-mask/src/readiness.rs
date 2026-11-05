@@ -22,6 +22,9 @@ pub const CONFIG_NAME: &str = "rascal.toml";
 /// The action that needs the segmenter pack.
 pub const SEGMENTER_ACTION: &str = "remove_prompt";
 
+/// What an optional checker requirement is for (table-manners 3.1's `for`).
+pub const CHECK_FOR: &str = "checking the result";
+
 /// The variable the segmenter pack reads its model directory from.
 pub const MODELS_ENV: &str = "RASCAL_TOOLS_MODELS";
 
@@ -85,6 +88,8 @@ pub fn for_call(setup: &Setup<'_>, action: &str, filler: Use<'_>) -> Readiness {
                     setup: Some(format!(
                         "Add `[fillers.{name}]` to {CONFIG_NAME}, or name a configured filler."
                     )),
+                    optional: false,
+                    needed_for: None,
                 }),
             },
             Use::Configured => {
@@ -96,6 +101,14 @@ pub fn for_call(setup: &Setup<'_>, action: &str, filler: Use<'_>) -> Readiness {
     }
     if segmenter {
         segmenter_requirements(setup, &mut requirements);
+        let fills = match filler {
+            Use::MaskOnly => false,
+            Use::Filler(_) => true,
+            Use::Configured => setup.config.config().is_some_and(|c| !c.fillers.is_empty()),
+        };
+        if fills {
+            checker_requirements(setup, &mut requirements);
+        }
     }
     let mut seen = std::collections::BTreeSet::new();
     requirements.retain(|r| seen.insert((format!("{:?}", r.kind), r.name.clone())));
@@ -109,12 +122,47 @@ pub fn for_call(setup: &Setup<'_>, action: &str, filler: Use<'_>) -> Readiness {
     }
 }
 
-/// Whether a requirement stands in the way: `missing` or `invalid`.
+/// Whether a requirement stands in the way: `missing` or `invalid`, and not optional (an
+/// optional one limits a part of the action, never the action: table-manners 3.1).
 pub fn unmet(requirement: &Requirement) -> bool {
-    matches!(
-        requirement.state,
-        RequirementState::Missing | RequirementState::Invalid
-    )
+    !requirement.optional
+        && matches!(
+            requirement.state,
+            RequirementState::Missing | RequirementState::Invalid
+        )
+}
+
+/// What the checker needs (ADR 0023), each optional and for checking the result: its program
+/// and its key. Missing either, the remove still runs and fills, unchecked, and says why.
+fn checker_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
+    let Some(checker) = setup.config.config().and_then(|c| c.checker.as_ref()) else {
+        return;
+    };
+    let optional = |mut r: Requirement| {
+        r.optional = true;
+        r.needed_for = Some(CHECK_FOR.to_string());
+        r
+    };
+    if let Some(program) = checker.command.first() {
+        let found = executable(program);
+        out.push(optional(Requirement {
+            kind: RequirementKind::Dependency,
+            name: "checker".to_string(),
+            state: if found {
+                RequirementState::Present
+            } else {
+                RequirementState::Missing
+            },
+            setup: (!found).then(|| {
+                format!("Install `{program}`, or point `checker.command` at a program that exists.")
+            }),
+            optional: false,
+            needed_for: None,
+        }));
+    }
+    if let Some(var) = &checker.key_env {
+        out.push(optional(credential(setup.answers, var)));
+    }
 }
 
 fn config_requirement(state: &ConfigState, segmenter: bool) -> Requirement {
@@ -147,6 +195,8 @@ fn config_requirement(state: &ConfigState, segmenter: bool) -> Requirement {
         name: CONFIG_NAME.to_string(),
         state,
         setup,
+        optional: false,
+        needed_for: None,
     }
 }
 
@@ -161,6 +211,8 @@ fn filler_requirements(
         name: format!("fillers.{name}"),
         state: RequirementState::Present,
         setup: None,
+        optional: false,
+        needed_for: None,
     });
     if let Some(var) = &entry.key_env {
         out.push(credential(setup.answers, var));
@@ -178,6 +230,8 @@ fn filler_requirements(
             setup: (!found).then(|| {
                 format!("Install `{program}`, or point `fillers.{name}.command` at a program that exists.")
             }),
+            optional: false,
+            needed_for: None,
         });
     }
 }
@@ -205,6 +259,8 @@ fn credential(answers: &Answers, var: &str) -> Requirement {
         name: var.to_string(),
         state,
         setup: Some(setup),
+        optional: false,
+        needed_for: None,
     }
 }
 
@@ -240,6 +296,8 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
             name: format!("packs.{PACK_NAME}"),
             state: RequirementState::Missing,
             setup: Some("Run `rascal tools setup --bundle <bundle> --config <path>`.".to_string()),
+            optional: false,
+            needed_for: None,
         });
         return;
     };
@@ -253,6 +311,8 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
                 "{} does not exist. Run `rascal tools setup --bundle <bundle> --config <path>`.",
                 launcher.display()
             )),
+            optional: false,
+            needed_for: None,
         });
         return;
     }
@@ -264,6 +324,8 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
             setup: Some(format!(
                 "`rascal serve` could not start it: {reason}. Fix the install and restart rascal."
             )),
+            optional: false,
+            needed_for: None,
         });
         return;
     }
@@ -272,6 +334,8 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
         name: format!("packs.{name}"),
         state: RequirementState::Present,
         setup: None,
+        optional: false,
+        needed_for: None,
     });
     let passes_models = entry.env.iter().any(|v| v == MODELS_ENV);
     let models_env = passes_models
@@ -296,6 +360,8 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
                 name: var.clone(),
                 state: RequirementState::Present,
                 setup: None,
+                optional: false,
+                needed_for: None,
             });
         } else if var == MODELS_ENV && !all_present {
             out.push(Requirement {
@@ -306,6 +372,8 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
                     "Set `{MODELS_ENV}` to the directory holding the model files, or put them in {}.",
                     models.display()
                 )),
+                optional: false,
+                needed_for: None,
             });
         }
     }
@@ -372,6 +440,8 @@ fn model_files(install: &Path, models: &Path) -> Vec<Requirement> {
                 "{} holds no readable artifacts.toml. Run `rascal tools setup --bundle <bundle> --config <path>` again.",
                 install.display()
             )),
+            optional: false,
+            needed_for: None,
         }];
     };
     names
@@ -392,6 +462,8 @@ fn model_files(install: &Path, models: &Path) -> Vec<Requirement> {
                     )
                 }),
                 name,
+                optional: false,
+                needed_for: None,
             }
         })
         .collect()

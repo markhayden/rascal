@@ -38,7 +38,7 @@
     "recipe": "seam"
   },
   "cache": "off",
-  "contract": "0.4.0",
+  "contract": "0.5.0",
   "duration_ms": 0,
   "error": {
     "code": "tool_process",
@@ -135,7 +135,7 @@
   "notes": [
     "filler call started: {\"filler\":\"failing\",\"spend_usd\":0.04}",
     "filler call: {\"filler\":\"failing\",\"target\":\"/rascal/target/debug/rascal fake-filler failing {image} {mask} {out}\",\"request_width\":112,\"request_height\":400,\"request_bytes\":34089,\"response_bytes\":0,\"duration_ms\":0,\"status\":2,\"outcome\":\"filler: fillers.failing: exited with 2: fake filler: failing as asked\",\"charge\":\"unresolved\"}",
-    "0.0400 USD of the spend is unresolved: a filler call was sent and no answer settles whether it was charged; it is counted at its price"
+    "0.0400 USD of the spend is unresolved: a filler or checker call was sent and no answer settles whether it was charged; it is counted at its price"
   ],
   "run": {
     "client_run_id": null,

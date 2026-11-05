@@ -704,7 +704,11 @@ measure: band set with before = I_F, after = W' in F (the mask's frame); drift w
 ```
 
 For `heal remove-prompt` with a configured checker the graph runs once per try, on each try's
-mask (see "Self-correcting remove"); every other `heal` runs it once.
+mask (see "Self-correcting remove"); every other `heal` runs it once. A try's mask comes from a
+run of the recipe from a named step with one of its input ports bound by the caller (`select`'s
+`plane` bound to `P_k`): the steps before it do not run, their outputs and the run's inputs are
+the earlier run's, and the binding is refused, naming the step, unless every artifact is the
+port's type and in the frame the recipe's own binding gave that port.
 
 The journal gains the filler call: a note when it starts with the entry's price, then the command
 or URL, request dimensions, duration, bytes, exit status and whether it may have been charged
@@ -968,11 +972,18 @@ raw frame (`remove-prompt` masks in the raw frame, with no `cut:`).
    - a place where it finds nothing adds its own region, rasterized, as a plane.
 
    With an empty `where`, `M_{k+1}` takes `grow.px` doubled once. Places that overlap simply
-   union.
+   union. The place's box is the box of its rasterized pixels; the pad snaps outward to whole
+   pixels and is clamped to the image; a place in several parts is one place per part, and one
+   that covers no pixel adds nothing. A try whose mask cannot be made (the shaping stops) or
+   whose fill stops ends the tries, keeping those made.
 5. If `M_{k+1}` has the same identity as `M_k`, stop: another try would repeat this one.
 
 **The result.** The selected try is the first `pass`. Failing that, tries rank `unsure` over
-`fail`, then fewer places in `where`, then the earlier try. The run's summary says which try
+`fail` (and both over a try whose check could not run), then fewer places in `where`, then the
+earlier try. The summary is a note: "Kept try 2 of 3." and, when it did not pass, "The check
+still sees <prompt> in 1 place (unsure)."; the selected try's result is also the run directory's
+`result.png`, its Mask the run's (`artifacts.out` port `mask`), and every other try's Mask is
+listed beside it as `mask_try_<k>`. The run's summary says which try
 was kept and, if it did not pass, "The check still sees …". `selected_try` is recorded. The
 selected try's result, preview and mask lead `images.out` with the roles `result`, `preview` and
 `mask`; every other try follows in try order as `result_try_<k>`, `preview_try_<k>` and
@@ -984,11 +995,17 @@ files live under `tries/<k>/` in the run directory and are never overwritten by 
 Masks are committed artifacts like any other, so a host can open an earlier try's mask and
 preview after the run.
 
-**Recording and replay.** Each check call is journaled like a pack call: `checker call:` (the
-command, duration, exit, spend; never a key) and `checker stored:`. The stored record holds the
+**Recording and replay.** Each check call is journaled like a filler call: `checker call
+started:` (its price) before it, so a run stopped mid-check counts it, `checker call:` (the
+command, duration, exit, spend; never a key) after it, and `checker stored:`. The checker runs
+with `tries/<k>/check/` as its working directory, and its printed result is kept there as
+`result.json`. The stored record holds the
 request identity (source, candidate and resolved arguments), the result and the try's
 transition (the places used, the planes added). `heal --replay` answers checks from the
-recording, as it does pack steps; a check the recording lacks is an error, never a call. A run's
+recording, as it does pack steps, matching a check by its request identity and its try (a
+checker may answer one request differently on two tries); a check the recording lacks is an
+error, never a call. A cancelled check's process is stopped as a pack's is (stdin closed, then
+SIGTERM, then SIGKILL), and is counted at its price as unresolved. A run's
 `run.json` lists the tries, each with its mask identity, its result's image reference, its
 verdict and its spend.
 
@@ -1359,7 +1376,7 @@ behind the tool.
 
 rascal conforms to **table-manners** v0.4 (milestone M10, after v0.3.0 in M12 and v0.2.0 in M11),
 pinned `=0.4.0` from crates.io (PLAN.md 10.15); M13 moves to `=0.5.0` (the result's `verdict` and
-optional requirements)
+optional requirements; by path until the release is published, PLAN.md 13.15)
 (https://github.com/markhayden/table-manners; ADR 0020, decisions 13 and 14), the shared contract of the owner's tools: what an agent, a script or the
 playground sees from outside is the same for squint, rascal and the tools after them, so they
 chain in one pipeline without glue code. The contract's text is the specification of that

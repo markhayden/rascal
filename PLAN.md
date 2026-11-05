@@ -3701,7 +3701,8 @@ The changes cover:
 - **Readiness.** The checker's key is an `optional` credential, `for` "checking the result", on
   `remove_prompt` only.
 - **The setting.** `check` (boolean, default true) is in `remove_prompt`'s `params_schema` when
-  a checker is configured, and `--no-check` on the CLI.
+  a checker is configured. (`--no-check` on the CLI lands with 13.12a, built 2026-11-04: it rides
+  on `heal`'s arguments, which 13.11 was reshaping at the same time.)
 - **Resolution.** One function settles whether a check will run (the spec's five conditions)
   before readiness and the estimate. The invocation records `check` and the reason when it is
   off.

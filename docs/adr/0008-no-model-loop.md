@@ -1,6 +1,6 @@
 # 0008: No model-driven loop inside rascal
 
-Date: 2026-10-28. Status: accepted.
+Date: 2026-10-28. Status: accepted; amended by ADR 0023 (a bounded check-and-retry for `heal remove-prompt`).
 
 ## Context
 

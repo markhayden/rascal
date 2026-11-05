@@ -1,6 +1,6 @@
 //! `rascal.toml`: the configuration a pipeline gives rascal: the general sections, the
-//! `[fillers.*]` entries (SPEC.md "Fillers") and the `[packs.*]` entries (SPEC.md "The MCP
-//! server and client").
+//! `[fillers.*]` entries (SPEC.md "Fillers"), the `[packs.*]` entries (SPEC.md "The MCP
+//! server and client") and the `[checker]` (SPEC.md "Self-correcting remove").
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -55,6 +55,102 @@ pub struct Config {
     /// What `serve` lets callers name (CONTRACT 5.2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub serve: Option<ServeConfig>,
+    /// The tool `heal remove-prompt` asks whether the object is gone (ADR 0023); at most one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checker: Option<CheckerConfig>,
+}
+
+/// `[checker]`: a table-manners tool action that answers with a verdict (table-manners 2.4),
+/// called as `<command> --arguments <file> --allow-dir <dir>` with `arguments` rendered:
+/// every string value's `{source}`, `{candidate}` and `{prompt}` replaced by the input image's
+/// staged path, the result's staged path and the call's prompt. The arguments are the checker's
+/// own, so rascal holds no checker-specific code. `key_env` names the checker's key: declared so
+/// readiness lists it (optional, for checking the result) and a host passes it; never read,
+/// stored or logged, and kept from every pack.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CheckerConfig {
+    /// The command and its arguments, by absolute path (a host runs tools with a fixed `PATH`);
+    /// rascal adds `--arguments <file>` and `--allow-dir <dir>`.
+    pub command: Vec<String>,
+    /// The checker's call arguments, with the placeholders in its string values.
+    #[schemars(with = "std::collections::BTreeMap<String, serde_json::Value>")]
+    pub arguments: toml::Table,
+    /// The environment variable holding the checker's key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_env: Option<String>,
+    /// The most one check may cost, in US dollars: reserved per try and passed as the call's
+    /// `max_spend_usd`.
+    pub spend_usd_per_call: f64,
+    /// Seconds before a check is abandoned (the check could not run).
+    #[serde(default = "default_timeout")]
+    pub timeout_s: u64,
+    /// Free text naming what the checker is (its version, its model), recorded with each check.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+}
+
+/// The placeholders a checker's arguments may name.
+pub const CHECKER_PLACEHOLDERS: [&str; 3] = ["{source}", "{candidate}", "{prompt}"];
+
+impl CheckerConfig {
+    /// The entry's shape rules.
+    pub fn check(&self) -> Result<()> {
+        let fail = |m: String| Error::usage(format!("checker: {m}"));
+        if self.command.is_empty() || self.command[0].trim().is_empty() {
+            return Err(fail("command is empty".into()));
+        }
+        if !(self.spend_usd_per_call.is_finite() && self.spend_usd_per_call >= 0.0) {
+            return Err(fail(format!(
+                "spend_usd_per_call must be a price of 0 or more, got {}",
+                self.spend_usd_per_call
+            )));
+        }
+        if self.timeout_s == 0 {
+            return Err(fail("timeout_s must be at least 1".into()));
+        }
+        if let Some(var) = &self.key_env
+            && (var.is_empty() || !var.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+        {
+            return Err(fail(format!(
+                "key_env {var:?} is not a plain variable name"
+            )));
+        }
+        let mut found = Vec::new();
+        strings(&toml::Value::Table(self.arguments.clone()), &mut found);
+        for text in &found {
+            let mut rest = text.as_str();
+            while let Some(open) = rest.find('{') {
+                let Some(close) = rest[open..].find('}') else {
+                    break;
+                };
+                let name = &rest[open..open + close + 1];
+                if !CHECKER_PLACEHOLDERS.contains(&name) {
+                    return Err(fail(format!(
+                        "arguments name {name}; the placeholders are {}",
+                        CHECKER_PLACEHOLDERS.join(", ")
+                    )));
+                }
+                rest = &rest[open + close + 1..];
+            }
+        }
+        for needed in ["{source}", "{candidate}"] {
+            if !found.iter().any(|t| t.contains(needed)) {
+                return Err(fail(format!("arguments name no {needed}")));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Every string inside a TOML value, depth first.
+fn strings(value: &toml::Value, out: &mut Vec<String>) {
+    match value {
+        toml::Value::String(s) => out.push(s.clone()),
+        toml::Value::Array(items) => items.iter().for_each(|v| strings(v, out)),
+        toml::Value::Table(table) => table.values().for_each(|v| strings(v, out)),
+        _ => {}
+    }
 }
 
 /// `[serve]`: `allow_dirs` narrows the directories `rascal serve --allow-dir` allows, never
@@ -117,6 +213,11 @@ impl Config {
             pack.check(name)
                 .map_err(|e| Error::usage(format!("{origin}: {e}")))?;
         }
+        if let Some(checker) = &config.checker {
+            checker
+                .check()
+                .map_err(|e| Error::usage(format!("{origin}: {e}")))?;
+        }
         if let Some(limits) = &config.limits {
             for (what, value) in [
                 ("call_cap_usd", limits.call_cap_usd),
@@ -143,11 +244,13 @@ impl Config {
         Ok(config)
     }
 
-    /// Every environment variable a filler names as `key_env`: the names no pack may see.
+    /// Every environment variable a filler or the checker names as `key_env`: the names no pack
+    /// may see.
     pub fn key_envs(&self) -> Vec<String> {
         self.fillers
             .values()
             .filter_map(|f| f.key_env.clone())
+            .chain(self.checker.as_ref().and_then(|c| c.key_env.clone()))
             .collect()
     }
 

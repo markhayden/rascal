@@ -101,6 +101,10 @@ struct Reservation<'a> {
     ledger: &'a std::sync::Mutex<Ledger>,
     usd: f64,
     settled: bool,
+    /// Whether the result is checked, and the tries the hold covers (SPEC.md "Self-correcting
+    /// remove": spend, reserved up front).
+    check: rascal_mask::checker::Check,
+    tries: u32,
 }
 
 impl Reservation<'_> {
@@ -486,10 +490,14 @@ impl ContractActions {
             let images = estimate::slots(recipe)?.images;
             self.check_estimate(named, &action, &now, &images)?;
         }
+        // The number of tries and their total are chosen and reserved in one step under the
+        // ledger's lock (SPEC.md "Self-correcting remove"), so two calls never count the same
+        // balance.
         let mut ledger = self.ledger.lock().unwrap_or_else(|e| e.into_inner());
         let held = self.held(&ledger);
+        let (tries, worst_case_usd) = price.tries(Some(held)).unwrap_or((1, 0.0));
         let limits = estimate::Limits {
-            worst_case_usd: price.worst_case_usd.unwrap_or(0.0),
+            worst_case_usd,
             call_cap_usd: price.cap_usd,
             session_budget_usd: held.budget_usd,
             session_held_usd: held.held_usd,
@@ -500,6 +508,8 @@ impl ContractActions {
             ledger: &self.ledger,
             usd: limits.worst_case_usd,
             settled: false,
+            check: price.check,
+            tries,
         })
     }
 
@@ -708,7 +718,8 @@ impl ContractActions {
             }
             Ok((run_args, reservation)) => {
                 image = Some(run_args.image.clone());
-                let mut pending = run_json::pending_for(&run_args, filler.as_deref());
+                let mut pending =
+                    run_json::pending_for(&run_args, filler.as_deref(), reservation.check.record());
                 pending.invocation = invocation;
                 pending.id = id.clone();
                 pending.started_ms = started_ms;
@@ -719,7 +730,13 @@ impl ContractActions {
                 let journal = out.join("journal.jsonl");
                 let ended = std::thread::scope(|scope| {
                     scope.spawn(|| watch_journal(&journal, &done, progress));
-                    let ended = self.execute(recipe, run_args, filler.as_deref());
+                    let ended = self.execute(
+                        recipe,
+                        run_args,
+                        filler.as_deref(),
+                        &reservation.check,
+                        reservation.tries,
+                    );
                     done.store(true, Ordering::SeqCst);
                     ended
                 });
@@ -782,8 +799,16 @@ impl ContractActions {
         Ok(())
     }
 
-    /// Runs the recipe, through `heal` when a filler is named.
-    fn execute(&self, recipe: &str, run_args: run::RunArgs, filler: Option<&str>) -> Ended {
+    /// Runs the recipe, through `heal` when a filler is named, checked as `check` says over at
+    /// most `tries` tries.
+    fn execute(
+        &self,
+        recipe: &str,
+        run_args: run::RunArgs,
+        filler: Option<&str>,
+        check: &rascal_mask::checker::Check,
+        tries: u32,
+    ) -> Ended {
         match filler {
             Some(filler) => match heal::heal(&heal::HealArgs {
                 run: run_args,
@@ -791,18 +816,29 @@ impl ContractActions {
                 no_dash: true,
                 replay: None,
                 cache: None,
+                check: check.clone(),
+                tries,
             }) {
-                Ok(report) => run_json::ended_ok(
+                Ok(report) if report.cancelled.is_some() => run_json::ended_cancelled(
                     recipe,
-                    report.status,
-                    report.stopped_at.as_deref(),
-                    report.reason.as_deref(),
-                    None,
-                    Some(filler),
-                    report.renders,
-                    report.result,
-                    report.cache,
+                    report.cancelled.as_deref().unwrap_or_default(),
+                    report.tries,
                 ),
+                Ok(report) => Ended {
+                    verdict: report.verdict,
+                    tries: report.tries,
+                    ..run_json::ended_ok(
+                        recipe,
+                        report.status,
+                        report.stopped_at.as_deref(),
+                        report.reason.as_deref(),
+                        None,
+                        Some(filler),
+                        report.renders,
+                        report.result,
+                        report.cache,
+                    )
+                },
                 Err(error) => run_json::ended_with(recipe, &error),
             },
             None => match run::run(&run_args) {

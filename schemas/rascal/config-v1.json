@@ -22,6 +22,56 @@
       ],
       "type": "object"
     },
+    "CheckerConfig": {
+      "additionalProperties": false,
+      "description": "`[checker]`: a table-manners tool action that answers with a verdict (table-manners 2.4),\ncalled as `<command> --arguments <file> --allow-dir <dir>` with `arguments` rendered:\nevery string value's `{source}`, `{candidate}` and `{prompt}` replaced by the input image's\nstaged path, the result's staged path and the call's prompt. The arguments are the checker's\nown, so rascal holds no checker-specific code. `key_env` names the checker's key: declared so\nreadiness lists it (optional, for checking the result) and a host passes it; never read,\nstored or logged, and kept from every pack.",
+      "properties": {
+        "arguments": {
+          "additionalProperties": true,
+          "description": "The checker's call arguments, with the placeholders in its string values.",
+          "type": "object"
+        },
+        "command": {
+          "description": "The command and its arguments, by absolute path (a host runs tools with a fixed `PATH`);\nrascal adds `--arguments <file>` and `--allow-dir <dir>`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "key_env": {
+          "description": "The environment variable holding the checker's key.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "revision": {
+          "description": "Free text naming what the checker is (its version, its model), recorded with each check.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "spend_usd_per_call": {
+          "description": "The most one check may cost, in US dollars: reserved per try and passed as the call's\n`max_spend_usd`.",
+          "format": "double",
+          "type": "number"
+        },
+        "timeout_s": {
+          "default": 120,
+          "description": "Seconds before a check is abandoned (the check could not run).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command",
+        "arguments",
+        "spend_usd_per_call"
+      ],
+      "type": "object"
+    },
     "CorpusConfig": {
       "additionalProperties": false,
       "description": "The private corpus (M6).",
@@ -287,6 +337,17 @@
         }
       ],
       "description": "The fill cache (table-manners 4.4, ADR 0020): a fill is kept by its request, so an\nidentical request is answered without calling the filler again."
+    },
+    "checker": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CheckerConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The tool `heal remove-prompt` asks whether the object is gone (ADR 0023); at most one."
     },
     "config_version": {
       "description": "The file's version.",

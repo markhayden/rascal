@@ -73,7 +73,7 @@ the shipped files are the acceptance fixtures:
 |---|---|---|
 | `seam` | a band across the wrap edge of a 360, wide where the surface is smooth and thin where it is detailed, with a tone ramp across it | none: the wrap edge |
 | `remove` | an object with its shadow, minus protected zones, feathered | a click, a stroke, a polygon or a rectangle |
-| `remove-prompt` | the same, found by the Python pack's segmenter (OWLv2 and SAM 2.1, `tools/python/MODEL.md`) | a text prompt |
+| `remove-prompt` | the same, found by the Python pack's segmenter (OWLv2 and SAM 2.1, `tools/python/MODEL.md`): the whole object, small holes filled; with a `[checker]`, `heal` checks the fill and retries (up to three tries) | a text prompt |
 | `repair` | a scratch or tear, tightened to the defect's edges and feathered | a stroke |
 | `repair-area` | a stain or spot, rasterized and feathered | a rectangle or polygon |
 | `protect` | the inverse of any mask, for a second pass | a mask |
@@ -84,6 +84,7 @@ rascal run seam pano.jpg --out run/
 rascal run remove room.jpg --location chairs.json --out run/
 rascal run remove-prompt room.jpg --prompt "chair" --config rascal.toml --out run/   # the pack's segmenter finds them
 rascal heal remove-prompt room.jpg --prompt "chair" --set segment.threshold=0.4 --set grow.px=8 --filler lama --config rascal.toml --out run/
+rascal heal remove-prompt dog.jpg --prompt "leather collar. dog tags." --filler bria-erase --config rascal.toml --out run/   # with [checker]: filled, checked, retried where the checker still sees it; --no-check turns it off
 rascal run repair print.jpg --stroke scratch.json --out run/
 rascal heal seam pano.jpg --filler local-inpaint --config rascal.toml --out run/
 rascal render run/artifacts/<id> --for tinted --image img-3 --out seam-tinted.png

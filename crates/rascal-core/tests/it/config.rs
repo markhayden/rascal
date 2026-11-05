@@ -124,3 +124,78 @@ fn serve_allow_dirs_are_absolute() {
         Config::builtin().identity()
     );
 }
+
+/// Task 13.10: `[checker]` (SPEC.md "Self-correcting remove", part 3): the command, the
+/// checker's own arguments with the three placeholders, a key, a price per check, a timeout.
+const CHECKER: &str = r#"
+config_version = 1
+[checker]
+command = ["/opt/squint/bin/squint", "call", "source_fidelity"]
+arguments = { source = { path = "{source}" }, candidate = { path = "{candidate}" }, requirements = [{ id = "RQ1", kind = "must_not", text = "Any part of {prompt} is visible." }] }
+key_env = "ANTHROPIC_API_KEY"
+spend_usd_per_call = 0.01
+revision = "squint 0.1, claude-haiku-5-5"
+"#;
+
+#[test]
+fn a_checker_parses_and_its_key_is_kept_from_packs() {
+    let config = Config::parse(CHECKER, "rascal.toml").unwrap();
+    let checker = config.checker.as_ref().unwrap();
+    assert_eq!(checker.timeout_s, 120, "the filler's default timeout");
+    assert_eq!(checker.spend_usd_per_call, 0.01);
+    assert!(config.key_envs().contains(&"ANTHROPIC_API_KEY".to_string()));
+}
+
+#[test]
+fn a_checker_entry_that_does_not_check_is_refused_naming_why() {
+    for (from, to, why) in [
+        (
+            r#"command = ["/opt/squint/bin/squint", "call", "source_fidelity"]"#,
+            "command = []",
+            "command is empty",
+        ),
+        (
+            "spend_usd_per_call = 0.01",
+            "spend_usd_per_call = -1.0",
+            "spend_usd_per_call",
+        ),
+        (
+            "spend_usd_per_call = 0.01",
+            "spend_usd_per_call = 0.01\ntimeout_s = 0",
+            "timeout_s",
+        ),
+        (
+            r#"key_env = "ANTHROPIC_API_KEY""#,
+            r#"key_env = "A KEY""#,
+            "key_env",
+        ),
+        (
+            "{prompt} is visible",
+            "{object} is visible",
+            "arguments name {object}",
+        ),
+        (
+            r#"candidate = { path = "{candidate}" }, "#,
+            "",
+            "arguments name no {candidate}",
+        ),
+        (
+            r#"source = { path = "{source}" }, "#,
+            "",
+            "arguments name no {source}",
+        ),
+    ] {
+        assert!(CHECKER.contains(from), "{from}");
+        let text = CHECKER.replace(from, to);
+        let error = Config::parse(&text, "rascal.toml").unwrap_err().to_string();
+        assert!(
+            error.contains("checker") && error.contains(why),
+            "{why}: {error}"
+        );
+    }
+    let missing_price = CHECKER.replace("spend_usd_per_call = 0.01\n", "");
+    assert!(
+        Config::parse(&missing_price, "rascal.toml").is_err(),
+        "a price is required"
+    );
+}

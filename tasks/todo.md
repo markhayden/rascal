@@ -166,13 +166,13 @@ with green CI on both platforms, and then the tag.
 - [ ] 13.7 The pick (owner); ADR 0018 section, export if needed
 - [ ] 13.8 table-manners v0.5 draft: verdict, optional requirements, image out labels
 - [ ] 13.9 squint answers with a verdict; real `squint call` integration test
-- [ ] 13.10 The checker's configuration, readiness, `check`, the reservation; ADR 0023
-- [ ] 13.11 `heal`, one try at a time (refactor) → tag `m13.2`
-- [ ] 13.12a One checked try
-- [ ] 13.12b The located retry
-- [ ] 13.12c N tries, the selection and the outputs
-- [ ] 13.13 Replay and cancellation → tag `m13.3`
+- [x] 13.10 The checker's configuration, readiness, `check`, the reservation; ADR 0023
+- [x] 13.11 `heal`, one try at a time (refactor) → tag `m13.2`
+- [x] 13.12a One checked try
+- [x] 13.12b The located retry
+- [x] 13.12c N tries, the selection and the outputs
+- [x] 13.13 Replay and cancellation → tag `m13.3`
 - [ ] 13.14 Wafflery shows checks → tag `m13.4`
-- [ ] 13.15 Version 0.5.0 everywhere at once; publish; pins from crates.io
+- [x] 13.15 Version 0.5.0 everywhere at once; publish; pins from crates.io (2026-11-05: the v0.5 fixtures regenerated with the loop's four; table-manners 0.5.0 published; pinned `=0.5.0` from crates.io)
 - [ ] 13.16 Merge and the by-hand check
 - [ ] Checkpoint M13 → tag `m13`

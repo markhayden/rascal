@@ -155,6 +155,112 @@ directory holding the previous journal: the run directory, or the workspace when
 page; every filler call, failed ones included, keeps its status, duration and bytes in the
 journal.
 
+## The checker (ADR 0023)
+
+`heal remove-prompt` can ask a **checker** whether the object is still visible after the fill and
+try again when it is (SPEC.md "Self-correcting remove", part 3). A checker is any table-manners
+tool action that answers with a verdict (contract 0.5.0, 2.4); squint's `source_fidelity` is the
+first. At most one, written by hand like a filler:
+
+```toml
+[checker]
+command = ["/Users/me/.local/bin/squint", "call", "source_fidelity"]   # by absolute path; rascal adds --arguments and --allow-dir
+arguments = { source = { path = "{source}" }, candidate = { path = "{candidate}" }, requirements = [{ id = "RQ1", kind = "must_not", text = "Any part of {prompt} is visible." }] }
+key_env = "ANTHROPIC_API_KEY"   # declared so readiness lists it and a host passes it; never read or stored
+spend_usd_per_call = 0.01       # the most one check costs: reserved per try, sent as the call's max_spend_usd
+timeout_s = 120
+revision = "squint 0.1, claude-haiku-5-5"
+```
+
+- `arguments` are the checker's own call arguments; rascal replaces `{source}` (the input image),
+  `{candidate}` (the try's result) and `{prompt}` in their string values and adds
+  `max_spend_usd`. `{source}` and `{candidate}` are required; any other `{…}` is refused.
+- The check runs for `remove_prompt` with a filler when a checker is configured, its key is
+  present, and the call has not turned it off (`"check": false`; `--no-check` on the command
+  line, `rascal heal … --no-check`). The description then offers `check` (default true) and says
+`answers: verdict`.
+- The checker's program and key are **optional** requirements of `remove_prompt`, `for` "checking
+  the result": missing, the action stays `ready` and a call fills once, unchecked, saying why.
+- A checked call reserves its tries up front: the most of three whose total (each try the
+  filler's price plus the checker's) fits the call's cap and the session's balance, at least one.
+  The estimate's `worst_case_usd` is that total; `effective["x-rascal"].check` says whether the
+  result is checked, or why not. The run's notes say "Checked: up to N tries within the spend
+  limits.", or why it was not checked ("Not checked: the checker needs ANTHROPIC_API_KEY.").
+
+**One check.** Each try's result is written as `tries/<k>/result.png` in the run directory, and
+its check is staged in `tries/<k>/check/`: the input image as `source.png`, the result as
+`candidate.png` and the rendered arguments as `arguments.json`. The checker runs there as
+`<command> --arguments <that file> --allow-dir <that directory>`, its working directory the same,
+so it reads nothing else wherever the workspace lives; its environment is rascal's (the key
+passes through), its stderr is dropped. rascal reads the table-manners result it prints (kept as
+`result.json`), never its exit code (squint exits 1 on `fail` and 2 on `unsure`): a `completed`
+result with a `verdict` is the answer, and the run's `verdict` is the selected try's. Anything
+else is a **check failure**, which ends the checking with the tries made and a note "The check
+could not run: …": another status (with its error's reason), a completed result with no verdict,
+output that is not JSON, output over 1 MiB, or no answer within `timeout_s` (the checker is
+stopped).
+
+**The located retry.** On `fail` or `unsure` with tries left, the next try's mask is rebuilt
+from planes, never from the shaped mask. Each place the verdict names (each part of a place in
+several parts) must be on the try's result, by its file digest and size, or the checking ends as
+a check failure ("a place it named is not usable: the location is on another image …"). The
+input image is cut exactly to the box of the place's pixels padded by `segment.pad` on each side
+(snapped outward, clamped to the image) and committed as a `crop` record in a new `crop:` frame;
+`segment` runs there (`tries.<k>.segment.<place>` in the journal) with the run's own parameters
+and half its threshold. Each plane it returns is written at the crop's offset into an empty
+plane of the raw frame and committed as a `place` record (role `plane`); a place where it finds
+nothing joins as itself, rasterized. With no place, the next try's `grow.px` is doubled, once.
+The planes so far go to `select` in place of `segment`'s (`Recipe::run_from`), the shaping runs
+from there in `tries/<k + 1>/` (its `outputs.json` and render), and the heal graph runs again. A
+try whose mask cannot be made, or whose fill stops, ends the tries with a note.
+
+**The tries and the result.** The tries stop at a pass, at the last try the limits allow, at a
+check failure, or when the next try's mask would have the same identity as the last one ("Try 3
+would repeat try 2: its mask is unchanged, so the tries stop."). The run keeps the first try that
+passed; failing that, `unsure` over `fail` (and both over a try whose check could not run), then
+fewer places, then the earlier try. Its result is `result.png` in the run directory, its Mask the
+run's Mask (`artifacts.out` port `mask`), and a note says "Kept try 2 of 3." and, when it did not
+pass, "The check still sees the collar in 1 place (unsure).". `images.out` leads with the kept
+try's `result`, `preview` and `mask`, then every other try in order as `result_try_<k>`,
+`preview_try_<k>` and `mask_try_<k>` (its preview drawn into `tries/<k>/preview-mask.png`), each
+labelled "Try k · result" and so on; every other try's Mask is listed in `artifacts.out` as
+`mask_try_<k>`, so a host opens it by reference after the run. The body has `selected_try` and
+`tries`: per try its Mask's identity, its result's image reference, its verdict and its spend.
+The result's `verdict` is the kept try's (its places on the kept result); an unchecked run, or one
+whose check could not run, has none.
+
+**The journal** gets `checker call started: {"spend_usd": …}` before a check, `checker call:
+{…}` after it (the command as configured, the duration, the exit code, the bytes, the outcome,
+whether it may have been charged, and the spend the result reports; never a key), and, when it
+answered, `checker stored: {…}`: the try, the request's identity (over the checker's command and
+revision, the source's and the candidate's file digests and the arguments with digests in place
+of the paths), the checker's `revision`, both digests, the arguments as sent, the verdict and,
+when another try follows, the `transition`: the `crops` segmented, the `planes` added by identity
+and the widened `grow_px`.
+A check's spend is what its result reports; a check that printed none counts its price as
+unresolved (`docs/contract.md`, "Spend").
+
+**Replay and cancellation.** `heal --replay <recorded run>` answers each check from that run's
+`checker stored:` note with the same request identity and the same try, noting "checker call
+replayed from the recorded check …"; the checker is never called, and a check the recording
+lacks ends the heal with a usage error (exit 64). A replay needs no checker key: when the
+recording holds checks, the replay is checked from it even with the key missing. A cancelled run (a `serve` client's
+cancellation, or SIGINT or SIGTERM on the command line) stops a check under way: its stdin is
+closed, then after five seconds SIGTERM, then after five more SIGKILL, and it is counted at its
+price as unresolved. The run ends `cancelled`, its `run.json` listing the tries completed before
+the cancellation (`tries`, and each as `result_try_<k>`, `preview_try_<k>` and `mask_try_<k>`),
+and the session settles the call's reservation at what the run spent.
+
+**The scripted checker.** The testkit's `rascal fake-checker <script>` (a `--features testkit`
+build) is a checker command that answers from a JSON script: `{"answers": [{"verdict": "fail",
+"where": [[x0, y0, x1, y1]]}, {"verdict": "pass"}], "spend_usd": 0.004}`, the `n`th call taking
+the `n`th answer (the last once they run out). An answer may add `delay_ms`, `foreign` (its places
+name another image) or a `failure`: `status`, `no-verdict`, `garbage`, `oversize` or `outside`
+(it reads a path outside `--allow-dir` and refuses itself, as a real tool refuses one). Like
+squint it reads both images and exits 1 on `fail` and 2 on `unsure`. The tests in
+`crates/rascal-mask/tests/it/checker.rs` drive it, and one runs the real `squint` with its
+scripted provider when `../squint/target/debug/squint` is a testkit build.
+
 ## The fake fillers
 
 The testkit's fake filler is one implementation with six behaviours, reachable as a command

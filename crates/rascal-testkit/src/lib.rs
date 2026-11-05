@@ -1,11 +1,12 @@
 //! Test support shared by every crate's tests and by the binary's `testkit` feature: fake
-//! fillers (exact, mis-sized, re-encoding, slow, failing), the fake pack and a fake install of
+//! fillers (exact, mis-sized, re-encoding, slow, failing), the scripted checker, the fake pack and a fake install of
 //! it, the independent minimal MCP client, a filesystem shim and synthetic image builders.
 //!
 //! Builders arrive with the tasks that need them: the synthetic images (1.1), the filesystem
 //! shim (1.7b), the fake fillers (2.7), the independent MCP client and the fake MCP server (3.1),
-//! the fake pack (3.3), the fake install (12.2).
+//! the fake pack (3.3), the fake install (12.2), the scripted checker (13.12a).
 
+pub mod fake_checker;
 pub mod fake_filler;
 pub mod fake_install;
 pub mod fake_pack;

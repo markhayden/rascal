@@ -8,7 +8,7 @@
     "recipe": "seam"
   },
   "cache": "off",
-  "contract": "0.4.0",
+  "contract": "0.5.0",
   "duration_ms": 0,
   "error": {
     "code": "budget",

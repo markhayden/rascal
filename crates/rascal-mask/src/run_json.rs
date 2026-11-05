@@ -14,6 +14,7 @@ use rascal_core::contract::table_manners::images::{
 use rascal_core::contract::table_manners::operations::{ArtifactEntry, ArtifactRef, Artifacts};
 use rascal_core::contract::table_manners::{
     Cache, ErrorCode, ErrorInfo, Invocation, Run, RunResult, Spend, SpendBasis, Status, Tool,
+    Verdict,
 };
 use rascal_core::contract::{self, LocationMeta, location_out};
 use rascal_mask::filler::{self, Spent};
@@ -206,6 +207,28 @@ pub struct Ended {
     pub body: serde_json::Map<String, Value>,
     /// The fill cache: `Some(true)` a hit, `Some(false)` a miss, `None` not consulted.
     pub cache: Option<bool>,
+    /// The checker's verdict on the result (table-manners 2.4); none when it was not judged.
+    pub verdict: Option<Verdict>,
+    /// A checked heal's tries, in order; empty when unchecked.
+    pub tries: Vec<TryOut>,
+}
+
+/// One try of a checked heal, for its `run.json` (SPEC.md "Self-correcting remove", part 3):
+/// the kept try leads `images.out` as `result`, `preview` and `mask`, every other follows as
+/// `result_try_<k>`, `preview_try_<k>` and `mask_try_<k>`, and the body lists them all.
+#[derive(Debug, Clone)]
+pub struct TryOut {
+    pub k: u32,
+    /// Whether the run kept it.
+    pub selected: bool,
+    /// Its result, `tries/<k>/result.png`.
+    pub result: PathBuf,
+    /// Its Mask's identity.
+    pub mask: String,
+    /// Its mask's grey render.
+    pub render: Option<PathBuf>,
+    pub verdict: Option<Verdict>,
+    pub spend: Spent,
 }
 
 /// An output file's reference: its bytes' digest and its header's dimensions; the input's
@@ -327,7 +350,7 @@ pub fn finish(
     let body = ended.body;
     if spent.unresolved_usd > 0.0 {
         notes.push(format!(
-            "{:.4} USD of the spend is unresolved: a filler call was sent and no answer settles whether it was charged; it is counted at its price",
+            "{:.4} USD of the spend is unresolved: a filler or checker call was sent and no answer settles whether it was charged; it is counted at its price",
             spent.unresolved_usd
         ));
     }
@@ -351,9 +374,10 @@ pub fn finish(
             role: "result".to_string(),
             image,
             locator: Locator::Path(absolute(path)),
+            label: None,
         });
     }
-    let artifacts = task_artifacts(pending, workspace_dir, &mut out, &mut notes);
+    let mut artifacts = task_artifacts(pending, workspace_dir, &mut out, &mut notes);
     for (profile, path) in &ended.renders {
         if profile == "grey"
             && let Some(image) = output_reference(path, input.as_ref())
@@ -362,8 +386,21 @@ pub fn finish(
                 role: "mask".to_string(),
                 image,
                 locator: Locator::Path(absolute(path)),
+                label: None,
             });
         }
+    }
+    let mut body = body;
+    if !ended.tries.is_empty() {
+        tries_out(
+            &ended.tries,
+            workspace_dir,
+            input.as_ref(),
+            &mut out,
+            &mut artifacts,
+            &mut body,
+            &mut notes,
+        );
     }
     if let Some(publish) = publish {
         for entry in &artifacts.out {
@@ -389,6 +426,7 @@ pub fn finish(
         locations,
         notes,
         spent,
+        verdict: ended.verdict,
     };
     finish_with(
         pending,
@@ -399,6 +437,79 @@ pub fn finish(
         produced,
     )
     .map(|()| spent)
+}
+
+/// A checked heal's tries in its result: the kept try's outs (already in `out`) labelled with
+/// its number, then every other try's result, preview and mask as `<kind>_try_<k>`, labelled
+/// "Try k · <kind>", each other Mask in `artifacts` as `mask_try_<k>`; and the body's `tries`
+/// (each with its Mask, its result's reference, its verdict and its spend) and
+/// `selected_try`.
+fn tries_out(
+    tries: &[TryOut],
+    workspace_dir: &Path,
+    input: Option<&ImageReference>,
+    out: &mut Vec<ImageOut>,
+    artifacts: &mut Artifacts,
+    body: &mut serde_json::Map<String, Value>,
+    notes: &mut Vec<String>,
+) {
+    let label = |k: u32, kind: &str| Some(format!("Try {k} · {kind}"));
+    if let Some(kept) = tries.iter().find(|t| t.selected) {
+        for o in out.iter_mut() {
+            o.label = label(kept.k, &o.role);
+        }
+        body.insert("selected_try".into(), Value::from(kept.k));
+    }
+    for t in tries.iter().filter(|t| !t.selected) {
+        if let Some(image) = output_reference(&t.result, input) {
+            out.push(ImageOut {
+                role: format!("result_try_{}", t.k),
+                image,
+                locator: Locator::Path(absolute(&t.result)),
+                label: label(t.k, "result"),
+            });
+        }
+        let dir = t.result.parent().unwrap_or(Path::new("."));
+        match try_mask_entry(workspace_dir, &t.mask, dir, &format!("mask_try_{}", t.k)) {
+            Ok(entry) => {
+                if let Some(preview) = &entry.preview {
+                    out.push(ImageOut {
+                        role: format!("preview_try_{}", t.k),
+                        label: label(t.k, "preview"),
+                        ..preview.clone()
+                    });
+                }
+                artifacts.out.push(entry);
+            }
+            Err(e) => notes.push(format!(
+                "the Mask {} of try {} could not be listed: {e}",
+                t.mask, t.k
+            )),
+        }
+        if let Some(render) = &t.render
+            && let Some(image) = output_reference(render, input)
+        {
+            out.push(ImageOut {
+                role: format!("mask_try_{}", t.k),
+                image,
+                locator: Locator::Path(absolute(render)),
+                label: label(t.k, "mask"),
+            });
+        }
+    }
+    let listed: Vec<Value> = tries
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "try": t.k,
+                "mask": t.mask,
+                "result": output_reference(&t.result, input),
+                "verdict": t.verdict,
+                "spend": { "usd": usd(t.spend.usd), "unresolved_usd": usd(t.spend.unresolved_usd) },
+            })
+        })
+        .collect();
+    body.insert("tries".into(), Value::Array(listed));
 }
 
 /// A task's artifacts (4.7; PLAN.md 10.8): in, the `mask` and `protect` references its
@@ -444,18 +555,28 @@ fn task_artifacts(
     Artifacts { taken, out }
 }
 
-/// The out entry of the Mask `identity` the run made, with its preview.
+/// The out entry of the Mask `identity` the run made, with its preview in the run directory.
 fn mask_entry(
     pending: &Pending,
     workspace_dir: &Path,
     identity: &str,
+) -> rascal_core::error::Result<ArtifactEntry> {
+    try_mask_entry(workspace_dir, identity, &pending.dir, "mask")
+}
+
+/// The out entry of the Mask `identity` through `port`, its preview written into `dir`.
+fn try_mask_entry(
+    workspace_dir: &Path,
+    identity: &str,
+    dir: &Path,
+    port: &str,
 ) -> rascal_core::error::Result<ArtifactEntry> {
     let ws = rascal_core::workspace::Workspace::open_read_only(workspace_dir)?;
     let artifact = contract::artifact_ref(&ws, identity)?;
     let ops = rascal_ops::registry()?;
     let preview = match crate::preview::draw(&ws, &ops, identity)? {
         Some((bytes, frame)) => {
-            let file = pending.dir.join(PREVIEW_FILE);
+            let file = dir.join(PREVIEW_FILE);
             std::fs::write(&file, &bytes).map_err(|e| Error::io(&file, e))?;
             Some(crate::preview::image_out(
                 &bytes,
@@ -466,7 +587,7 @@ fn mask_entry(
         None => None,
     };
     Ok(ArtifactEntry {
-        port: "mask".to_string(),
+        port: port.to_string(),
         artifact,
         preview,
     })
@@ -483,6 +604,8 @@ pub struct Produced {
     pub locations: Locations,
     pub notes: Vec<String>,
     pub spent: Spent,
+    /// The verdict a judged run carries in its header (table-manners 2.4).
+    pub verdict: Option<Verdict>,
 }
 
 /// Writes `run.json` into the run directory from its parts, atomically: the header from
@@ -543,6 +666,7 @@ pub fn finish_with(
             .chain(produced.notes)
             .collect(),
         body,
+        verdict: produced.verdict,
     };
     write(&pending.dir, &result)
 }
@@ -565,8 +689,15 @@ pub fn write(dir: &Path, result: &RunResult) -> rascal_core::error::Result<()> {
 }
 
 /// The pending record for a `run` or `heal` of `args` (with `filler` for heal), before it
-/// starts: its id, action, directory, start time and input identity.
-pub fn pending_for(args: &crate::run::RunArgs, filler: Option<&str>) -> Pending {
+/// starts: its id, action, directory, start time and input identity. `check` is the call's
+/// check record (`x-rascal.check`), when it has one: it enters the identity, so a checked and
+/// an unchecked run of the same inputs never share one, while a run with no checker
+/// configured keeps the identity it always had.
+pub fn pending_for(
+    args: &crate::run::RunArgs,
+    filler: Option<&str>,
+    check: Option<Value>,
+) -> Pending {
     let started_ms = allocate_ms();
     // Only regular files are read: a FIFO or a device named as an input would block the read.
     let digest_of = |p: &Option<PathBuf>| {
@@ -594,6 +725,10 @@ pub fn pending_for(args: &crate::run::RunArgs, filler: Option<&str>) -> Pending 
         "projection": args.projection.map(|p| format!("{p:?}")),
         "filler": filler,
     });
+    let mut parts = parts;
+    if let Some(check) = check {
+        parts["check"] = check;
+    }
     Pending {
         id: new_id(started_ms),
         action: action_of(&args.recipe),
@@ -696,6 +831,8 @@ pub fn ended_with(recipe: &str, error: &Error) -> Ended {
             result: None,
             body,
             cache: None,
+            verdict: None,
+            tries: Vec::new(),
         };
     }
     let (status, info) = error_of(error);
@@ -708,13 +845,30 @@ pub fn ended_with(recipe: &str, error: &Error) -> Ended {
         result: None,
         body,
         cache: None,
+        verdict: None,
+        tries: Vec::new(),
+    }
+}
+
+/// How a checked heal cancelled during its tries ended: `cancelled` before `step`, with the
+/// tries it completed kept as evidence.
+pub fn ended_cancelled(recipe: &str, step: &str, tries: Vec<TryOut>) -> Ended {
+    Ended {
+        tries,
+        ..ended_with(
+            recipe,
+            &Error::Cancelled {
+                step: step.to_string(),
+            },
+        )
     }
 }
 
 /// Watches for SIGINT and SIGTERM while a `run` or `heal` works (4.2): the run in [`CURRENT`]
 /// gets `run.json` with status `cancelled` and what it reached, and the process exits 130 or
 /// 143. A commit is staged and renamed, so stopping between any two writes leaves the workspace
-/// whole; a filler command still running is left to its own timeout.
+/// whole; a checker under way gets SIGTERM; a filler command still running is left to its own
+/// timeout.
 pub fn watch_signals() {
     std::thread::spawn(|| {
         let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
@@ -737,6 +891,8 @@ pub fn watch_signals() {
             }
         });
         let Some(code) = code else { return };
+        // A check under way is stopped with the command.
+        rascal_mask::checker::call::stop_running();
         let pending = CURRENT.lock().ok().and_then(|mut c| c.take());
         if let Some(pending) = pending
             && pending.fresh
@@ -757,6 +913,8 @@ pub fn watch_signals() {
                     result: None,
                     body,
                     cache: None,
+                    verdict: None,
+                    tries: Vec::new(),
                 },
                 None,
             );
@@ -786,6 +944,8 @@ pub fn ended_ok(
         result,
         body: body_of(recipe, status, stopped_at, reason, mask_dir, filler),
         cache,
+        verdict: None,
+        tries: Vec::new(),
     }
 }
 

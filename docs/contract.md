@@ -1,8 +1,9 @@
 # table-manners: rascal's side of the shared contract
 
-rascal conforms to [table-manners](https://github.com/markhayden/table-manners) v0.4 (milestones
-M8 and M9 for v0.1.0, M11 for v0.2.0, M12 for v0.3.0, M10 for v0.4.0), pinned `=0.4.0` from
-crates.io on the M10 branch (PLAN.md 10.15; `main` keeps `=0.3.0` until the branch merges); the shared contract of
+rascal conforms to [table-manners](https://github.com/markhayden/table-manners) v0.5 (milestones
+M8 and M9 for v0.1.0, M11 for v0.2.0, M12 for v0.3.0, M10 for v0.4.0, M13 for v0.5.0), pinned
+`=0.5.0` on the M13 branch, by path to the contract's `v0.5` checkout until the release is
+published (PLAN.md 13.15), then from crates.io; the shared contract of
 the owner's tools (ADR 0020, decisions 13 and 14): what an agent, a script or the playground sees
 from outside is the same for squint, rascal and the tools after them. The contract's text is the
 specification; this page is what rascal does under it (PLAN.md M8 to M12), as built on the M10
@@ -10,9 +11,13 @@ branch.
 
 ## The pin
 
-`table-manners = "=0.4.0"` in the workspace `Cargo.toml`, the published crate: its serde types
-and embedded schemas, no logic (PLAN.md 10.15; M10 built against the contract's `v0.4` branch by
-path until the release, and the fixtures generated then match the release unchanged).
+`table-manners = { path = "../table-manners", version = "=0.5.0" }` in the workspace
+`Cargo.toml` on the M13 branch until 0.5.0 is published, then `"=0.5.0"` from crates.io: its serde
+types and embedded schemas, no logic (PLAN.md 13.15; M10 pinned `=0.4.0` the same way). v0.5's
+fixtures add the checked `remove_prompt`: `describe-checker-optional-missing.json` (`answers:
+verdict`, `ready` with the checker's key optional and missing), `run-remove-prompt-checked-pass.json`,
+`run-remove-prompt-three-tries.json` (labelled outs, the kept try's verdict) and
+`run-remove-prompt-not-checked.json` (no `verdict`; the note says why).
 `scripts/check-contract.sh` warns in CI when crates.io has a newer release; moving the pin is a
 deliberate commit that also refreshes `fixtures/contract/` and `fixtures/table-manners/`.
 
@@ -196,8 +201,9 @@ its file's digest and dimensions and an absolute `path`. A heal whose filler fai
 that still lists the mask. `locations.used` holds the location the run took in;
 `locations.found` the segmenter's boxes, with `score` and `score_kind: owlv2-detection`.
 `input_identity` is a SHA-256 over what was asked (the action, the recipe, the image's file
-digest, the location files, `--set`, the prompt, the filler), so equal requests have equal
-identities. `spend` and `cache` come from the fill (8.6). `artifacts` (4.7), which every result
+digest, the location files, `--set`, the prompt, the filler, and the check record
+`x-rascal.check` when a checker is configured), so equal requests have equal identities and a
+checked and an unchecked run of the same inputs never share one. `spend` and `cache` come from the fill (8.6). `artifacts` (4.7), which every result
 of an operations tool carries, lists a task's Mask too (task 10.8): `artifacts.in` holds the
 `mask` and `protect` references the invocation names (`preview: null`), and `artifacts.out` the
 Mask the recipe outputs (`port: "mask"`), its reference and its preview. The run records that
@@ -519,8 +525,11 @@ the total and `spend.unresolved_usd` the part no answer settled, with a note (ta
 4.5). `spend.basis` is `estimated` when any amount comes from a price (a known or unresolved
 call, at its configured price) and `measured` when the spend is a known zero: a call answered
 with 401 or 403 and none counted at its price (`run-credential-rejected.json`). A run with no
-call, or only calls not sent, stays `estimated` at zero. The call's reservation is settled at
-what it spent, so a rejected key holds nothing back from the budget.
+call, or only calls not sent, stays `estimated` at zero. A check (`docs/fillers.md`, "The
+checker") is journaled the same way (`checker call started`, `checker call`) and counts what its
+result reports, `measured` or `estimated` as the checker says, or its price as unresolved when it
+printed no result. The call's reservation is settled at what it spent, so a rejected key holds
+nothing back from the budget and the tries a checked call reserved and never made come back.
 `[limits]` holds `serve` to `call_cap_usd` per call and `session_budget_usd` across the process's
 calls (4.5). A call's `max_spend_usd` lowers the cap: the effective cap is the configured one
 lowered by it, or the caller's value when no cap is configured. It is an argument like any other,

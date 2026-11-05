@@ -345,6 +345,7 @@ pub const COMPONENTS: &[&str] = &[
     "Pick",
     "FillerConfig",
     "PackConfig",
+    "CheckerConfig",
     "Accepts",
     "ContextImage",
     "InputDecl",

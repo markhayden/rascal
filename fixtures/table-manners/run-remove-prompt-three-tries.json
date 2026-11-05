@@ -1,0 +1,1878 @@
+{
+  "action": "remove_prompt",
+  "artifacts": {
+    "in": [],
+    "out": [
+      {
+        "artifact": {
+          "frame": "sha256:7aa57d73caf3bc715fcb84e511f4fb54cd54da81062e60d87872ae20ae9a5635",
+          "identity": "sha256:f3efae3caa05635494d10e69a7cda6c9a2fe703936670be1b53c0b6d85b7bba9",
+          "on": {
+            "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+            "height": 320,
+            "projection": "flat",
+            "topology": "bounded",
+            "width": 480
+          },
+          "resource": "rascal://artifact/sha256:f3efae3caa05635494d10e69a7cda6c9a2fe703936670be1b53c0b6d85b7bba9",
+          "schema_version": 1,
+          "tool": "rascal",
+          "type": "rascal:Mask"
+        },
+        "port": "mask",
+        "preview": {
+          "image": {
+            "file_sha256": "69358d22a41e0279fb0066ff6f16652c45b04f377e2336b0ba1fd3f295d611c9",
+            "height": 320,
+            "projection": "flat",
+            "topology": "bounded",
+            "width": 480
+          },
+          "path": "/runs/run-1767225600083-1/preview-mask.png",
+          "role": "preview"
+        }
+      },
+      {
+        "artifact": {
+          "frame": "sha256:7aa57d73caf3bc715fcb84e511f4fb54cd54da81062e60d87872ae20ae9a5635",
+          "identity": "sha256:5b2181ebfb3a21dc01716914999ae7dd6a35c45c3a4e813b43fce19a938174fc",
+          "on": {
+            "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+            "height": 320,
+            "projection": "flat",
+            "topology": "bounded",
+            "width": 480
+          },
+          "resource": "rascal://artifact/sha256:5b2181ebfb3a21dc01716914999ae7dd6a35c45c3a4e813b43fce19a938174fc",
+          "schema_version": 1,
+          "tool": "rascal",
+          "type": "rascal:Mask"
+        },
+        "port": "mask_try_1",
+        "preview": {
+          "image": {
+            "file_sha256": "3139f219e707a99c06360c7eca73953157064f90b79db1a57cca0c677ead8449",
+            "height": 320,
+            "projection": "flat",
+            "topology": "bounded",
+            "width": 480
+          },
+          "path": "/runs/run-1767225600083-1/tries/1/preview-mask.png",
+          "role": "preview"
+        }
+      },
+      {
+        "artifact": {
+          "frame": "sha256:7aa57d73caf3bc715fcb84e511f4fb54cd54da81062e60d87872ae20ae9a5635",
+          "identity": "sha256:62e364046171a0255b2737416705d273605d53f572baa0b8560b54b689d4ef1e",
+          "on": {
+            "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+            "height": 320,
+            "projection": "flat",
+            "topology": "bounded",
+            "width": 480
+          },
+          "resource": "rascal://artifact/sha256:62e364046171a0255b2737416705d273605d53f572baa0b8560b54b689d4ef1e",
+          "schema_version": 1,
+          "tool": "rascal",
+          "type": "rascal:Mask"
+        },
+        "port": "mask_try_2",
+        "preview": {
+          "image": {
+            "file_sha256": "3139f219e707a99c06360c7eca73953157064f90b79db1a57cca0c677ead8449",
+            "height": 320,
+            "projection": "flat",
+            "topology": "bounded",
+            "width": 480
+          },
+          "path": "/runs/run-1767225600083-1/tries/2/preview-mask.png",
+          "role": "preview"
+        }
+      }
+    ]
+  },
+  "body": {
+    "filler": "fake",
+    "outcome": "ok",
+    "recipe": "remove-prompt",
+    "selected_try": 3,
+    "tries": [
+      {
+        "mask": "sha256:5b2181ebfb3a21dc01716914999ae7dd6a35c45c3a4e813b43fce19a938174fc",
+        "result": {
+          "file_sha256": "338c5b91b237500b3861c273ac8c9e1c3e76a976d24e12b7d672d01ea9aba39d",
+          "height": 320,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "spend": {
+          "unresolved_usd": 0.0,
+          "usd": 0.024
+        },
+        "try": 1,
+        "verdict": {
+          "value": "fail",
+          "where": [
+            {
+              "image": {
+                "file_sha256": "338c5b91b237500b3861c273ac8c9e1c3e76a976d24e12b7d672d01ea9aba39d",
+                "height": 320,
+                "projection": "flat",
+                "topology": "bounded",
+                "width": 480
+              },
+              "kind": "bbox",
+              "parts": [
+                {
+                  "bbox": [
+                    0.1,
+                    0.2,
+                    0.30000000000000004,
+                    0.4
+                  ]
+                }
+              ],
+              "source": {
+                "item": "RQ1",
+                "tool": "fake-checker",
+                "version": "0"
+              },
+              "straddles_wrap": false
+            }
+          ]
+        }
+      },
+      {
+        "mask": "sha256:62e364046171a0255b2737416705d273605d53f572baa0b8560b54b689d4ef1e",
+        "result": {
+          "file_sha256": "338c5b91b237500b3861c273ac8c9e1c3e76a976d24e12b7d672d01ea9aba39d",
+          "height": 320,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "spend": {
+          "unresolved_usd": 0.0,
+          "usd": 0.024
+        },
+        "try": 2,
+        "verdict": {
+          "value": "unsure",
+          "where": [
+            {
+              "image": {
+                "file_sha256": "338c5b91b237500b3861c273ac8c9e1c3e76a976d24e12b7d672d01ea9aba39d",
+                "height": 320,
+                "projection": "flat",
+                "topology": "bounded",
+                "width": 480
+              },
+              "kind": "bbox",
+              "parts": [
+                {
+                  "bbox": [
+                    0.2,
+                    0.2,
+                    0.4,
+                    0.4
+                  ]
+                }
+              ],
+              "source": {
+                "item": "RQ1",
+                "tool": "fake-checker",
+                "version": "0"
+              },
+              "straddles_wrap": false
+            },
+            {
+              "image": {
+                "file_sha256": "338c5b91b237500b3861c273ac8c9e1c3e76a976d24e12b7d672d01ea9aba39d",
+                "height": 320,
+                "projection": "flat",
+                "topology": "bounded",
+                "width": 480
+              },
+              "kind": "bbox",
+              "parts": [
+                {
+                  "bbox": [
+                    0.5,
+                    0.2,
+                    0.7,
+                    0.4
+                  ]
+                }
+              ],
+              "source": {
+                "item": "RQ1",
+                "tool": "fake-checker",
+                "version": "0"
+              },
+              "straddles_wrap": false
+            }
+          ]
+        }
+      },
+      {
+        "mask": "sha256:f3efae3caa05635494d10e69a7cda6c9a2fe703936670be1b53c0b6d85b7bba9",
+        "result": {
+          "file_sha256": "557648a9e51515b685ae380c8aef13283fc5ac01a674fb9da0d391ccfe6375be",
+          "height": 320,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "spend": {
+          "unresolved_usd": 0.0,
+          "usd": 0.024
+        },
+        "try": 3,
+        "verdict": {
+          "value": "unsure",
+          "where": [
+            {
+              "image": {
+                "file_sha256": "557648a9e51515b685ae380c8aef13283fc5ac01a674fb9da0d391ccfe6375be",
+                "height": 320,
+                "projection": "flat",
+                "topology": "bounded",
+                "width": 480
+              },
+              "kind": "bbox",
+              "parts": [
+                {
+                  "bbox": [
+                    0.3,
+                    0.2,
+                    0.5,
+                    0.4
+                  ]
+                }
+              ],
+              "source": {
+                "item": "RQ1",
+                "tool": "fake-checker",
+                "version": "0"
+              },
+              "straddles_wrap": false
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "cache": "off",
+  "contract": "0.5.0",
+  "duration_ms": 0,
+  "error": null,
+  "finished": "2026-01-01T00:00:00.000Z",
+  "images": {
+    "in": [
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "role": "source",
+        "slot": "image"
+      }
+    ],
+    "out": [
+      {
+        "image": {
+          "file_sha256": "557648a9e51515b685ae380c8aef13283fc5ac01a674fb9da0d391ccfe6375be",
+          "height": 320,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "label": "Try 3 · result",
+        "path": "/runs/run-1767225600083-1/result.png",
+        "role": "result"
+      },
+      {
+        "image": {
+          "file_sha256": "69358d22a41e0279fb0066ff6f16652c45b04f377e2336b0ba1fd3f295d611c9",
+          "height": 320,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "label": "Try 3 · preview",
+        "path": "/runs/run-1767225600083-1/preview-mask.png",
+        "role": "preview"
+      },
+      {
+        "image": {
+          "file_sha256": "d90e3a73196c3c7fdbff41d294808a1438e8b51445ea464c687b8d3dc75aa087",
+          "height": 320,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "label": "Try 3 · mask",
+        "path": "/runs/run-1767225600083-1/tries/3/remove-prompt-grey.png",
+        "role": "mask"
+      },
+      {
+        "image": {
+          "file_sha256": "338c5b91b237500b3861c273ac8c9e1c3e76a976d24e12b7d672d01ea9aba39d",
+          "height": 320,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "label": "Try 1 · result",
+        "path": "/runs/run-1767225600083-1/tries/1/result.png",
+        "role": "result_try_1"
+      },
+      {
+        "image": {
+          "file_sha256": "3139f219e707a99c06360c7eca73953157064f90b79db1a57cca0c677ead8449",
+          "height": 320,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "label": "Try 1 · preview",
+        "path": "/runs/run-1767225600083-1/tries/1/preview-mask.png",
+        "role": "preview_try_1"
+      },
+      {
+        "image": {
+          "file_sha256": "db84bd0d9e837c03d3d43c86fe5217fd1f81b3b92e054e76494c02dc37ae26eb",
+          "height": 320,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "label": "Try 1 · mask",
+        "path": "/runs/run-1767225600083-1/remove-prompt-grey.png",
+        "role": "mask_try_1"
+      },
+      {
+        "image": {
+          "file_sha256": "338c5b91b237500b3861c273ac8c9e1c3e76a976d24e12b7d672d01ea9aba39d",
+          "height": 320,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "label": "Try 2 · result",
+        "path": "/runs/run-1767225600083-1/tries/2/result.png",
+        "role": "result_try_2"
+      },
+      {
+        "image": {
+          "file_sha256": "3139f219e707a99c06360c7eca73953157064f90b79db1a57cca0c677ead8449",
+          "height": 320,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "label": "Try 2 · preview",
+        "path": "/runs/run-1767225600083-1/tries/2/preview-mask.png",
+        "role": "preview_try_2"
+      },
+      {
+        "image": {
+          "file_sha256": "db84bd0d9e837c03d3d43c86fe5217fd1f81b3b92e054e76494c02dc37ae26eb",
+          "height": 320,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "label": "Try 2 · mask",
+        "path": "/runs/run-1767225600083-1/tries/2/remove-prompt-grey.png",
+        "role": "mask_try_2"
+      }
+    ]
+  },
+  "input_identity": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "invocation": {
+    "action": "remove_prompt",
+    "arguments": {
+      "filler": "fake",
+      "image": {
+        "expect": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        }
+      },
+      "projection": "flat",
+      "prompt": "the chair",
+      "strict": false
+    },
+    "effective": {
+      "config_identity": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0004",
+      "model": "fillers.fake",
+      "x-rascal": {
+        "check": {
+          "on": true
+        },
+        "constants": {
+          "feather": "feather-v1"
+        },
+        "filler": {
+          "fill_max_side": null,
+          "kind": "command",
+          "name": "fake",
+          "paste": "feather",
+          "revision": "fake exact"
+        }
+      }
+    },
+    "requirements": [
+      "rascal.toml",
+      "fillers.fake",
+      "rascal",
+      "packs.fake",
+      "owlv2-base-patch16.onnx",
+      "owlv2-base-patch16.tokenizer.json",
+      "sam2.1-hiera-tiny.encoder.onnx",
+      "sam2.1-hiera-tiny.decoder3.onnx",
+      "checker",
+      "RASCAL_FIXTURE_CHECKER_KEY"
+    ]
+  },
+  "locations": {
+    "found": [
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.1,
+                0.1
+              ],
+              [
+                0.35,
+                0.1
+              ],
+              [
+                0.35,
+                0.25
+              ],
+              [
+                0.1,
+                0.25
+              ]
+            ]
+          }
+        ],
+        "score": 0.9,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-0",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.1,
+                0.30000000000000004
+              ],
+              [
+                0.35,
+                0.30000000000000004
+              ],
+              [
+                0.35,
+                0.45000000000000007
+              ],
+              [
+                0.1,
+                0.45000000000000007
+              ]
+            ]
+          }
+        ],
+        "score": 0.8,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-1",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.1,
+                0.5
+              ],
+              [
+                0.35,
+                0.5
+              ],
+              [
+                0.35,
+                0.65
+              ],
+              [
+                0.1,
+                0.65
+              ]
+            ]
+          }
+        ],
+        "score": 0.7,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-2",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.1,
+                0.7000000000000001
+              ],
+              [
+                0.35,
+                0.7000000000000001
+              ],
+              [
+                0.35,
+                0.8500000000000001
+              ],
+              [
+                0.1,
+                0.8500000000000001
+              ]
+            ]
+          }
+        ],
+        "score": 0.6,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-3",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.5,
+                0.1
+              ],
+              [
+                0.75,
+                0.1
+              ],
+              [
+                0.75,
+                0.25
+              ],
+              [
+                0.5,
+                0.25
+              ]
+            ]
+          }
+        ],
+        "score": 0.5,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-4",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.5,
+                0.30000000000000004
+              ],
+              [
+                0.75,
+                0.30000000000000004
+              ],
+              [
+                0.75,
+                0.45000000000000007
+              ],
+              [
+                0.5,
+                0.45000000000000007
+              ]
+            ]
+          }
+        ],
+        "score": 0.4,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-5",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.5,
+                0.5
+              ],
+              [
+                0.75,
+                0.5
+              ],
+              [
+                0.75,
+                0.65
+              ],
+              [
+                0.5,
+                0.65
+              ]
+            ]
+          }
+        ],
+        "score": 0.29999999999999993,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-6",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.5,
+                0.7000000000000001
+              ],
+              [
+                0.75,
+                0.7000000000000001
+              ],
+              [
+                0.75,
+                0.8500000000000001
+              ],
+              [
+                0.5,
+                0.8500000000000001
+              ]
+            ]
+          }
+        ],
+        "score": 0.19999999999999996,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-7",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.1,
+                0.1
+              ],
+              [
+                0.35,
+                0.1
+              ],
+              [
+                0.35,
+                0.25
+              ],
+              [
+                0.1,
+                0.25
+              ]
+            ]
+          }
+        ],
+        "score": 0.9,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-0",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.1,
+                0.30000000000000004
+              ],
+              [
+                0.35,
+                0.30000000000000004
+              ],
+              [
+                0.35,
+                0.45000000000000007
+              ],
+              [
+                0.1,
+                0.45000000000000007
+              ]
+            ]
+          }
+        ],
+        "score": 0.8,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-1",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.1,
+                0.5
+              ],
+              [
+                0.35,
+                0.5
+              ],
+              [
+                0.35,
+                0.65
+              ],
+              [
+                0.1,
+                0.65
+              ]
+            ]
+          }
+        ],
+        "score": 0.7,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-2",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.1,
+                0.7000000000000001
+              ],
+              [
+                0.35,
+                0.7000000000000001
+              ],
+              [
+                0.35,
+                0.8500000000000001
+              ],
+              [
+                0.1,
+                0.8500000000000001
+              ]
+            ]
+          }
+        ],
+        "score": 0.6,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-3",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.5,
+                0.1
+              ],
+              [
+                0.75,
+                0.1
+              ],
+              [
+                0.75,
+                0.25
+              ],
+              [
+                0.5,
+                0.25
+              ]
+            ]
+          }
+        ],
+        "score": 0.5,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-4",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.5,
+                0.30000000000000004
+              ],
+              [
+                0.75,
+                0.30000000000000004
+              ],
+              [
+                0.75,
+                0.45000000000000007
+              ],
+              [
+                0.5,
+                0.45000000000000007
+              ]
+            ]
+          }
+        ],
+        "score": 0.4,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-5",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.5,
+                0.5
+              ],
+              [
+                0.75,
+                0.5
+              ],
+              [
+                0.75,
+                0.65
+              ],
+              [
+                0.5,
+                0.65
+              ]
+            ]
+          }
+        ],
+        "score": 0.29999999999999993,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-6",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.5,
+                0.7000000000000001
+              ],
+              [
+                0.75,
+                0.7000000000000001
+              ],
+              [
+                0.75,
+                0.8500000000000001
+              ],
+              [
+                0.5,
+                0.8500000000000001
+              ]
+            ]
+          }
+        ],
+        "score": 0.19999999999999996,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-7",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.1,
+                0.1
+              ],
+              [
+                0.35,
+                0.1
+              ],
+              [
+                0.35,
+                0.25
+              ],
+              [
+                0.1,
+                0.25
+              ]
+            ]
+          }
+        ],
+        "score": 0.9,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-0",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.1,
+                0.30000000000000004
+              ],
+              [
+                0.35,
+                0.30000000000000004
+              ],
+              [
+                0.35,
+                0.45000000000000007
+              ],
+              [
+                0.1,
+                0.45000000000000007
+              ]
+            ]
+          }
+        ],
+        "score": 0.8,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-1",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.1,
+                0.5
+              ],
+              [
+                0.35,
+                0.5
+              ],
+              [
+                0.35,
+                0.65
+              ],
+              [
+                0.1,
+                0.65
+              ]
+            ]
+          }
+        ],
+        "score": 0.7,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-2",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.1,
+                0.7000000000000001
+              ],
+              [
+                0.35,
+                0.7000000000000001
+              ],
+              [
+                0.35,
+                0.8500000000000001
+              ],
+              [
+                0.1,
+                0.8500000000000001
+              ]
+            ]
+          }
+        ],
+        "score": 0.6,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-3",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.5,
+                0.1
+              ],
+              [
+                0.75,
+                0.1
+              ],
+              [
+                0.75,
+                0.25
+              ],
+              [
+                0.5,
+                0.25
+              ]
+            ]
+          }
+        ],
+        "score": 0.5,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-4",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.5,
+                0.30000000000000004
+              ],
+              [
+                0.75,
+                0.30000000000000004
+              ],
+              [
+                0.75,
+                0.45000000000000007
+              ],
+              [
+                0.5,
+                0.45000000000000007
+              ]
+            ]
+          }
+        ],
+        "score": 0.4,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-5",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.5,
+                0.5
+              ],
+              [
+                0.75,
+                0.5
+              ],
+              [
+                0.75,
+                0.65
+              ],
+              [
+                0.5,
+                0.65
+              ]
+            ]
+          }
+        ],
+        "score": 0.29999999999999993,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-6",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.5,
+                0.7000000000000001
+              ],
+              [
+                0.75,
+                0.7000000000000001
+              ],
+              [
+                0.75,
+                0.8500000000000001
+              ],
+              [
+                0.5,
+                0.8500000000000001
+              ]
+            ]
+          }
+        ],
+        "score": 0.19999999999999996,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-7",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.1,
+                0.1
+              ],
+              [
+                0.35,
+                0.1
+              ],
+              [
+                0.35,
+                0.25
+              ],
+              [
+                0.1,
+                0.25
+              ]
+            ]
+          }
+        ],
+        "score": 0.9,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-0",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.1,
+                0.30000000000000004
+              ],
+              [
+                0.35,
+                0.30000000000000004
+              ],
+              [
+                0.35,
+                0.45000000000000007
+              ],
+              [
+                0.1,
+                0.45000000000000007
+              ]
+            ]
+          }
+        ],
+        "score": 0.8,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-1",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.1,
+                0.5
+              ],
+              [
+                0.35,
+                0.5
+              ],
+              [
+                0.35,
+                0.65
+              ],
+              [
+                0.1,
+                0.65
+              ]
+            ]
+          }
+        ],
+        "score": 0.7,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-2",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.1,
+                0.7000000000000001
+              ],
+              [
+                0.35,
+                0.7000000000000001
+              ],
+              [
+                0.35,
+                0.8500000000000001
+              ],
+              [
+                0.1,
+                0.8500000000000001
+              ]
+            ]
+          }
+        ],
+        "score": 0.6,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-3",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.5,
+                0.1
+              ],
+              [
+                0.75,
+                0.1
+              ],
+              [
+                0.75,
+                0.25
+              ],
+              [
+                0.5,
+                0.25
+              ]
+            ]
+          }
+        ],
+        "score": 0.5,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-4",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.5,
+                0.30000000000000004
+              ],
+              [
+                0.75,
+                0.30000000000000004
+              ],
+              [
+                0.75,
+                0.45000000000000007
+              ],
+              [
+                0.5,
+                0.45000000000000007
+              ]
+            ]
+          }
+        ],
+        "score": 0.4,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-5",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.5,
+                0.5
+              ],
+              [
+                0.75,
+                0.5
+              ],
+              [
+                0.75,
+                0.65
+              ],
+              [
+                0.5,
+                0.65
+              ]
+            ]
+          }
+        ],
+        "score": 0.29999999999999993,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-6",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      },
+      {
+        "image": {
+          "file_sha256": "40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242",
+          "height": 320,
+          "pixel_sha256": "5f0fd58af19f22cfb74f65c7ade5d4ba3e4b21e87d61bdbe8eb902da57463a8d",
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "polygon",
+        "label": "the chair",
+        "parts": [
+          {
+            "polygon": [
+              [
+                0.5,
+                0.7000000000000001
+              ],
+              [
+                0.75,
+                0.7000000000000001
+              ],
+              [
+                0.75,
+                0.8500000000000001
+              ],
+              [
+                0.5,
+                0.8500000000000001
+              ]
+            ]
+          }
+        ],
+        "score": 0.19999999999999996,
+        "score_kind": "owlv2-detection",
+        "source": {
+          "item": "instance-7",
+          "tool": "rascal",
+          "version": "0.1.1"
+        },
+        "straddles_wrap": false
+      }
+    ],
+    "used": []
+  },
+  "notes": [
+    "pack manifest: {\"pack\":\"fake\",\"revision\":\"fake 1\",\"manifest\":{\"manifest_version\":1,\"name\":\"segment\",\"version\":\"0.1.0\",\"purpose\":\"Finds the instances a prompt names in an image and returns a polygon and a plane for each.\",\"when_to_use\":\"When the region to mask is an object named in words rather than drawn.\",\"when_not_to_use\":\"When the region is a known box or a drawn stroke; use rect or stroke.\",\"output_guidance\":\"One region per instance with its score, and one plane image per region in the image's frame; select or rasterize makes a mask.\",\"cost\":{\"tier\":\"expensive\",\"seconds\":2.0},\"returns\":{\"max_images\":8,\"max_long_edge\":8192,\"max_image_bytes\":16777216,\"max_summary_bytes\":1024,\"max_regions\":8,\"max_region_label_bytes\":256,\"max_measurements\":8,\"max_transforms\":0,\"max_envelope_bytes\":1048576},\"model_schema\":{\"properties\":{\"prompt\":{\"type\":\"string\"}},\"type\":\"object\"},\"input_schema\":{\"type\":\"object\"},\"output_schema\":{\"type\":\"object\"},\"concurrent\":false,\"accepts_hints\":[],\"evidence_kind\":null,\"frame_args\":[],\"frames_out\":[],\"image_args\":[],\"pairs_with\":[],\"preconditions\":\"\",\"requires\":[]},\"rascal\":{\"annotation_version\":1,\"inputs\":[{\"name\":\"image\",\"artifact_type\":\"Image\",\"required\":true,\"purpose\":\"The image to segment.\"}],\"outputs\":[{\"name\":\"region\",\"artifact_type\":\"Location\",\"required\":true,\"purpose\":\"One polygon per instance, with its score.\",\"many\":true},{\"name\":\"plane\",\"artifact_type\":\"Image\",\"required\":true,\"purpose\":\"One instance plane per region, in the image's frame.\",\"many\":true}],\"params\":[{\"name\":\"prompt\",\"purpose\":\"What to find, in words.\",\"kind\":\"string\",\"required\":false,\"default\":\"\"},{\"name\":\"max_instances\",\"purpose\":\"The most instances to return.\",\"kind\":\"integer\",\"required\":false,\"default\":2,\"min\":1.0,\"max\":8.0},{\"name\":\"threshold\",\"purpose\":\"The detector score a box needs (the fake finds the same whatever it is).\",\"kind\":\"number\",\"required\":false,\"default\":0.2,\"min\":0.0,\"max\":1.0},{\"name\":\"pad\",\"purpose\":\"How far each found box is widened (the fake ignores it).\",\"kind\":\"number\",\"required\":false,\"default\":0.05,\"min\":0.0,\"max\":0.5},{\"name\":\"delay_ms\",\"purpose\":\"A pause before answering, for tests of timing.\",\"kind\":\"integer\",\"required\":false,\"default\":0,\"min\":0.0,\"max\":60000.0}]}}",
+    "pack call: {\"pack\":\"fake\",\"tool\":\"segment\",\"target\":\"/work/v05/pack/.venv/bin/rascal-tools serve\",\"request_bytes\":0,\"response_bytes\":19902,\"duration_ms\":0,\"status\":\"ok\",\"outcome\":\"ok\"}",
+    "pack stored: {\"request\":\"sha256:29997e97088085cb1053ed08a00e0cf2b3e2265cef5df5653c0179bf1a1d8758\",\"pack\":\"fake\",\"revision\":\"fake 1\",\"tool\":\"segment\",\"envelope\":{\"envelope_version\":1,\"status\":\"ok\",\"summary\":\"8 instances of \\\"the chair\\\"\",\"regions\":[{\"id\":\"instance-0\",\"location\":{\"kind\":\"polygon\",\"frame\":\"raw:480x320:flat\",\"polygon\":[[0.1,0.1],[0.35,0.1],[0.35,0.25],[0.1,0.25]]},\"label\":\"the chair\",\"score\":0.9},{\"id\":\"instance-1\",\"location\":{\"kind\":\"polygon\",\"frame\":\"raw:480x320:flat\",\"polygon\":[[0.1,0.30000000000000004],[0.35,0.30000000000000004],[0.35,0.45000000000000007],[0.1,0.45000000000000007]]},\"label\":\"the chair\",\"score\":0.8},{\"id\":\"instance-2\",\"location\":{\"kind\":\"polygon\",\"frame\":\"raw:480x320:flat\",\"polygon\":[[0.1,0.5],[0.35,0.5],[0.35,0.65],[0.1,0.65]]},\"label\":\"the chair\",\"score\":0.7},{\"id\":\"instance-3\",\"location\":{\"kind\":\"polygon\",\"frame\":\"raw:480x320:flat\",\"polygon\":[[0.1,0.7000000000000001],[0.35,0.7000000000000001],[0.35,0.8500000000000001],[0.1,0.8500000000000001]]},\"label\":\"the chair\",\"score\":0.6},{\"id\":\"instance-4\",\"location\":{\"kind\":\"polygon\",\"frame\":\"raw:480x320:flat\",\"polygon\":[[0.5,0.1],[0.75,0.1],[0.75,0.25],[0.5,0.25]]},\"label\":\"the chair\",\"score\":0.5},{\"id\":\"instance-5\",\"location\":{\"kind\":\"polygon\",\"frame\":\"raw:480x320:flat\",\"polygon\":[[0.5,0.30000000000000004],[0.75,0.30000000000000004],[0.75,0.45000000000000007],[0.5,0.45000000000000007]]},\"label\":\"the chair\",\"score\":0.4},{\"id\":\"instance-6\",\"location\":{\"kind\":\"polygon\",\"frame\":\"raw:480x320:flat\",\"polygon\":[[0.5,0.5],[0.75,0.5],[0.75,0.65],[0.5,0.65]]},\"label\":\"the chair\",\"score\":0.29999999999999993},{\"id\":\"instance-7\",\"location\":{\"kind\":\"polygon\",\"frame\":\"raw:480x320:flat\",\"polygon\":[[0.5,0.7000000000000001],[0.75,0.7000000000000001],[0.75,0.8500000000000001],[0.5,0.8500000000000001]]},\"label\":\"the chair\",\"score\":0.19999999999999996}],\"images\":[{\"frame\":\"raw:480x320:flat\",\"parent\":\"raw:480x320:flat\",\"width\":480,\"height\":320,\"media_type\":\"image/png\",\"identity\":\"sha256:d0e43310f54ebdb98e33860903a0ec169e4a9b8c3bd35f70f5eb700471bd8818\"},{\"frame\":\"raw:480x320:flat\",\"parent\":\"raw:480x320:flat\",\"width\":480,\"height\":320,\"media_type\":\"image/png\",\"identity\":\"sha256:6e65fc60b9c696a785cde54304f407fb0238d82207ae564951641ad9522ba1cc\"},{\"frame\":\"raw:480x320:flat\",\"parent\":\"raw:480x320:flat\",\"width\":480,\"height\":320,\"media_type\":\"image/png\",\"identity\":\"sha256:5bcf06e1ce46da464a259f051485b08e6d40296e3e362b380e46ba2a068c5db8\"},{\"frame\":\"raw:480x320:flat\",\"parent\":\"raw:480x320:flat\",\"width\":480,\"height\":320,\"media_type\":\"image/png\",\"identity\":\"sha256:9043837c8139a198631912ee00fbf88a2b233cd3725aa352bc1501fc1a7dfd05\"},{\"frame\":\"raw:480x320:flat\",\"parent\":\"raw:480x320:flat\",\"width\":480,\"height\":320,\"media_type\":\"image/png\",\"identity\":\"sha256:1c994ce70f1b3f24d303e6dea7fc5357ff8536635253364ec7693cc56edd55de\"},{\"frame\":\"raw:480x320:flat\",\"parent\":\"raw:480x320:flat\",\"width\":480,\"height\":320,\"media_type\":\"image/png\",\"identity\":\"sha256:1b2e581eab2fbd6f2e53a5e55d285f0a7adb6b6bd9ae183ef65e5cba650cf33c\"},{\"frame\":\"raw:480x320:flat\",\"parent\":\"raw:480x320:flat\",\"width\":480,\"height\":320,\"media_type\":\"image/png\",\"identity\":\"sha256:bbf82bf1403362220122e33d985a171c5bf7ee55b1eb71f0a8bdb10c776b39e3\"},{\"frame\":\"raw:480x320:flat\",\"parent\":\"raw:480x320:flat\",\"width\":480,\"height\":320,\"media_type\":\"image/png\",\"identity\":\"sha256:3705a529c3fd4e1ea447eb89976b5c9676e98fec9fc4206b78721975606b0e4e\"}],\"provenance\":{\"tool\":\"segment\",\"version\":\"0.1.0\",\"duration_ms\":0},\"artifacts\":{\"plane_0\":{\"artifact_type\":\"Image\",\"id\":\"plane_0\",\"identity\":\"sha256:d0e43310f54ebdb98e33860903a0ec169e4a9b8c3bd35f70f5eb700471bd8818\"},\"plane_1\":{\"artifact_type\":\"Image\",\"id\":\"plane_1\",\"identity\":\"sha256:6e65fc60b9c696a785cde54304f407fb0238d82207ae564951641ad9522ba1cc\"},\"plane_2\":{\"artifact_type\":\"Image\",\"id\":\"plane_2\",\"identity\":\"sha256:5bcf06e1ce46da464a259f051485b08e6d40296e3e362b380e46ba2a068c5db8\"},\"plane_3\":{\"artifact_type\":\"Image\",\"id\":\"plane_3\",\"identity\":\"sha256:9043837c8139a198631912ee00fbf88a2b233cd3725aa352bc1501fc1a7dfd05\"},\"plane_4\":{\"artifact_type\":\"Image\",\"id\":\"plane_4\",\"identity\":\"sha256:1c994ce70f1b3f24d303e6dea7fc5357ff8536635253364ec7693cc56edd55de\"},\"plane_5\":{\"artifact_type\":\"Image\",\"id\":\"plane_5\",\"identity\":\"sha256:1b2e581eab2fbd6f2e53a5e55d285f0a7adb6b6bd9ae183ef65e5cba650cf33c\"},\"plane_6\":{\"artifact_type\":\"Image\",\"id\":\"plane_6\",\"identity\":\"sha256:bbf82bf1403362220122e33d985a171c5bf7ee55b1eb71f0a8bdb10c776b39e3\"},\"plane_7\":{\"artifact_type\":\"Image\",\"id\":\"plane_7\",\"identity\":\"sha256:3705a529c3fd4e1ea447eb89976b5c9676e98fec9fc4206b78721975606b0e4e\"},\"region_0\":{\"artifact_type\":\"Location\",\"id\":\"region_0\",\"identity\":\"sha256:32d9d40c296948f845a99174f2b231bd2078fae201e038f339a3745102af6aa1\"},\"region_1\":{\"artifact_type\":\"Location\",\"id\":\"region_1\",\"identity\":\"sha256:eaf388ce08c79bb10c31106d924bbe6cf9ae8e938473b7d181acf8fc1bcd4bff\"},\"region_2\":{\"artifact_type\":\"Location\",\"id\":\"region_2\",\"identity\":\"sha256:be727215354ca6cf222098bd26c02af9be8989a286183187b23ed5bde4ff12ca\"},\"region_3\":{\"artifact_type\":\"Location\",\"id\":\"region_3\",\"identity\":\"sha256:f19cb8b3174cd9011259ee06e09a13e7b8e082acd10e5b42e7019700a15ff71f\"},\"region_4\":{\"artifact_type\":\"Location\",\"id\":\"region_4\",\"identity\":\"sha256:67382e3ef21a0097dcb070c2b43ddf18f0cdd5bedab243105571628a7fbabed2\"},\"region_5\":{\"artifact_type\":\"Location\",\"id\":\"region_5\",\"identity\":\"sha256:d6e64f0f8a3544262c6a1f10064b49a161a589aebc9d92608721c0d981d14fcd\"},\"region_6\":{\"artifact_type\":\"Location\",\"id\":\"region_6\",\"identity\":\"sha256:d373f3e24a9bd7b7fe8c2b0b491db309247cf4fd8a1ef472c39cf5c2d38a12e7\"},\"region_7\":{\"artifact_type\":\"Location\",\"id\":\"region_7\",\"identity\":\"sha256:85006fdc560c49723c9b2d3750288bfc1a34bff61c02e7e09077f64d893ed2d5\"}}},\"outputs\":{\"plane_0\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:d0e43310f54ebdb98e33860903a0ec169e4a9b8c3bd35f70f5eb700471bd8818\"},\"plane_1\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:6e65fc60b9c696a785cde54304f407fb0238d82207ae564951641ad9522ba1cc\"},\"plane_2\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:5bcf06e1ce46da464a259f051485b08e6d40296e3e362b380e46ba2a068c5db8\"},\"plane_3\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:9043837c8139a198631912ee00fbf88a2b233cd3725aa352bc1501fc1a7dfd05\"},\"plane_4\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:1c994ce70f1b3f24d303e6dea7fc5357ff8536635253364ec7693cc56edd55de\"},\"plane_5\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:1b2e581eab2fbd6f2e53a5e55d285f0a7adb6b6bd9ae183ef65e5cba650cf33c\"},\"plane_6\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:bbf82bf1403362220122e33d985a171c5bf7ee55b1eb71f0a8bdb10c776b39e3\"},\"plane_7\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:3705a529c3fd4e1ea447eb89976b5c9676e98fec9fc4206b78721975606b0e4e\"},\"region_0\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:32d9d40c296948f845a99174f2b231bd2078fae201e038f339a3745102af6aa1\"},\"region_1\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:eaf388ce08c79bb10c31106d924bbe6cf9ae8e938473b7d181acf8fc1bcd4bff\"},\"region_2\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:be727215354ca6cf222098bd26c02af9be8989a286183187b23ed5bde4ff12ca\"},\"region_3\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:f19cb8b3174cd9011259ee06e09a13e7b8e082acd10e5b42e7019700a15ff71f\"},\"region_4\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:67382e3ef21a0097dcb070c2b43ddf18f0cdd5bedab243105571628a7fbabed2\"},\"region_5\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:d6e64f0f8a3544262c6a1f10064b49a161a589aebc9d92608721c0d981d14fcd\"},\"region_6\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:d373f3e24a9bd7b7fe8c2b0b491db309247cf4fd8a1ef472c39cf5c2d38a12e7\"},\"region_7\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:85006fdc560c49723c9b2d3750288bfc1a34bff61c02e7e09077f64d893ed2d5\"}}}",
+    "Checked: up to 3 tries within the spend limits.",
+    "filler call started: {\"filler\":\"fake\",\"spend_usd\":0.02}",
+    "filler call: {\"filler\":\"fake\",\"target\":\"/rascal/target/debug/rascal fake-filler exact {image} {mask} {out}\",\"request_width\":480,\"request_height\":320,\"request_bytes\":268773,\"response_bytes\":185788,\"duration_ms\":0,\"status\":0,\"outcome\":\"ok\",\"charge\":\"known\"}",
+    "fill stored: {\"request\":\"sha256:138baaf978437d57cf6d385d6f6e8993cd6dc852b1f4b59dcce527b8453c6fdd\",\"fill\":\"sha256:d70acbce7841d8549b55d6a6568a9296fd3661ba6177872626a927a6801f523f\",\"filler\":\"fake\",\"revision\":\"fake exact\"}",
+    "checker call started: {\"spend_usd\":0.01}",
+    "checker call: {\"target\":\"/rascal/target/debug/rascal fake-checker /work/v05/script.json\",\"duration_ms\":0,\"exit\":1,\"response_bytes\":819,\"outcome\":\"fail\",\"charge\":\"known\",\"spend\":{\"usd\":0.004,\"unresolved_usd\":0.0,\"basis\":\"measured\"}}",
+    "pack call: {\"pack\":\"fake\",\"tool\":\"segment\",\"target\":\"/work/v05/pack/.venv/bin/rascal-tools serve\",\"request_bytes\":0,\"response_bytes\":7078,\"duration_ms\":0,\"status\":\"ok\",\"outcome\":\"ok\"}",
+    "pack stored: {\"request\":\"sha256:506530e6da67b69cef5cd31aa41cf91f393250f5eba072beec54bc2eed6be88b\",\"pack\":\"fake\",\"revision\":\"fake 1\",\"tool\":\"segment\",\"envelope\":{\"envelope_version\":1,\"status\":\"ok\",\"summary\":\"8 instances of \\\"the chair\\\"\",\"regions\":[{\"id\":\"instance-0\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:1\",\"polygon\":[[0.1,0.1],[0.35,0.1],[0.35,0.25],[0.1,0.25]]},\"label\":\"the chair\",\"score\":0.9},{\"id\":\"instance-1\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:1\",\"polygon\":[[0.1,0.30000000000000004],[0.35,0.30000000000000004],[0.35,0.45000000000000007],[0.1,0.45000000000000007]]},\"label\":\"the chair\",\"score\":0.8},{\"id\":\"instance-2\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:1\",\"polygon\":[[0.1,0.5],[0.35,0.5],[0.35,0.65],[0.1,0.65]]},\"label\":\"the chair\",\"score\":0.7},{\"id\":\"instance-3\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:1\",\"polygon\":[[0.1,0.7000000000000001],[0.35,0.7000000000000001],[0.35,0.8500000000000001],[0.1,0.8500000000000001]]},\"label\":\"the chair\",\"score\":0.6},{\"id\":\"instance-4\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:1\",\"polygon\":[[0.5,0.1],[0.75,0.1],[0.75,0.25],[0.5,0.25]]},\"label\":\"the chair\",\"score\":0.5},{\"id\":\"instance-5\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:1\",\"polygon\":[[0.5,0.30000000000000004],[0.75,0.30000000000000004],[0.75,0.45000000000000007],[0.5,0.45000000000000007]]},\"label\":\"the chair\",\"score\":0.4},{\"id\":\"instance-6\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:1\",\"polygon\":[[0.5,0.5],[0.75,0.5],[0.75,0.65],[0.5,0.65]]},\"label\":\"the chair\",\"score\":0.29999999999999993},{\"id\":\"instance-7\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:1\",\"polygon\":[[0.5,0.7000000000000001],[0.75,0.7000000000000001],[0.75,0.8500000000000001],[0.5,0.8500000000000001]]},\"label\":\"the chair\",\"score\":0.19999999999999996}],\"images\":[{\"frame\":\"crop:1\",\"parent\":\"crop:1\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:afe70c2f0e6bd68062767abc986e81b9b4c19a5139dac2d474462c6938054309\"},{\"frame\":\"crop:1\",\"parent\":\"crop:1\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:bc3e1c36f33d08dbe83e8cf76e7ab852accedc11b09fd8e475b13233bc01b0cb\"},{\"frame\":\"crop:1\",\"parent\":\"crop:1\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:54f14c824eb0af685f2d0bfeb9babef32849cacb2c63f16fe8bf9e37a75afe16\"},{\"frame\":\"crop:1\",\"parent\":\"crop:1\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:a661cf2f7363432c8f2728bf0f3fd3d21f92b85a5b370bf5aefed0dd053110f0\"},{\"frame\":\"crop:1\",\"parent\":\"crop:1\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:b63ed2276a4dffab3c788bac7adf4e5a76387cb7ac1fde908ecc12760e47dc6a\"},{\"frame\":\"crop:1\",\"parent\":\"crop:1\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:1d23fd7c32ae962b0e7aa0af769a9b5f9bd85ebb371939b3869e9b6ca98bb222\"},{\"frame\":\"crop:1\",\"parent\":\"crop:1\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:317c0629711093cea9fa15f00f89f5b295431357c3e959acbcd32c95fe0f5873\"},{\"frame\":\"crop:1\",\"parent\":\"crop:1\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:85f15aab2319b5571b9b78baf82d4c40ba90d3bf89e77ebee403db41aaaa05c6\"}],\"provenance\":{\"tool\":\"segment\",\"version\":\"0.1.0\",\"duration_ms\":0},\"artifacts\":{\"plane_0\":{\"artifact_type\":\"Image\",\"id\":\"plane_0\",\"identity\":\"sha256:afe70c2f0e6bd68062767abc986e81b9b4c19a5139dac2d474462c6938054309\"},\"plane_1\":{\"artifact_type\":\"Image\",\"id\":\"plane_1\",\"identity\":\"sha256:bc3e1c36f33d08dbe83e8cf76e7ab852accedc11b09fd8e475b13233bc01b0cb\"},\"plane_2\":{\"artifact_type\":\"Image\",\"id\":\"plane_2\",\"identity\":\"sha256:54f14c824eb0af685f2d0bfeb9babef32849cacb2c63f16fe8bf9e37a75afe16\"},\"plane_3\":{\"artifact_type\":\"Image\",\"id\":\"plane_3\",\"identity\":\"sha256:a661cf2f7363432c8f2728bf0f3fd3d21f92b85a5b370bf5aefed0dd053110f0\"},\"plane_4\":{\"artifact_type\":\"Image\",\"id\":\"plane_4\",\"identity\":\"sha256:b63ed2276a4dffab3c788bac7adf4e5a76387cb7ac1fde908ecc12760e47dc6a\"},\"plane_5\":{\"artifact_type\":\"Image\",\"id\":\"plane_5\",\"identity\":\"sha256:1d23fd7c32ae962b0e7aa0af769a9b5f9bd85ebb371939b3869e9b6ca98bb222\"},\"plane_6\":{\"artifact_type\":\"Image\",\"id\":\"plane_6\",\"identity\":\"sha256:317c0629711093cea9fa15f00f89f5b295431357c3e959acbcd32c95fe0f5873\"},\"plane_7\":{\"artifact_type\":\"Image\",\"id\":\"plane_7\",\"identity\":\"sha256:85f15aab2319b5571b9b78baf82d4c40ba90d3bf89e77ebee403db41aaaa05c6\"},\"region_0\":{\"artifact_type\":\"Location\",\"id\":\"region_0\",\"identity\":\"sha256:d0fdf56268b9c39f1bfd0f0569ef9d0d4f41a17d94a89c1a6a8ae15671b42917\"},\"region_1\":{\"artifact_type\":\"Location\",\"id\":\"region_1\",\"identity\":\"sha256:6ff077499f8393f16b3f449f49d5c9360846939aeb1584b00ef61bcb0ce0f480\"},\"region_2\":{\"artifact_type\":\"Location\",\"id\":\"region_2\",\"identity\":\"sha256:a0aa3ae4eba1fcdc47372e937776af3c8ec6599e7652b73f5d2973b3fd884cf3\"},\"region_3\":{\"artifact_type\":\"Location\",\"id\":\"region_3\",\"identity\":\"sha256:1da453ba2239bda6ed1756ac87bbcdfef564ee56948fe07c14c6dfba52842543\"},\"region_4\":{\"artifact_type\":\"Location\",\"id\":\"region_4\",\"identity\":\"sha256:a1c157bc6bac7b7edf07b4ec2ea3b9de135f5a197ad82a833c78774a47c8779d\"},\"region_5\":{\"artifact_type\":\"Location\",\"id\":\"region_5\",\"identity\":\"sha256:4369ef864401a8029251afddb061e303e7b9c6468edea60988cc23ec36472cbe\"},\"region_6\":{\"artifact_type\":\"Location\",\"id\":\"region_6\",\"identity\":\"sha256:5b08cec137e308ebc669ad8adaa5ee1f94b411ea42d8a8eb778f4d7cf98abd81\"},\"region_7\":{\"artifact_type\":\"Location\",\"id\":\"region_7\",\"identity\":\"sha256:de57bbd9094e701555e8bcfc62ea9a9ef18bd7c433c12dd28a074d44f6c4ccb4\"}}},\"outputs\":{\"plane_0\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:afe70c2f0e6bd68062767abc986e81b9b4c19a5139dac2d474462c6938054309\"},\"plane_1\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:bc3e1c36f33d08dbe83e8cf76e7ab852accedc11b09fd8e475b13233bc01b0cb\"},\"plane_2\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:54f14c824eb0af685f2d0bfeb9babef32849cacb2c63f16fe8bf9e37a75afe16\"},\"plane_3\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:a661cf2f7363432c8f2728bf0f3fd3d21f92b85a5b370bf5aefed0dd053110f0\"},\"plane_4\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:b63ed2276a4dffab3c788bac7adf4e5a76387cb7ac1fde908ecc12760e47dc6a\"},\"plane_5\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:1d23fd7c32ae962b0e7aa0af769a9b5f9bd85ebb371939b3869e9b6ca98bb222\"},\"plane_6\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:317c0629711093cea9fa15f00f89f5b295431357c3e959acbcd32c95fe0f5873\"},\"plane_7\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:85f15aab2319b5571b9b78baf82d4c40ba90d3bf89e77ebee403db41aaaa05c6\"},\"region_0\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:d0fdf56268b9c39f1bfd0f0569ef9d0d4f41a17d94a89c1a6a8ae15671b42917\"},\"region_1\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:6ff077499f8393f16b3f449f49d5c9360846939aeb1584b00ef61bcb0ce0f480\"},\"region_2\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:a0aa3ae4eba1fcdc47372e937776af3c8ec6599e7652b73f5d2973b3fd884cf3\"},\"region_3\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:1da453ba2239bda6ed1756ac87bbcdfef564ee56948fe07c14c6dfba52842543\"},\"region_4\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:a1c157bc6bac7b7edf07b4ec2ea3b9de135f5a197ad82a833c78774a47c8779d\"},\"region_5\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:4369ef864401a8029251afddb061e303e7b9c6468edea60988cc23ec36472cbe\"},\"region_6\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:5b08cec137e308ebc669ad8adaa5ee1f94b411ea42d8a8eb778f4d7cf98abd81\"},\"region_7\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:de57bbd9094e701555e8bcfc62ea9a9ef18bd7c433c12dd28a074d44f6c4ccb4\"}}}",
+    "checker stored: {\"try\":1,\"request\":\"sha256:0000000000000000000000000000000000000000000000000000000000000000\",\"revision\":\"fake checker\",\"source\":\"40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242\",\"candidate\":\"338c5b91b237500b3861c273ac8c9e1c3e76a976d24e12b7d672d01ea9aba39d\",\"arguments\":{\"candidate\":{\"path\":\"/runs/run-1767225600083-1/tries/1/check/candidate.png\"},\"max_spend_usd\":0.01,\"requirements\":[{\"id\":\"RQ1\",\"kind\":\"must_not\",\"text\":\"Any part of the chair is visible.\"}],\"source\":{\"path\":\"/runs/run-1767225600083-1/tries/1/check/source.png\"}},\"verdict\":{\"value\":\"fail\",\"where\":[{\"image\":{\"file_sha256\":\"338c5b91b237500b3861c273ac8c9e1c3e76a976d24e12b7d672d01ea9aba39d\",\"width\":480,\"height\":320,\"projection\":\"flat\",\"topology\":\"bounded\"},\"kind\":\"bbox\",\"parts\":[{\"bbox\":[0.1,0.2,0.30000000000000004,0.4]}],\"straddles_wrap\":false,\"source\":{\"tool\":\"fake-checker\",\"version\":\"0\",\"item\":\"RQ1\"}}]},\"transition\":{\"crops\":[[43,60,149,132]],\"planes\":[\"sha256:2e2f8117f63ac77aee2345924d3470fa7c981c4e52c8c85930fcf8fe6f88a68f\",\"sha256:c4d5455ad6a7f6dfdda903c0048ce061ba38174c0b4550bc6e0bbcc14482e872\",\"sha256:157c2a602cb8171af434064836ad7cebc9c4c756038b37f0410a58abdcb179e0\",\"sha256:100d1f87c897c6ef066f647da98f53d76cdae9ef4df6cf6d7bc93b62e95d62cb\",\"sha256:3e5325366cb9faa03c03421c2e3c432ef73a4d1aa89135e706493da4dd3b61da\",\"sha256:65628106208ea3c918409a0b7c3b2f2e1eab2b95c8d58d1896b8326edbb1766e\",\"sha256:568ab4cfcb2e8fc80f4c6745cda5e6401e9b1429e54388aae8216df695bd6a86\",\"sha256:012f6842b39f4e4b0abb612b4c2f637ff75789d3fbce8a3d4125707b4e6f3b88\"]}}",
+    "filler call started: {\"filler\":\"fake\",\"spend_usd\":0.02}",
+    "filler call: {\"filler\":\"fake\",\"target\":\"/rascal/target/debug/rascal fake-filler exact {image} {mask} {out}\",\"request_width\":480,\"request_height\":320,\"request_bytes\":268773,\"response_bytes\":185788,\"duration_ms\":0,\"status\":0,\"outcome\":\"ok\",\"charge\":\"known\"}",
+    "fill stored: {\"request\":\"sha256:138baaf978437d57cf6d385d6f6e8993cd6dc852b1f4b59dcce527b8453c6fdd\",\"fill\":\"sha256:d70acbce7841d8549b55d6a6568a9296fd3661ba6177872626a927a6801f523f\",\"filler\":\"fake\",\"revision\":\"fake exact\"}",
+    "checker call started: {\"spend_usd\":0.01}",
+    "checker call: {\"target\":\"/rascal/target/debug/rascal fake-checker /work/v05/script.json\",\"duration_ms\":0,\"exit\":2,\"response_bytes\":1098,\"outcome\":\"unsure\",\"charge\":\"known\",\"spend\":{\"usd\":0.004,\"unresolved_usd\":0.0,\"basis\":\"measured\"}}",
+    "pack call: {\"pack\":\"fake\",\"tool\":\"segment\",\"target\":\"/work/v05/pack/.venv/bin/rascal-tools serve\",\"request_bytes\":0,\"response_bytes\":7078,\"duration_ms\":0,\"status\":\"ok\",\"outcome\":\"ok\"}",
+    "pack stored: {\"request\":\"sha256:5c56ea09a48e89571a2bcab74e0147548b941113b3ba3997f6b2beed54354715\",\"pack\":\"fake\",\"revision\":\"fake 1\",\"tool\":\"segment\",\"envelope\":{\"envelope_version\":1,\"status\":\"ok\",\"summary\":\"8 instances of \\\"the chair\\\"\",\"regions\":[{\"id\":\"instance-0\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:2\",\"polygon\":[[0.1,0.1],[0.35,0.1],[0.35,0.25],[0.1,0.25]]},\"label\":\"the chair\",\"score\":0.9},{\"id\":\"instance-1\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:2\",\"polygon\":[[0.1,0.30000000000000004],[0.35,0.30000000000000004],[0.35,0.45000000000000007],[0.1,0.45000000000000007]]},\"label\":\"the chair\",\"score\":0.8},{\"id\":\"instance-2\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:2\",\"polygon\":[[0.1,0.5],[0.35,0.5],[0.35,0.65],[0.1,0.65]]},\"label\":\"the chair\",\"score\":0.7},{\"id\":\"instance-3\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:2\",\"polygon\":[[0.1,0.7000000000000001],[0.35,0.7000000000000001],[0.35,0.8500000000000001],[0.1,0.8500000000000001]]},\"label\":\"the chair\",\"score\":0.6},{\"id\":\"instance-4\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:2\",\"polygon\":[[0.5,0.1],[0.75,0.1],[0.75,0.25],[0.5,0.25]]},\"label\":\"the chair\",\"score\":0.5},{\"id\":\"instance-5\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:2\",\"polygon\":[[0.5,0.30000000000000004],[0.75,0.30000000000000004],[0.75,0.45000000000000007],[0.5,0.45000000000000007]]},\"label\":\"the chair\",\"score\":0.4},{\"id\":\"instance-6\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:2\",\"polygon\":[[0.5,0.5],[0.75,0.5],[0.75,0.65],[0.5,0.65]]},\"label\":\"the chair\",\"score\":0.29999999999999993},{\"id\":\"instance-7\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:2\",\"polygon\":[[0.5,0.7000000000000001],[0.75,0.7000000000000001],[0.75,0.8500000000000001],[0.5,0.8500000000000001]]},\"label\":\"the chair\",\"score\":0.19999999999999996}],\"images\":[{\"frame\":\"crop:2\",\"parent\":\"crop:2\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:22d7410e2952dd7cb5f0664f24ee51d6817eb8116488568c7f3a6c41bb246a39\"},{\"frame\":\"crop:2\",\"parent\":\"crop:2\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:b010f7ac817ccb0af66477dc9722f2f07422aba678d8cd5714fe4cdddae5698c\"},{\"frame\":\"crop:2\",\"parent\":\"crop:2\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:e67a8a37e56370967e9f8fd9498ec0c04d2924e83530de61c790c1615900b18d\"},{\"frame\":\"crop:2\",\"parent\":\"crop:2\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:e063e890d03b28f168e26aed8dfed840c0e658d68615f77e29f35f83727d73cd\"},{\"frame\":\"crop:2\",\"parent\":\"crop:2\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:34dc80d751f0b10e679fb9d50fbed9e358a9c88d47b48a16aa2634f4ccd22dff\"},{\"frame\":\"crop:2\",\"parent\":\"crop:2\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:33bd8055ae03a70e42d79a90657e86962b42aa3f1a6a3cb506a7658a22b7d1f6\"},{\"frame\":\"crop:2\",\"parent\":\"crop:2\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:f8c7922a3aefdb21fc49e804ded4003627b0e5d2a4374b219235306b6c221fb4\"},{\"frame\":\"crop:2\",\"parent\":\"crop:2\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:a434a14c48642316079db4c945d389d29162380b39acc738da445c6432e3e6b4\"}],\"provenance\":{\"tool\":\"segment\",\"version\":\"0.1.0\",\"duration_ms\":0},\"artifacts\":{\"plane_0\":{\"artifact_type\":\"Image\",\"id\":\"plane_0\",\"identity\":\"sha256:22d7410e2952dd7cb5f0664f24ee51d6817eb8116488568c7f3a6c41bb246a39\"},\"plane_1\":{\"artifact_type\":\"Image\",\"id\":\"plane_1\",\"identity\":\"sha256:b010f7ac817ccb0af66477dc9722f2f07422aba678d8cd5714fe4cdddae5698c\"},\"plane_2\":{\"artifact_type\":\"Image\",\"id\":\"plane_2\",\"identity\":\"sha256:e67a8a37e56370967e9f8fd9498ec0c04d2924e83530de61c790c1615900b18d\"},\"plane_3\":{\"artifact_type\":\"Image\",\"id\":\"plane_3\",\"identity\":\"sha256:e063e890d03b28f168e26aed8dfed840c0e658d68615f77e29f35f83727d73cd\"},\"plane_4\":{\"artifact_type\":\"Image\",\"id\":\"plane_4\",\"identity\":\"sha256:34dc80d751f0b10e679fb9d50fbed9e358a9c88d47b48a16aa2634f4ccd22dff\"},\"plane_5\":{\"artifact_type\":\"Image\",\"id\":\"plane_5\",\"identity\":\"sha256:33bd8055ae03a70e42d79a90657e86962b42aa3f1a6a3cb506a7658a22b7d1f6\"},\"plane_6\":{\"artifact_type\":\"Image\",\"id\":\"plane_6\",\"identity\":\"sha256:f8c7922a3aefdb21fc49e804ded4003627b0e5d2a4374b219235306b6c221fb4\"},\"plane_7\":{\"artifact_type\":\"Image\",\"id\":\"plane_7\",\"identity\":\"sha256:a434a14c48642316079db4c945d389d29162380b39acc738da445c6432e3e6b4\"},\"region_0\":{\"artifact_type\":\"Location\",\"id\":\"region_0\",\"identity\":\"sha256:c2226a05b4703b33e5e4d694c28693b3bfa67a677523a9941f5bc3282297506b\"},\"region_1\":{\"artifact_type\":\"Location\",\"id\":\"region_1\",\"identity\":\"sha256:2a263baaee859785785804921211bb95a8f4c10640fe8f39600932dee3501aaa\"},\"region_2\":{\"artifact_type\":\"Location\",\"id\":\"region_2\",\"identity\":\"sha256:4effad7252db60486fa86520d1c5d93926ad5acc05cbd5a26e50cf850836774e\"},\"region_3\":{\"artifact_type\":\"Location\",\"id\":\"region_3\",\"identity\":\"sha256:aa03869081a19a6c0332df865789a9249a22dd46fa804a4557a9ea652b6c8833\"},\"region_4\":{\"artifact_type\":\"Location\",\"id\":\"region_4\",\"identity\":\"sha256:296939e009925d024cce37e849535b7727206965aba5eec68f51cd578eb2aa03\"},\"region_5\":{\"artifact_type\":\"Location\",\"id\":\"region_5\",\"identity\":\"sha256:2b1ba3053f0e8fbd3a62898a813d4c9bf237dac4505f78e6f7eb61d4f806ce95\"},\"region_6\":{\"artifact_type\":\"Location\",\"id\":\"region_6\",\"identity\":\"sha256:2d89eb117608744c9294e385aee7c6e7ec5f678c1466dbcbc9dfc72f1362b47c\"},\"region_7\":{\"artifact_type\":\"Location\",\"id\":\"region_7\",\"identity\":\"sha256:57de422c79b0080f2f556983dbb8f4e6d0e39f67d68b1bfc20c59181dbc144dc\"}}},\"outputs\":{\"plane_0\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:22d7410e2952dd7cb5f0664f24ee51d6817eb8116488568c7f3a6c41bb246a39\"},\"plane_1\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:b010f7ac817ccb0af66477dc9722f2f07422aba678d8cd5714fe4cdddae5698c\"},\"plane_2\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:e67a8a37e56370967e9f8fd9498ec0c04d2924e83530de61c790c1615900b18d\"},\"plane_3\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:e063e890d03b28f168e26aed8dfed840c0e658d68615f77e29f35f83727d73cd\"},\"plane_4\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:34dc80d751f0b10e679fb9d50fbed9e358a9c88d47b48a16aa2634f4ccd22dff\"},\"plane_5\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:33bd8055ae03a70e42d79a90657e86962b42aa3f1a6a3cb506a7658a22b7d1f6\"},\"plane_6\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:f8c7922a3aefdb21fc49e804ded4003627b0e5d2a4374b219235306b6c221fb4\"},\"plane_7\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:a434a14c48642316079db4c945d389d29162380b39acc738da445c6432e3e6b4\"},\"region_0\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:c2226a05b4703b33e5e4d694c28693b3bfa67a677523a9941f5bc3282297506b\"},\"region_1\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:2a263baaee859785785804921211bb95a8f4c10640fe8f39600932dee3501aaa\"},\"region_2\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:4effad7252db60486fa86520d1c5d93926ad5acc05cbd5a26e50cf850836774e\"},\"region_3\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:aa03869081a19a6c0332df865789a9249a22dd46fa804a4557a9ea652b6c8833\"},\"region_4\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:296939e009925d024cce37e849535b7727206965aba5eec68f51cd578eb2aa03\"},\"region_5\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:2b1ba3053f0e8fbd3a62898a813d4c9bf237dac4505f78e6f7eb61d4f806ce95\"},\"region_6\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:2d89eb117608744c9294e385aee7c6e7ec5f678c1466dbcbc9dfc72f1362b47c\"},\"region_7\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:57de422c79b0080f2f556983dbb8f4e6d0e39f67d68b1bfc20c59181dbc144dc\"}}}",
+    "pack call: {\"pack\":\"fake\",\"tool\":\"segment\",\"target\":\"/work/v05/pack/.venv/bin/rascal-tools serve\",\"request_bytes\":0,\"response_bytes\":7078,\"duration_ms\":0,\"status\":\"ok\",\"outcome\":\"ok\"}",
+    "pack stored: {\"request\":\"sha256:06c42480a28efc221d118905c9bcd6b72f9c6d36d823ce043f98467a99276485\",\"pack\":\"fake\",\"revision\":\"fake 1\",\"tool\":\"segment\",\"envelope\":{\"envelope_version\":1,\"status\":\"ok\",\"summary\":\"8 instances of \\\"the chair\\\"\",\"regions\":[{\"id\":\"instance-0\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:3\",\"polygon\":[[0.1,0.1],[0.35,0.1],[0.35,0.25],[0.1,0.25]]},\"label\":\"the chair\",\"score\":0.9},{\"id\":\"instance-1\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:3\",\"polygon\":[[0.1,0.30000000000000004],[0.35,0.30000000000000004],[0.35,0.45000000000000007],[0.1,0.45000000000000007]]},\"label\":\"the chair\",\"score\":0.8},{\"id\":\"instance-2\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:3\",\"polygon\":[[0.1,0.5],[0.35,0.5],[0.35,0.65],[0.1,0.65]]},\"label\":\"the chair\",\"score\":0.7},{\"id\":\"instance-3\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:3\",\"polygon\":[[0.1,0.7000000000000001],[0.35,0.7000000000000001],[0.35,0.8500000000000001],[0.1,0.8500000000000001]]},\"label\":\"the chair\",\"score\":0.6},{\"id\":\"instance-4\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:3\",\"polygon\":[[0.5,0.1],[0.75,0.1],[0.75,0.25],[0.5,0.25]]},\"label\":\"the chair\",\"score\":0.5},{\"id\":\"instance-5\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:3\",\"polygon\":[[0.5,0.30000000000000004],[0.75,0.30000000000000004],[0.75,0.45000000000000007],[0.5,0.45000000000000007]]},\"label\":\"the chair\",\"score\":0.4},{\"id\":\"instance-6\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:3\",\"polygon\":[[0.5,0.5],[0.75,0.5],[0.75,0.65],[0.5,0.65]]},\"label\":\"the chair\",\"score\":0.29999999999999993},{\"id\":\"instance-7\",\"location\":{\"kind\":\"polygon\",\"frame\":\"crop:3\",\"polygon\":[[0.5,0.7000000000000001],[0.75,0.7000000000000001],[0.75,0.8500000000000001],[0.5,0.8500000000000001]]},\"label\":\"the chair\",\"score\":0.19999999999999996}],\"images\":[{\"frame\":\"crop:3\",\"parent\":\"crop:3\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:e749df48e0e89e5b3d8926af45edb6daf966bbe66cc8beb46bbe7bc0a9efc338\"},{\"frame\":\"crop:3\",\"parent\":\"crop:3\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:7f65c3e6eddb5f600913fb78978e68eaa55fc635a2d1df4b3c2c5f45419899dc\"},{\"frame\":\"crop:3\",\"parent\":\"crop:3\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:29aa4a73e47cfa59b35134edb8a35ae9b2853292320d49147f1837fb5e7f66dc\"},{\"frame\":\"crop:3\",\"parent\":\"crop:3\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:2d418b6afb4371c85dffaf34d2f70222913e7b8e42814f0ae73981b1bbd8a9c4\"},{\"frame\":\"crop:3\",\"parent\":\"crop:3\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:7c8a87f53977c4c6db4c1b40f4805bd0be6e5ca2252972c4e62ab871f3c8eaaf\"},{\"frame\":\"crop:3\",\"parent\":\"crop:3\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:e7376feb50aab0a4f611c0a7529e7d9bfe100cc4a1d8717d4d0210e46dcfa813\"},{\"frame\":\"crop:3\",\"parent\":\"crop:3\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:c6dbc1fcea265328dd6a563677c79b31646df57be5a082412600e57d0783a186\"},{\"frame\":\"crop:3\",\"parent\":\"crop:3\",\"width\":106,\"height\":72,\"media_type\":\"image/png\",\"identity\":\"sha256:119ddb44efeaf022a71526b08be7f131da49478a7ef6ec59af132d472cde19c8\"}],\"provenance\":{\"tool\":\"segment\",\"version\":\"0.1.0\",\"duration_ms\":0},\"artifacts\":{\"plane_0\":{\"artifact_type\":\"Image\",\"id\":\"plane_0\",\"identity\":\"sha256:e749df48e0e89e5b3d8926af45edb6daf966bbe66cc8beb46bbe7bc0a9efc338\"},\"plane_1\":{\"artifact_type\":\"Image\",\"id\":\"plane_1\",\"identity\":\"sha256:7f65c3e6eddb5f600913fb78978e68eaa55fc635a2d1df4b3c2c5f45419899dc\"},\"plane_2\":{\"artifact_type\":\"Image\",\"id\":\"plane_2\",\"identity\":\"sha256:29aa4a73e47cfa59b35134edb8a35ae9b2853292320d49147f1837fb5e7f66dc\"},\"plane_3\":{\"artifact_type\":\"Image\",\"id\":\"plane_3\",\"identity\":\"sha256:2d418b6afb4371c85dffaf34d2f70222913e7b8e42814f0ae73981b1bbd8a9c4\"},\"plane_4\":{\"artifact_type\":\"Image\",\"id\":\"plane_4\",\"identity\":\"sha256:7c8a87f53977c4c6db4c1b40f4805bd0be6e5ca2252972c4e62ab871f3c8eaaf\"},\"plane_5\":{\"artifact_type\":\"Image\",\"id\":\"plane_5\",\"identity\":\"sha256:e7376feb50aab0a4f611c0a7529e7d9bfe100cc4a1d8717d4d0210e46dcfa813\"},\"plane_6\":{\"artifact_type\":\"Image\",\"id\":\"plane_6\",\"identity\":\"sha256:c6dbc1fcea265328dd6a563677c79b31646df57be5a082412600e57d0783a186\"},\"plane_7\":{\"artifact_type\":\"Image\",\"id\":\"plane_7\",\"identity\":\"sha256:119ddb44efeaf022a71526b08be7f131da49478a7ef6ec59af132d472cde19c8\"},\"region_0\":{\"artifact_type\":\"Location\",\"id\":\"region_0\",\"identity\":\"sha256:4562bb9fe253f7d97d83b866bf6365508faf23e1db1b23fe9b72bdcdbaa2e45a\"},\"region_1\":{\"artifact_type\":\"Location\",\"id\":\"region_1\",\"identity\":\"sha256:60ea22d5559281a22ed96d99eb03a2b5d2f9df78ae2d3830f4a451c42af075d0\"},\"region_2\":{\"artifact_type\":\"Location\",\"id\":\"region_2\",\"identity\":\"sha256:44a42fc34afff861ddc5bc7e9cf1ec6cdffadd7a20eb366cb7bf9748835730dc\"},\"region_3\":{\"artifact_type\":\"Location\",\"id\":\"region_3\",\"identity\":\"sha256:891e961268d3c8bc9a595a6357a811906ae13bab529d9c86d67b146d63a6fdd6\"},\"region_4\":{\"artifact_type\":\"Location\",\"id\":\"region_4\",\"identity\":\"sha256:90fa26d9a8cb9461308f995d983c057a841ced107bfbb2750aecb6bae4d868ee\"},\"region_5\":{\"artifact_type\":\"Location\",\"id\":\"region_5\",\"identity\":\"sha256:7136a40e315658286455aa230e7201800b8a9013536551b842fb6a0405375ef1\"},\"region_6\":{\"artifact_type\":\"Location\",\"id\":\"region_6\",\"identity\":\"sha256:32f099b662b959aa572780295699aa8cbe17be5a154947f8ad4728de674706de\"},\"region_7\":{\"artifact_type\":\"Location\",\"id\":\"region_7\",\"identity\":\"sha256:9cb96a666c3fb363b7b309ad6f717771c7d1f4bc04df8832b5efb546ce406f07\"}}},\"outputs\":{\"plane_0\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:e749df48e0e89e5b3d8926af45edb6daf966bbe66cc8beb46bbe7bc0a9efc338\"},\"plane_1\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:7f65c3e6eddb5f600913fb78978e68eaa55fc635a2d1df4b3c2c5f45419899dc\"},\"plane_2\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:29aa4a73e47cfa59b35134edb8a35ae9b2853292320d49147f1837fb5e7f66dc\"},\"plane_3\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:2d418b6afb4371c85dffaf34d2f70222913e7b8e42814f0ae73981b1bbd8a9c4\"},\"plane_4\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:7c8a87f53977c4c6db4c1b40f4805bd0be6e5ca2252972c4e62ab871f3c8eaaf\"},\"plane_5\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:e7376feb50aab0a4f611c0a7529e7d9bfe100cc4a1d8717d4d0210e46dcfa813\"},\"plane_6\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:c6dbc1fcea265328dd6a563677c79b31646df57be5a082412600e57d0783a186\"},\"plane_7\":{\"artifact_type\":\"Image\",\"identity\":\"sha256:119ddb44efeaf022a71526b08be7f131da49478a7ef6ec59af132d472cde19c8\"},\"region_0\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:4562bb9fe253f7d97d83b866bf6365508faf23e1db1b23fe9b72bdcdbaa2e45a\"},\"region_1\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:60ea22d5559281a22ed96d99eb03a2b5d2f9df78ae2d3830f4a451c42af075d0\"},\"region_2\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:44a42fc34afff861ddc5bc7e9cf1ec6cdffadd7a20eb366cb7bf9748835730dc\"},\"region_3\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:891e961268d3c8bc9a595a6357a811906ae13bab529d9c86d67b146d63a6fdd6\"},\"region_4\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:90fa26d9a8cb9461308f995d983c057a841ced107bfbb2750aecb6bae4d868ee\"},\"region_5\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:7136a40e315658286455aa230e7201800b8a9013536551b842fb6a0405375ef1\"},\"region_6\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:32f099b662b959aa572780295699aa8cbe17be5a154947f8ad4728de674706de\"},\"region_7\":{\"artifact_type\":\"Location\",\"identity\":\"sha256:9cb96a666c3fb363b7b309ad6f717771c7d1f4bc04df8832b5efb546ce406f07\"}}}",
+    "checker stored: {\"try\":2,\"request\":\"sha256:0000000000000000000000000000000000000000000000000000000000000000\",\"revision\":\"fake checker\",\"source\":\"40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242\",\"candidate\":\"338c5b91b237500b3861c273ac8c9e1c3e76a976d24e12b7d672d01ea9aba39d\",\"arguments\":{\"candidate\":{\"path\":\"/runs/run-1767225600083-1/tries/2/check/candidate.png\"},\"max_spend_usd\":0.01,\"requirements\":[{\"id\":\"RQ1\",\"kind\":\"must_not\",\"text\":\"Any part of the chair is visible.\"}],\"source\":{\"path\":\"/runs/run-1767225600083-1/tries/2/check/source.png\"}},\"verdict\":{\"value\":\"unsure\",\"where\":[{\"image\":{\"file_sha256\":\"338c5b91b237500b3861c273ac8c9e1c3e76a976d24e12b7d672d01ea9aba39d\",\"width\":480,\"height\":320,\"projection\":\"flat\",\"topology\":\"bounded\"},\"kind\":\"bbox\",\"parts\":[{\"bbox\":[0.2,0.2,0.4,0.4]}],\"straddles_wrap\":false,\"source\":{\"tool\":\"fake-checker\",\"version\":\"0\",\"item\":\"RQ1\"}},{\"image\":{\"file_sha256\":\"338c5b91b237500b3861c273ac8c9e1c3e76a976d24e12b7d672d01ea9aba39d\",\"width\":480,\"height\":320,\"projection\":\"flat\",\"topology\":\"bounded\"},\"kind\":\"bbox\",\"parts\":[{\"bbox\":[0.5,0.2,0.7,0.4]}],\"straddles_wrap\":false,\"source\":{\"tool\":\"fake-checker\",\"version\":\"0\",\"item\":\"RQ1\"}}]},\"transition\":{\"crops\":[[91,60,197,132],[235,60,341,132]],\"planes\":[\"sha256:f9da9c1495c5648eea1ff0b828ea2f55010aaef7aacd85e7c24bda0ab518b929\",\"sha256:199a2431c0dd66b47e6bb0530233144e5686028f3198599eb752642c6627934b\",\"sha256:f88451d9f2947f798e578a2a81e6360a615dc225fbfeb2801df1c1358ae65036\",\"sha256:b4b8b5a7e2b6ed9524bf56b358b08968937b5258ec61f0c5756dd08b718fa75a\",\"sha256:18c0651eafc0849ed22019bd3b35561ea20f1e355ffac942320024060d87a5cd\",\"sha256:02c87923c5b7ebf15b96ca76bb1adb664768cebbeaa854e088285bf008a8fc06\",\"sha256:f572ad11b49ac5ac6086b45cddfff54627650de3deb136ac3e7c884430d779e0\",\"sha256:d7ddf217b90f72c6010aa1a3df45e37ae5c04f2f369f64f9151943175b8a0500\",\"sha256:8306b332adcb7df7a459981048f94578c195cb58e665279901c39cc2d85b9aea\",\"sha256:1a607ac4b7b48465286030a38a3ec0b2b08e9b49d15b18c7cdc690133cfacee6\",\"sha256:c09598a93decb15ff7a217c50bba62b13d6bd70bc53473d4ece85750d34e3442\",\"sha256:f557469526cf3a3b47064d49fdca463453b822c0190b8c10c7344bdea32a7736\",\"sha256:8500dcc891746e3e5bd26d36043892f15105b1d128ddae25c717669585a177a4\",\"sha256:4360bd8f477d9f5013763c3f0a9def51035a58dcfe9ecd80ddc68c453cffff31\",\"sha256:9378a7b9bcc0bd3ae927bd0087730cfd553115505852ac3fb692174bb7fb3908\",\"sha256:340b20d677b3aaa95451cbf215f4546422b70986bcf2a828765de8c33fa30f8e\"]}}",
+    "filler call started: {\"filler\":\"fake\",\"spend_usd\":0.02}",
+    "filler call: {\"filler\":\"fake\",\"target\":\"/rascal/target/debug/rascal fake-filler exact {image} {mask} {out}\",\"request_width\":480,\"request_height\":320,\"request_bytes\":268873,\"response_bytes\":185649,\"duration_ms\":0,\"status\":0,\"outcome\":\"ok\",\"charge\":\"known\"}",
+    "fill stored: {\"request\":\"sha256:32fc4897d821949f8d3bdcec5f0723ffa4f3ed8424d8525691913712436a5f96\",\"fill\":\"sha256:6863adb80548cddb5af732feb050ecea2befa91935439dbb88ffa9789f2ce6fa\",\"filler\":\"fake\",\"revision\":\"fake exact\"}",
+    "checker call started: {\"spend_usd\":0.01}",
+    "checker call: {\"target\":\"/rascal/target/debug/rascal fake-checker /work/v05/script.json\",\"duration_ms\":0,\"exit\":2,\"response_bytes\":805,\"outcome\":\"unsure\",\"charge\":\"known\",\"spend\":{\"usd\":0.004,\"unresolved_usd\":0.0,\"basis\":\"measured\"}}",
+    "checker stored: {\"try\":3,\"request\":\"sha256:0000000000000000000000000000000000000000000000000000000000000000\",\"revision\":\"fake checker\",\"source\":\"40e657ddd81ee448c90cdc287a376980c9e14f56583997049c6c0447d9c37242\",\"candidate\":\"557648a9e51515b685ae380c8aef13283fc5ac01a674fb9da0d391ccfe6375be\",\"arguments\":{\"candidate\":{\"path\":\"/runs/run-1767225600083-1/tries/3/check/candidate.png\"},\"max_spend_usd\":0.01,\"requirements\":[{\"id\":\"RQ1\",\"kind\":\"must_not\",\"text\":\"Any part of the chair is visible.\"}],\"source\":{\"path\":\"/runs/run-1767225600083-1/tries/3/check/source.png\"}},\"verdict\":{\"value\":\"unsure\",\"where\":[{\"image\":{\"file_sha256\":\"557648a9e51515b685ae380c8aef13283fc5ac01a674fb9da0d391ccfe6375be\",\"width\":480,\"height\":320,\"projection\":\"flat\",\"topology\":\"bounded\"},\"kind\":\"bbox\",\"parts\":[{\"bbox\":[0.3,0.2,0.5,0.4]}],\"straddles_wrap\":false,\"source\":{\"tool\":\"fake-checker\",\"version\":\"0\",\"item\":\"RQ1\"}}]}}",
+    "Kept try 3 of 3. The check still sees the chair in 1 place (unsure)."
+  ],
+  "run": {
+    "client_run_id": null,
+    "dir": "/runs/run-1767225600083-1",
+    "id": "run-1767225600083-1",
+    "resource": "rascal://run/run-1767225600083-1/run.json",
+    "session_id": "00000000-0000-4000-8000-000000000012"
+  },
+  "spend": {
+    "basis": "estimated",
+    "unresolved_usd": 0.0,
+    "usd": 0.072
+  },
+  "started": "2026-01-01T00:00:00.000Z",
+  "status": "completed",
+  "tool": {
+    "name": "rascal",
+    "version": "0.1.1"
+  },
+  "verdict": {
+    "value": "unsure",
+    "where": [
+      {
+        "image": {
+          "file_sha256": "557648a9e51515b685ae380c8aef13283fc5ac01a674fb9da0d391ccfe6375be",
+          "height": 320,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 480
+        },
+        "kind": "bbox",
+        "parts": [
+          {
+            "bbox": [
+              0.3,
+              0.2,
+              0.5,
+              0.4
+            ]
+          }
+        ],
+        "source": {
+          "item": "RQ1",
+          "tool": "fake-checker",
+          "version": "0"
+        },
+        "straddles_wrap": false
+      }
+    ]
+  }
+}
