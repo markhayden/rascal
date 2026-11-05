@@ -1562,12 +1562,15 @@ fn start(
     let filler = healing.map(|h| h.filler);
     match invocation::of_command(args, healing) {
         Ok((invocation, price)) => {
-            let pending = run_json::begin(run_json::pending_for(args, filler), invocation);
+            let pending = run_json::begin(
+                run_json::pending_for(args, filler, price.check.record()),
+                invocation,
+            );
             run_json::watch_signals();
             (pending, price)
         }
         Err(error) => {
-            let pending = run_json::pending_for(args, filler);
+            let pending = run_json::pending_for(args, filler, None);
             if pending.fresh {
                 let _ = std::fs::create_dir_all(&pending.dir);
             }

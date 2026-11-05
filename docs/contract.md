@@ -196,8 +196,9 @@ its file's digest and dimensions and an absolute `path`. A heal whose filler fai
 that still lists the mask. `locations.used` holds the location the run took in;
 `locations.found` the segmenter's boxes, with `score` and `score_kind: owlv2-detection`.
 `input_identity` is a SHA-256 over what was asked (the action, the recipe, the image's file
-digest, the location files, `--set`, the prompt, the filler), so equal requests have equal
-identities. `spend` and `cache` come from the fill (8.6). `artifacts` (4.7), which every result
+digest, the location files, `--set`, the prompt, the filler, and the check record
+`x-rascal.check` when a checker is configured), so equal requests have equal identities and a
+checked and an unchecked run of the same inputs never share one. `spend` and `cache` come from the fill (8.6). `artifacts` (4.7), which every result
 of an operations tool carries, lists a task's Mask too (task 10.8): `artifacts.in` holds the
 `mask` and `protect` references the invocation names (`preview: null`), and `artifacts.out` the
 Mask the recipe outputs (`port: "mask"`), its reference and its preview. The run records that

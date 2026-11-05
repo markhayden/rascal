@@ -689,8 +689,15 @@ pub fn write(dir: &Path, result: &RunResult) -> rascal_core::error::Result<()> {
 }
 
 /// The pending record for a `run` or `heal` of `args` (with `filler` for heal), before it
-/// starts: its id, action, directory, start time and input identity.
-pub fn pending_for(args: &crate::run::RunArgs, filler: Option<&str>) -> Pending {
+/// starts: its id, action, directory, start time and input identity. `check` is the call's
+/// check record (`x-rascal.check`), when it has one: it enters the identity, so a checked and
+/// an unchecked run of the same inputs never share one, while a run with no checker
+/// configured keeps the identity it always had.
+pub fn pending_for(
+    args: &crate::run::RunArgs,
+    filler: Option<&str>,
+    check: Option<Value>,
+) -> Pending {
     let started_ms = allocate_ms();
     // Only regular files are read: a FIFO or a device named as an input would block the read.
     let digest_of = |p: &Option<PathBuf>| {
@@ -718,6 +725,10 @@ pub fn pending_for(args: &crate::run::RunArgs, filler: Option<&str>) -> Pending 
         "projection": args.projection.map(|p| format!("{p:?}")),
         "filler": filler,
     });
+    let mut parts = parts;
+    if let Some(check) = check {
+        parts["check"] = check;
+    }
     Pending {
         id: new_id(started_ms),
         action: action_of(&args.recipe),

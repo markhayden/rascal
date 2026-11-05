@@ -1358,3 +1358,41 @@ fn a_cancellation_mid_check_stops_the_checker_and_keeps_the_tries() {
     assert_eq!(ledger["spent_usd"], 0.054, "{ledger:#}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The check is part of what a run was asked: a checked run, an unchecked one and one whose key
+/// is missing, of the same inputs, have three input identities.
+#[test]
+fn a_checked_and_an_unchecked_run_never_share_an_input_identity() {
+    let dir = scratch("identity");
+    let file = config(&dir, &Setup::default());
+    let keyed = dir.join("keyed.toml");
+    std::fs::write(
+        &keyed,
+        std::fs::read_to_string(&file).unwrap().replace(
+            "timeout_s = 30",
+            "timeout_s = 30\nkey_env = \"RASCAL_TEST_ABSENT_KEY\"",
+        ),
+    )
+    .unwrap();
+    let identity = |name: &str, config: &Path, extra: &[&str]| {
+        let o = heal_into(&dir, config, name, extra);
+        assert_eq!(o.status.code(), Some(0), "{name}: {}", text(&o.stderr));
+        let result: Value = serde_json::from_str(
+            &std::fs::read_to_string(dir.join(name).join("run.json")).unwrap(),
+        )
+        .unwrap();
+        result["input_identity"].as_str().unwrap().to_string()
+    };
+    let checked = identity("checked", &file, &[]);
+    assert_eq!(
+        checked,
+        identity("again", &file, &[]),
+        "the same call, the same identity"
+    );
+    let unchecked = identity("unchecked", &file, &["--no-check"]);
+    let no_key = identity("no-key", &keyed, &[]);
+    assert_ne!(checked, unchecked);
+    assert_ne!(checked, no_key);
+    assert_ne!(unchecked, no_key);
+    let _ = std::fs::remove_dir_all(&dir);
+}

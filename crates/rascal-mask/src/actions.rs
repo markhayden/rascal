@@ -718,7 +718,8 @@ impl ContractActions {
             }
             Ok((run_args, reservation)) => {
                 image = Some(run_args.image.clone());
-                let mut pending = run_json::pending_for(&run_args, filler.as_deref());
+                let mut pending =
+                    run_json::pending_for(&run_args, filler.as_deref(), reservation.check.record());
                 pending.invocation = invocation;
                 pending.id = id.clone();
                 pending.started_ms = started_ms;
