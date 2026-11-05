@@ -802,11 +802,14 @@ fn a_rejected_credential_is_credential_and_never_retryable() {
         assert_eq!(r["spend"]["usd"], 0.0, "{r:#}");
         assert_eq!(r["spend"]["unresolved_usd"], 0.0);
         assert_eq!(r["spend"]["basis"], "measured", "{r:#}");
-        let call = r["notes"]
-            .as_array()
-            .unwrap()
+        // The call is recorded in the run's journal; the result's notes are sentences.
+        let journal = rascal_core::journal::Journal::read(
+            &Path::new(r["run"]["dir"].as_str().unwrap()).join("journal.jsonl"),
+        )
+        .unwrap();
+        let call = journal
             .iter()
-            .filter_map(|n| n.as_str()?.strip_prefix("filler call: "))
+            .filter_map(|l| l.note.as_deref()?.strip_prefix("filler call: "))
             .collect::<Vec<_>>();
         assert_eq!(call.len(), 1, "{r:#}");
         let call: serde_json::Value = serde_json::from_str(call[0]).unwrap();

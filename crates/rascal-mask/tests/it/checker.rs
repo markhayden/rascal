@@ -141,6 +141,17 @@ fn notes(result: &Value) -> Vec<String> {
         .collect()
 }
 
+/// Every note in the run's journal, the machine records (`checker call: …`, `checker stored: …`)
+/// with the sentences: the result keeps only the sentences (table-manners 2).
+fn records(result: &Value) -> Vec<String> {
+    let dir = Path::new(result["run"]["dir"].as_str().unwrap());
+    rascal_core::journal::Journal::read(&dir.join("journal.jsonl"))
+        .unwrap()
+        .into_iter()
+        .filter_map(|l| l.note)
+        .collect()
+}
+
 fn note_with<'a>(notes: &'a [String], prefix: &str) -> Vec<&'a str> {
     notes
         .iter()
@@ -192,7 +203,16 @@ fn a_pass_on_the_first_try_ends_the_run_with_its_verdict() {
     );
     assert_eq!(arguments["max_spend_usd"], 0.01);
     // The journal: the call started, the call, and the stored answer with the request identity.
-    let notes = notes(&result);
+    // The result's notes are sentences; the calls are recorded in the journal.
+    assert_eq!(
+        notes(&result),
+        vec![
+            "Checked: up to 3 tries within the spend limits.".to_string(),
+            "Kept try 1 of 1.".to_string()
+        ],
+        "{result:#}"
+    );
+    let notes = records(&result);
     assert_eq!(note_with(&notes, "checker call started: ").len(), 1);
     let call: Value = serde_json::from_str(note_with(&notes, "checker call: ")[0]).unwrap();
     assert_eq!(call["outcome"], "pass");
@@ -233,7 +253,7 @@ fn a_fail_is_an_answer_whatever_the_exit_code() {
         .find(|o| o["role"] == "result")
         .unwrap();
     assert_eq!(place["image"]["file_sha256"], out["image"]["file_sha256"]);
-    let notes = notes(&result);
+    let notes = records(&result);
     let call: Value = serde_json::from_str(note_with(&notes, "checker call: ")[0]).unwrap();
     assert_eq!(call["exit"], 1, "the checker exited 1, and it was not read");
     let _ = std::fs::remove_dir_all(&dir);
@@ -277,7 +297,7 @@ fn each_check_failure_completes_the_run_flagged_without_a_verdict() {
         assert_eq!(flagged.len(), 1, "{failure}: {notes:#?}");
         assert!(flagged[0].contains(says), "{failure}: {}", flagged[0]);
         assert!(
-            note_with(&notes, "checker stored: ").is_empty(),
+            note_with(&records(&result), "checker stored: ").is_empty(),
             "{failure}"
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -552,7 +572,7 @@ fn sha256(path: &Path) -> String {
 }
 
 fn stored(result: &Value) -> Vec<Value> {
-    note_with(&notes(result), "checker stored: ")
+    note_with(&records(result), "checker stored: ")
         .iter()
         .map(|t| serde_json::from_str(t).unwrap())
         .collect()
@@ -1191,7 +1211,7 @@ fn a_replay_of_a_three_try_run_makes_no_call_and_gives_the_same_outputs() {
             .collect::<Vec<_>>()
     };
     assert_eq!(tries(&again), tries(&recorded));
-    let notes = notes(&again);
+    let notes = records(&again);
     assert!(note_with(&notes, "checker call: ").is_empty(), "{notes:#?}");
     assert!(note_with(&notes, "checker call started: ").is_empty());
     assert_eq!(

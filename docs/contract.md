@@ -175,8 +175,11 @@ Every `run` and `heal` writes `run.json` into its run directory, last and atomic
 temporary name, then a rename), whatever the outcome, when the directory was new or empty at the
 start; an `--out` that held something is refused untouched. It is the contract's result: the
 header (`status`, `error`, `run` with `rascal://run/<id>/run.json` and the absolute directory,
-`started`, `finished`, `duration_ms`, `input_identity`, `spend`, `cache`, `notes` from the
-journal) and rascal's body (`recipe`, `outcome` in rascal's own statuses, `stopped_at`,
+`started`, `finished`, `duration_ms`, `input_identity`, `spend`, `cache`, `notes`: the
+journal's sentences, without its machine records (`pack manifest:`, `pack call:`, `pack stored:`,
+`pack stderr:`, `filler call started:`, `filler call:`, `fill stored:`, `checker call started:`,
+`checker call:`, `checker stored:`), which stay in `journal.jsonl` for the replay, the spend and
+the report) and rascal's body (`recipe`, `outcome` in rascal's own statuses, `stopped_at`,
 `reason`, `mask_dir`, `filler`).
 
 | rascal | `status` | `error.code` |

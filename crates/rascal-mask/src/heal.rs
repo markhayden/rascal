@@ -69,7 +69,7 @@ pub struct HealReport {
 }
 
 /// The journal note prefix of a reusable fill: the request identity and the fill artifact.
-const FILL_NOTE: &str = "fill stored: ";
+pub(crate) const FILL_NOTE: &str = "fill stored: ";
 
 /// A recorded fill, for replay: the request's identity, the fill's, and the filler that made
 /// it (name and revision), so a replay never passes one filler's pixels off as another's.
