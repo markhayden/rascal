@@ -240,6 +240,16 @@ and the widened `grow_px`.
 A check's spend is what its result reports; a check that printed none counts its price as
 unresolved (`docs/contract.md`, "Spend").
 
+**Replay and cancellation.** `heal --replay <recorded run>` answers each check from that run's
+`checker stored:` note with the same request identity and the same try, noting "checker call
+replayed from the recorded check …"; the checker is never called, and a check the recording
+lacks ends the heal with a usage error (exit 64). A cancelled run (a `serve` client's
+cancellation, or SIGINT or SIGTERM on the command line) stops a check under way: its stdin is
+closed, then after five seconds SIGTERM, then after five more SIGKILL, and it is counted at its
+price as unresolved. The run ends `cancelled`, its `run.json` listing the tries completed before
+the cancellation (`tries`, and each as `result_try_<k>`, `preview_try_<k>` and `mask_try_<k>`),
+and the session settles the call's reservation at what the run spent.
+
 **The scripted checker.** The testkit's `rascal fake-checker <script>` (a `--features testkit`
 build) is a checker command that answers from a JSON script: `{"answers": [{"verdict": "fail",
 "where": [[x0, y0, x1, y1]]}, {"verdict": "pass"}], "spend_usd": 0.004}`, the `n`th call taking

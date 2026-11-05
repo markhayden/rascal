@@ -443,14 +443,14 @@ impl Pack {
         let service = match connected {
             Ok(Ok(service)) => service,
             Ok(Err(e)) => {
-                Self::kill(&mut child, self.grace).await;
+                stop_child(&mut child, self.grace).await;
                 return Err(Error::op(
                     name,
                     format!("initialize failed: {}", summarize_init_error(&e)),
                 ));
             }
             Err(_) => {
-                Self::kill(&mut child, self.grace).await;
+                stop_child(&mut child, self.grace).await;
                 return Err(Error::op(
                     name,
                     format!(
@@ -475,7 +475,7 @@ impl Pack {
         };
         if let Some(why) = refused {
             let _ = service.cancel().await;
-            Self::kill(&mut child, self.grace).await;
+            stop_child(&mut child, self.grace).await;
             return Err(Error::op(name, format!("refused at initialize: {why}")));
         }
         let listed = tokio::time::timeout(remaining(), service.list_all_tools()).await;
@@ -483,12 +483,12 @@ impl Pack {
             Ok(Ok(tools)) => tools,
             Ok(Err(e)) => {
                 let _ = service.cancel().await;
-                Self::kill(&mut child, self.grace).await;
+                stop_child(&mut child, self.grace).await;
                 return Err(Error::op(name, format!("tools/list failed: {e}")));
             }
             Err(_) => {
                 let _ = service.cancel().await;
-                Self::kill(&mut child, self.grace).await;
+                stop_child(&mut child, self.grace).await;
                 return Err(Error::op(
                     name,
                     format!(
@@ -504,7 +504,7 @@ impl Pack {
                 Ok(t) => tools.push(t),
                 Err(e) => {
                     let _ = service.cancel().await;
-                    Self::kill(&mut child, self.grace).await;
+                    stop_child(&mut child, self.grace).await;
                     return Err(Error::op(name, format!("tool {} rejected: {e}", tool.name)));
                 }
             }
@@ -536,7 +536,7 @@ impl Pack {
                 let after: Vec<Manifest> = tools.iter().map(|t| t.manifest.clone()).collect();
                 if before != after {
                     let _ = service.cancel().await;
-                    Self::kill(&mut child, self.grace).await;
+                    stop_child(&mut child, self.grace).await;
                     let names =
                         |m: &[Manifest]| m.iter().map(|t| t.name.clone()).collect::<Vec<_>>();
                     return Err(Error::op(
@@ -581,26 +581,9 @@ impl Pack {
         live.service.cancellation_token().cancel();
         let child = live.child.lock().unwrap_or_else(|e| e.into_inner()).take();
         if let Some(mut child) = child {
-            Self::kill(&mut child, self.grace).await;
+            stop_child(&mut child, self.grace).await;
             tracing::info!(pack = %self.name, "pack stopped");
         }
-    }
-
-    async fn kill(child: &mut tokio::process::Child, grace: Duration) {
-        drop(child.stdin.take());
-        if tokio::time::timeout(grace, child.wait()).await.is_ok() {
-            return;
-        }
-        if let Some(pid) = child.id() {
-            let _ = nix::sys::signal::kill(
-                nix::unistd::Pid::from_raw(pid as i32),
-                nix::sys::signal::Signal::SIGTERM,
-            );
-        }
-        if tokio::time::timeout(grace, child.wait()).await.is_ok() {
-            return;
-        }
-        let _ = child.kill().await;
     }
 
     // --- calls ------------------------------------------------------------------------------
@@ -790,14 +773,14 @@ impl Drop for Pack {
                         .enable_all()
                         .build()
                     {
-                        rt.block_on(Self::kill(&mut child, grace));
+                        rt.block_on(stop_child(&mut child, grace));
                     }
                 });
             }
             runtime.shutdown_background();
         } else {
             if let Some(mut child) = child {
-                runtime.block_on(Self::kill(&mut child, grace));
+                runtime.block_on(stop_child(&mut child, grace));
             }
             drop(runtime);
         }
@@ -810,5 +793,30 @@ fn summarize_init_error(e: &rmcp::service::ClientInitializeError) -> String {
     match text.char_indices().nth(300) {
         Some((at, _)) => format!("{}…", &text[..at]),
         None => text,
+    }
+}
+
+/// Stops a helper process the way a pack is stopped: its stdin closed, `grace` to exit, then
+/// SIGTERM, `grace` again, then SIGKILL; it is waited for, so nothing is left behind. The
+/// checker's process is stopped the same way (rascal-mask).
+pub async fn stop_child(child: &mut tokio::process::Child, grace: Duration) {
+    drop(child.stdin.take());
+    if tokio::time::timeout(grace, child.wait()).await.is_ok() {
+        return;
+    }
+    terminate(child.id());
+    if tokio::time::timeout(grace, child.wait()).await.is_ok() {
+        return;
+    }
+    let _ = child.kill().await;
+}
+
+/// Sends SIGTERM to the process `pid`, when there is one.
+pub fn terminate(pid: Option<u32>) {
+    if let Some(pid) = pid {
+        let _ = nix::sys::signal::kill(
+            nix::unistd::Pid::from_raw(pid as i32),
+            nix::sys::signal::Signal::SIGTERM,
+        );
     }
 }

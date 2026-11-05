@@ -84,8 +84,13 @@ fn config(dir: &Path, setup: &Setup) -> PathBuf {
 /// `rascal heal remove-prompt` of the chair image with the prompt "the chair" into `<dir>/run`,
 /// plus `extra` flags.
 fn heal(dir: &Path, config: &Path, extra: &[&str]) -> Output {
+    heal_into(dir, config, "run", extra)
+}
+
+/// [`heal`] into `<dir>/<name>`.
+fn heal_into(dir: &Path, config: &Path, name: &str, extra: &[&str]) -> Output {
     let image = repo_root().join("fixtures/images/chair-blob.png");
-    let out = dir.join("run");
+    let out = dir.join(name);
     Command::new(env!("CARGO_BIN_EXE_rascal"))
         .args([
             "heal",
@@ -1119,5 +1124,237 @@ fn an_earlier_try_s_mask_and_preview_open_by_reference_after_the_run() {
         preview["contents"][0]["mimeType"], "image/png",
         "{preview:#}"
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The bytes of every file a run wrote under `tries/` and its `result.png`, by relative path,
+/// leaving out the check's own staging (the arguments name the run's directory).
+fn outputs(run: &Path) -> std::collections::BTreeMap<String, Vec<u8>> {
+    let mut files = std::collections::BTreeMap::new();
+    files.insert(
+        "result.png".to_string(),
+        std::fs::read(run.join("result.png")).unwrap(),
+    );
+    for k in 1..=3 {
+        for name in [
+            "result.png",
+            "remove-prompt-grey.png",
+            "check/candidate.png",
+            "check/source.png",
+        ] {
+            let path = run.join(format!("tries/{k}/{name}"));
+            if let Ok(bytes) = std::fs::read(&path) {
+                files.insert(format!("tries/{k}/{name}"), bytes);
+            }
+        }
+    }
+    files
+}
+
+const THREE_TRIES: &str = r#"[
+    { "verdict": "fail", "where": [[0.1, 0.2, 0.3, 0.4]] },
+    { "verdict": "unsure", "where": [[0.2, 0.2, 0.4, 0.4], [0.5, 0.5, 0.7, 0.7]] },
+    { "verdict": "unsure", "where": [[0.3, 0.2, 0.5, 0.4]] }
+]"#;
+
+#[test]
+fn a_replay_of_a_three_try_run_makes_no_call_and_gives_the_same_outputs() {
+    let dir = scratch("replay");
+    let answers: Value = serde_json::from_str(THREE_TRIES).unwrap();
+    let file = config(
+        &dir,
+        &Setup {
+            script: json!({ "answers": answers }),
+            ..Setup::default()
+        },
+    );
+    let o = heal(&dir, &file, &[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(calls(&dir), 3);
+    let recorded = run_json(&dir);
+    let replay = dir.join("run").to_str().unwrap().to_string();
+    let o = heal_into(&dir, &file, "again", &["--replay", &replay]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(calls(&dir), 3, "the checker was not called");
+    let again: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("again/run.json")).unwrap())
+            .unwrap();
+    assert_eq!(outputs(&dir.join("run")), outputs(&dir.join("again")));
+    assert_eq!(again["verdict"], recorded["verdict"]);
+    assert_eq!(again["body"]["selected_try"], 3);
+    let tries = |r: &Value| {
+        r["body"]["tries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| (t["mask"].clone(), t["result"].clone(), t["verdict"].clone()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(tries(&again), tries(&recorded));
+    let notes = notes(&again);
+    assert!(note_with(&notes, "checker call: ").is_empty(), "{notes:#?}");
+    assert!(note_with(&notes, "checker call started: ").is_empty());
+    assert_eq!(
+        notes
+            .iter()
+            .filter(|n| n.starts_with("checker call replayed"))
+            .count(),
+        3
+    );
+    assert_eq!(again["spend"]["usd"], 0.0);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_replay_whose_recording_lacks_a_check_is_refused_never_called() {
+    let dir = scratch("replay-missing");
+    let answers: Value = serde_json::from_str(THREE_TRIES).unwrap();
+    let file = config(
+        &dir,
+        &Setup {
+            script: json!({ "answers": answers }),
+            ..Setup::default()
+        },
+    );
+    let o = heal(&dir, &file, &[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    // The record of try 2's check is gone from the recording.
+    let journal = dir.join("run/journal.jsonl");
+    let lines: Vec<String> = std::fs::read_to_string(&journal)
+        .unwrap()
+        .lines()
+        .map(|l| {
+            if l.contains("checker stored: ") && l.contains(r#"\"try\":2"#) {
+                l.replace("checker stored: ", "checker forgotten: ")
+            } else {
+                l.to_string()
+            }
+        })
+        .collect();
+    assert!(lines.iter().any(|l| l.contains("checker forgotten: ")));
+    std::fs::write(&journal, lines.join("\n") + "\n").unwrap();
+    let replay = dir.join("run").to_str().unwrap().to_string();
+    let o = heal_into(&dir, &file, "again", &["--replay", &replay]);
+    assert_ne!(o.status.code(), Some(0));
+    assert!(
+        text(&o.stderr).contains("no recorded check"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert_eq!(calls(&dir), 3, "the checker was not called");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Cancelling a served run while its second check is under way: the checker is stopped (stdin
+/// closed, then SIGTERM), the run ends cancelled with try 1 kept, and the session settles what
+/// it spent, the stopped check at its price as unresolved.
+#[test]
+fn a_cancellation_mid_check_stops_the_checker_and_keeps_the_tries() {
+    let dir = scratch("cancel");
+    let file = config(
+        &dir,
+        &Setup {
+            script: json!({ "answers": [
+                { "verdict": "fail", "where": [[0.2, 0.2, 0.5, 0.5]] },
+                { "verdict": "pass", "delay_ms": 60000 }
+            ], "spend_usd": 0.004 }),
+            checker: "spend_usd_per_call = 0.01\ntimeout_s = 120",
+            filler_usd: Some(0.02),
+            ..Setup::default()
+        },
+    );
+    let text_config = std::fs::read_to_string(&file).unwrap();
+    std::fs::write(
+        &file,
+        format!("{text_config}[limits]\nsession_budget_usd = 1.0\n"),
+    )
+    .unwrap();
+    let mut client = serve(&dir, &file);
+    let image = repo_root().join("fixtures/images/chair-blob.png");
+    let id = client
+        .begin(
+            "tools/call",
+            json!({
+                "name": "remove_prompt",
+                "arguments": { "image": { "path": image.to_str().unwrap() }, "prompt": "the chair", "filler": "fake" },
+                "_meta": { "progressToken": "c-1" }
+            }),
+        )
+        .unwrap();
+    let first = loop {
+        let message = client.next_message().unwrap();
+        if message["method"] == "notifications/progress" {
+            break message;
+        }
+    };
+    let run_id = first["params"]["_meta"]["table-manners/run"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    // Wait for the second check to be under way: the checker has seen its second call.
+    let waited = std::time::Instant::now();
+    let pid = loop {
+        if let Some(pid) = std::fs::read_to_string(dir.join("script.seen-1.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+            .and_then(|v| v["pid"].as_u64())
+        {
+            break pid;
+        }
+        assert!(
+            waited.elapsed().as_secs() < 60,
+            "the second check never started"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    };
+    client
+        .notify(
+            "notifications/cancelled",
+            json!({ "requestId": id, "reason": "test" }),
+        )
+        .unwrap();
+    let ended = std::time::Instant::now();
+    let stored = loop {
+        let read = client
+            .request(
+                "resources/read",
+                json!({ "uri": format!("rascal://run/{run_id}/run.json") }),
+            )
+            .ok()
+            .and_then(|r| r["contents"][0]["text"].as_str().map(str::to_string))
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok());
+        if let Some(result) = read
+            && result["status"] != "running"
+        {
+            break result;
+        }
+        assert!(ended.elapsed().as_secs() < 30, "the run never ended");
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    };
+    assert_eq!(stored["status"], "cancelled", "{stored:#}");
+    assert!(stored.get("verdict").is_none());
+    let tries = stored["body"]["tries"].as_array().unwrap();
+    assert_eq!(tries.len(), 1, "try 1 is kept: {stored:#}");
+    assert!(
+        stored["images"]["out"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|o| o["role"] == "result_try_1")
+    );
+    let run_dir = PathBuf::from(stored["run"]["dir"].as_str().unwrap());
+    assert!(run_dir.join("tries/1/result.png").is_file());
+    // Two fills, one answered check and the stopped one at its price.
+    assert_eq!(stored["spend"]["usd"], 0.054, "{stored:#}");
+    assert_eq!(stored["spend"]["unresolved_usd"], 0.01);
+    let alive = Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .status()
+        .unwrap()
+        .success();
+    assert!(!alive, "the checker process {pid} is gone");
+    let ledger = session(&mut client);
+    assert_eq!(ledger["reserved_usd"], 0.0, "{ledger:#}");
+    assert_eq!(ledger["spent_usd"], 0.054, "{ledger:#}");
     let _ = std::fs::remove_dir_all(&dir);
 }

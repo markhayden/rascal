@@ -839,10 +839,25 @@ pub fn ended_with(recipe: &str, error: &Error) -> Ended {
     }
 }
 
+/// How a checked heal cancelled during its tries ended: `cancelled` before `step`, with the
+/// tries it completed kept as evidence.
+pub fn ended_cancelled(recipe: &str, step: &str, tries: Vec<TryOut>) -> Ended {
+    Ended {
+        tries,
+        ..ended_with(
+            recipe,
+            &Error::Cancelled {
+                step: step.to_string(),
+            },
+        )
+    }
+}
+
 /// Watches for SIGINT and SIGTERM while a `run` or `heal` works (4.2): the run in [`CURRENT`]
 /// gets `run.json` with status `cancelled` and what it reached, and the process exits 130 or
 /// 143. A commit is staged and renamed, so stopping between any two writes leaves the workspace
-/// whole; a filler command still running is left to its own timeout.
+/// whole; a checker under way gets SIGTERM; a filler command still running is left to its own
+/// timeout.
 pub fn watch_signals() {
     std::thread::spawn(|| {
         let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
@@ -865,6 +880,8 @@ pub fn watch_signals() {
             }
         });
         let Some(code) = code else { return };
+        // A check under way is stopped with the command.
+        rascal_mask::checker::call::stop_running();
         let pending = CURRENT.lock().ok().and_then(|mut c| c.take());
         if let Some(pending) = pending
             && pending.fresh

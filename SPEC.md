@@ -1002,7 +1002,10 @@ with `tries/<k>/check/` as its working directory, and its printed result is kept
 `result.json`. The stored record holds the
 request identity (source, candidate and resolved arguments), the result and the try's
 transition (the places used, the planes added). `heal --replay` answers checks from the
-recording, as it does pack steps; a check the recording lacks is an error, never a call. A run's
+recording, as it does pack steps, matching a check by its request identity and its try (a
+checker may answer one request differently on two tries); a check the recording lacks is an
+error, never a call. A cancelled check's process is stopped as a pack's is (stdin closed, then
+SIGTERM, then SIGKILL), and is counted at its price as unresolved. A run's
 `run.json` lists the tries, each with its mask identity, its result's image reference, its
 verdict and its spend.
 

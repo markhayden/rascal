@@ -148,6 +148,21 @@ impl StoredCheck {
     }
 }
 
+/// The check a recorded run stored for `request` at try `attempt` (`checker stored:`), from the
+/// journal in `dir`: the run's directory, or its workspace when it used one. A checker may
+/// answer the same request differently from one try to the next, so a try is answered only by
+/// the record of the same try. None when the recording holds none.
+pub fn recorded(dir: &Path, request: &str, attempt: u32) -> Result<Option<StoredCheck>> {
+    let workspace = rascal_core::workspace::Workspace::open_read_only(dir)?;
+    let lines = rascal_core::journal::Journal::read(&workspace.journal_path())?;
+    Ok(lines.into_iter().find_map(|line| {
+        let text = line.note?.strip_prefix(STORED_PREFIX)?.to_string();
+        serde_json::from_str::<StoredCheck>(&text)
+            .ok()
+            .filter(|stored| stored.request == request && stored.attempt == attempt)
+    }))
+}
+
 /// Copies the source and the candidate into `dir` and writes the rendered arguments there.
 pub fn stage(config: &CheckerConfig, request: &Request, dir: &Path) -> Result<Staged> {
     std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
@@ -226,10 +241,49 @@ fn render(value: &Value, source: &str, candidate: &str, prompt: &str) -> Value {
 pub struct Called {
     pub answer: std::result::Result<Verdict, String>,
     pub call: CheckerCall,
+    /// The run was cancelled while the check was under way, and the checker stopped.
+    pub cancelled: bool,
 }
 
-/// Runs the staged check.
-pub fn call(config: &CheckerConfig, staged: &Staged) -> Called {
+/// How long a stopped checker gets at each step (stdin closed, SIGTERM) before the next, as a
+/// pack does.
+pub const GRACE: Duration = rascal_mcp::client::GRACE;
+
+/// The checker process under way, so a signal that ends the command stops it too.
+static RUNNING: std::sync::Mutex<Option<u32>> = std::sync::Mutex::new(None);
+
+/// Sends SIGTERM to the checker under way, if any: the command line's signal watcher calls it
+/// before the process exits.
+pub fn stop_running() {
+    let pid = RUNNING.lock().ok().and_then(|mut r| r.take());
+    rascal_mcp::client::terminate(pid);
+}
+
+/// Why a check gave no verdict.
+enum Stopped {
+    Failed(String),
+    Cancelled,
+}
+
+impl From<String> for Stopped {
+    fn from(reason: String) -> Stopped {
+        Stopped::Failed(reason)
+    }
+}
+
+impl From<&str> for Stopped {
+    fn from(reason: &str) -> Stopped {
+        Stopped::Failed(reason.to_string())
+    }
+}
+
+/// Runs the staged check. When `cancel` is set while it runs, the checker is stopped (stdin
+/// closed, then SIGTERM, then SIGKILL, each after [`GRACE`]) and the call comes back cancelled.
+pub fn call(
+    config: &CheckerConfig,
+    staged: &Staged,
+    cancel: Option<&rascal_core::workspace::Cancel>,
+) -> Called {
     let mut call = CheckerCall {
         target: config.command.join(" "),
         duration_ms: 0,
@@ -239,7 +293,11 @@ pub fn call(config: &CheckerConfig, staged: &Staged) -> Called {
         charge: Charge::NotSent,
         spend: None,
     };
-    let answer = run(config, staged, &mut call);
+    let (answer, cancelled) = match run(config, staged, cancel, &mut call) {
+        Ok(verdict) => (Ok(verdict), false),
+        Err(Stopped::Failed(reason)) => (Err(reason), false),
+        Err(Stopped::Cancelled) => (Err("cancelled".to_string()), true),
+    };
     call.outcome = match &answer {
         Ok(verdict) => serde_json::to_value(verdict.value)
             .ok()
@@ -247,14 +305,19 @@ pub fn call(config: &CheckerConfig, staged: &Staged) -> Called {
             .unwrap_or_default(),
         Err(reason) => reason.clone(),
     };
-    Called { answer, call }
+    Called {
+        answer,
+        call,
+        cancelled,
+    }
 }
 
 fn run(
     config: &CheckerConfig,
     staged: &Staged,
+    cancel: Option<&rascal_core::workspace::Cancel>,
     call: &mut CheckerCall,
-) -> std::result::Result<Verdict, String> {
+) -> std::result::Result<Verdict, Stopped> {
     let timeout = Duration::from_secs(config.timeout_s);
     let started = Instant::now();
     let rt = runtime().map_err(|e| e.to_string())?;
@@ -267,7 +330,7 @@ fn run(
             .arg("--allow-dir")
             .arg(&staged.dir)
             .current_dir(&staged.dir)
-            .stdin(std::process::Stdio::null())
+            .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
             .kill_on_drop(true);
@@ -276,8 +339,11 @@ fn run(
             .map_err(|e| format!("cannot start {}: {e}", config.command[0]))?;
         // Started: whatever happens now may have been charged.
         call.charge = Charge::Unresolved;
+        if let Ok(mut running) = RUNNING.lock() {
+            *running = child.id();
+        }
         let Some(stdout) = child.stdout.take() else {
-            return Err("no stdout to read".to_string());
+            return Err(Stopped::from("no stdout to read"));
         };
         let read = async {
             let mut bytes = Vec::new();
@@ -292,10 +358,28 @@ fn run(
             };
             Ok::<_, std::io::Error>((bytes, exit))
         };
-        let outcome = tokio::time::timeout(timeout, read).await;
+        let watch = async {
+            while !cancel.is_some_and(|c| c.load(std::sync::atomic::Ordering::SeqCst)) {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        };
+        let outcome = tokio::select! {
+            outcome = tokio::time::timeout(timeout, read) => Some(outcome),
+            () = watch => None,
+        };
+        let Some(outcome) = outcome else {
+            rascal_mcp::client::stop_child(&mut child, GRACE).await;
+            if let Ok(mut running) = RUNNING.lock() {
+                *running = None;
+            }
+            return Err(Stopped::Cancelled);
+        };
         let _ = child.start_kill();
         let _ = child.wait().await;
-        match outcome {
+        if let Ok(mut running) = RUNNING.lock() {
+            *running = None;
+        }
+        Ok(match outcome {
             Err(_) => Err(format!(
                 "no answer within {} s; the checker was stopped",
                 config.timeout_s
@@ -306,7 +390,7 @@ fn run(
                 MAX_ANSWER_BYTES
             )),
             Ok(Ok(printed)) => Ok(printed),
-        }
+        }?)
     });
     call.duration_ms = started.elapsed().as_millis() as u64;
     let (bytes, exit) = printed?;
@@ -338,14 +422,16 @@ fn run(
             return Err(format!(
                 "its run ended {}{reason}",
                 status.unwrap_or("without a status")
-            ));
+            )
+            .into());
         }
     }
     let verdict = result
         .get("verdict")
         .filter(|v| !v.is_null())
         .ok_or("its completed result has no verdict")?;
-    serde_json::from_value(verdict.clone()).map_err(|e| format!("its verdict does not read: {e}"))
+    serde_json::from_value(verdict.clone())
+        .map_err(|e| Stopped::Failed(format!("its verdict does not read: {e}")))
 }
 
 #[cfg(test)]

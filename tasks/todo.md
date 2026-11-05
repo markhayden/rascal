@@ -171,7 +171,7 @@ with green CI on both platforms, and then the tag.
 - [x] 13.12a One checked try
 - [x] 13.12b The located retry
 - [x] 13.12c N tries, the selection and the outputs
-- [ ] 13.13 Replay and cancellation → tag `m13.3`
+- [x] 13.13 Replay and cancellation → tag `m13.3`
 - [ ] 13.14 Wafflery shows checks → tag `m13.4`
 - [ ] 13.15 Version 0.5.0 everywhere at once; publish; pins from crates.io
 - [ ] 13.16 Merge and the by-hand check

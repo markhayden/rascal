@@ -63,6 +63,9 @@ pub struct HealReport {
     pub verdict: Option<Verdict>,
     /// A checked heal's tries, in order; empty when unchecked.
     pub tries: Vec<crate::run_json::TryOut>,
+    /// The step a cancellation during the tries stopped before; `tries` are those completed
+    /// before it.
+    pub cancelled: Option<String>,
 }
 
 /// The journal note prefix of a reusable fill: the request identity and the fill artifact.
@@ -230,33 +233,31 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
                 checker,
                 prompt,
                 tries: args.tries,
+                replay: args.replay.as_deref(),
             };
             let checked = checking.tries(subject, out_image, from)?;
+            if let Some(step) = checked.cancelled {
+                // The tries completed before the cancellation are the run's evidence.
+                run.write_tables()?;
+                return Ok(HealReport {
+                    status: Status::Ok,
+                    stopped_at: None,
+                    reason: None,
+                    result: None,
+                    source: Some(source),
+                    dash: None,
+                    renders: Vec::new(),
+                    cache,
+                    verdict: None,
+                    tries: try_outs(&run, &checked.tries, None),
+                    cancelled: Some(step),
+                });
+            }
             let kept = &checked.tries[selected(&checked.tries)];
             run.record_output("mask", &kept.mask.record.identity)?;
             run.note(summary(kept, checked.tries.len(), prompt))?;
             let verdict = (!checked.failed).then(|| kept.verdict.clone()).flatten();
-            let outs = checked
-                .tries
-                .iter()
-                .map(|t| run_json::TryOut {
-                    k: t.k,
-                    selected: t.k == kept.k,
-                    result: run
-                        .dir
-                        .join("tries")
-                        .join(t.k.to_string())
-                        .join("result.png"),
-                    mask: t.mask.record.identity.clone(),
-                    render: t
-                        .renders
-                        .iter()
-                        .find(|(profile, _)| profile == "grey")
-                        .map(|(_, path)| path.clone()),
-                    verdict: t.verdict.clone(),
-                    spend: t.spend,
-                })
-                .collect();
+            let outs = try_outs(&run, &checked.tries, Some(kept.k));
             (kept.result.clone(), kept.renders.clone(), verdict, outs)
         }
     };
@@ -279,7 +280,32 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         cache,
         verdict,
         tries,
+        cancelled: None,
     })
+}
+
+/// The tries as `run.json` lists them, `kept` the one the run kept.
+fn try_outs(run: &Run, tries: &[Try], kept: Option<u32>) -> Vec<run_json::TryOut> {
+    tries
+        .iter()
+        .map(|t| run_json::TryOut {
+            k: t.k,
+            selected: Some(t.k) == kept,
+            result: run
+                .dir
+                .join("tries")
+                .join(t.k.to_string())
+                .join("result.png"),
+            mask: t.mask.record.identity.clone(),
+            render: t
+                .renders
+                .iter()
+                .find(|(profile, _)| profile == "grey")
+                .map(|(_, path)| path.clone()),
+            verdict: t.verdict.clone(),
+            spend: t.spend,
+        })
+        .collect()
 }
 
 /// The run's sentence about the try it kept, of `made`: which, and when it did not pass, what
@@ -317,6 +343,8 @@ struct Checking<'a> {
     checker: &'a CheckerConfig,
     prompt: &'a str,
     tries: u32,
+    /// A recorded run whose checks answer instead of the checker.
+    replay: Option<&'a Path>,
 }
 
 /// One try of a checked heal: its number, its mask, its result, the renders its shaping wrote,
@@ -334,6 +362,8 @@ struct Try {
 struct Checked {
     tries: Vec<Try>,
     failed: bool,
+    /// The step a cancellation stopped before: the tries made are kept as evidence.
+    cancelled: Option<String>,
 }
 
 impl Checking<'_> {
@@ -345,7 +375,33 @@ impl Checking<'_> {
     ///
     /// `from` is the journal's note count before try 1's fill: each try's spend is what the
     /// notes since the try before it record.
-    fn tries(&self, first: Subject, result: Arc<Image>, mut from: usize) -> Result<Checked> {
+    /// A cancellation during the tries keeps those completed.
+    fn tries(&self, first: Subject, result: Arc<Image>, from: usize) -> Result<Checked> {
+        let mut tries = Vec::new();
+        match self.run_tries(first, result, from, &mut tries) {
+            Ok(failed) => Ok(Checked {
+                tries,
+                failed,
+                cancelled: None,
+            }),
+            Err(Error::Cancelled { step }) => Ok(Checked {
+                tries,
+                failed: false,
+                cancelled: Some(step),
+            }),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// [`Checking::tries`], each completed try pushed onto `tries`; whether a check failure
+    /// ended them.
+    fn run_tries(
+        &self,
+        first: Subject,
+        result: Arc<Image>,
+        mut from: usize,
+        tries: &mut Vec<Try>,
+    ) -> Result<bool> {
         use checker::call::Transition;
         use rascal_core::contract::table_manners::VerdictValue;
         use rascal_core::recipe::{Rebind, Recipe};
@@ -357,7 +413,6 @@ impl Checking<'_> {
         let mut planes = crate::retry::first_planes(&self.outcome.bindings);
         let mut shaping: Recipe = self.recipe.clone();
         let mut widened = false;
-        let mut tries = Vec::new();
         let mut current = Try {
             k: 1,
             mask: first.mask.clone(),
@@ -377,13 +432,11 @@ impl Checking<'_> {
                 k,
                 &dir,
                 &current.result,
+                self.replay,
             )?
             else {
                 tries.push(self.settled(current, &mut from)?);
-                return Ok(Checked {
-                    tries,
-                    failed: true,
-                });
+                return Ok(true);
             };
             current.verdict = Some(verdict.clone());
             if verdict.value == VerdictValue::Pass || k == self.tries {
@@ -427,10 +480,7 @@ impl Checking<'_> {
                         self.run
                             .note(format!("The check could not run: {reason}."))?;
                         tries.push(self.settled(current, &mut from)?);
-                        return Ok(Checked {
-                            tries,
-                            failed: true,
-                        });
+                        return Ok(true);
                     }
                 }
             }
@@ -495,10 +545,7 @@ impl Checking<'_> {
                 }
             }
         }
-        Ok(Checked {
-            tries,
-            failed: false,
-        })
+        Ok(false)
     }
 }
 
@@ -550,6 +597,7 @@ fn selected(tries: &[Try]) -> usize {
 /// directory `dir`, the check staged in `dir/check/` and called, and the call journaled. The
 /// verdict with its record (journaled by the caller once the try's transition is known), or
 /// none when the check could not run, which the journal says ("The check could not run: …").
+#[allow(clippy::too_many_arguments)]
 fn check_try(
     run: &Run,
     config: &CheckerConfig,
@@ -558,6 +606,7 @@ fn check_try(
     k: u32,
     dir: &Path,
     result: &Image,
+    replay: Option<&Path>,
 ) -> Result<Option<(Verdict, checker::call::StoredCheck)>> {
     use checker::call::{self, CallStarted, Request, StoredCheck};
     std::fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
@@ -572,6 +621,29 @@ fn check_try(
         },
         &dir.join("check"),
     )?;
+    if let Some(recording) = replay {
+        let stored = call::recorded(recording, &staged.identity, k)?.ok_or_else(|| {
+            Error::usage(format!(
+                "--replay {}: no recorded check of request {} (try {k}); under --replay the checker is never called",
+                recording.display(),
+                staged.identity
+            ))
+        })?;
+        run.note(format!(
+            "checker call replayed from the recorded check {} of try {}; the checker was not called",
+            stored.request, stored.attempt
+        ))?;
+        let verdict = stored.verdict.clone();
+        return Ok(Some((
+            verdict,
+            StoredCheck {
+                attempt: k,
+                arguments: staged.arguments,
+                transition: None,
+                ..stored
+            },
+        )));
+    }
     if run.cancelled() {
         return Err(Error::Cancelled {
             step: "checker".to_string(),
@@ -583,9 +655,14 @@ fn check_try(
         }
         .note(),
     )?;
-    let called =
-        tracing::info_span!("checker", attempt = k).in_scope(|| call::call(config, &staged));
+    let called = tracing::info_span!("checker", attempt = k)
+        .in_scope(|| call::call(config, &staged, run.cancel.as_deref()));
     run.note(called.call.note())?;
+    if called.cancelled {
+        return Err(Error::Cancelled {
+            step: "checker".to_string(),
+        });
+    }
     match called.answer {
         Ok(verdict) => {
             let stored = StoredCheck {
@@ -982,6 +1059,7 @@ fn stopped(
         cache: None,
         verdict: None,
         tries: Vec::new(),
+        cancelled: None,
     })
 }
 

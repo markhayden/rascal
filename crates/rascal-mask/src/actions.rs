@@ -818,6 +818,11 @@ impl ContractActions {
                 check: check.clone(),
                 tries,
             }) {
+                Ok(report) if report.cancelled.is_some() => run_json::ended_cancelled(
+                    recipe,
+                    report.cancelled.as_deref().unwrap_or_default(),
+                    report.tries,
+                ),
                 Ok(report) => Ended {
                     verdict: report.verdict,
                     tries: report.tries,

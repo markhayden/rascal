@@ -898,6 +898,11 @@ fn main() {
             };
             let result = heal::heal(&args);
             let ended = match &result {
+                Ok(report) if report.cancelled.is_some() => run_json::ended_cancelled(
+                    &args.run.recipe,
+                    report.cancelled.as_deref().unwrap_or_default(),
+                    report.tries.clone(),
+                ),
                 Ok(report) => run_json::Ended {
                     verdict: report.verdict.clone(),
                     tries: report.tries.clone(),
