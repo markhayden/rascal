@@ -341,7 +341,19 @@ pub fn finish(
             image: reference.clone(),
         });
     }
+    // Most telling first (table-manners 2.3, `images.out`): the filled result when a filler
+    // painted, then the mask drawn over the image, then the bare mask.
     let mut out = Vec::new();
+    if let Some(path) = &ended.result
+        && let Some(image) = output_reference(path, input.as_ref())
+    {
+        out.push(ImageOut {
+            role: "result".to_string(),
+            image,
+            locator: Locator::Path(absolute(path)),
+        });
+    }
+    let artifacts = task_artifacts(pending, workspace_dir, &mut out, &mut notes);
     for (profile, path) in &ended.renders {
         if profile == "grey"
             && let Some(image) = output_reference(path, input.as_ref())
@@ -353,16 +365,6 @@ pub fn finish(
             });
         }
     }
-    if let Some(path) = &ended.result
-        && let Some(image) = output_reference(path, input.as_ref())
-    {
-        out.push(ImageOut {
-            role: "result".to_string(),
-            image,
-            locator: Locator::Path(absolute(path)),
-        });
-    }
-    let artifacts = task_artifacts(pending, workspace_dir, &mut out, &mut notes);
     if let Some(publish) = publish {
         for entry in &artifacts.out {
             if let Err(e) = publish(&entry.artifact.identity) {

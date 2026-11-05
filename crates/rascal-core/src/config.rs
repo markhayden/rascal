@@ -66,6 +66,12 @@ pub struct ServeConfig {
     /// Absolute directories; unset, the flags stand as given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allow_dirs: Option<Vec<String>>,
+    /// Where the contract's action runs go when `--runs` is not given, relative to this file;
+    /// unset, `$XDG_DATA_HOME/rascal/runs`. With `[workspace] dir`, a host can start
+    /// `rascal serve --config <file>` alone, and `rascal call --config <file>` from a terminal
+    /// then uses the same workspace and runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runs: Option<String>,
 }
 
 /// `[cache]`: where fills are kept.
@@ -273,8 +279,8 @@ fn reason_without_values(error: &Error, text: &str, origin: &str) -> String {
 
 /// One filler entry under `[fillers.<name>]`: a command with placeholders or an HTTP endpoint,
 /// the rendering profile it takes, the paste mode its result is composited with, a timeout,
-/// and for the lab a revision string. `key_env` names the environment variable holding a
-/// bearer key, which is read at call time and never stored, logged or journaled.
+/// and for the lab a revision string. `key_env` names the environment variable holding the
+/// filler's key, which is read at call time and never stored, logged or journaled.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FillerConfig {
@@ -298,7 +304,9 @@ pub struct FillerConfig {
     /// For an image-input profile: also send the `grey` rendering as `mask`.
     #[serde(default)]
     pub send_mask: bool,
-    /// The environment variable holding the bearer key for `url`.
+    /// The environment variable holding the filler's key: sent as the bearer for `url`; for a
+    /// `command`, declared so readiness lists it and a host passes it (the command inherits
+    /// rascal's environment). Kept from every pack either way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key_env: Option<String>,
     /// The filler's largest side; the heal graph windows to it. Unset: no window.
@@ -371,9 +379,6 @@ impl FillerConfig {
             return Err(fail(format!(
                 "spend_usd_per_call must be a price of 0 or more, got {price}"
             )));
-        }
-        if self.key_env.is_some() && self.url.is_none() {
-            return Err(fail("key_env goes with url".into()));
         }
         if let Some(command) = &self.command {
             for placeholder in ["{image}", "{out}"] {

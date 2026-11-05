@@ -577,10 +577,6 @@ revision = "r1"
             "timeout_s",
         ),
         (
-            "[fillers.x]\ncommand = [\"a\"]\nprofile = \"grey\"\nkey_env = \"K\"\n",
-            "key_env goes with url",
-        ),
-        (
             "[fillers.x]\ncommand = [\"a\"]\nprofile = \"grey\"\nbogus = 1\n",
             "unknown field",
         ),

@@ -153,6 +153,13 @@
         },
         "required": {
           "type": "boolean"
+        },
+        "title": {
+          "description": "How a person reads the name, where the name alone is jargon (`bbox` is a \"Box\").",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -246,6 +253,16 @@
     },
     "cost": {
       "$ref": "#/$defs/Cost"
+    },
+    "exactly_one_of": {
+      "description": "Groups of optional params of which exactly one must be given (`line`: `column` or\n`path`); the input schema says so as a `oneOf`, so a client building a form knows.",
+      "items": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "type": "array"
     },
     "input_schema": {
       "description": "The JSON Schema of the parameter table, derived from `params`."

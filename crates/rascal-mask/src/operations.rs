@@ -809,7 +809,13 @@ impl ContractActions {
                 journal(Some(&envelope), None);
                 let value = serde_json::to_value(&*envelope).ok();
                 let reason = envelope.reason.clone().unwrap_or_default();
-                return Err((Error::usage(format!("{op}: {reason}")), value));
+                // Most ops' reasons already name the op ("line: give exactly one…"); say it once.
+                let message = if reason.starts_with(&format!("{op}:")) {
+                    reason
+                } else {
+                    format!("{op}: {reason}")
+                };
+                return Err((Error::usage(message), value));
             }
             Err(error) => {
                 journal(None, Some(format!("{}: {error}", manifest.name)));

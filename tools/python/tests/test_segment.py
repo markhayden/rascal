@@ -101,6 +101,37 @@ def test_the_manifest_holds_the_bounds_rascal_ceilings_allow() -> None:
     assert manifest["image_args"] == ["image"]
 
 
+def test_every_instance_fits_the_declared_bounds(harness, monkeypatch) -> None:
+    """The most instances a call may keep stay inside the manifest's `returns`: rascal rejects
+    an answer over its declared bounds, so the bound counts every measurement emitted."""
+
+    class Found:
+        def __init__(self, n: int) -> None:
+            self.box = (float(n), float(n), float(n + 4), float(n + 4))
+            self.query = 0
+            self.score = 0.9
+
+    class Detector:
+        def detect(self, pixels, queries, threshold, most):
+            return [Found(n) for n in range(most)]
+
+    class Segmenter:
+        def embed(self, pixels):
+            return None
+
+        def planes(self, features, boxes, width, height):
+            planes = [np.ones((height, width), dtype=bool) for _ in boxes]
+            return planes, [0.9 for _ in boxes]
+
+    monkeypatch.setattr(segment, "_models", (Detector(), Segmenter()))
+    result = segment.run({"prompt": "collar", "max_instances": segment.MAX_INSTANCES}, harness)
+    assert result.isError is not True, result.structuredContent
+    returns = segment.SPEC.manifest()["returns"]
+    answer = result.structuredContent
+    assert len(answer["measurements"]) <= returns["max_measurements"]
+    assert len(answer["regions"]) == segment.MAX_INSTANCES <= returns["max_regions"]
+
+
 @pytest.mark.segmenter
 def test_the_chair_is_found_with_parity() -> None:
     for name in (segment.GRAPH, segment.TOKENIZER, segment.ENCODER, segment.DECODER):

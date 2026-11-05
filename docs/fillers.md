@@ -24,7 +24,7 @@ spend_usd_per_call = 0.04                                       # the price of o
 url = "https://example.invalid/inpaint"   # multipart POST: image, mask (when the profile has one), prompt (when given)
 profile = "binary"
 paste = "hard"
-key_env = "HOSTED_FILLER_KEY"             # Authorization: Bearer; read at call time, never stored, logged or journaled
+key_env = "HOSTED_FILLER_KEY"             # the key's variable (a command filler may name one too); read at call time, never stored, logged or journaled
 timeout_s = 180
 max_side = 2048                           # the heal graph windows to it
 ```
@@ -40,9 +40,15 @@ dir = ".rascal/fills"          # keep every fill by its request, filler and revi
 call_cap_usd = 0.50            # the most one call may spend; a call may lower it (max_spend_usd), never raise it
 session_budget_usd = 5.00      # the most one serve process may spend
 
-[serve]                        # rascal serve only
+[serve]                        # rascal serve and rascal call
 allow_dirs = ["/srv/images"]   # narrows --allow-dir to the overlap, never widens it; [] allows nothing
+runs = "runs"                  # where action runs go without --runs, relative to this file
 ```
+
+With `[workspace] dir` and `[serve] runs`, the configuration alone says where the store and the
+runs are. A host can start `rascal serve --config rascal.toml`, and `rascal call <action>
+--config rascal.toml` from a terminal then lands in the same store and runs: a host's command
+handoff carries `--config`, never flags it does not understand.
 
 A fill is cached under a key over the request's bytes (the image, the mask, the prompt) with the
 filler's name and `revision`, so one filler's pixels are never another's. A hit writes `fill from
@@ -52,8 +58,16 @@ the per-call cap (an `error` with code `cap`) or the session's budget (code `bud
 paid step, and `rascal estimate` or the `estimate` tool says so beforehand
 (`docs/contract.md`, "The fill cache, prices and limits" and "Estimates").
 
-Exactly one of `command` and `url`; `key_env` goes with `url`; `send_mask = true` on an
-image-input profile also sends the `grey` rendering as `mask`. `examples/rascal.toml` has both
+Exactly one of `command` and `url`; `send_mask = true` on an image-input profile also sends
+the `grey` rendering as `mask`.
+
+**`key_env`** names the variable holding the filler's key, for either kind. For `url` it is
+sent as `Authorization: Bearer`. A `command` inherits rascal's environment, so the script
+reads the variable itself (a script that calls a hosted model, such as Bria on fal, names
+`key_env = "FAL_KEY"`). Either way readiness lists it as a `credential` requirement, so a host
+that passes a tool only the names it declares (Wafflery does) passes the key; a command filler
+that reads a key it never declares works from a shell and fails under such a host. The key is
+never stored, logged or journaled, and no pack sees the variable. `examples/rascal.toml` has both
 entries; the schema is `schemas/rascal/config-v1.json`.
 
 **`overrides`** are recipe overrides in the matrix's form (`"<step>.<param>" = value`,

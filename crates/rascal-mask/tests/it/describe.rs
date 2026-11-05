@@ -80,7 +80,7 @@ fn assert_v04_shapes(doc: &serde_json::Value) {
         [
             ("location", "json", true),
             ("rascal:Mask", "bundle", true),
-            ("rascal:BandProfile", "none", false),
+            ("rascal:BandProfile", "none", true),
             ("rascal:Series", "none", false),
             ("rascal:Plan", "none", false),
         ]
@@ -727,4 +727,40 @@ fn each_operations_params_schema_takes_its_defaults_and_refuses_an_unknown_param
             "{name}"
         );
     }
+}
+
+/// A command filler names its key too (a script calling a hosted model): readiness lists the
+/// variable as a credential, so a host that passes only the requirement names passes it.
+#[test]
+fn a_command_filler_with_a_key_lists_it_as_a_credential() {
+    let dir = scratch("command-key");
+    let config = dir.join("rascal.toml");
+    std::fs::write(
+        &config,
+        "config_version = 1\n\n[fillers.scripted]\ncommand = [\"/bin/sh\", \"fill.sh\", \"{image}\", \"{mask}\", \"{out}\"]\nprofile = \"binary\"\nkey_env = \"SCRIPTED_KEY\"\n",
+    )
+    .unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_rascal"))
+        .args(["describe", "--json", "--config", config.to_str().unwrap()])
+        .env_remove("RASCAL_LOG")
+        .env_remove("SCRIPTED_KEY")
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    for action in of_kind(&doc, "task") {
+        let requirements = action["readiness"]["requirements"].as_array().unwrap();
+        assert!(
+            requirements.iter().any(|r| r["kind"] == "credential"
+                && r["name"] == "SCRIPTED_KEY"
+                && r["state"] == "missing"),
+            "{action:#}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }

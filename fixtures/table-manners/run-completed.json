@@ -62,17 +62,6 @@
     "out": [
       {
         "image": {
-          "file_sha256": "b5dfa6acb21fbf4a6ed2b7961ec840f20495e0e2c6a225fb2e95dbaed14d9013",
-          "height": 400,
-          "projection": "flat",
-          "topology": "bounded",
-          "width": 112
-        },
-        "path": "/runs/run-1767225600000-1/seam-grey.png",
-        "role": "mask"
-      },
-      {
-        "image": {
           "file_sha256": "07cb0b641886d777beb4ec2729ac4147c57327841431a6a7a845becb0d8b657f",
           "height": 400,
           "projection": "equirectangular",
@@ -92,6 +81,17 @@
         },
         "path": "/runs/run-1767225600000-1/preview-mask.png",
         "role": "preview"
+      },
+      {
+        "image": {
+          "file_sha256": "b5dfa6acb21fbf4a6ed2b7961ec840f20495e0e2c6a225fb2e95dbaed14d9013",
+          "height": 400,
+          "projection": "flat",
+          "topology": "bounded",
+          "width": 112
+        },
+        "path": "/runs/run-1767225600000-1/seam-grey.png",
+        "role": "mask"
       }
     ]
   },

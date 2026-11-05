@@ -38,7 +38,7 @@
     },
     "FillerConfig": {
       "additionalProperties": false,
-      "description": "One filler entry under `[fillers.<name>]`: a command with placeholders or an HTTP endpoint,\nthe rendering profile it takes, the paste mode its result is composited with, a timeout,\nand for the lab a revision string. `key_env` names the environment variable holding a\nbearer key, which is read at call time and never stored, logged or journaled.",
+      "description": "One filler entry under `[fillers.<name>]`: a command with placeholders or an HTTP endpoint,\nthe rendering profile it takes, the paste mode its result is composited with, a timeout,\nand for the lab a revision string. `key_env` names the environment variable holding the\nfiller's key, which is read at call time and never stored, logged or journaled.",
       "properties": {
         "command": {
           "description": "The command and its arguments; `{image}`, `{mask}`, `{out}` and `{prompt}` are\nsubstituted. Exactly one of `command` and `url`.",
@@ -60,7 +60,7 @@
           ]
         },
         "key_env": {
-          "description": "The environment variable holding the bearer key for `url`.",
+          "description": "The environment variable holding the filler's key: sent as the bearer for `url`; for a\n`command`, declared so readiness lists it and a host passes it (the command inherits\nrascal's environment). Kept from every pack either way.",
           "type": [
             "string",
             "null"
@@ -245,6 +245,13 @@
           },
           "type": [
             "array",
+            "null"
+          ]
+        },
+        "runs": {
+          "description": "Where the contract's action runs go when `--runs` is not given, relative to this file;\nunset, `$XDG_DATA_HOME/rascal/runs`. With `[workspace] dir`, a host can start\n`rascal serve --config <file>` alone, and `rascal call --config <file>` from a terminal\nthen uses the same workspace and runs.",
+          "type": [
+            "string",
             "null"
           ]
         }

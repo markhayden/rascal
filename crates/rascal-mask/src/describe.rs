@@ -400,7 +400,7 @@ pub fn description(setup: &Setup<'_>) -> Result<Description> {
             images: Some(images),
             locations: Some(locations),
             outputs: Some(Outputs {
-                images: vec!["mask".to_string(), "result".to_string()],
+                images: vec!["result".to_string(), "mask".to_string()],
                 locations: if found {
                     vec![LocationOutput::Found]
                 } else {

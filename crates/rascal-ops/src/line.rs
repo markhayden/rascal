@@ -68,6 +68,7 @@ impl Op for Line {
                 .bounded(1e-9, 1e9),
             ],
         )
+        .exactly_one_of(&["column", "path"])
     }
 
     fn run(&self, context: &Context<'_>, inputs: &Inputs, params: &Params) -> Result<Output> {

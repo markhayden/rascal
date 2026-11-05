@@ -88,10 +88,14 @@ impl ArtifactType {
     }
 
     /// Whether rascal draws an artifact of the type as an image for people (CONTRACT 3.3, 4.7):
-    /// a location and a Mask, each over the image it was made on. An image is its own picture;
-    /// a band profile, a series and a plan have no preview.
+    /// a location and a Mask, each over the image it was made on, and a band profile as its band
+    /// over the image with a chart of its half-width per row beside it. An image is its own
+    /// picture; a series and a plan have no preview.
     pub fn preview(self) -> bool {
-        matches!(self, ArtifactType::Location | ArtifactType::Mask)
+        matches!(
+            self,
+            ArtifactType::Location | ArtifactType::Mask | ArtifactType::BandProfile
+        )
     }
 
     /// What an artifact of the type is, in a sentence for people (CONTRACT 3.3).

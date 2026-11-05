@@ -62,6 +62,23 @@ pub fn draw(store: &Workspace, ops: &OpRegistry, id: &str) -> Result<Option<(Vec
                 None => image,
             }
         }
+        Artifact::BandProfile(band) => {
+            let image = match image {
+                Some(image) => image,
+                None => canvas(&frame),
+            };
+            let mut inputs = Inputs::new();
+            inputs.insert("band".to_string(), artifact.clone());
+            let mask = run(ops, &frames, "profile", &inputs, &Params::new(), "mask")?;
+            let drawn = overlay(ops, &frames, &mask, &image)?;
+            let Artifact::Image(drawn) = drawn else {
+                return Err(Error::op("preview", "the drawing is not an image"));
+            };
+            return Ok(Some((
+                png_pixels(&with_width_chart(&drawn.pixels, &band.half, band.thin_px))?,
+                frame,
+            )));
+        }
         _ => return Ok(None),
     };
     let Artifact::Image(picture) = picture else {
@@ -210,6 +227,53 @@ fn canvas(frame: &Frame) -> Artifact {
         Role::Working,
         None,
     )))
+}
+
+/// The band drawn on its image with a chart beside it: one bar per row, its length the row's
+/// half-width against the widest row's, and a line where the thin minimum sits. Read top to
+/// bottom alongside the image, the bars say where fan widened the band and where it held thin.
+fn with_width_chart(drawn: &image::DynamicImage, half: &[f64], thin: f64) -> image::DynamicImage {
+    let picture = drawn.to_rgb8();
+    let (width, height) = picture.dimensions();
+    let panel = (width / 3).clamp(160, 480);
+    let margin = 12u32;
+    let mut out = image::RgbImage::from_pixel(width + panel, height, image::Rgb([24, 26, 26]));
+    image::imageops::replace(&mut out, &picture, 0, 0);
+    let widest = half.iter().copied().fold(thin.max(1.0), f64::max);
+    let scale = f64::from(panel - 2 * margin) / widest;
+    let x0 = width + margin;
+    for y in 0..height {
+        let row = half.get(y as usize).copied().unwrap_or(0.0);
+        let length = (row * scale).round().max(0.0) as u32;
+        for x in x0..(x0 + length).min(width + panel - margin) {
+            out.put_pixel(x, y, image::Rgb([236, 64, 226]));
+        }
+    }
+    let thin_x = x0 + (thin * scale).round() as u32;
+    if thin_x < width + panel {
+        for y in 0..height {
+            out.put_pixel(thin_x, y, image::Rgb([164, 170, 165]));
+        }
+    }
+    for y in 0..height {
+        out.put_pixel(width, y, image::Rgb([52, 55, 53]));
+    }
+    image::DynamicImage::ImageRgb8(out)
+}
+
+/// Pixels as PNG bytes.
+fn png_pixels(pixels: &image::DynamicImage) -> Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    pixels
+        .write_to(
+            &mut std::io::Cursor::new(&mut bytes),
+            image::ImageFormat::Png,
+        )
+        .map_err(|source| Error::Image {
+            path: "<preview>".into(),
+            source,
+        })?;
+    Ok(bytes)
 }
 
 /// An image's pixels as PNG bytes.
