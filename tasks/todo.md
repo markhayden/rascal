@@ -179,15 +179,16 @@ with green CI on both platforms, and then the tag.
 
 ## M14 Choosable segmenters (PLAN.md M14; SPEC.md "Choosable segmenters")
 - [x] 14.0 Record decision 15 (decided 2026-11-09); ADR 0018 section
-- [ ] 14.1 The comparison harness and frozen references (segment-lab)
+- [x] 14.1 The comparison harness and frozen references (segment-lab `fb8529d`, `0967a36`)
 - [x] 14.2 The catalogue and the adapter interface (Tiny unchanged); catalogue-aware readiness
 - [x] 14.3 Installations (layout, `current`, holds, checks), inactive
 - [x] 14.4 The installer and the cutover (no models in the bundle; `get --from`; model gate) → merge `m14p-pack`, tag `m14.1`
+- [ ] 14.4a Follow-up: `rascal tools setup` into an install that already holds `models/` is refused (extra files); allow the models directory so a pack upgrade keeps its models
 - [ ] 14.5 BiRefNet → tag `m14.2-birefnet`
 - [ ] 14.6 HQ-SAM → tag `m14.2-hqsam`
 - [ ] 14.7 EVF-SAM2 → tag `m14.2-evfsam2`
 - [ ] 14.8 SAM 3 → tag `m14.2-sam3`
-- [ ] 14.9 table-manners 0.6.0 draft: per-choice readiness, installables, install/uninstall
+- [x] 14.9 table-manners 0.6.0 draft (`v0.6` `b7df92f`, local until 14.13): per-choice readiness, installables, install/uninstall
 - [ ] 14.10 Rascal resolves, pins and records the model
 - [ ] 14.11 `describe`, `serve`'s controls and the CLI → tag `m14.3`
 - [ ] 14.12 Wafflery: Installables list and Model choice
