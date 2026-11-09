@@ -4,9 +4,10 @@ A case is a directory `fixtures/parity/<tool>/<case>/` at the repository root (r
 under `fixtures/`) holding `envelope.json` (the envelope
 without provenance) and `plane_<n>.png` for each image block. `assert_parity` compares the
 regions and measurements exactly (as JSON) and each plane as the fraction of pixels that differ,
-which must not exceed the tolerance. `UPDATE_PARITY=1` rewrites a case. `requires_artifact`
-skips a `segmenter`-marked test when the model artifact is not in the cache, so `pytest` is
-green offline without it and checks parity when it is there."""
+which must not exceed the tolerance. `UPDATE_PARITY=1` rewrites a case. `requires_model`
+skips a `segmenter`-marked test when the model is not installed in the models directory, so
+`pytest` is green offline without it and checks parity when it is there (and fails instead under
+RASCAL_TOOLS_REQUIRE_MODELS)."""
 
 from __future__ import annotations
 
@@ -21,17 +22,18 @@ import pytest
 from mcp import types
 from PIL import Image
 
-from rascal_tools import fetch
+from rascal_tools import installs
+from rascal_tools.models import cache
 
 PARITY = Path(__file__).resolve().parents[3] / "fixtures" / "parity"
 
 
-def requires_artifact(name: str) -> None:
-    """Skips the test unless the named artifact is fetched and verified."""
-    artifacts = {a.name: a for a in fetch.read_artifacts(fetch.ARTIFACTS)}
-    artifact = artifacts.get(name)
-    if artifact is None or not fetch.fetched(artifact):
-        pytest.skip(f"artifact {name} is not fetched; run `rascal-tools fetch`")
+def requires_model(model: str) -> installs.Installation:
+    """The model's verified installation; skips the test when it is not installed."""
+    try:
+        return cache.installation(model)
+    except cache.MissingModel as e:
+        pytest.skip(f"{model} is not installed ({e})")
 
 
 def _planes(result: types.CallToolResult) -> list[np.ndarray]:

@@ -21,11 +21,43 @@ environment (`tools/python/export/`) is locked to PyPI packages so the export re
 its lock; SAM 2.1 comes through Transformers like the detector. It is four times the size and
 gives tighter planes. ADR 0018 records the refinement.
 
-The digests in `artifacts.toml` are the exported files'; `rascal-tools fetch` verifies them
-after a download and the pack verifies them once per process before an artifact is used. The
-files are published as release assets of the repository (`models-2026-10` for OWLv2 and the
-SAM encoder, `models-2026-11` for the three-outline decoder), and a bundle carries them under
-`models/`.
+The digests in `artifacts.toml` are the exported files'; `rascal-tools get` checks them after a
+download and the pack verifies an installation once per process before it is used. The files
+are published as release assets of the repository (`models-2026-10` for OWLv2 and the SAM
+encoder, `models-2026-11` for the three-outline decoder); a bundle carries none. Each model's licence texts are artifacts too, installed beside its graphs: Tiny's,
+`LICENSE.owlv2-base-patch16.txt` and `LICENSE.sam2.1-hiera-tiny.txt` (the Apache-2.0 text with a
+header naming the model, its revision and the export), are the release `models-2026-11-tiny`,
+and their sources are `export/licences/`. Every artifact records its size, which bounds a
+download.
+
+## The catalogue
+
+`segment` runs the model its `model` argument names from the segmenter catalogue,
+`src/rascal_tools/segmenters.toml` (SPEC.md "Choosable segmenters"): per model its id, the
+adapter that runs it (`rascal_tools/models/adapters.py`), the `segment` parameters it uses (a
+call that supplies another is `invalid_args`, even at its default), its licence and licence
+files, its files by name in `artifacts.toml`, its sizes, the platforms it runs on and the lab
+round's figures. Exactly one entry is the default; today the catalogue holds `tiny`, the two
+models above as one adapter, `owlv2+sam2`, which carries M13's pick and retry and reports
+`outline_<n>`, `retried_<n>`, `retry_kept_<n>` and `mask_iou_predicted`. Every adapter's
+instances come back best score first, ties by query then by the box's top-left, row-major, cut
+to `max_instances`; region `n` is paired with plane `n`. One model is loaded at a time.
+
+## Installations
+
+`rascal_tools.installs` lays models out in the models directory as installations (SPEC.md
+"Installing a model"): `<models>/<id>/<identity>/` holds a model's files by name and its
+`install.json` (the model, the catalogue revision, each file's name, size and SHA-256); the
+identity is the SHA-256 of that record; `<models>/<id>/current` names the installation in use and
+is replaced in one rename; every file is kept once under `<models>/files/<sha256>` as a hard link;
+`.lock` serialises publishing, deleting and the holds runs take (`.held/<run id>`, the run's
+process id inside; a hold whose process is gone is ignored); a held installation is never
+deleted. An installation is verified once per process per identity (sizes, digests, regular
+files), and every external-data file a graph names must be a file of the same installation
+(`rascal_tools.onnx_refs` reads the locations from the graph's protobuf). The pack reads every
+model through its installation (`rascal_tools.models.cache`); a `segment` call may name the
+installation it expects, and the pack runs that one even when it is no longer `current`.
+`rascal-tools get <model>` makes installations (`rascal_tools.installer`, `docs/tools.md`).
 
 ## The export
 
@@ -82,7 +114,7 @@ The pack mirrors the upstream processors in numpy and Pillow (`rascal_tools.mode
 
 `tools/python/tests/test_segment.py` covers the query parsing, the box arithmetic, the
 preprocessing and the argument checks without a model, and under the `segmenter` marker (run
-only when every artifact is fetched and verified) the chair fixture through both models with
+only when Tiny is installed, required under RASCAL_TOOLS_REQUIRE_MODELS=tiny) the chair fixture through both models with
 parity against `fixtures/parity/segment/chair/`: the envelope must match exactly (scores to
 three decimals, polygon corners to four) and the plane may differ in at most 0.5% of its
 pixels. The fixture's chair is a drawn blob; the detector puts its box on it exactly but

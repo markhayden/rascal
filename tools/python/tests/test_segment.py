@@ -10,10 +10,10 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from rascal_tools.models import cache, owlv2, sam2
+from rascal_tools.models import adapters, cache, owlv2, sam2
 from rascal_tools.tools import segment
 from tests.conftest import harness_dict
-from tests.parity import assert_parity, requires_artifact
+from tests.parity import assert_parity, requires_model
 
 FIXTURE = Path(__file__).resolve().parents[3] / "fixtures" / "images" / "chair-blob.png"
 
@@ -89,13 +89,15 @@ def test_bad_arguments_are_invalid_args(harness) -> None:
         assert result.structuredContent["status"] == "invalid_args", arguments
 
 
-def test_a_missing_artifact_names_where_it_looked(harness, monkeypatch, tmp_path) -> None:
+def test_a_model_not_installed_names_where_it_looked_and_how_to_get_it(
+    harness, monkeypatch, tmp_path
+) -> None:
     monkeypatch.setenv("RASCAL_TOOLS_MODELS", str(tmp_path))
-    monkeypatch.setattr(cache, "_verified", {})
-    monkeypatch.setattr(segment, "_models", None)
-    with pytest.raises(cache.MissingArtifact) as error:
+    monkeypatch.setattr(cache, "_models", {})
+    monkeypatch.setattr(segment, "_slot", segment.installs.Slot())
+    with pytest.raises(cache.MissingModel) as error:
         segment.run({"prompt": "chair"}, harness)
-    assert str(tmp_path) in str(error.value) and "rascal-tools fetch" in str(error.value)
+    assert str(tmp_path) in str(error.value) and "rascal-tools get tiny" in str(error.value)
 
 
 def test_the_manifest_holds_the_bounds_rascal_ceilings_allow() -> None:
@@ -126,7 +128,8 @@ def test_every_instance_fits_the_declared_bounds(harness, monkeypatch) -> None:
         def outlines(self, features, box, points, width, height):
             return [np.ones((height, width), dtype=bool) for _ in range(3)], [0.9, 0.8, 0.7]
 
-    monkeypatch.setattr(segment, "_models", (Detector(), Segmenter()))
+    adapter = adapters.Owlv2Sam2(Detector(), Segmenter())
+    monkeypatch.setattr(segment, "load", lambda entry, installation=None: adapter)
     result = segment.run({"prompt": "collar", "max_instances": segment.MAX_INSTANCES}, harness)
     assert result.isError is not True, result.structuredContent
     returns = segment.SPEC.manifest()["returns"]
@@ -136,9 +139,9 @@ def test_every_instance_fits_the_declared_bounds(harness, monkeypatch) -> None:
 
 
 @pytest.mark.segmenter
+@pytest.mark.model_tiny
 def test_the_chair_is_found_with_parity() -> None:
-    for name in (segment.GRAPH, segment.TOKENIZER, segment.ENCODER, segment.DECODER):
-        requires_artifact(name)
+    requires_model("tiny")
     from rascal_tools import harness as harness_module
 
     pixels = np.asarray(Image.open(FIXTURE).convert("RGB"))
@@ -161,9 +164,9 @@ def test_the_chair_is_found_with_parity() -> None:
 
 
 @pytest.mark.segmenter
+@pytest.mark.model_tiny
 def test_several_instances_decode_one_box_per_call() -> None:
-    for name in (segment.GRAPH, segment.TOKENIZER, segment.ENCODER, segment.DECODER):
-        requires_artifact(name)
+    requires_model("tiny")
     from rascal_tools import harness as harness_module
 
     pixels = np.asarray(Image.open(FIXTURE).convert("RGB"))
@@ -205,7 +208,8 @@ def _fake_models(monkeypatch, answer):
             calls.append((box, list(points)))
             return answer(box, points)
 
-    monkeypatch.setattr(segment, "_models", (Detector(), Segmenter()))
+    adapter = adapters.Owlv2Sam2(Detector(), Segmenter())
+    monkeypatch.setattr(segment, "load", lambda entry, installation=None: adapter)
     return calls
 
 

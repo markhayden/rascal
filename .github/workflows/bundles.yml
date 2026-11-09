@@ -4,10 +4,10 @@ name: bundles
 # tag, one bundle per platform is built by scripts/build-bundle.sh on that platform's runner,
 # packed as a tar.gz with its SHA-256 beside it, smoked by scripts/bundle-acceptance.sh from
 # the packed archive, and uploaded to the tag's GitHub release (the one dist creates from the
-# same tag). The models are the ones `tools/python/src/rascal_tools/artifacts.toml` names, fetched
-# with `rascal-tools fetch` from the releases it points at: on a version tag they are
-# required (BUNDLE_MODELS=required), so a release bundle never ships without `segment`; a manual
-# run without them builds a bundle that says so and serves echo_region only.
+# same tag). A bundle carries no model: models are a setup step (`rascal-tools get`, SPEC.md
+# "Choosable segmenters"). The acceptance installs Tiny into the bundle's install from its
+# release assets, fetched beforehand with the pack's own installer, with the network off, and
+# segments with it; each job also runs Tiny's real-model tests, required, not skipped.
 on:
   push:
     tags: ["v*"]
@@ -40,26 +40,26 @@ jobs:
           python-version: "3.12"
       - name: Sync the Python pack's environment
         run: uv sync --frozen --project tools/python
-      - name: Fetch the model artifacts artifacts.toml names, when they are published
+      - name: Tiny's release assets, fetched and verified (the network step)
+        run: scripts/tiny-assets.sh "$RUNNER_TEMP/tiny-assets"
+      - name: Tiny's real-model tests, required
+        env:
+          RASCAL_TOOLS_MODELS: ${{ runner.temp }}/models
+          RASCAL_TOOLS_REQUIRE_MODELS: tiny
         run: |
-          if uv run --frozen --project tools/python rascal-tools fetch; then
-            echo "models fetched"
-          else
-            echo "the models artifacts.toml names could not be fetched; the bundle serves echo_region only"
-          fi
+          uv run --frozen --project tools/python rascal-tools get tiny --from "$RUNNER_TEMP/tiny-assets"
+          uv run --frozen --project tools/python pytest tools/python/tests -m model_tiny
       - name: Allow an unprivileged network namespace (Linux)
         if: runner.os == 'Linux'
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: cargo build --release -p rascal-mask
       - name: Build the bundle and pack it
-        env:
-          BUNDLE_MODELS: ${{ startsWith(github.ref, 'refs/tags/v') && 'required' || '' }}
         run: |
           scripts/build-bundle.sh ${{ matrix.platform }} bundle --archive rascal-tools-bundle-${{ matrix.platform }}.tar.gz
           shasum -a 256 rascal-tools-bundle-${{ matrix.platform }}.tar.gz > rascal-tools-bundle-${{ matrix.platform }}.tar.gz.sha256
           cat rascal-tools-bundle-${{ matrix.platform }}.tar.gz.sha256
-      - name: Install from the packed archive with no network and call the pack
-        run: scripts/bundle-acceptance.sh target/release/rascal --archive rascal-tools-bundle-${{ matrix.platform }}.tar.gz
+      - name: Install from the packed archive with no network, install Tiny, and call the pack
+        run: scripts/bundle-acceptance.sh target/release/rascal --archive rascal-tools-bundle-${{ matrix.platform }}.tar.gz --models "$RUNNER_TEMP/tiny-assets"
       - name: Upload to the release
         if: startsWith(github.ref, 'refs/tags/v')
         env:

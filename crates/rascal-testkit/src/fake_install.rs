@@ -1,7 +1,8 @@
 //! A fake segmenter pack install, shaped as `rascal tools setup` leaves one: the launcher
 //! `<dir>/.venv/bin/rascal-tools` (a shell script that runs any program, such as the fake pack),
-//! `<dir>/artifacts.toml` naming the model files, and with `models` the files themselves under
-//! `<dir>/models/`. Readiness inspects exactly this shape (PLAN.md 12.2).
+//! `<dir>/artifacts.toml` naming the model files, `<dir>/segmenters.toml` naming the default
+//! model's files, and with `models` the default model installed under `<dir>/models/` as the pack
+//! lays an installation out (`<models>/tiny/current` naming `<models>/tiny/<identity>/`). Readiness inspects exactly this shape (PLAN.md 12.2).
 
 use std::path::{Path, PathBuf};
 
@@ -57,6 +58,17 @@ pub fn write(dir: &Path, program: &[&str], models: bool) -> std::io::Result<Fake
         ));
     }
     std::fs::write(dir.join("artifacts.toml"), manifest)?;
+    let files = MODEL_FILES
+        .iter()
+        .map(|n| format!("{n:?}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    std::fs::write(
+        dir.join("segmenters.toml"),
+        format!(
+            "[[segmenter]]\nid = \"tiny\"\ndefault = true\nfiles = [{files}]\nlicence_files = []\n"
+        ),
+    )?;
     if models {
         write_models(&dir.join("models"))?;
     }
@@ -66,11 +78,20 @@ pub fn write(dir: &Path, program: &[&str], models: bool) -> std::io::Result<Fake
     })
 }
 
-/// Writes every model file, non-empty, into `models`.
+/// The identity the fake installation is published under.
+pub const INSTALLATION: &str = "f00dfeedf00dfeedf00dfeedf00dfeedf00dfeedf00dfeedf00dfeedf00dfeed";
+
+/// Where the fake installation keeps a model file under `models`.
+pub fn model_file(models: &Path, name: &str) -> PathBuf {
+    models.join("tiny").join(INSTALLATION).join(name)
+}
+
+/// Installs every model file, non-empty, as the default model's installation under `models`.
 pub fn write_models(models: &Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(models)?;
+    let installation = models.join("tiny").join(INSTALLATION);
+    std::fs::create_dir_all(&installation)?;
     for name in MODEL_FILES {
-        std::fs::write(models.join(name), b"fake weights")?;
+        std::fs::write(installation.join(name), b"fake weights")?;
     }
-    Ok(())
+    std::fs::write(models.join("tiny/current"), format!("{INSTALLATION}\n"))
 }

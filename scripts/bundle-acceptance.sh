@@ -3,11 +3,12 @@
 # this machine's bundle (the one network step), then, with the network disabled where the
 # platform allows it (`unshare -rn` on Linux) and the uv and pip caches pointed at empty
 # directories, `rascal tools setup --bundle` installs into a clean directory, the installed
-# pack answers `echo_region` through `rascal tools call` (and `segment`, when the models were
-# in the pack's model directory and so are in the bundle), a tampered copy of the bundle is
-# refused, and the pytest bundle test checks the build's output.
+# pack answers `echo_region` through `rascal tools call`, Tiny is installed into it with
+# `rascal-tools get tiny --from <models>` (a directory of Tiny's release assets, fetched and
+# verified before this script, outside the bundle) and the pack segments the chair with it, a
+# tampered copy of the bundle is refused, and the pytest bundle test checks the build's output.
 #
-#   scripts/bundle-acceptance.sh <rascal binary> [--archive <file.tar.gz>] [scratch dir]
+#   scripts/bundle-acceptance.sh <rascal binary> [--archive <file.tar.gz>] --models <dir> [scratch dir]
 #
 # With --archive the bundle is also packed as that .tar.gz and the install reads the archive
 # with its digest, the way a release's bundle is installed.
@@ -21,6 +22,12 @@ rascal="$(cd "$(dirname "$rascal")" && pwd)/$(basename "$rascal")"
 shift
 archive=""
 if [ "${1:-}" = "--archive" ]; then archive="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"; shift 2; fi
+models=""
+if [ "${1:-}" = "--models" ]; then models="$(cd "$2" && pwd)"; shift 2; fi
+if [ -z "$models" ]; then
+  echo "bundle: --models <a directory of Tiny's release assets> is required (rascal-tools get tiny, then copy its installation's files)" >&2
+  exit 64
+fi
 scratch="${1:-$(mktemp -d "${TMPDIR:-/tmp}/rascal-bundle.XXXXXX")}"
 if ! command -v uv >/dev/null 2>&1; then
   if [ -n "${CI:-}" ]; then echo "bundle: uv is not installed in CI" >&2; exit 1; fi
@@ -78,11 +85,14 @@ assert envelope["status"] == "ok", envelope
 print("echo_region:", envelope["summary"])
 ' "$scratch/call.json"
 
-if [ -d "$scratch/bundle/models" ]; then
-  echo "bundle: the installed pack segments the chair from the bundled models"
-  ${disconnected[@]+"${disconnected[@]}"} "$rascal" tools call rascal-tools segment --config "$scratch/rascal.toml" \
-    --workspace "$scratch/ws" --image fixtures/images/chair-blob.png --prompt "a wooden chair" --threshold 0.05 --max_instances 1 --json > "$scratch/segment.json"
-  python3 -I -c '
+echo "bundle: Tiny into the install from $models, with no network"
+mkdir -p "$scratch/pack/models"
+${disconnected[@]+"${disconnected[@]}"} "$scratch/pack/.venv/bin/rascal-tools" get tiny --from "$models" --models "$scratch/pack/models"
+
+echo "bundle: the installed pack segments the chair with Tiny"
+${disconnected[@]+"${disconnected[@]}"} "$rascal" tools call rascal-tools segment --config "$scratch/rascal.toml" \
+  --workspace "$scratch/ws" --image fixtures/images/chair-blob.png --prompt "a wooden chair" --threshold 0.05 --max_instances 1 --json > "$scratch/segment.json"
+python3 -I -c '
 import json, sys
 text = open(sys.argv[1]).read()
 envelope = json.JSONDecoder().raw_decode(text[text.index("{"):])[0]
@@ -90,9 +100,6 @@ assert envelope["status"] == "ok", envelope
 assert envelope["regions"][0]["label"] == "a wooden chair", envelope
 print("segment:", envelope["summary"])
 ' "$scratch/segment.json"
-else
-  echo "bundle: no models in the bundle (rascal-tools fetch first); segment not called"
-fi
 
 echo "bundle: a tampered copy is refused"
 cp -R "$scratch/bundle" "$scratch/tampered"

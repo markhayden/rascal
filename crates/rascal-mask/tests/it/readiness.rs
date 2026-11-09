@@ -138,7 +138,7 @@ fn remove_prompt_follows_an_install() {
         .to_string();
     assert!(
         setup.contains(&home.join(".cache/rascal-tools").display().to_string())
-            && setup.contains("rascal-tools fetch"),
+            && setup.contains("rascal-tools get tiny"),
         "{setup}"
     );
 
@@ -151,9 +151,37 @@ fn remove_prompt_follows_an_install() {
     assert_eq!(names, MODEL_FILES);
     assert!(present.iter().all(|(_, s)| s == "present"), "{present:?}");
     // An empty file is not a model file.
-    std::fs::write(install_dir.join("models").join(MODEL_FILES[2]), b"").unwrap();
+    let third = fake_install::model_file(&install_dir.join("models"), MODEL_FILES[2]);
+    std::fs::write(&third, b"").unwrap();
     let readiness = remove_prompt(&home, &config, &[]);
     assert_eq!(readiness["state"], "needs_setup");
+    std::fs::write(&third, b"fake weights").unwrap();
+    // The files without `current` naming them are no installation (a flat directory of model
+    // files, as before M14, is not read either).
+    std::fs::remove_file(install_dir.join("models/tiny/current")).unwrap();
+    let readiness = remove_prompt(&home, &config, &[]);
+    assert_eq!(readiness["state"], "needs_setup");
+    fake_install::write_models(&install_dir.join("models")).unwrap();
+
+    // Another model in the catalogue and in artifacts.toml, not installed: only the default's
+    // files are required, so remove_prompt stays ready (PLAN.md 14.2).
+    let mut artifacts = std::fs::read_to_string(install_dir.join("artifacts.toml")).unwrap();
+    artifacts.push_str("\n[[artifact]]\nname = \"other.onnx\"\nurl = \"https://example.invalid/other.onnx\"\nsha256 = \"0000000000000000000000000000000000000000000000000000000000000000\"\nlicence = \"MIT\"\n");
+    std::fs::write(install_dir.join("artifacts.toml"), artifacts).unwrap();
+    let mut catalogue = std::fs::read_to_string(install_dir.join("segmenters.toml")).unwrap();
+    catalogue.push_str("\n[[segmenter]]\nid = \"other\"\nfiles = [\"other.onnx\"]\n");
+    std::fs::write(install_dir.join("segmenters.toml"), catalogue).unwrap();
+    let readiness = remove_prompt(&home, &config, &[]);
+    assert_eq!(readiness["state"], "ready", "{readiness:#}");
+    assert_eq!(files(&readiness).len(), MODEL_FILES.len());
+    // No catalogue: the install is broken, and says so.
+    std::fs::remove_file(install_dir.join("segmenters.toml")).unwrap();
+    let readiness = remove_prompt(&home, &config, &[]);
+    assert_eq!(readiness["state"], "needs_setup");
+    assert_eq!(
+        files(&readiness),
+        vec![("segmenters.toml".to_string(), "missing".to_string())]
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 

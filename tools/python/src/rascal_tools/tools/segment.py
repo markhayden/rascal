@@ -1,28 +1,27 @@
-"""`segment`: a text prompt to instances. OWLv2 proposes boxes for each query in the prompt;
-each kept box is padded, SAM 2.1 gives three candidate outlines for it, and the rules in
-`rascal_tools.outline` keep one: the whole object by default, retried once with a wider box and
-a point on each piece when the outline is thin or in pieces (SPEC.md "Self-correcting remove").
-The answer is one polygon region (the padded box) with its score per instance and one plane per
-region, in the image's frame, best score first (`MODEL.md`). The models load on the first call
-and stay loaded."""
+"""`segment`: a text prompt to instances, by the model the `model` argument names from the
+segmenter catalogue (`segmenters.toml`, SPEC.md "Choosable segmenters"). The default, Tiny:
+OWLv2 proposes boxes for each query in the prompt; each kept box is padded, SAM 2.1 gives three
+candidate outlines for it, and the rules in `rascal_tools.outline` keep one: the whole object by
+default, retried once with a wider box and a point on each piece when the outline is thin or in
+pieces (SPEC.md "Self-correcting remove"). The answer is one polygon region (the box) with its
+score per instance and one plane per region, in the image's frame, best score first
+(`MODEL.md`). One model is loaded at a time, on its first call, and stays loaded until a call
+names another."""
 
 from __future__ import annotations
 
 import re
 import threading
-from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 from mcp import types
 
-from rascal_tools import __version__, outline
+from rascal_tools import __version__, catalogue, installs, outline
 from rascal_tools.envelope import Answer
 from rascal_tools.harness import Harness
 from rascal_tools.manifest import Bounds, Param, Port, ToolSpec
-from rascal_tools.models import cache
-from rascal_tools.models.owlv2 import Detector
-from rascal_tools.models.sam2 import Segmenter
+from rascal_tools.models import adapters, cache
 
 GRAPH = "owlv2-base-patch16.onnx"
 TOKENIZER = "owlv2-base-patch16.tokenizer.json"
@@ -32,6 +31,9 @@ DECODER = "sam2.1-hiera-tiny.decoder3.onnx"
 MAX_INSTANCES = 16
 MAX_QUERIES = 16
 MAX_PROMPT_BYTES = 1024
+
+ENTRIES = catalogue.read()
+DEFAULT = catalogue.default(ENTRIES).id
 
 SPEC = ToolSpec(
     name="segment",
@@ -69,6 +71,21 @@ SPEC = ToolSpec(
             '("chair. side table").',
             "string",
             required=True,
+        ),
+        Param(
+            "model",
+            "Which segmenter runs, by its id in the pack's segmenter catalogue; each uses only "
+            "some of the other settings, and one it does not use is refused.",
+            "choice",
+            default=DEFAULT,
+            choices=tuple(e.id for e in ENTRIES),
+        ),
+        Param(
+            "installation",
+            "The model's installation to run, by its identity, so a run keeps one installation "
+            "across its calls; empty runs the one installed now.",
+            "string",
+            default="",
         ),
         Param(
             "max_instances",
@@ -126,18 +143,26 @@ SPEC = ToolSpec(
 )
 
 _lock = threading.Lock()
-_models: tuple[Detector, Segmenter] | None = None
+_slot = installs.Slot()
 
 
-def models() -> tuple[Detector, Segmenter]:
-    """The two models, loaded on first use; a missing artifact raises `MissingArtifact`."""
-    global _models
+def load(entry: catalogue.Entry, installation: str | None = None) -> adapters.Adapter:
+    """The entry's adapter over its installation (`installation` names one, else the current
+    one), loaded on first use and kept while calls name the same model and installation; another
+    model or installation unloads it first, and so does an installation that is gone. A model
+    not installed raises `cache.MissingModel`."""
     with _lock:
-        if _models is None:
-            detector = Detector(cache.artifact(GRAPH), cache.artifact(TOKENIZER))
-            segmenter = Segmenter(cache.artifact(ENCODER), cache.artifact(DECODER))
-            _models = (detector, segmenter)
-        return _models
+
+        def build(found: installs.Installation) -> adapters.Adapter:
+            return adapters.BUILDERS[entry.adapter]({n: found.path(n) for n in entry.files})
+
+        try:
+            _, adapter = _slot.get(cache.models(), entry.id, installation or None, build)
+        except installs.InstallError as e:
+            raise cache.MissingModel(
+                f"{e}; run `rascal-tools get {entry.id}`, or set RASCAL_TOOLS_MODELS"
+            ) from e
+        return adapter
 
 
 def queries_of(prompt: str) -> list[str]:
@@ -161,45 +186,6 @@ def polygon_of(
     return [[fx(x0), fy(y0)], [fx(x1), fy(y0)], [fx(x1), fy(y1)], [fx(x0), fy(y1)]]
 
 
-@dataclass(frozen=True)
-class Traced:
-    """One instance's kept outline: its plane, the padded box it was traced in, the candidate
-    index kept, its predicted IoU and whether a retry ran and was kept."""
-
-    plane: np.ndarray
-    box: tuple[float, float, float, float]
-    index: int
-    iou: float
-    retried: bool
-    retry_kept: bool
-
-
-def trace(
-    segmenter: Segmenter,
-    features: list[np.ndarray],
-    found: tuple[float, float, float, float],
-    pad: float,
-    rule: str,
-    min_cover: float,
-    image: Any,
-) -> Traced:
-    """The detector's box to one outline: padded, traced, picked, and retried once with the box
-    padded by twice `pad` and a point on each piece when the outline is thin or in pieces."""
-    width, height = image.width, image.height
-    box = outline.pad_box(found, pad, width, height)
-    planes, ious = segmenter.outlines(features, box, [], width, height)
-    k = outline.pick(planes, ious, box, rule)
-    traced = Traced(planes[k], box, k, ious[k], False, False)
-    if not traced.plane.any() or not outline.needs_retry(traced.plane, box, min_cover):
-        return traced
-    wider = outline.pad_box(found, 2 * pad, width, height)
-    planes, ious = segmenter.outlines(features, wider, outline.points(traced.plane), width, height)
-    k = outline.pick(planes, ious, wider, rule)
-    if outline.accept_retry(traced.plane, planes[k], wider):
-        return Traced(planes[k], wider, k, ious[k], True, True)
-    return Traced(traced.plane, box, traced.index, traced.iou, True, False)
-
-
 def run(arguments: dict[str, Any], harness: Harness) -> types.CallToolResult:
     answer = Answer(SPEC.name, SPEC.version)
     prompt = arguments.get("prompt")
@@ -212,6 +198,18 @@ def run(arguments: dict[str, Any], harness: Harness) -> types.CallToolResult:
         return answer.invalid_args("prompt names no query")
     if len(queries) > MAX_QUERIES:
         return answer.invalid_args(f"prompt names {len(queries)} queries; at most {MAX_QUERIES}")
+    model = arguments.get("model", DEFAULT)
+    entry = catalogue.by_id(ENTRIES, model) if isinstance(model, str) else None
+    if entry is None:
+        return answer.invalid_args(
+            f"model must be one of {', '.join(e.id for e in ENTRIES)}, not {model!r}"
+        )
+    installation = arguments.get("installation", "")
+    if not isinstance(installation, str):
+        return answer.invalid_args("installation must be a string")
+    unused = [p for p in catalogue.SEGMENT_PARAMS if p in arguments and p not in entry.params]
+    if unused:
+        return answer.invalid_args(f"{entry.id} does not use {', '.join(unused)}")
     max_instances = arguments.get("max_instances", 8)
     if not isinstance(max_instances, int) or not 1 <= max_instances <= MAX_INSTANCES:
         return answer.invalid_args(f"max_instances must be an integer in 1..{MAX_INSTANCES}")
@@ -227,41 +225,39 @@ def run(arguments: dict[str, Any], harness: Harness) -> types.CallToolResult:
     min_cover = arguments.get("min_cover", 0.2)
     if not isinstance(min_cover, int | float) or not 0.0 <= min_cover <= 1.0:
         return answer.invalid_args("min_cover must be a number in 0..1")
+    settings = adapters.Settings(
+        float(threshold), max_instances, float(pad), rule, float(min_cover)
+    )
     image = harness.image("image")
-    detector, segmenter = models()
-    detections = detector.detect(image.pixels, queries, float(threshold), max_instances)
+    adapter = load(entry, installation)
+    instances = adapters.order(adapter.find(image.pixels, queries, settings), max_instances)
     answer.measure("queries", float(len(queries)), "count")
-    if not detections:
+    if not instances:
         return answer.not_applicable(
             f"no instance of {prompt!r} scores over {float(threshold):g} in {image.id}"
         )
-    features = segmenter.embed(image.pixels)
     kept = 0
-    for n, detection in enumerate(detections):
-        traced = trace(
-            segmenter, features, detection.box, float(pad), rule, float(min_cover), image
-        )
-        if not traced.plane.any():
+    for n, instance in enumerate(instances):
+        if not instance.plane.any():
             continue
         answer.region(
             f"seg-{n}",
             {
                 "kind": "polygon",
                 "frame": image.frame,
-                "polygon": polygon_of(traced.box, image.width, image.height),
+                "polygon": polygon_of(instance.box, image.width, image.height),
             },
-            queries[detection.query],
-            round(detection.score, 3),
+            queries[instance.query],
+            round(instance.score, 3),
         )
-        answer.plane(image.frame, traced.plane)
-        answer.measure(f"plane_px_{n}", float(np.count_nonzero(traced.plane)), "px", image.frame)
-        answer.measure(f"outline_{n}", float(traced.index), "index")
-        answer.measure(f"retried_{n}", float(traced.retried), "flag")
-        answer.measure(f"retry_kept_{n}", float(traced.retry_kept), "flag")
+        answer.plane(image.frame, instance.plane)
+        answer.measure(f"plane_px_{n}", float(np.count_nonzero(instance.plane)), "px", image.frame)
+        for name, (value, unit) in instance.diagnostics.items():
+            answer.measure(f"{name}_{n}", value, unit)
         kept += 1
-        if kept == 1:
-            answer.measure("mask_iou_predicted", round(traced.iou, 3), "ratio")
+        if kept == 1 and instance.iou is not None:
+            answer.measure("mask_iou_predicted", round(instance.iou, 3), "ratio")
     if kept == 0:
         return answer.not_applicable(f"every instance of {prompt!r} decoded to an empty plane")
-    labels = ", ".join(f"{queries[d.query]} {d.score:.2f}" for d in detections)
+    labels = ", ".join(f"{queries[i.query]} {i.score:.2f}" for i in instances)
     return answer.ok(f"{kept} instance{'s' if kept != 1 else ''} of {prompt!r}: {labels}")

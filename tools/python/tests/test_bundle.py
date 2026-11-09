@@ -47,18 +47,15 @@ def test_the_manifest_lists_every_file_with_its_digest_and_nothing_else() -> Non
         "uv.lock",
         "MODEL.md",
         "artifacts.toml",
+        "segmenters.toml",
         "NOTICE",
         "LICENSE",
         bundle["wheel"],
     ):
         assert required in listed
-    # The models are in, every one of them, or none is.
-    named = [a["name"] for a in tomllib.loads((root / "artifacts.toml").read_text())["artifact"]]
-    bundled = {rel for rel in listed if rel.startswith("models/")}
-    if bundle["models"]:
-        assert bundled == {f"models/{name}" for name in named}
-    else:
-        assert not bundled
+    # No model is in a bundle: models are a setup step (`rascal-tools get`).
+    assert not any(rel.startswith("models/") for rel in listed)
+    assert "models" not in bundle
 
 
 @requires_bundle

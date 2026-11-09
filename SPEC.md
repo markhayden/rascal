@@ -1274,17 +1274,18 @@ configuration files, the licence files). The **installation identity** is the SH
 `install.json`. Shared files live once in `<models>/files/` by digest and an installation lists
 them by digest. An install:
 
-1. takes an exclusive lock on `<models>/.lock` (another `get`, a `remove` or another process
-   waits or is refused `busy`, per the caller);
+1. takes the model's own lock, `<models>/<id>/.lock` (another `get` or `remove` of the same
+   model waits or is refused `busy`, per the caller), so a long download never blocks runs or
+   other models;
 2. stages everything in `<models>/.staging/<id>-<random>/`;
 3. verifies every staged file;
-4. if `<models>/<id>/<identity>/` exists and verifies, discards the staging directory and keeps
+4. takes the models lock, `<models>/.lock`, for the publish alone (steps 4 to 6): if `<models>/<id>/<identity>/` exists and verifies, discards the staging directory and keeps
    it; if it exists and does not verify, refuses `busy` while it has a live hold, and otherwise
    deletes it; then renames the staging directory to it, and points `<models>/<id>/current` at
    it by writing a temporary file and renaming it over `current` (one atomic rename);
 5. deletes the previous installation's directory only when its identity differs and no live run
    holds it; otherwise leaves it for a later `get` or `remove`;
-6. releases the lock.
+6. releases both locks.
 
 **Runs hold their installation.** When rascal admits a run it takes `<models>/.lock`, reads
 `current`, checks the directory exists, writes `<models>/<id>/<identity>/.held/<run id>` (with
@@ -1306,8 +1307,7 @@ unloads it before its next call.
 **The installer process.** `get` and `remove` run in a separate process (`rascal-tools
 install`), never in a pack, with the pack's minimal environment; no credential is involved.
 Under `serve` rascal starts it for the `install` and `uninstall` controls. It checks the
-platform and the free disk before downloading. `rascal tools setup` records the absolute path
-of the `uv` it used; nothing in the installer needs `uv`.
+platform and the free disk before downloading. Nothing in the installer needs `uv`.
 
 **Licence.** Decision 15: rascal hosts each catalogued model's ONNX export as release assets,
 each with its weights' licence text, and installs that text with the model. SAM 3's export is a
@@ -1819,8 +1819,8 @@ scripts/acceptance.sh                          # release acceptance: install, re
 
 # Python tool pack
 cd tools/python && uv sync --frozen                        # development only; may download
-uv run --frozen --offline --no-sync rascal-tools fetch     # model artifacts; network, explicit
-uv run --frozen --offline --no-sync pytest                 # offline; the segmenter case skips until fetched
+uv run --frozen --no-sync rascal-tools get tiny            # a model's installation; network, explicit
+uv run --frozen --offline --no-sync pytest                 # offline; a model's tests skip until it is installed
 uv run --frozen --offline --no-sync ruff check . && uv run --frozen --offline --no-sync ruff format --check .
 
 # the binary

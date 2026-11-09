@@ -60,5 +60,7 @@ jobs:
       - name: Sync the Python pack's environment
         run: uv sync --frozen --project tools/python
       - run: cargo build -p rascal-mask
+      - name: Tiny's release assets (the network step; the install below reads them offline)
+        run: scripts/tiny-assets.sh "$RUNNER_TEMP/tiny-assets"
       - name: The bundle, installed and called with no network
-        run: scripts/bundle-acceptance.sh target/debug/rascal
+        run: scripts/bundle-acceptance.sh target/debug/rascal --models "$RUNNER_TEMP/tiny-assets"

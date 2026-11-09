@@ -60,9 +60,10 @@ rascal tools setup --bundle https://github.com/markhayden/rascal/releases/downlo
 `setup` downloads the archive (the one network step), checks its digest, verifies every file
 inside against the bundle's manifest, installs offline, and prints the `[packs.rascal-tools]`
 entry to put in `rascal.toml`. `--bundle` also takes a local archive or an unpacked directory.
-A full bundle carries the segmenter's model files (749 MB, Apache-2.0,
-`tools/python/MODEL.md`); a bundle built without them says so and serves `echo_region` only,
-and `rascal-tools fetch` brings the models later. `docs/tools.md` has the whole of it.
+A bundle carries no model: installing one is a setup step, `rascal-tools get tiny` from the
+install's environment (Tiny, the default segmenter: 749 MB, Apache-2.0, `tools/python/MODEL.md`),
+or `--from` a directory holding its release assets on a machine with no network. `docs/tools.md`
+has the whole of it.
 
 ## The recipes
 

@@ -94,7 +94,8 @@ step "docs coverage, read from the installed binary"
 RASCAL_BIN="$rascal" scripts/check-docs.sh
 
 step "the Python pack's bundle, installed and called with no network"
-scripts/bundle-acceptance.sh "$rascal" "$scratch/bundle"
+if command -v uv >/dev/null 2>&1; then scripts/tiny-assets.sh "$scratch/tiny-assets" >/dev/null; else mkdir -p "$scratch/tiny-assets"; fi
+scripts/bundle-acceptance.sh "$rascal" --models "$scratch/tiny-assets" "$scratch/bundle"
 
 echo
 echo "acceptance ok: rascal $version"
