@@ -1048,31 +1048,32 @@ pack:
 - By hand: the owner's collar photo, kept private, masks the collar, buckle and tag with the
   default settings, then passes the check.
 
-### Choosable segmenters (draft 5, M14)
+### Choosable segmenters (draft 8, M14)
 
 The owner's goal (2026-11-09): a person picks the segmenter behind a prompt, both while testing
-in Wafflery and in a production config, and rascal does not have to ship every model as long as
-getting one is easy. The segment-01 lab round (M13 track B) measured five contenders against the
-owner's hand-drawn masks; none is best everywhere, and the strongest on removal (SAM 3) is under
-its maker's own licence and is 3.4 GB. So `segment` serves several models, the bundle carries
-only the default, and the others are installed on request. Codex's reviews (round 1, 17
-findings; round 2, 8 partly resolved and 3 new; round 3, 1 partly and 3 new;
-round 4, 1 partly and 3 new; `docs/reviews/m14-spec-review-*-codex-2026-11-09.md`) are folded in.
+in Wafflery and in a production config. Every model the segment-01 lab round (M13 track B)
+found worth having can be had with one command or one button. The models are a setup step the
+person takes: the bundle carries none, and nothing downloads on its own. Draft 6 follows the
+owner's decision of 2026-11-09 (decision 15, below) that rascal hosts every catalogued model
+itself, SAM 3 included, with its licence file; it replaces draft 5's "maker route" (the
+person's Hugging Face sign-in and a conversion on their machine). Codex's reviews of drafts 1
+to 7 (`docs/reviews/m14-spec-review-*-codex-2026-11-09.md`) are folded in.
 
 #### What a person sees
 
+- **Setup.** After `rascal tools setup`, `rascal tools models` lists the catalogue and `rascal
+  tools get <model>` installs one; until a model is installed, `remove-prompt` is `needs_setup`
+  with that instruction. `rascal tools remove <model>` removes one.
 - **Wafflery, a tool's setup.** A Segmenters list, one row per catalogued model: its title, a
   "best for" line and the lab's remove score, the lab's time per image (with the machine it was
   measured on), download and installed size, licence, and its state: `ready`, `not installed`
-  (a Get button), `needs setup` (Get explains what is missing: a sign-in, an accepted licence),
-  `installing` (progress, Cancel), or `unavailable` (this platform cannot run it; the reason).
-  A finished install turns the row `ready` in the same session.
+  (a Get button, which states the size and the licence before it starts), `installing`
+  (progress, Cancel), or `unavailable` (this platform cannot run it; the reason). A finished
+  install turns the row `ready` in the same session.
 - **Wafflery, the remove-with-a-prompt form.** A Model choice listing every catalogued model,
-  the resolved default first; a model that is not installed shows why and links to its Get.
-  Running the same prompt and image with another model is one change and one run.
-- **The command line.** `rascal tools models` lists the catalogue with each model's state;
-  `rascal tools get <model>` and `rascal tools remove <model>` install and remove;
-  `rascal heal remove-prompt … --model <id>` picks one for a run.
+  the resolved default first; one that is not installed shows so and links to its Get. Running
+  the same prompt and image with another model is one change and one run.
+- **The command line.** `rascal heal remove-prompt … --model <id>` picks one for a run.
 - **Configuration.** The production default:
 
   ```toml
@@ -1084,46 +1085,46 @@ round 4, 1 partly and 3 new; `docs/reviews/m14-spec-review-*-codex-2026-11-09.md
 #### Choosing a model: one rule
 
 `model` is resolved once per call, in this order: the call's `model` argument; else
-`[segment] model` in the configuration; else the catalogue's default (`tiny`). The resolved id
-is passed explicitly to every `segment` call the run makes, including M13's crop retries, so a
-run never mixes models. The model's installation is pinned the same way: rascal reads its
-installation identity when the run is admitted and passes it with every `segment` call
-(`installation`), and the pack runs exactly that installation (below), so a reinstall or removal
-during a run cannot mix two installations or strand a retry.
-- M13's checker-directed crops are padded on rascal's side by the run's **crop pad**: the
-  resolved `pad` when the model takes `pad` (Tiny, BiRefNet: unchanged from M13), else 0.05
-  (`segment`'s default). It is recorded in each try's record as `crop_pad` and never forwarded
-  to a model that does not take `pad`. An unknown id is `invalid`; a known id whose model is not installed is
-refused `not_ready` before any run, naming the model and how to get it. There is no fallback to
-another model: a different segmenter is a different result.
+`[segment] model` in the configuration; else the catalogue's default (`tiny`). An unknown id is
+`invalid`; a known id whose model is not installed is refused `not_ready` before any run,
+naming the model and the command that installs it. There is no fallback to another model: a
+different segmenter is a different result.
 
+- The resolved id is passed to every `segment` call the run makes, M13's crop retries included,
+  so a run never mixes models. The installation is pinned the same way: rascal reads the
+  model's installation identity when the run is admitted (under the models lock, with a hold;
+  "Installing a model") and passes it with every `segment` call (`installation`), so a
+  reinstall or removal during a run cannot mix two installations or strand a retry.
+- M13's checker-directed crops are padded on rascal's side by the run's **crop pad**: the
+  resolved `pad` when the model takes `pad` (unchanged from M13 for the OWLv2-based models),
+  else 0.05 (`segment`'s default). It is recorded in each try's record as `crop_pad` and never
+  forwarded to a model that does not take `pad`. Likewise M13's halved threshold on a crop retry
+  applies only to a model that takes `threshold`; a model that does not (EVF-SAM2) retries with
+  its own applicable settings unchanged, and neither `threshold` nor `pad` reaches it.
 - `remove-prompt` gains an optional input `model` (Text), bound to the `segment` step's `model`
   parameter; the recipe's other steps are unchanged. The `remove_prompt` action's
   `params_schema` gains `model` as a string `enum` of the catalogue's ids, default the resolved
   configuration default.
-- `segment` itself stays a pack tool, not a public operation (as under v0.4): a person or agent
-  picks a model through `remove_prompt` or the CLI. A recipe step cannot set `model` itself;
-  the only way in is the `model` input, so the order above is the whole rule.
-- `model` is forwarded to the pack only when the pack's `segment` manifest declares it; with a
-  third-party pack that does not, `model` is not offered (no `enum`, no `[segment]`), and a call
-  that names one is `invalid`.
-- `[segment] model` is valid only when the configured segmenter pack's `segment` manifest
-  declares a `model` parameter whose choices include it and the model is not `unavailable` on
-  this platform; otherwise the configuration is `invalid` with the reason. A third-party pack
-  without `model` keeps working with no `[segment]` table, as today.
-- What a model does not use is not accepted. `pad`, `outline` and `min_cover` apply to the
-  OWLv2-based adapters only (the catalogue's `params` lists each model's). Applicability is
-  checked against the parameters the call and the recipe actually supplied, before defaults are
-  filled: one supplied that the model does not use is `invalid`, even when it equals the
-  default. Defaults are then filled for the applicable parameters only, and only those are
-  forwarded to the pack and recorded as the step's effective parameters; an ordinary SAM 3 call
-  therefore carries no `pad`, `outline` or `min_cover`.
+- `segment` stays a pack tool, not a public operation (as under v0.4). A recipe step cannot set
+  `model` itself; the only way in is the `model` input, so the order above is the whole rule.
+- `model` and `installation` are forwarded to the pack only when the pack's `segment` manifest
+  declares them; with a third-party pack that does not, `model` is not offered (no `enum`, no
+  `[segment]`), and a call that names one is `invalid`.
+- `[segment] model` is valid only when the configured pack's `segment` manifest declares `model`
+  with the id among its choices and the model is not `unavailable` on this platform; otherwise
+  the configuration is `invalid` with the reason.
+- What a model does not use is not accepted. The catalogue's `params` lists each model's
+  applicable parameters. Applicability is checked against the parameters the call and the
+  recipe actually supplied, before defaults are filled: one supplied that the model does not use
+  is `invalid`, even when it equals the default. Defaults are then filled for the applicable
+  parameters only, and only those are forwarded and recorded; an ordinary SAM 3 call carries no
+  `pad`, `outline` or `min_cover`.
 
 #### The catalogue
 
 One file in the pack, `tools/python/src/rascal_tools/segmenters.toml`, flat, one entry per
-model; files are named by reference to `artifacts.toml` (released files) or to the model's
-maker source (below), so shared files (OWLv2) are listed once and installed once.
+model; its files are named by reference to `artifacts.toml`, so shared files (OWLv2) are listed
+once and installed once.
 
 ```toml
 [[segmenter]]
@@ -1132,16 +1133,14 @@ title = "OWLv2 + SAM 2.1 Tiny"
 adapter = "owlv2+sam2"                       # the pack class that runs it (below)
 params = ["threshold", "max_instances", "pad", "outline", "min_cover"]   # applicable parameters
 default = true                               # exactly one entry
-bundled = true                               # in the release bundle (only permissive models may be)
-licence = "Apache-2.0"
-licence_class = "permissive"                 # permissive | maker-terms | unconfirmed
-source = "release"                           # release | maker
+licence = "Apache-2.0"                       # the weights' licence as read on the day (MODEL.md)
+licence_files = ["LICENSE.owlv2", "LICENSE.sam2"]   # artifacts installed beside the graphs
 files = ["owlv2-base-patch16.onnx", "owlv2-base-patch16.tokenizer.json",
          "sam2.1-hiera-tiny.encoder.onnx", "sam2.1-hiera-tiny.decoder3.onnx"]
 download_mb = 749
 installed_mb = 749
 platforms = ["macos-arm64", "linux-x86_64"]
-lab = { round = "segment-01", remove = 0.548, iou = 0.576, best_for = "small and fast; the shipped default" }
+lab = { round = "segment-01", remove = 0.548, iou = 0.576, best_for = "small and fast" }
 ```
 
 - **`lab`.** Copied from the round that measured the model, with the round's name. `remove` is
@@ -1149,208 +1148,194 @@ lab = { round = "segment-01", remove = 0.548, iou = 0.576, best_for = "small and
   page from the private round, with the metric definitions and no private image): per image
   `(1 - m) / ((1 - m) + 4m + 0.5(s - o) + 4o)` for missed share `m`, spill share `s` and the
   part `o` of the spill on another object, averaged over the images. `cpu_s`, when present, is
-  the round's warm time per image with `cpu_machine` naming the machine; a measurement the
-  round did not make is left out, and a host shows "not measured". A model with no round has
-  no `lab` table.
-- **`platforms`** lists where the model's graphs and its install route are supported; elsewhere
-  it is `unavailable`. `min_free_disk_mb` (maker route only) is the peak disk the install needs.
-- **`licence_class`** applies decision 15 (below). `bundled = true` requires `permissive`.
+  the round's warm time per image with `cpu_machine` naming the machine; a measurement the round
+  did not make is left out, and a host shows "not measured".
+- **`platforms`** lists where the model's graphs are supported; elsewhere it is `unavailable`.
+- **`licence_files`** are installed with the model and listed in `install.json`; every model's
+  release assets carry its licence text (for SAM 3, Meta's SAM License, which its terms
+  require with any redistribution).
 
-The first catalogue:
+The first catalogue, the lab's five contenders that run on a CPU, plus Tiny:
 
-| id | adapter | source | licence |
+| id | adapter | licence (weights) | lab remove score |
 |---|---|---|---|
-| `tiny` | `owlv2+sam2` (today's, unchanged) | release, bundled, default | Apache-2.0 |
-| `birefnet` | `owlv2+birefnet` | release, once its ONNX parity check passes | MIT |
-| `sam3` | `sam3` | maker | SAM License (maker-terms) |
+| `tiny` | `owlv2+sam2` (today's, unchanged), the default | Apache-2.0 | 0.548 |
+| `sam3` | `sam3` | SAM License (Meta) | 0.777 |
+| `birefnet` | `owlv2+birefnet` | MIT | 0.731 |
+| `hqsam` | `owlv2+hqsam` (ViT-L) | Apache-2.0 (`lkeab/hq-sam`'s card) | 0.679 |
+| `evfsam2` | `evfsam2` | Apache-2.0 (`YxZhang/evf-sam2-multitask`'s card) | 0.581 |
 
-HQ-SAM is listed `unconfirmed` (it cannot be got) until its authors confirm the weights'
-licence; then it is a `release` entry with adapter `owlv2+hqsam`. EVF-SAM2 and Sa2VA are not
-catalogued: EVF-SAM2 is the weakest of the five on removal and spills most onto other objects;
-Sa2VA is practical only on a GPU (2.5 minutes per image on a CPU).
+A model enters the catalogue only when its ONNX export passes the gate (below); one that fails
+stays out until it does. Sa2VA (Apache-2.0) is not catalogued: a 4B vision-language model,
+practical only on a GPU (2.5 minutes per image on a CPU) and not expected to export to ONNX; it
+waits for a hosted-model route, which is later work.
 
 #### The adapters
 
 Each adapter is one class behind one interface, `find(image, queries, settings) -> instances`;
-an instance is `{query, score, region, plane, diagnostics}`: the query it answers, its score
-in [0, 1], a polygon region (a rectangle in image pixels), a boolean plane in the image's frame,
+an instance is `{query, score, region, plane, diagnostics}`: the query it answers, its score in
+[0, 1], a polygon region (a rectangle in image pixels), a boolean plane in the image's frame,
 and optional per-instance diagnostics the adapter reports as measurements (Tiny keeps M13's
-`outline_<n>`, `mask_iou_predicted`, `retried_<n>` and `retry_kept_<n>` exactly; the other
-adapters report none they do not compute). Every
-adapter splits the prompt into queries as today (on `.`, `,`, `;`, lower-cased), keeps
-instances scoring at least `threshold`, sorts all instances by score descending (ties by query
-order, then by region's top-left, row-major), cuts to `max_instances`, and returns region `n`
-with plane `n`. `MODEL.md` records each adapter's preprocessing exactly.
+`outline_<n>`, `mask_iou_predicted`, `retried_<n>` and `retry_kept_<n>` exactly; the others
+report only what they compute). Every adapter splits the prompt into queries as today (on `.`,
+`,`, `;`, lower-cased), keeps instances scoring at least `threshold`, sorts all instances by
+score descending (ties by query order, then by region's top-left, row-major), cuts to
+`max_instances`, and returns region `n` with plane `n`. `MODEL.md` records each adapter's
+preprocessing exactly. The pre- and post-processing are numpy and Pillow; the pack runs ONNX
+only (ADR 0018).
 
 - **`owlv2+sam2`**: today's `segment`, with M13's pick and retry, moved behind the interface
   unchanged (`MODEL.md` "Preprocessing in the pack").
-- **`owlv2+birefnet`**: OWLv2 as today; each kept box padded by `pad`, clipped to the image,
-  cropped, resized to 1024² (Pillow bilinear), scaled to [0, 1] and normalised with the
-  ImageNet mean and deviation; the graph's output passed through a sigmoid, resized to the
-  crop's size (bilinear) and thresholded at 0.5, then placed in an empty image-sized plane at
-  the crop's position. A crop narrower or shorter than 2 px gives an empty plane. Region: the
-  padded box. One outline per box, so `outline` and `min_cover` do not apply.
-- **`sam3`**: one vision pass per image; per query, one text pass and one head pass. The image
-  is resized to 1008² (bilinear, antialiased) and normalised as `Sam3Processor` does; the
-  query tokenised with SAM 3's CLIP tokenizer to 32 tokens. The head carries the lab's
-  text-only workaround (one box labelled -10, `onnxcheck/sam3`). Per query, an instance's score
-  is the sigmoid of its logit times the sigmoid of the presence logit, as Transformers'
-  post-processing computes it; masks are the head's 288² logits resized to the image (bilinear)
-  and thresholded at 0 (probability 0.5); the region is the instance's predicted box in image
-  pixels. Instances of different queries are not merged. `pad`, `outline` and `min_cover` do
-  not apply. The pre- and post-processing are numpy and Pillow, as for the other adapters.
+- **`owlv2+birefnet`**: OWLv2 as today; each kept box padded by `pad`, then the crop's corners
+  rounded outward to whole pixels (`x0 = max(0, floor(x0))`, `x1 = min(width, ceil(x1))`, the
+  same for y) and the image cropped, resized to 1024² (Pillow bilinear), scaled to [0, 1] and
+  normalised with the ImageNet mean and deviation; the output passed through a sigmoid,
+  quantised to 8 bits (`uint8(p * 255)`, truncating), resized to the crop as an 8-bit image
+  (Pillow bilinear), kept where the value is above 127, and placed in an empty image-sized plane
+  at the crop's position, exactly as the lab's `birefnet` cell does. A crop under 2 px on a
+  side gives an empty plane. Region: the padded box. Params: `threshold`, `max_instances`,
+  `pad`.
+- **`owlv2+hqsam`**: OWLv2 as today; HQ-SAM ViT-L on each padded box as the lab's
+  `hqsam-vitl-hqonly` cell runs it: one outline (`multimask_output=False`) from the
+  high-quality output alone (`hq_token_only=True`), logits thresholded at 0, image preprocessing
+  as SAM's (longest side to 1024, padded, normalised). M13's retry applies (it takes points);
+  the pick does not (one outline). Params: `threshold`, `max_instances`, `pad`, `min_cover`.
+- **`evfsam2`**: end to end, one instance per query: BEIT-3 reads the image (224², bicubic)
+  and the query (its XLM-R tokenizer) and its output prompts SAM 2.1 Large (the image at 1024,
+  as SAM 2); of the three outlines the one with the highest predicted IoU is kept, thresholded
+  at logit 0, as the lab's `evfsam2` cell does. EVF-SAM2 gives no detection score, so the
+  instance's score is 1.0 and `threshold` does not apply; a query whose plane is empty gives no
+  instance. Region: the plane's bounding box. Params: `max_instances`.
+- **`sam3`**: one vision pass per image; per query one text pass and one head pass. The image is
+  resized to 1008² (bilinear, antialiased) and normalised as `Sam3Processor` does; the query is
+  tokenised with SAM 3's CLIP tokenizer to 32 tokens. The head carries the lab's text-only
+  workaround (one box labelled -10, `onnxcheck/sam3`). An instance's score is the sigmoid of
+  its logit times the sigmoid of the presence logit, as Transformers' post-processing computes
+  it; masks are the head's 288² logits resized to the image (bilinear) and thresholded at 0;
+  the region is the predicted box in image pixels. Params: `threshold`, `max_instances`.
 
-At most one segmenter's graphs are loaded at a time; a call for another model unloads the
-first. Loaded models are keyed by their installation identity (below). A `segment` call names
-the installation it expects; the pack loads that installation's directory, which may no longer
-be `current` (a reinstall during the run), and refuses the call as an operational error if the
-directory is gone. A call with no `installation` (a direct pack call by hand) uses `current`.
-The lab is not such a caller: a lab cell takes a hold the same way before computing its
-identity, passes that installation to every pack call, and releases the hold when the cell
-ends.
+At most one segmenter's graphs are loaded at a time; a call for another model unloads the first.
+Loaded models are keyed by installation identity. A `segment` call names the installation it
+expects; the pack loads that directory even when it is no longer `current`, and refuses the call
+as an operational error if it is gone. A call with no `installation` (a direct pack call by
+hand) uses `current`. A lab cell takes a hold before computing its identity, passes that
+installation to every pack call, and releases the hold when the cell ends.
+
+#### The export gate
+
+Each catalogued model is exported to ONNX by `tools/python/export/export.py --only <model>` at
+a pinned upstream revision (safetensors where the maker publishes them; `trust_remote_code`
+only where the maker's code requires it, at a pinned revision, on the exporting machine only),
+and published as release assets with its licence file. Before a release is published, the
+export passes two checks, run once by the person exporting (never on a user's machine):
+
+1. **Instance parity** against the maker's PyTorch model run through the same adapter
+   semantics, on rascal's `chair-blob.png` fixture and one non-square image made for the purpose
+   (both synthetic and Apache-2.0, part of rascal), with `max_instances` 8, in two cases. The
+   **positive case**: the prompt "chair. table" at a threshold frozen per model with the
+   references, the highest of 0.2, 0.1, 0.05 and 0.01 at which the PyTorch model gives at least
+   one non-empty instance on each image (the shipped OWLv2 scores the chair fixture's chair at
+   about 0.019, so the OWLv2-based models freeze 0.01; a model with no instance even at 0.01 on
+   an image takes a different synthetic image, verified before freezing). The **negative
+   case**: "giraffe" at 0.2, finding nothing (EVF-SAM2, which always answers, has its plane
+   recorded and compared like any other). In both: per query the same number of instances,
+   matched in the adapter's order; each score within 1e-3; each region within 2 px; each plane
+   at IoU ≥ 0.999 (two empty planes count as 1, an empty against a non-empty as 0). Tiny's
+   references are frozen the same way. The reference
+   envelopes and planes are frozen under `fixtures/models/<id>/` and checked by a test with
+   required models.
+2. **The corpus gate:** on the segment-01 corpus, the branch's own pack runs the same recipe the
+   lab's cell for that model runs (the remove-prompt mask, no fill) with the shipped adapter, and
+   every image's core matches the lab's PyTorch cell at IoU ≥ 0.999, 20 of 20. The lab's earlier
+   SAM 3 ONNX check (which swapped changed pixels into the old core) is evidence the export can
+   pass, not the gate.
+
+A miss keeps the model out of the catalogue; the thresholds change only by a change to this
+spec.
 
 #### Installing a model
 
-Three routes, by `licence_class`:
+`rascal-tools get <model>` (the CLI behind `rascal tools get`, Wafflery's Get and the
+`install` control) downloads the model's release assets over HTTPS, bounded by the sizes in
+`artifacts.toml`, and checks each file's SHA-256 before anything reads it.
+`rascal-tools get <model> --from <directory>` installs from a directory holding the same
+assets (copied from a release), with the same checks and no network: the offline and
+air-gapped route. `rascal-tools fetch` is removed. `get` with no model gets the default.
 
-| class | route | what `get` does |
-|---|---|---|
-| permissive | release | downloads rascal's ONNX export from the repository's release assets over HTTPS and checks each file against `artifacts.toml`'s SHA-256, as `fetch` does today |
-| maker-terms | maker | downloads the maker's checkpoint with the person's credential, verifies it against pinned digests, converts it on the person's machine and checks the result (below) |
-| unconfirmed | none | refused: the weights' licence is not confirmed (`MODEL.md` says what is pending) |
+**The bundle carries no models.** `scripts/build-bundle.sh` stops copying model files;
+`rascal tools setup` installs the pack, and the person then gets the models they want. The
+disconnected acceptance installs the bundle with the network off, then `get tiny --from` a local
+copy of the release assets, then calls `segment`.
 
-`rascal-tools fetch` is replaced by `rascal-tools get <model>` (default: the default model);
-`scripts/build-bundle.sh` copies the files of `bundled = true` entries only, named by the
-catalogue and never by what happens to be installed, and fails when a bundled entry is not
-`permissive`. A test proves a models directory holding SAM 3 cannot put any of its files into a
-bundle.
+**One installation per model, published atomically.** Each installation is its own directory,
+`<models>/<id>/<identity>/`, holding `install.json`: the model id, the catalogue revision, each
+file's name, size and SHA-256 (every graph, every external-data file, tokenizer and
+configuration files, the licence files). The **installation identity** is the SHA-256 of
+`install.json`. Shared files live once in `<models>/files/` by digest and an installation lists
+them by digest. An install:
 
-**One installation per model, published atomically.** Each installation is its own
-directory, `<models>/<id>/<identity>/`, holding `install.json`: the model id, the catalogue revision, the
-route, each file's name, size and SHA-256 (every graph, every external-data file, tokenizer and
-configuration files, the licence text), and for the maker route the provenance below. The
-**installation identity** is the SHA-256 of `install.json`. Shared released files live once in
-`<models>/files/` by digest and an installation lists them by digest. An install:
-
-1. takes an exclusive lock on `<models>/.lock` (a second `get`, a `remove`, or another process
+1. takes an exclusive lock on `<models>/.lock` (another `get`, a `remove` or another process
    waits or is refused `busy`, per the caller);
 2. stages everything in `<models>/.staging/<id>-<random>/`;
-3. verifies every staged file (digests; for the maker route also parity);
-4. if `<models>/<id>/<identity>/` already exists and verifies (the same files again), discards
-   the staging directory and keeps it; if it exists and does not verify (a file missing or
-   corrupt), refuses `busy` while it has a live hold, and otherwise deletes it; then renames the
-   staging directory to it. Then it
-   points `<models>/<id>/current` at it by writing a temporary file and renaming it over
-   `current` (one atomic rename);
-5. deletes the previous installation's directory only when its identity differs from the new
-   one and no live run holds it (below); otherwise leaves it for a later `get` or `remove`;
+3. verifies every staged file;
+4. if `<models>/<id>/<identity>/` exists and verifies, discards the staging directory and keeps
+   it; if it exists and does not verify, refuses `busy` while it has a live hold, and otherwise
+   deletes it; then renames the staging directory to it, and points `<models>/<id>/current` at
+   it by writing a temporary file and renaming it over `current` (one atomic rename);
+5. deletes the previous installation's directory only when its identity differs and no live run
+   holds it; otherwise leaves it for a later `get` or `remove`;
 6. releases the lock.
 
 **Runs hold their installation.** When rascal admits a run it takes `<models>/.lock`, reads
-`current`, checks the installation directory exists, writes
-`<models>/<id>/<identity>/.held/<run id>` (with its process id), and only then releases the
-lock; the hold is deleted when the run ends, and a hold whose process is gone is stale and
-ignored. `get` and `remove` check holds and delete under the same lock, so a run is never
-admitted onto an installation being deleted. An installation directory with a live
-hold is never deleted: `get` and `remove` leave it, unreferenced by `current`, and the next
-`get` or `remove` after the hold ends deletes it.
+`current`, checks the directory exists, writes `<models>/<id>/<identity>/.held/<run id>` (with
+its process id), and only then releases the lock; the hold is deleted when the run ends on any
+outcome, and a hold whose process is gone is stale and ignored. `get` and `remove` check holds
+and delete under the same lock, so a run is never admitted onto an installation being deleted,
+and a held directory is never deleted (the next `get` or `remove` after the hold ends does it).
 
 `current` always names a complete, verified installation or does not exist. A crash leaves at
 worst a staging directory or an unreferenced installation directory, both deleted by the next
-`get` or `remove`; the installation `current` names keeps working throughout. Cancel
-deletes the attempt's staging directory and nothing else. Before loading, the pack checks the
-installation's files against `install.json` once per process per installation identity; every
-external-data reference in a graph must name a file listed in `install.json` inside the same
-directory (no absolute path, no `..`, no symlink); anything else refuses to load. `remove`
-takes the lock, deletes `current` first (atomically), then every installation directory of the
-model with no live hold and any shared file no remaining installation lists; a
-pack holding that model loaded keeps working until the call in flight ends and unloads it
-before the next.
+`get` or `remove`. Cancel deletes the attempt's staging directory and nothing else. Before
+loading, the pack checks the installation's files against `install.json` once per process per
+installation identity; every external-data reference in a graph must name a file listed in
+`install.json` inside the same directory (no absolute path, no `..`, no symlink). `remove`
+takes the lock, deletes `current` first, then every installation directory of the model with no
+live hold and any shared file no remaining installation lists; a pack holding that model loaded
+unloads it before its next call.
 
-**The maker route (SAM 3).**
+**The installer process.** `get` and `remove` run in a separate process (`rascal-tools
+install`), never in a pack, with the pack's minimal environment; no credential is involved.
+Under `serve` rascal starts it for the `install` and `uninstall` controls. It checks the
+platform and the free disk before downloading. `rascal tools setup` records the absolute path
+of the `uv` it used; nothing in the installer needs `uv`.
 
-- **Credential.** The person signs in to Hugging Face, accepts Meta's terms on
-  `huggingface.co/facebook/sam3`, and makes a read token. `get` reads it from `HF_TOKEN`. Only
-  the installer process receives it (below); packs never do (the pack environment keeps
-  stripping every `_TOKEN` name). The token is sent only to `huggingface.co` over HTTPS,
-  dropped on any redirect to another host, never stored, logged, journaled or put in an error
-  message; errors name the HTTP status only.
-- **What is downloaded.** A pinned revision (`3c879f39826c281e95690f02c7821c4de09afae7`) and,
-  per file, a pinned SHA-256 and size in the catalogue: `model.safetensors`, the tokenizer and
-  processor configuration files, and `LICENSE` (its digest pins the licence text the person
-  accepted). Downloads are bounded by the pinned sizes and checked before anything reads them.
-  Only safetensors weights are read (never a pickle such as `sam3.pt`); no remote code is
-  executed (`trust_remote_code` off); the graph uses only standard ONNX operators.
-- **The converter.** The conversion code and its lock (`convert.py`, `pyproject.toml`,
-  `uv.lock`), the parity input images and the parity references are package data of the pack
-  wheel (`rascal_tools/convert/`), so an installed pack has them without a source checkout; a
-  test installs the built wheel into an empty environment with no checkout on the path and
-  runs the maker route against the fake checkpoint server from there. `get` provisions the converter's own
-  environment on first use into `<models>/.converter/<lock digest>/` with `uv sync --frozen`
-  from that lock (network; `uv` is already a prerequisite), with no credential in its
-  environment. It is never part of the bundle or the pack's environment (ADR 0018 stands: the
-  pack runs ONNX only). `remove --converter` deletes it.
-- **Provenance.** `install.json` records the checkpoint revision and file digests, the
-  converter's source digest and lock digest, library versions, every output file's digest, the
-  licence file's digest, and the parity result. It describes what this machine did; it is not a
-  signature, and the pack trusts an installation only as far as its own digest check of the
-  files `install.json` lists.
-- **Parity, a correctness gate.** The pack's data carries, per maker-route model, two input
-  images (rascal's own `chair-blob.png` fixture and one non-square image made for the purpose,
-  both Apache-2.0 as part of rascal, no private or third-party image) and the reference outputs
-  of the reference conversion, run with fixed settings (threshold 0.2, `max_instances` 8):
-  the expected instances (query, score, region) and each plane as a 1-bit PNG with its digest. The fresh graphs must give the same number of
-  instances per query, matched in the order above; each score within 1e-3; each region within
-  2 px; each plane at IoU ≥ 0.999 with its reference. The references include at least one
-  non-empty instance per image, and a query that finds nothing ("giraffe") must find nothing
-(zero instances; no planes are compared). Two empty planes count as IoU 1; an empty plane
-against a non-empty one as 0.
-  A failure deletes the staging directory and reports which check failed.
-- **Cost.** SAM 3: 3.4 GB of checkpoint, about 2 GB for the converter environment, 3.4 GB of
-  graphs (`.onnx` files plus external data), peak disk about 9 GB, some minutes of conversion;
-  `get` states the sizes before it starts and Wafflery shows them on Get's confirmation.
-
-**The installer process.** `get` and `remove` run in a separate process
-(`rascal-tools install`), never in a pack. Under `serve`, rascal starts it with the pack's
-minimal environment plus, for the maker route, exactly the credential the model's requirements
-name (here `HF_TOKEN`), which `serve` holds because the host passed it (contract 4.6: a host
-passes the variables the description's requirements name). Entering a token in Wafflery stores
-it in the Keychain and restarts the session deliberately, as the contract requires for any
-changed credential.
-
-**Licence.** Decision 15 (proposed) is narrow: rascal does not distribute SAM Materials or
-weights converted from them. A person who gets SAM 3 obtains it from Meta under the SAM
-License they accepted, and the local conversion is a derivative work under that licence; the
-licence's use restrictions and terms apply to that person's use, including any further
-transfer (a production machine provisioned from a converted installation carries the licence
-text, which `install.json` points to). Rascal's own code that drives the conversion is
-Apache-2.0 and contains no SAM Materials; its parity references are outputs, recorded with the
-licence's acknowledgement. The lab's use of SAM 3 is under the owner's acceptance of
-2026-11-05.
+**Licence.** Decision 15: rascal hosts each catalogued model's ONNX export as release assets,
+each with its weights' licence text, and installs that text with the model. SAM 3's export is a
+derivative of SAM Materials and is distributed under the SAM License, whose copy goes with it;
+its use restrictions bind whoever uses it. The release notes and `MODEL.md` name each model's
+licence and source.
 
 #### Recording which model ran
 
-The resolved model id, the installation identity and the adapter's version (the pack's
-version) are recorded as resolved parameters of the `segment` step (the journal's `pack call:`
-and the step record) and in the result's `invocation` (`arguments.model` resolved, and
-`effective["x-rascal"].segmenter = {model, installation, adapter_version}`, the contract's
-extension place; the same object in the estimate, whose binding therefore changes when the
-model is reinstalled), never as measurements (those stay numeric). A lab cell's identity
-includes the installation identity and the adapter version of the model it runs. `run --replay` and `heal --replay` answer `segment` from the recording
-without starting the pack or needing the model installed, as for any pack step. `install.json`
-is copied into the run's directory when a run uses the installation, so removing the model
-does not erase the evidence.
+The resolved model id, the installation identity and the adapter's version (the pack's version)
+are recorded as resolved parameters of the `segment` step (the journal's `pack call:` and the
+step record) and in the result's `invocation` (`arguments.model` resolved, and
+`effective["x-rascal"].segmenter = {model, installation, adapter_version}`; the same object in
+the estimate, whose binding therefore changes when the model is reinstalled), never as
+measurements. A lab cell's identity includes the installation identity and the adapter version.
+`run --replay` and `heal --replay` answer `segment` from the recording without starting the pack
+or needing the model installed. `install.json` is copied into the run's directory when a run
+uses the installation.
 
 #### The contract: per-choice readiness and installables (table-manners 0.6.0)
 
-- **Readiness per choice.** In a description, an action's `params_schema` property whose
-  choices are an `enum` may carry `x-requirements`: an object from each choice to that
-  choice's requirement names. Readiness lists those requirements with `for_choice: {param,
-  value}`:
+- **Readiness per choice.** In a description, an action's `params_schema` property whose choices
+  are an `enum` may carry `x-requirements`: an object from each choice to that choice's
+  requirement names. Readiness lists those requirements with `for_choice: {param, value}`:
 
   ```jsonc
   "params_schema": { "properties": { "model": { "type": "string", "enum": ["tiny", "birefnet", "sam3"],
-    "default": "sam3", "x-requirements": { "birefnet": ["segmenter:birefnet"], "sam3": ["segmenter:sam3"] } } } },
+    "default": "sam3", "x-requirements": { "tiny": ["segmenter:tiny"], "birefnet": ["segmenter:birefnet"], "sam3": ["segmenter:sam3"] } } } },
   "readiness": { "state": "needs_setup", "requirements": [
     { "kind": "file", "name": "segmenter:sam3", "state": "missing", "for_choice": { "param": "model", "value": "sam3" },
       "installable": "sam3", "setup": "Get SAM 3 in the tool's setup, or run `rascal tools get sam3`." } ] }
@@ -1361,94 +1346,88 @@ does not erase the evidence.
   `needs_setup`. A call or estimate evaluates the choice it names: a call naming an installed
   choice runs even when the action is `needs_setup` because of its default; a call naming a
   missing one is refused `not_ready` naming that requirement. A choice whose installable is
-  `unavailable` on this platform is left out of the `enum`, so naming it is `invalid`.
+  `unavailable` on this platform is left out of the `enum`.
 - **Installables.** The description may list `installables`: per entry `id`, `title`, `kind`
-  (`model`, the only kind 0.6.0 defines), `download_bytes`, `installed_bytes`, `licence`, `licence_class`, `state`
-  (`installed`, `not_installed`, `needs_setup`, `installing`, `unavailable`), `progress`
-  (0 to 1, only while `installing`), `requirements` (what installing needs: the credential,
-  free disk; never what running needs), `notes`, and `x-<tool>` (rascal: `lab`). The state is
-  read from disk (the installations, the lock and a status file the installer writes): describe
-  stays a local inspection. `last_outcome` (`null`, or `{action, state, error, at}` with `action`
-  `install` or `uninstall` and `state` `succeeded`, `failed` or `cancelled`) reports the most recent install or uninstall that
-  finished, until the next one starts, so a host that reconnects learns how a detached install
+  (`model`, the only kind 0.6.0 defines), `download_bytes`, `installed_bytes`, `licence`,
+  `state` (`installed`, `not_installed`, `installing`, `unavailable`), `progress` (0 to 1, only
+  while `installing`), `requirements` (what installing needs, such as free disk; never what
+  running needs), `notes`, and `x-<tool>` (rascal: `lab`). The state is read from disk (the
+  installations, the lock and a status file the installer writes): describe stays a local
+  inspection. `last_outcome` (`null`, or `{action, state, error, at}` with `action` `install`
+  or `uninstall` and `state` `succeeded`, `failed` or `cancelled`) reports the most recent one
+  that finished, until the next starts, so a host that reconnects learns how a detached install
   ended.
 - **The `install` and `uninstall` controls.** Reserved tools beside `describe` and `estimate`.
-  Request: `{ "id": "<installable>" }`. They are not actions: no run, no workspace, no spend,
-  no `max_spend_usd`, no `client_run_id`. An install is owned by the tool process and its
+  Request: `{ "id": "<installable>" }`. They are not actions: no run, no workspace, no spend, no
+  `max_spend_usd`, no `client_run_id`. An install is owned by the tool process and its
   installer, not by the MCP request: progress goes out as MCP progress notifications on the
-  request's progress token, with `_meta["table-manners/installable"]` the id and no run
+  request's progress token with `_meta["table-manners/installable"]` the id and no run
   reference; MCP cancellation of the request cancels the install; if the client disconnects, the
   install continues and a later `describe` shows `installing` and then the outcome. A second
-  `install` for an id already installing attaches to it (progress from then on, the same result).
-  Result: `{ "id", "state", "installation": <identity or null>, "error": null | {code,
-  message} }`, codes `needs_setup` (with requirements), `unavailable`, `busy`, `failed` (with a
-  message that carries no credential), `cancelled`. Refusals before starting are `-32602` with
-  `data.reason` `unknown_installable` or `not_ready`. `uninstall` of an installing id cancels
-  it; of an installed id removes it.
+  `install` for an id already installing attaches to it. Result: `{ "id", "state",
+  "installation": <identity or null>, "error": null | {code, message} }`, codes `unavailable`,
+  `busy`, `failed`, `cancelled`. Refusals before starting are `-32602` with `data.reason`
+  `unknown_installable` or `not_ready` (a requirement such as free disk unmet). `uninstall` of an
+  installing id cancels it; of an installed id removes it.
 - table-manners 0.6.0 adds the schemas (`installable.json`, the controls' request and result,
-  `for_choice` on a requirement), fixtures, and conformance; rascal and Wafflery move from
+  `for_choice` on a requirement), fixtures and conformance; rascal, Wafflery and squint move from
   0.5.0 to 0.6.0 together, as in M13.
 
 #### Wafflery
 
-- Tool setup gains an Installables list over any tool's `installables`, with Get and Remove calling `install` and `uninstall`, progress and Cancel, a
-  confirmation stating the sizes and the licence before a `maker-terms` install, and the
-  credential fields the requirements name, stored in the macOS Keychain; saving a credential
-  restarts the tool's session deliberately (contract 4.6).
+- Tool setup gains an Installables list over any tool's `installables`, with Get and Remove
+  calling `install` and `uninstall`, progress and Cancel, and a confirmation stating the sizes
+  and the licence before an install.
 - The action form renders an `enum` parameter with `x-requirements` as a choice whose options
   show their state; one not ready shows why and links to its installable.
 - A result shows which model made it (`invocation.effective["x-rascal"].segmenter`).
 
-#### Decision 15 (proposed, owner): which models rascal may hand out
+#### Decision 15 (owner, 2026-11-09): rascal hosts the models it catalogues
 
-Rascal hosts or bundles only models whose weights are under a permissive licence (Apache-2.0,
-MIT, BSD) stated by their makers or confirmed by them in writing. A model under its maker's own
-terms (SAM 3) may be catalogued only on the maker route: the person gets it from the maker under
-the maker's terms, and rascal distributes none of it. A model whose weights' licence is not
-stated is listed `unconfirmed` and cannot be got until its maker confirms. Recorded in
-`docs/owner-decisions.md` and as a section of ADR 0018 once the owner signs it; M14's maker
-route waits on that signature.
+Rascal catalogues the segmenters the lab found worth having and hosts each one's ONNX export
+itself, as release assets of the repository, each with its weights' licence text, SAM 3
+included (under Meta's SAM License, whose copy goes with it). Models are a setup step: the
+bundle carries none and nothing downloads without the person asking. A model whose weights'
+licence is not stated by its maker is not catalogued until it is (HQ-SAM's and EVF-SAM2's are
+stated as Apache-2.0 on their Hugging Face cards). Recorded in `docs/owner-decisions.md` and as
+a section of ADR 0018, which this refines: the bundle no longer carries the models.
 
 #### Testing
 
-No test touches the network: downloads go through an injected transport, so the release route
-is tested against an in-process fake and the maker route against a fake checkpoint server and a
-fake converter.
+No test touches the network: downloads go through an injected transport, tested against an
+in-process fake; `--from` against a local directory.
 
 - **The pack.** A catalogue with fake models (tiny ONNX graphs, one per adapter kind) proves
   `model` selects the adapter; ordering and the region-plane pairing; an inapplicable explicit
   parameter is `invalid`; a not-installed model is `not_ready`; one model loaded at a time; a
-  reinstall picked up by installation identity; an external-data reference outside the
-  installation refused.
+  named non-current installation loads; an external-data reference outside the installation is
+  refused.
 - **Installing.** Digest mismatch, oversize and truncated downloads refused and staged files
   deleted; cancel at each stage leaves the previous installation working and no staging
   directory; a crash mid-install cleaned by the next `get`; two consecutive `get`s of an
-  unchanged model (the same identity kept, nothing deleted); two concurrent installs, an install
-  racing a remove, a remove while a call is in flight; a reinstall and a removal between a
-  run's first `segment` and its checker-directed retry (the retry uses the pinned installation;
-  the held directory survives until the run ends); admission paused between reading `current`
-  and writing the hold while a `remove` runs (the remove waits for the lock); an installed file
-  corrupted, then `get` repairs it; a lab cell whose model is reinstalled between computing its
-  identity and running (the cell runs the held installation); parity pass installs and parity fail
-  removes and reports which check; a missing credential refused before any download; the
-  token never appears in any output, log, file, journal or error (a canary token and a scan);
-  a redirect to another host drops the token; a bundle build with SAM 3 installed contains none
-  of its files.
-- **Real models (gated, offline).** With already-provisioned installations and the network
-  disabled: `birefnet` and `sam3` through the shipped adapters on the chair fixture, a
-  non-square image, several queries, a query that finds nothing, and M13's crop retry; and on
-  the lab corpus (private, the owner's machine), each model's masks against the lab's recorded
-  ONNX masks at IoU ≥ 0.999 per image, the same gate M13 set for an adopted model.
+  unchanged model (the same identity kept, nothing deleted); two concurrent installs; an install
+  racing a remove; a remove while a call is in flight; a reinstall and a removal between a run's
+  first `segment` and its checker-directed retry; admission paused between reading `current` and
+  writing the hold while a `remove` waits for the lock; a corrupted installed file repaired by
+  `get`; a lab cell whose model is reinstalled between computing its identity and running;
+  `--from` with a missing or tampered file; the licence files installed and listed; an
+  unsupported platform and too little free disk refused before downloading; a bundle contains
+  no model file.
+- **Real models (gated, offline).** For each catalogued model, with the network disabled after a
+  real install: the shipped adapter on the chair fixture, a non-square image, several queries, a
+  query that finds nothing, and a checked `heal remove-prompt` whose scripted checker forces one
+  crop retry (for EVF-SAM2, a retry asserting that neither `threshold` nor `pad` reaches the
+  adapter); the frozen instance-parity references; on the lab corpus, the corpus gate.
 - **The contract.** table-manners 0.6.0's fixtures for `x-requirements`, `for_choice`,
   `installables`, `install` and `uninstall`, with rascal's generated by its own test.
-- **Rascal.** `describe` with each model installed or not and each readiness case of the truth
-  table; the resolution order; `[segment] model` with a pack that has no `model`; the resolved
-  model and installation passed to every retry; a SAM 3 checker retry's crop rectangle with the
-  0.05 crop pad asserted; replay with the model removed.
+- **Rascal.** `describe` with each model installed or not and each readiness case; the
+  resolution order; `[segment] model` with a pack that has no `model`; the model and
+  installation passed to every retry; a SAM 3 checker retry's crop rectangle with the 0.05 crop
+  pad; replay with the model removed.
 - **Wafflery.** Stories for each installable state and the choice field; the setup-to-run
   journey with a fake tool, including a disconnect during an install.
-- **By hand.** On a fresh models directory, the owner gets BiRefNet and SAM 3 in Wafflery, runs
-  one prompt with three models, and sets `[segment] model` for production.
+- **By hand.** On a fresh models directory, the owner gets each catalogued model in Wafflery,
+  runs one prompt with each side by side, and sets `[segment] model` for production.
 
 ### Workspace
 
@@ -1737,8 +1716,8 @@ and validate native documents against `schemas/rascal/`.
 `bundle.toml` (bundle version, the pack version, the required Python version, the platform, the
 SHA-256 of every file below), the pack's wheel, a **wheelhouse** with every transitive dependency
 as a wheel for that platform and Python, a provisioning `pyproject.toml` that pins the pack
-wheel by relative path, its `uv.lock`, `MODEL.md`, and under branch A the model artifact bytes
-themselves with their digests in `artifacts.toml`. Prerequisites on the machine: `uv` and an
+wheel by relative path, its `uv.lock` and `MODEL.md`. From M14 a bundle carries no model files:
+the person installs models with `rascal tools get` ("Choosable segmenters"). Prerequisites on the machine: `uv` and an
 interpreter of the required version; both are named in the README and checked by `setup`.
 `rascal tools setup` takes a bundle (downloaded by `setup` when given a URL, which is the only
 network step, or local with `--bundle`), verifies every digest, and installs with downloads
@@ -1746,8 +1725,8 @@ prohibited: `uv sync --frozen --no-dev --offline --no-index --find-links <wheelh
 `UV_PYTHON_DOWNLOADS=never` and empty caches. Launch is always offline:
 `<dir>/.venv/bin/rascal-tools serve` with `UV_OFFLINE=1`. The disconnected acceptance test
 starts from a local bundle, a pre-installed interpreter and `uv`, with the network disabled and
-the uv and pip caches empty, installs, launches and calls `echo_region`, and `segment` under
-branch A.
+the uv and pip caches empty, installs, launches and calls `echo_region`, then installs `tiny`
+with `rascal tools get tiny --from` a local copy of the release assets and calls `segment`.
 
 ### Diagnostics
 
@@ -2109,7 +2088,7 @@ Each names the command that proves it.
 | M6 | the lab: matrix, per-image bindings, cells and identity, attempts, ledger, assignment and picks, protocol, decode, corpus manifest and verify |
 | M7 | the Poisson paste as specified |
 | M13 | the self-correcting remove: `segment`'s whole-object outline and retry, `plug`, the segmenter lab round, the checker loop (ADR 0023) |
-| M14 | choosable segmenters: a segmenter catalogue, `model` on `segment` and `remove-prompt`, `rascal tools get`, the maker route for SAM 3, table-manners 0.6.0's per-choice readiness and installables, Wafflery's Installables list and Model choice (draft 5) |
+| M14 | choosable segmenters: a catalogue of five models (Tiny, SAM 3, BiRefNet, HQ-SAM, EVF-SAM2) hosted as release assets with their licences, `rascal tools get`, no models in the bundle, `model` on `remove-prompt`, table-manners 0.6.0's per-choice readiness and installables, Wafflery's Installables list and Model choice (draft 7) |
 | later | Node (`@markhayden/rascal`), Swift, WASM; the path fan; replace with homography; retouch; extend; isolate; `segment` under branch B |
 
 ## Open questions

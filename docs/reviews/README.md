@@ -45,7 +45,10 @@ Spec (`SPEC.md` "Choosable segmenters"):
 | 2 | draft 2 | not ready: 8 of 17 resolved, 9 partly; 3 new | draft 3 |
 | 3 | draft 3 | not ready: 10 of 11 resolved; 3 new | draft 4 |
 | 4 | draft 4 | not ready: 3 of 4 resolved; 3 new | draft 5 |
-| 5 | draft 5 (in plan round 2) | **ready to build**; no new findings | |
+| 5 | draft 5 (in plan round 2) | ready to build; no new findings | draft 6 (the owner's decision 15: rascal hosts every model; the maker route removed) |
+| 6 | draft 6 | not ready: 3 major (EVF-SAM2's retry threshold, BiRefNet's post-processing, the instance-parity gate) | draft 7 |
+| 7 | draft 7 | not ready: 3 of 3 resolved; 1 new (the positive case's threshold) | draft 8 |
+| 8 | draft 8 (in plan round 9) | **ready to build**; the rule checked against the shipped OWLv2 | |
 
 Plan (`PLAN.md` M14):
 
@@ -56,4 +59,7 @@ Plan (`PLAN.md` M14):
 | 3 | draft 3 | not ready: 3 of 7 resolved, 3 partly; 1 new | draft 4 |
 | 4 | draft 4 | not ready: 3 of 4 resolved; 2 new | draft 5 |
 | 5 | draft 5 | not ready: all 3 resolved; 1 new | draft 6 |
-| 6 | draft 6 | **ready to begin M14** | |
+| 6 | draft 6 | ready to begin M14 | draft 7 (the hosted design) |
+| 7 | draft 7 | not ready: 6 major, 1 minor | draft 8 |
+| 8 | draft 8 | not ready: 6 of 7 resolved, 1 partly; 1 new (the positive case's threshold) | draft 9 |
+| 9 | draft 9 | **ready to begin M14** | |
