@@ -149,3 +149,16 @@ consistent with squint; Wafflehouse owns the eventual installer. The shared name
 association and the session wait for table-manners v0.2; operation bindings are validated by
 rascal (type, schema version, frame, resolution), never by type name alone.
 
+
+## 15. Rascal hosts the models it catalogues
+
+2026-11-09. The owner wants a person to pick the segmenter in Wafflery and in configuration, with
+an easy path to every model the segment-01 lab round found worth having. Rascal catalogues those
+segmenters and hosts each one's ONNX export itself, as release assets of the repository, each
+with its weights' licence text. SAM 3 is included, under Meta's SAM License, whose copy goes with
+it; the owner judged the licence's terms (a copy with any redistribution, its use restrictions
+passed on, the indemnity) an acceptable risk for now. Models are a setup step: the bundle carries
+none and nothing downloads without the person asking (`rascal tools get`). A model whose weights'
+licence is not stated by its maker is not catalogued until it is; HQ-SAM's and EVF-SAM2's are
+Apache-2.0 on their Hugging Face cards. Sa2VA waits for a hosted-model route. SPEC.md
+"Choosable segmenters", PLAN.md M14, ADR 0018 "Refined 2026-11".

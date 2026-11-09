@@ -178,7 +178,7 @@ with green CI on both platforms, and then the tag.
 - [ ] Checkpoint M13 → tag `m13`
 
 ## M14 Choosable segmenters (PLAN.md M14; SPEC.md "Choosable segmenters")
-- [ ] 14.0 Record decision 15 (decided 2026-11-09); ADR 0018 section
+- [x] 14.0 Record decision 15 (decided 2026-11-09); ADR 0018 section
 - [ ] 14.1 The comparison harness and frozen references (segment-lab)
 - [ ] 14.2 The catalogue and the adapter interface (Tiny unchanged); catalogue-aware readiness
 - [ ] 14.3 Installations (layout, `current`, holds, checks), inactive

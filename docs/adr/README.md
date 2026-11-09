@@ -23,7 +23,7 @@ decision's shape without reversing it. Format: Context, Decision, Alternatives, 
 | 0015 | The MCP transport: the official SDK pinned, revision 2025-11-25, the independent client | accepted 2026-10-29 |
 | 0016 | Canonical serialization and the identity order | accepted 2026-10-28 |
 | 0017 | Durability: the sync primitive per platform and what rascal promises | accepted 2026-10-28 |
-| 0018 | The segmenter: branch A with OWLv2 and MobileSAM, exported to ONNX | accepted 2026-10-29 |
+| 0018 | The segmenter: branch A with OWLv2 and MobileSAM, exported to ONNX | accepted 2026-10-29; refined 2026-11 (rascal hosts the catalogued models; the bundle carries none) |
 | 0019 | The pack protocol: manifests in `_meta`, many ports, replay never calls, the escalation | accepted 2026-10-29 |
 | 0020 | rascal conforms to table-manners, the shared contract of the waffle tools | accepted 2026-10-30 |
 | 0021 | Operations are actions: references by identity, the binding refusal, the store, previews, export and import | accepted 2026-11-01 |

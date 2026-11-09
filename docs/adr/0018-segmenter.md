@@ -58,3 +58,14 @@ of graphs against about 40 MB) and with tighter planes. The detector is OWLv2 ba
 The exported graphs are 749 MB in all, not tens of megabytes: the bundle grows by that, and
 the artifacts are release assets the pack fetches or a bundle carries. `MODEL.md` records the
 export, its parity and the preprocessing the pack mirrors.
+
+## Refined 2026-11: rascal hosts the models it catalogues; the bundle carries none
+
+Decision 15 (2026-11-09). `segment` serves a catalogue of segmenters (`segmenters.toml`): Tiny
+(OWLv2 + SAM 2.1 Hiera-Tiny, the default), SAM 3, BiRefNet, HQ-SAM and EVF-SAM2, each an ONNX
+export that rascal publishes as release assets with its weights' licence text, after the export
+gate in SPEC.md "Choosable segmenters" (instance parity against the maker's PyTorch model, and the
+segment-01 corpus at IoU ≥ 0.999 per image). SAM 3 ships under Meta's SAM License, with its copy.
+The bundle no longer carries model files: the person installs models with `rascal tools get`
+(`--from` a local copy for an offline machine). "ONNX only in the bundle" stands as "ONNX only
+in the pack": the pack runs onnxruntime, never PyTorch.
