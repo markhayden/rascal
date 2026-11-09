@@ -8,7 +8,7 @@
 # relative path for that platform only, its `uv.lock` resolved against the wheelhouse and
 # nothing else, `wheel/` (the pack, from `uv build`), `wheelhouse/` (every locked dependency as
 # a wheel for the platform and the pack's Python, downloaded with pip under a uv-managed
-# interpreter), `MODEL.md`, `artifacts.toml`, `NOTICE`, `LICENSE`, the model artifacts under
+# interpreter), `MODEL.md`, `artifacts.toml`, `segmenters.toml`, `NOTICE`, `LICENSE`, the model artifacts under
 # `models/` when the pack's model directory holds them, and `bundle.toml` naming the pack, its
 # version, the Python version, the platform, whether the models are in, and the SHA-256 of
 # every file. Building needs uv and the network; it is the one step of the pack's life that
@@ -68,7 +68,7 @@ environments = ["$environment"]
 rascal-tools = { path = "wheel/$wheel" }
 TOML
 (cd "$out" && uv lock --no-index --find-links wheelhouse --python "$python" --quiet)
-cp tools/python/MODEL.md tools/python/src/rascal_tools/artifacts.toml tools/python/NOTICE LICENSE "$out/"
+cp tools/python/MODEL.md tools/python/src/rascal_tools/artifacts.toml tools/python/src/rascal_tools/segmenters.toml tools/python/NOTICE LICENSE "$out/"
 
 # The model artifacts (MODEL.md), from the pack's model directory when every one is there
 # with its digest; otherwise the bundle serves echo_region only and says so, or fails when

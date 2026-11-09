@@ -47,6 +47,7 @@ def test_the_manifest_lists_every_file_with_its_digest_and_nothing_else() -> Non
         "uv.lock",
         "MODEL.md",
         "artifacts.toml",
+        "segmenters.toml",
         "NOTICE",
         "LICENSE",
         bundle["wheel"],

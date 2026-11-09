@@ -1,7 +1,7 @@
 //! A fake segmenter pack install, shaped as `rascal tools setup` leaves one: the launcher
 //! `<dir>/.venv/bin/rascal-tools` (a shell script that runs any program, such as the fake pack),
-//! `<dir>/artifacts.toml` naming the model files, and with `models` the files themselves under
-//! `<dir>/models/`. Readiness inspects exactly this shape (PLAN.md 12.2).
+//! `<dir>/artifacts.toml` naming the model files, `<dir>/segmenters.toml` naming the default
+//! model's files, and with `models` the files themselves under `<dir>/models/`. Readiness inspects exactly this shape (PLAN.md 12.2).
 
 use std::path::{Path, PathBuf};
 
@@ -57,6 +57,17 @@ pub fn write(dir: &Path, program: &[&str], models: bool) -> std::io::Result<Fake
         ));
     }
     std::fs::write(dir.join("artifacts.toml"), manifest)?;
+    let files = MODEL_FILES
+        .iter()
+        .map(|n| format!("{n:?}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    std::fs::write(
+        dir.join("segmenters.toml"),
+        format!(
+            "[[segmenter]]\nid = \"tiny\"\ndefault = true\nfiles = [{files}]\nlicence_files = []\n"
+        ),
+    )?;
     if models {
         write_models(&dir.join("models"))?;
     }

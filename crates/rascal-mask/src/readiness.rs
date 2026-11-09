@@ -415,29 +415,37 @@ pub fn models_dir(
         .join(".cache/rascal-tools")
 }
 
-/// One `file` requirement per model artifact the install's `artifacts.toml` names: at the
-/// install's root (where a bundle puts it) or in the package source (a checkout's
-/// `tools/python`). A file is `present` when it is there and not empty; its digest is not
-/// hashed here (the pack verifies it before use), so it is never `valid`.
+/// One `file` requirement per file the default segmenter needs: the `files` and
+/// `licence_files` of the entry the install's segmenter catalogue (`segmenters.toml`) marks
+/// `default`, read at the install's root (where a bundle puts it) or in the package source (a
+/// checkout's `tools/python`). Another model's files never make `remove_prompt` need setup. A
+/// file is `present` when it is there and not empty; its digest is not hashed here (the pack
+/// verifies it before use), so it is never `valid`.
 fn model_files(install: &Path, models: &Path) -> Vec<Requirement> {
-    let manifest = [
-        install.join("artifacts.toml"),
-        install.join("src/rascal_tools/artifacts.toml"),
+    let catalogue = [
+        install.join("segmenters.toml"),
+        install.join("src/rascal_tools/segmenters.toml"),
     ]
     .into_iter()
     .find(|p| p.is_file());
-    let names = manifest
+    let names = catalogue
         .as_deref()
         .and_then(|p| std::fs::read_to_string(p).ok())
-        .and_then(|text| toml::from_str::<ArtifactsToml>(&text).ok())
-        .map(|a| a.artifact.into_iter().map(|a| a.name).collect::<Vec<_>>());
+        .and_then(|text| toml::from_str::<Catalogue>(&text).ok())
+        .and_then(|c| c.segmenter.into_iter().find(|s| s.default))
+        .map(|s| {
+            s.files
+                .into_iter()
+                .chain(s.licence_files)
+                .collect::<Vec<_>>()
+        });
     let Some(names) = names else {
         return vec![Requirement {
             kind: RequirementKind::File,
-            name: "artifacts.toml".to_string(),
+            name: "segmenters.toml".to_string(),
             state: RequirementState::Missing,
             setup: Some(format!(
-                "{} holds no readable artifacts.toml. Run `rascal tools setup --bundle <bundle> --config <path>` again.",
+                "{} holds no readable segmenters.toml with a default model. Run `rascal tools setup --bundle <bundle> --config <path>` again.",
                 install.display()
             )),
             optional: false,
@@ -470,14 +478,18 @@ fn model_files(install: &Path, models: &Path) -> Vec<Requirement> {
 }
 
 #[derive(serde::Deserialize)]
-struct ArtifactsToml {
+struct Catalogue {
     #[serde(default)]
-    artifact: Vec<ArtifactEntry>,
+    segmenter: Vec<CatalogueEntry>,
 }
 
 #[derive(serde::Deserialize)]
-struct ArtifactEntry {
-    name: String,
+struct CatalogueEntry {
+    #[serde(default)]
+    default: bool,
+    files: Vec<String>,
+    #[serde(default)]
+    licence_files: Vec<String>,
 }
 
 /// The requirements as one line for people: `config rascal.toml missing; credential KEY
