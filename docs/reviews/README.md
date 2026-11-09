@@ -34,3 +34,26 @@ findings plus new findings, most severe first.
 | M5 | [m5-checkpoint.md](m5-checkpoint.md) | two reviews (5.1 and 5.3; 5.2 waits on the owner); one must-fix (`setup` writing into the current directory) and nine should-fix landed in one commit with the proposed tests; two items recorded |
 | M6 | [m6-checkpoint.md](m6-checkpoint.md) | two reviews (6.1 to 6.3; 6.4 is the owner's round); no must-fix; three should-fix and the proposed identity, resume and key-absence tests landed in one commit; one owner decision (the `not_worse` rule) and three items recorded |
 | M7 | [m7-checkpoint.md](m7-checkpoint.md) | post-release (`v0.1.0` from `41e09c2`); two passes; no must-fix; six fixes in one commit each (archive links and escaping entries, the streamed download ceiling, the scratch directory, `fill_max_side = 0`, a wrong-sized cached fill, a release bundle without the models), the coverage tests and the docs drift; seven items recorded; the seven criteria checked |
+
+## M14: Choosable segmenters
+
+Spec (`SPEC.md` "Choosable segmenters"):
+
+| Round | Reviewed | Verdict | Answered by |
+|---|---|---|---|
+| 1 | draft 1 (2026-11-09) | not ready: 2 blockers, 13 major, 2 minor | draft 2 |
+| 2 | draft 2 | not ready: 8 of 17 resolved, 9 partly; 3 new | draft 3 |
+| 3 | draft 3 | not ready: 10 of 11 resolved; 3 new | draft 4 |
+| 4 | draft 4 | not ready: 3 of 4 resolved; 3 new | draft 5 |
+| 5 | draft 5 (in plan round 2) | **ready to build**; no new findings | |
+
+Plan (`PLAN.md` M14):
+
+| Round | Reviewed | Verdict | Answered by |
+|---|---|---|---|
+| 1 | draft 1 (2026-11-09) | not ready: 1 blocker, 10 major, 2 minor | draft 2 |
+| 2 | draft 2 | not ready: 9 of 13 resolved, 4 partly; 3 new | draft 3 |
+| 3 | draft 3 | not ready: 3 of 7 resolved, 3 partly; 1 new | draft 4 |
+| 4 | draft 4 | not ready: 3 of 4 resolved; 2 new | draft 5 |
+| 5 | draft 5 | not ready: all 3 resolved; 1 new | draft 6 |
+| 6 | draft 6 | **ready to begin M14** | |

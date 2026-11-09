@@ -3982,6 +3982,446 @@ publish.
 - 13.5's scene list and generation spend.
 - 13.7's pick.
 
+## Milestone M14: Choosable segmenters
+
+**Scope.** The spec is `SPEC.md` "Choosable segmenters" (draft 5 or later). A person picks the
+segmenter behind a prompt in Wafflery and in configuration; the bundle carries only Tiny; other
+models install on request: BiRefNet from rascal's release, SAM 3 from Meta through the maker
+route. Five tracks:
+
+- **Track P (the pack):** the catalogue and adapters, installations, the installer, BiRefNet.
+  Needs no contract change.
+- **Track S (SAM 3):** the maker route and the `sam3` adapter. Needs no contract change; waits on
+  decision 15.
+- **Track K (the contract):** table-manners 0.6.0.
+- **Track R (rascal on the contract):** model resolution, holds, recording, `describe`, `serve`'s
+  controls.
+- **Track W (Wafflery)** and squint's version bump.
+
+**Sources.** The owner's request of 2026-11-09; the segment-01 round and its ONNX checks
+(`../rascal-lab/segment-lab/onnxcheck/`); Codex spec reviews 1 to 4 and plan review 1 (13
+findings), round 2 (3 new, 4 partly) and round 3 (1 new, 3 partly), round 4 (2 new) and round 5 (1 new), all folded in. Spec round
+5: ready to build.
+
+**Repositories and branches.**
+
+| repo | branch | from | merges |
+|---|---|---|---|
+| rascal | `m14p-pack` (track P) | `main` | into `main` at `m14.2`, on its own (no contract change) |
+| rascal | `m14s-sam3` (track S) | `main` after `m14.2` | into `main` at `m14.3`, on its own; never merged if decision 15 is refused |
+| rascal | `m14r-models` (track R) | `main` after `m14.2` | into `main` at 14.13 |
+| table-manners | `v0.6` | `main` | into `main` at 14.12, tagged `v0.6.0`, published |
+| wafflery | `m14-installables` | `main` | into `main` at 14.13 |
+| squint | `m14-contract` in a worktree (`git worktree add`; squint's main checkout belongs to another session and is not touched) | `main` | into `main` at 14.13 |
+| `../rascal-lab/segment-lab` | `main` of the private repo | | the comparison harness and corpus checks; results land in rascal's `MODEL.md` with no private image |
+
+Tracks P and S are pushed as they land (their commits need no sibling repository). Tracks R, K, W
+and squint's branch build against table-manners by path with the crate's version held at `0.5.0`
+(`table-manners = { path = "../table-manners", version = "=0.5.0" }`), every fixture keeping
+`"contract": "0.5.0"`, and stay local until 14.12 pins `=0.6.0` from crates.io.
+
+**Order.**
+
+1. 14.0 (the owner's decision 15) and 14.1 (the comparison harness) first; neither blocks track K.
+2. **Track P:** `14.2 → 14.3 → 14.4`; `14.5` (BiRefNet's export, no artifact entry) can start at
+   once; `14.6` needs 14.4 and 14.5. `m14p-pack` merges at `m14.2`.
+3. **Track S:** `14.7` needs 14.0 signed and `m14.2`.
+4. **Track K:** `14.8` starts at once.
+5. **Track R:** `14.9 (1/3) → (2/3) → (3/3)` needs `m14.2` and 14.8; `14.10` needs 14.9.
+6. **Track W:** `14.11` needs 14.8 (against fixtures) and is checked against 14.10.
+7. `14.12` needs 14.8 to 14.11 (and squint's bump inside it); `14.13` follows 14.12, with 14.7 if
+   it landed.
+
+**Commits.**
+
+- **One commit per task slice per repository, each with that repository's gate green:** rascal
+  `just check` plus `uv run --frozen pytest` in `tools/python`; table-manners `cargo test`; squint
+  `just check`; Wafflery `cargo test --locked`, `bun run --cwd ui typecheck`, `bun run --cwd ui
+  test:unit`, `bun run scripts/build-ui.ts` then `bun run scripts/check-ui.ts`, and `bun run --cwd
+  ui test:browser` for UI slices. The slices are named in each task (`14.n (k/m)`).
+- **Scopes:** `feat(pack)`, `feat(mask)`, `feat(cli)`, `ci`, `contract`, `feat(ui)`, `docs`.
+- **Docs in the same commit:** `SPEC.md`, this plan, `MODEL.md`, `docs/tools.md`, the README and
+  `tasks/todo.md` change with the behaviour they describe.
+- **Cross-repository commits** name the commit they build against.
+- **Model-required runs.** Every real-model test carries a marker per model it needs
+  (`model_tiny`, `model_birefnet`, `model_sam3`, added in 14.2 to the existing `segmenter`
+  tests). `RASCAL_TOOLS_REQUIRE_MODELS=<id>[,<id>]` selects exactly those models' tests and fails
+  the run when a selected test skips or when none is selected; "required models" in a task means
+  `RASCAL_TOOLS_REQUIRE_MODELS=<its model> uv run --frozen pytest -m "model_<id>"`, and the bundle
+  with `BUNDLE_MODELS=required`.
+
+**Checkpoint tags** on rascal (annotated, recording the matching table-manners, squint and
+Wafflery commits and every model artifact's digest):
+
+- `m14.1`: after 14.4 on `m14p-pack` (catalogue, installations, installer; Tiny unchanged; the
+  bundle workflow green on both platforms with required models);
+- `m14.2`: the merge of `m14p-pack` into `main` after 14.6 (BiRefNet installable), or after 14.4
+  when BiRefNet is dropped (rollback rule 3); tracks S and R start from it either way;
+- `m14.3`: the merge of `m14s-sam3` after 14.7 (SAM 3 on the maker route);
+- `m14.4`: after 14.10 on `m14r-models` (rascal's side of the contract, against the draft).
+
+**Rollback.**
+
+1. A task that goes wrong is reverted on its branch with `git revert --no-commit`, newest first,
+   with the tasks that depend on it (on `m14r-models`: 14.10, then 14.9's slices newest first).
+2. A branch can be reset to its last `m14.k` tag after a `rescue/` reference.
+3. **Permitted omissions.** BiRefNet failing its gate in 14.5 or 14.6 drops `birefnet` from the
+   first catalogue (14.6 is struck; nothing else depends on it). Decision 15 refused or 14.7
+   failing its gate leaves `m14s-sam3` unmerged. In either case 14.13's acceptance names the
+   models that remain, and the owner's by-hand check runs with them.
+4. If v0.6 is abandoned, `m14r-models`, `m14-installables` and squint's branch are never merged;
+   `main` keeps `m14.2` (and `m14.3`), which need no contract change: the pack's CLI (`rascal-tools get`,
+   `remove`, `models`) and `segment`'s `model` through `rascal tools call` work without Wafflery.
+5. After 14.13, undoing M14 means reverting each repository's merge commits (newest first).
+- **Restoring a working install** at a checkpoint, in isolation, so live checkouts and the live
+  models directory are untouched (the new models layout is not readable by an older pack, by
+  design; there is no compatibility layer):
+  1. `git worktree add ../m14-restore/<tag>/<repo> <sha>` for rascal and each sibling at the SHAs
+     the tag records;
+  2. `cargo install --path crates/rascal-mask --locked --root ../m14-restore/<tag>`;
+  3. `uv sync --frozen` in that worktree's `tools/python`, then the models into a separate
+     directory: `RASCAL_TOOLS_MODELS=../m14-restore/<tag>/models` with that checkout's own
+     command (`rascal-tools fetch` before M14, `rascal-tools get` from `m14.1`);
+  4. a copy of `rascal.toml` with that `RASCAL_TOOLS_MODELS` in the pack's `env`, the pack
+     command pointing at the worktree, and no `[segment]` table before `m14.4`.
+
+  The Op Book records these commands; 14.13 runs them once against `m13` to prove they work.
+- **External state** is not rolled back: model releases, the published crate, converter locks. A
+  release is never deleted once a tag records it.
+
+### Task 14.0: The owner signs decision 15
+
+**Description.** The owner signs, amends or refuses decision 15 (spec, "Decision 15"). Signed, it
+goes into `docs/owner-decisions.md` and as a dated section of ADR 0018; `docs/adr/README.md`
+lists the change.
+
+**Acceptance.** The decision and the ADR section committed on `main` with the owner's date, or
+the refusal recorded and track S struck.
+
+**Verification.** `scripts/check-docs.sh`. **Dependencies.** None. **Size.** XS.
+
+### Task 14.1: The comparison harness (segment-lab)
+
+**Description.** In the private segment-lab repo:
+
+- **A driver for the shipped pack:** `segment-lab pack-round --pack <tools/python dir> --model <id>
+  [--installation <identity>] --out <dir>`, which runs the branch's own `rascal-tools serve`
+  (that checkout's environment and models directory) through rascal's `segment` on every corpus
+  image with the given model, and writes each core plus `pack.json` (the pack's commit, the model,
+  the installation identity, the image list). This is how 14.2, 14.6 and 14.7 exercise the shipped
+  adapters; no lab bridge cell is involved. Output goes to `out/m14-<model>/`, never the main
+  `out/`.
+- **`segment-lab compare --baseline <dir> --run <dir> --min-iou <x>`:** pairs cores per image,
+  fails (exit 1) when any image is below the threshold or missing (20 of 20 required), and prints
+  every image's IoU with both sides' `pack.json` or cell name.
+- **Frozen references** off git under `baseline/m14/`, digests in a committed
+  `baseline/m14.sha256`: `tiny` (the round's `tiny-part1` cores); `birefnet-onnx` and
+  `sam3-onnx`, real cores from two new lab cells that run the lab's ONNX graphs (the
+  `onnxcheck` exports, onnxruntime on the CPU) through the same bridge and rascal recipe as their
+  PyTorch cells (`birefnet`, `sam3-own`), so each core is a full remove-prompt mask, not a
+  swapped union. The cells' rounds are the gate the shipped adapters must match; they are also
+  compared with their PyTorch cells' cores (`compare --min-iou 0.999`, failing), which is the
+  ONNX check as a gate.
+
+**Acceptance.** Tests of `compare` on synthetic cores (pass, fail, a missing image fails) and of
+`pack-round` against a fake pack; the reference digests committed.
+
+**Verification.** `uv run pytest` in segment-lab. **Dependencies.** None. **Size.** S.
+
+### Task 14.2: The catalogue and the adapter interface
+
+**Description.**
+
+- `rascal_tools/segmenters.toml` with the spec's fields: `tiny` (default, bundled) and `hqsam`
+  (`unconfirmed`); its loader's checks (exactly one `default`; `bundled` only with `permissive`;
+  files named in `artifacts.toml` or a maker source; `params` a subset of `segment`'s;
+  `platforms` known).
+- `rascal_tools/models/adapters.py`: the interface and instance record (diagnostics included),
+  prompt splitting, ordering, cut, region-plane pairing. Today's OWLv2 + SAM 2.1 path moves behind
+  it as `owlv2+sam2`, measurements unchanged.
+- `segment` gains `model` (default `tiny`); the pack refuses an inapplicable parameter as
+  `invalid_args`; one segmenter loaded at a time.
+- The per-model markers and `RASCAL_TOOLS_REQUIRE_MODELS=<ids>` (the commit strategy's rule): the
+  selected models' tests fail instead of skipping, and an empty selection fails.
+- Rascal's readiness (`crates/rascal-mask/src/readiness.rs`) asks the pack's catalogue for the
+  default model's files instead of every `artifacts.toml` entry, so adding an artifact never makes
+  a Tiny-only install look incomplete; a Tiny-only regression test.
+
+**Acceptance.** Every existing pack and rascal test passes unchanged; new tests for the loader's
+refusals, ordering and pairing (fake adapter), an inapplicable parameter, one model loaded,
+`hqsam` refused as `unconfirmed`, readiness with an extra artifact entry. On the lab corpus,
+`tiny`'s cores after the move, from the branch's pack, equal the frozen `tiny` reference
+(`compare --min-iou 1.0`).
+
+**Verification.** `uv run --frozen pytest`; with required models `RASCAL_TOOLS_REQUIRE_MODELS=tiny
+uv run --frozen pytest -m model_tiny`; `just check`; in segment-lab, `segment-lab pack-round --pack
+../../rascal/tools/python --model tiny --out out/m14-tiny`, then `segment-lab compare --baseline
+baseline/m14/tiny --run out/m14-tiny --min-iou 1.0`. **Dependencies.** 14.1. **Size.** M,
+in slices `(1/2)` catalogue and adapters, `(2/2)` rascal's readiness.
+
+### Task 14.3: Installations
+
+**Description.** The layout and its primitives, added **inactive** (nothing reads or writes the
+live models directory through them yet; 14.4 switches every consumer at once): `<models>/<id>/<identity>/`
+with `install.json`, the atomic `current`, `<models>/files/` by digest, `.lock`, `.staging/`, the
+status file; publish (including the same-identity and damaged-directory cases), delete, holds
+(taken and released under `.lock`, stale holds ignored, every exit path releasing the hold);
+a resolver through `current` or a named installation that verifies once per process per
+identity; external-data containment.
+
+**Acceptance.** Component tests: reading through `current` and through a named non-current
+installation; a held directory surviving a publish and a delete, then deleted after the hold; a
+stale hold; admission paused between reading `current` and writing the hold while a delete waits
+on the lock (a barrier); the same identity published twice keeps it; a damaged directory replaced,
+and refused `busy` while held; a tampered file refused; external-data references outside the
+installation refused (absolute, `..`, symlink); a removed model unloads before the next call.
+All on temporary directories; the live lookup and `fetch` are untouched.
+
+**Verification.** `uv run --frozen pytest`; `just check`. **Dependencies.** 14.2. **Size.** M.
+
+### Task 14.4: The installer and the release route
+
+**Description.**
+
+- `(1/2)` `rascal-tools install` (the installer process) with `get <model>`, `remove <model>
+  [--converter]`, `models [--json]`, writing the new layout, beside `fetch` (which still feeds the
+  live lookup), with the release route below.
+- The release route over an injected transport: HTTPS, sizes bounded, digests, staging, `busy` or
+  wait, cancel on SIGINT/SIGTERM, crash recovery, the status file with `last_outcome`
+  (`action`, `state`), platform and free-disk checks before any download.
+- `uv` discovery for the installer, deterministic: `rascal tools setup` records the absolute path
+  of the `uv` it used in the pack directory, and the installer uses that path (or `RASCAL_UV`),
+  never `PATH`.
+- `(2/2)` **The cutover, one commit:** the pack's model lookup (`cache.py`) reads installations
+  only; rascal's readiness (`readiness.rs`) checks the default model's installation (its
+  `current` and `install.json` files) instead of `<models>/<filename>`; `rascal-tools fetch` is
+  removed (`get` with no model gets the default); `scripts/build-bundle.sh` writes Tiny's
+  installation from the catalogue (`bundled = true` only, a non-permissive bundled entry failing
+  the build); `.github/workflows/bundles.yml` provisions with `rascal-tools get` and gains a
+  `workflow_dispatch` input `require_models` (boolean) that sets `BUNDLE_MODELS=required` on a
+  manual run, as a `v*` tag already does; `docs/tools.md`,
+  the README and `MODEL.md` updated.
+- **The adopted set.** "Every adopted model" in this plan means the catalogue's entries that can be
+  installed (not `unconfirmed`) and list the platform at hand; HQ-SAM is never in it and is
+  covered by its refusal tests.
+- `(2/2)` also adds **`scripts/model-gate.sh <model>`**: it builds a `linux/amd64` image with
+  `uv`, Python 3.12 and the pack environment, installs the model with `rascal-tools get` into a
+  mounted models directory (network on, a credential passed to that container only when the
+  model's route needs one), then runs `RASCAL_TOOLS_REQUIRE_MODELS=<model> uv run --frozen pytest
+  -m model_<model>` in a second container with `--network none`; a missing prerequisite, a skip
+  or an empty selection fails it. Every model that lists `linux-x86_64` in `platforms` passes it.
+
+**Acceptance.** Tests with an in-process fake transport: digest mismatch, oversize and truncated
+downloads; cancel at each stage; crash recovery; two consecutive `get`s of an unchanged model;
+two concurrent `get`s; a `get` racing a `remove`; `last_outcome` after each outcome; an
+unsupported platform and too little free disk refused before downloading; `models --json`'s
+shape. At the cutover commit: a fresh models directory, `rascal-tools get`, then `rascal
+describe` shows `remove_prompt` `ready` and a `segment` call on the chair fixture succeeds; a
+bundle built with a fake SAM 3 installation present carries none of it; `BUNDLE_MODELS=required
+scripts/bundle-acceptance.sh target/release/rascal "$TMPDIR/m14-bundle"` passes; the bundle
+workflow, dispatched on the branch (`gh workflow run bundles.yml --ref m14p-pack -f
+require_models=true`), passes both platform jobs at the cutover's commit SHA (checked with `gh run
+view`) before `m14.1` is tagged;
+`scripts/model-gate.sh tiny` passes.
+
+**Verification.** `uv run --frozen pytest`; `just check`; `gh workflow run bundles.yml --ref m14p-pack -f
+require_models=true` and `gh run view` at the cutover's SHA; by hand, `rascal-tools get` on a fresh models directory.
+**Dependencies.** 14.3. **Size.** M, in the two slices above.
+
+### Task 14.5: BiRefNet's export
+
+**Description.** `tools/python/export/export.py --only birefnet`: `ZhengPeng7/BiRefNet` at a
+pinned revision, exported by the route the lab proved, its parity against PyTorch on the export's
+fixtures a failing check. The graph is published as a release asset (owner-authorised releases,
+as for `models-2026-11`). No entry is added to `artifacts.toml` here (14.6 adds it).
+
+**Acceptance.** The export's parity passes; the lab's BiRefNet ONNX gate passes on all 20
+images (IoU ≥ 0.999 per image against the lab's PyTorch cores); the asset's digest recorded in
+the task's commit message and `MODEL.md`. A miss is a spec change, not an exception.
+
+**Verification.** `uv run --project tools/python/export python tools/python/export/export.py
+--only birefnet`; the lab gate. **Dependencies.** The lab's check (if BiRefNet cannot pass,
+rollback rule 3). **Size.** S.
+
+### Task 14.6: The BiRefNet adapter
+
+**Description.** The `owlv2+birefnet` adapter (the spec's preprocessing, sigmoid, resize,
+threshold, placement; `outline` and `min_cover` inapplicable); the `artifacts.toml` entry and the
+`birefnet` catalogue entry (release route, the lab's figures).
+
+**Acceptance.** Fake-graph tests for crop, placement, the 2 px case and applicability. With
+required models and the network disabled: the chair fixture, a non-square image, several
+queries, a query that finds nothing. On the lab corpus, cores equal to the lab's ONNX cores
+(`compare --min-iou 0.999`). The bundle still carries Tiny alone.
+
+**Verification.** `RASCAL_TOOLS_REQUIRE_MODELS=birefnet uv run --frozen pytest -m model_birefnet`
+on macOS arm64; `scripts/model-gate.sh birefnet` for Linux x86_64; `segment-lab pack-round --model
+birefnet` and `compare --baseline baseline/m14/birefnet-onnx --min-iou 0.999`;
+`BUNDLE_MODELS=required scripts/bundle-acceptance.sh …`. **Dependencies.** 14.4, 14.5.
+**Size.** S.
+
+### Task 14.7: SAM 3 on the maker route
+
+**Description.**
+
+- `(1/3)` The converter as package data: `convert.py` (from the lab's `onnxcheck/sam3/export.py`),
+  its `pyproject.toml` and `uv.lock`, and the parity reference JSON; the two parity input images
+  (`fixtures/images/`) and the reference planes (1-bit PNGs, `fixtures/convert/sam3/`) live under
+  `fixtures/`, as the commit hook's image rule requires, and are mapped into the wheel and the
+  sdist by `pyproject.toml`'s build configuration. The maker route: `HF_TOKEN` sent only to
+  `huggingface.co`, dropped on a cross-host redirect, never written; the pinned revision, per-file
+  digests and sizes; safetensors only; the converter environment under
+  `<models>/.converter/<lock digest>/` provisioned with the recorded `uv` and no credential;
+  conversion; parity; provenance; sizes stated first.
+- `(2/3)` The `sam3` adapter (numpy and Pillow pre- and post-processing matching
+  `Sam3Processor`) and its catalogue entry (`maker-terms`, `platforms`, `min_free_disk_mb`).
+- `(3/3)` `MODEL.md`'s SAM 3 section (licence text digest, decision 15).
+
+**Acceptance.**
+- Fake checkpoint server and fake converter: a missing credential refused before any download;
+  a canary token absent from every output, log, file, journal and error; a cross-host redirect
+  drops it; a wrong digest refused; parity pass installs and each parity failure removes and
+  names the check; the converter environment never sees the token.
+- The built wheel and the sdist both contain the converter, its lock, images and references; a
+  test installs the wheel into an empty environment with no checkout on the path and runs the
+  maker route against the fakes.
+- With required models and the network disabled after a real install: the chair fixture, the
+  non-square image, several queries, a query that finds nothing; on the lab corpus `compare
+  --min-iou 0.999` against the frozen `sam3-onnx` reference.
+- By hand: `rascal-tools get sam3` on a fresh models directory with the owner's token.
+
+**Verification.** `uv run --frozen pytest`, `uv build` and the package-content test; required
+models (`RASCAL_TOOLS_REQUIRE_MODELS=sam3 … -m model_sam3`) on macOS arm64 and
+`scripts/model-gate.sh sam3` (the token passed to the
+install container only); `segment-lab pack-round --model sam3` and `compare --baseline
+baseline/m14/sam3-onnx --min-iou 0.999`; the by-hand get.
+**Dependencies.** 14.0 signed, `m14.2`. **Size.** L, in the three slices above.
+
+### Task 14.8: table-manners 0.6.0 draft
+
+**Description.** On `v0.6`: `CONTRACT.md` 3.1 gains `x-requirements`, `for_choice` and the
+readiness truth table; `installables` with `last_outcome`; the reserved `install` and `uninstall`
+controls (request, result, refusals, progress without a run, cancel, attach, detach); MCP progress
+`_meta["table-manners/installable"]`; "Changes from v0.5". Schemas, fixtures, conformance, the
+Rust types (including a progress type that carries an installable instead of a run).
+
+**Acceptance.** `cargo test` with fixtures for each readiness case, each installable state, each
+control result and refusal; schemas reject an unknown `kind` and `progress` outside `installing`.
+
+**Verification.** `cargo test`. **Dependencies.** None. **Size.** M.
+
+### Task 14.9: Rascal resolves, pins and records the model
+
+**Description.**
+
+- `(1/3)` Resolution: `[segment] model` validated against the pack's `segment` manifest (declared
+  `model`, the id among its choices, not `unavailable`); `remove-prompt`'s optional `model` input
+  bound to `segment`'s `model`; a recipe literal or override setting `model` on a step refused
+  at recipe load; the resolution order; applicability checked against supplied parameters before
+  defaults, only applicable ones forwarded and recorded; `heal remove-prompt --model`.
+- `(2/3)` Admission and evidence: the hold taken under `.lock` at admission and released on every
+  terminal outcome (including refusals after admission); `installation` passed to every
+  `segment` call; `effective["x-rascal"].segmenter` in invocation and estimate; `install.json`
+  copied into the run's directory; the lab cell identity including installation and adapter
+  version.
+- `(3/3)` Retries and replay: the model and installation kept on M13's crop retries; `crop_pad`;
+  replay answering `segment` from the recording with the model removed.
+
+**Acceptance.** Tests per slice: the resolution order; an unknown id `invalid`; a missing model
+`not_ready`; a pack with no `model`; a step-level `model` refused; an ordinary SAM 3-shaped call
+(fake pack) carrying no inapplicable parameter and an explicit one equal to its default
+`invalid`; holds released on refusal, failure, cancel and success; a reinstall and a removal
+between a run's first `segment` and its retry; the retry's crop rectangle with the 0.05 crop pad;
+the estimate binding and the lab cell identity changing on reinstall and on an adapter version
+change; replay with the model removed. With required models and the network disabled, for each
+catalogued model installed on the machine: a checked `heal remove-prompt` on the chair fixture
+with a scripted checker that fails the first try with a place, so the crop retry runs through the
+shipped adapter, and the run's try records show that the second try's `segment` ran on a crop
+(the evidence the retry executed). For Linux x86_64, 14.9 `(3/3)` extends `scripts/model-gate.sh`
+with `--heal`: the image also builds the branch's rascal for `linux/amd64` (`cargo build --release
+--locked`), carries the scripted checker and the testkit's offline filler, and after the pack
+tests runs `cargo nextest run -p rascal-mask --features rascal-mask/testkit --run-ignored only -E
+'test(checked_retry_real_model)'` with `RASCAL_TEST_MODEL=<model>`, offline; that test fails if the
+second try's crop record is missing.
+
+**Verification.** `just check`. **Dependencies.** `m14.2`, 14.8. **Size.** M, in the three slices.
+
+### Task 14.10: `describe`, `serve`'s controls and the CLI
+
+**Description.**
+
+- `(1/3)` `describe`: every catalogued model as an installable (state from disk, `last_outcome`,
+  `x-rascal.lab`), installables' requirements (`HF_TOKEN`, free disk) separate from actions';
+  `remove_prompt`'s `model` `enum` (default first) with `x-requirements`; the truth table.
+- `(2/3)` `serve`'s `install` and `uninstall`: the installer process supervised (started with the
+  pack's minimal environment plus exactly the credential the installable names; progress relayed
+  with the installable's id; cancel; attach; a disconnect leaving it running).
+- `(3/3)` `rascal tools models`, `get`, `remove` over the installer; the contract's
+  `fixtures/rascal/` regenerated by rascal's test.
+
+**Acceptance.** `describe` with each model installed or not and each truth-table case; `install`
+with progress, cancel, attach, and a disconnect followed by `describe` showing the outcome; the
+credential reaching the installer and no pack; `describe` making no network call.
+
+**Verification.** `just check`; the contract's conformance against rascal's fixtures.
+**Dependencies.** 14.4, 14.8, 14.9. **Size.** M, in the three slices.
+
+### Task 14.11: Wafflery
+
+**Description.**
+
+- `(1/3)` Backend: installable requirements read from the description alongside action
+  requirements; credentials from the Keychain put into the tool's child environment by the names
+  requirements give (`src/tools/environment.rs`); saving a credential restarts the tool's session
+  deliberately; the `install` / `uninstall` controls with progress and cancel.
+- `(2/3)` The Installables list in the tool's setup (states, sizes, licence, lab line, Get,
+  Remove, progress, Cancel, the maker-terms confirmation); shared components with stories,
+  desktop and phone widths.
+- `(3/3)` The action form's choice field from `x-requirements` (the resolved default first,
+  per-choice state, a link to the installable) and the result's model line.
+
+**Acceptance.** Stories for every installable state and the choice field; browser tests: the
+setup-to-run journey with a fake tool; a disconnect during an install; a credential saved and the
+session restarted; a newly installed choice becoming selectable in the same session; switching
+from a missing default to an installed alternative and running it; with a scrubbed host
+environment, the fake tool's installer receiving exactly the requirement's credential.
+
+**Verification.** Wafflery's gate. **Dependencies.** 14.8; checked against 14.10. **Size.** M, in
+the three slices.
+
+### Task 14.12: Publish table-manners 0.6.0
+
+**Description.** As 13.15, with all four repositories: rascal, Wafflery and squint (no feature
+change; its fixtures regenerated at 0.6.0 and its exact pin moved, on its worktree branch) bump to
+`0.6.0` together; each producer regenerates its fixtures and copies them into the contract; full
+conformance; `v0.6` merges into table-manners' `main`, tagged `v0.6.0`, published; every
+repository pins `=0.6.0` from crates.io and pushes its branch.
+
+**Acceptance.** Conformance green with rascal's, squint's and Wafflery's fixtures; crates.io has
+0.6.0; rascal's `scripts/check-contract.sh` passes; Wafflery accepts squint and rascal at 0.6.0.
+
+**Verification.** Each repository's gate and CI. **Dependencies.** 14.8 to 14.11. **Size.** S.
+
+### Task 14.13: The checkpoint
+
+**Description.** `just ci-local`; `/agent-skills:review` and `/agent-skills:test` on the diff,
+findings in `docs/reviews/m14-checkpoint.md`; the restore drill against `m13`; the owner's
+by-hand check on a fresh models directory: get each adopted model in Wafflery (HQ-SAM shows as
+unconfirmed and cannot be got), run one prompt with each side by side, set `[segment] model` for
+production and run `heal remove-prompt` from the CLI with a checker retry. **The convergence
+gate:** with `m14s-sam3` merged into `m14r-models` (when it landed), 14.9's offline checked-retry
+tests run for every adopted model (`RASCAL_TOOLS_REQUIRE_MODELS=<adopted ids>` and the ignored
+`checked_retry_real_model` test per model on macOS arm64, and `scripts/model-gate.sh --heal <id>` for
+each adopted model listing `linux-x86_64`), so no adopted model escapes them
+because it landed after 14.9. Merge `m14r-models`,
+`m14-installables` and squint's branch; CI green; tag `m14`.
+
+**Acceptance.** The owner's check passes with the remaining models named; the restore drill
+works; CI green on both platforms; the tag records the contract version and every model
+artifact's digest.
+
+**Verification.** CI; the owner. **Dependencies.** 14.12, and 14.7 when it landed. **Size.** S.
+
 ## Risks and mitigations
 
 | Risk | Impact | Mitigation |
@@ -3995,6 +4435,9 @@ publish.
 | The offline suite grows past three minutes | Low | Golden images are small synthetics; the shim replaces real sync in tests; 7.2 records the final timing |
 | Workspace durability differs by filesystem | Low | ADR 0017 names the primitive per platform; the shim tests the order; a real-sync test runs on each CI platform |
 | `just ci-local`'s Linux leg runs the host's architecture, not x86_64 | Low | GitHub CI on the pushed merge is the x86_64 gate before any tag |
+| A SAM 3 conversion on a person's machine differs from the reference (library builds, platform) | Medium: `get sam3` fails parity | The converter's lock pins every library; parity tolerances are set from the lab's check; a failure names the check and leaves the previous installation; the platforms list is narrowed to what the gate has passed on |
+| Meta changes the SAM License or the gated repository (the licence lets them change terms at any time) | Medium | The revision and the licence text are pinned by digest; a changed licence fails the pinned digest and stops the route until the owner re-reads it and updates decision 15 |
+| SAM 3's 3.4 GB in memory at fp32 is too much for small machines | Medium | One model loaded at a time; the catalogue's `min_free_disk_mb` and a memory note; fp16 or int8 graphs are a follow-up measured in the lab first |
 
 ## Owner decisions needed
 
@@ -4007,3 +4450,4 @@ publish.
 | 5 | The segmenter, its branch and the export's redistribution terms | 5.2 (decided in 4.5) |
 | 6 | The private corpus location, contents and groups (at least `min_decided` images each) | 6.1 |
 | 7 | The path fan before or after v1 | after M7 unless 4.3 shows the need |
+| 15 | Which models rascal may hand out (SPEC.md "Decision 15") | 14.0; track S (14.7) waits on it |

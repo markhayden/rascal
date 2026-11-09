@@ -176,3 +176,19 @@ with green CI on both platforms, and then the tag.
 - [x] 13.15 Version 0.5.0 everywhere at once; publish; pins from crates.io (2026-11-05: the v0.5 fixtures regenerated with the loop's four; table-manners 0.5.0 published; pinned `=0.5.0` from crates.io)
 - [ ] 13.16 Merge and the by-hand check
 - [ ] Checkpoint M13 → tag `m13`
+
+## M14 Choosable segmenters (PLAN.md M14; SPEC.md "Choosable segmenters")
+- [ ] 14.0 The owner signs decision 15; ADR 0018 section
+- [ ] 14.1 The comparison harness and frozen baseline (segment-lab)
+- [ ] 14.2 The catalogue and the adapter interface (Tiny unchanged); catalogue-aware readiness
+- [ ] 14.3 Installations (layout, `current`, holds, checks; bundle from the catalogue)
+- [ ] 14.4 The installer and the release route; bundles workflow → tag `m14.1`
+- [ ] 14.5 BiRefNet's export and release asset
+- [ ] 14.6 The BiRefNet adapter → merge `m14p-pack`, tag `m14.2`
+- [ ] 14.7 SAM 3 on the maker route → merge `m14s-sam3`, tag `m14.3`
+- [ ] 14.8 table-manners 0.6.0 draft: per-choice readiness, installables, install/uninstall
+- [ ] 14.9 Rascal resolves, pins and records the model
+- [ ] 14.10 `describe`, `serve`'s controls and the CLI → tag `m14.4`
+- [ ] 14.11 Wafflery: credentials, Installables list, Model choice
+- [ ] 14.12 Publish table-manners 0.6.0 (rascal, squint, Wafflery)
+- [ ] 14.13 The checkpoint → tag `m14`

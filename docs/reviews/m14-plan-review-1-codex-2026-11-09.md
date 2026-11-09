@@ -1,0 +1,65 @@
+1. **Blocker — The 0.6.0 release omits an existing producer.** [PLAN.md:4300](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4300)  
+   M14 coordinates only rascal, table-manners and Wafflery. However, table-manners’ [fixture gate](/Users/markhayden/go/src/github.com/markhayden/table-manners/tests/fixtures.rs:100) requires **every** producer’s fixtures to match `CONTRACT_VERSION`, including squint’s existing 0.5.0 fixtures. Wafflery also [accepts exactly one version](/Users/markhayden/go/src/github.com/markhayden/wafflery/src/tools/mod.rs:82), so upgrading it would reject an unchanged squint. M13 explicitly included squint; M14 cannot simply reuse its publication procedure without that participant.  
+   **Fix:** Add squint’s adoption, producer-generated fixtures, gates and coordinated release dependency—or explicitly design and test backward compatibility before publishing.
+
+2. **Major — The branch structure cannot guarantee the promised pack-only checkpoints.** [PLAN.md:4016](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4016), [PLAN.md:4055](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4055)  
+   P and R share `m14-models`, but R may start after 14.2 while P continues through 14.6. Once R introduces the path pin, subsequent P commits inherit it: they cannot be pushed independently with green CI, and `m14.3` need not be contract-independent. The fallback also promises “the pack and the CLI,” although the rascal CLI wrappers arrive in 14.9, after that checkpoint.  
+   **Fix:** Use separate pack and contract-dependent branches, as M13 did, or require all P commits and tags before R lands. Move the independent CLI wrappers into the pack track if the fallback must include them. Record and restore matching sibling SHAs.
+
+3. **Major — Adding BiRefNet’s artifact can break Tiny before the relevant consumers change.** [PLAN.md:4022](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4022), [PLAN.md:4162](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4162)  
+   14.4 can start immediately and adds BiRefNet to `artifacts.toml`. Today, [build-bundle.sh:82](/Users/markhayden/go/src/github.com/markhayden/rascal/scripts/build-bundle.sh:82) copies every artifact, and [readiness.rs:422](/Users/markhayden/go/src/github.com/markhayden/rascal/crates/rascal-mask/src/readiness.rs:422) requires every artifact. Thus an allowed intermediate commit either bundles BiRefNet or makes a Tiny-only installation appear incomplete. The bundle change is in 14.2; readiness waits until 14.9.  
+   **Fix:** Separate export/publication from activating the artifact entry. Before activation, make both bundle membership and existing Tiny readiness catalogue-aware, with a Tiny-only regression test.
+
+4. **Major — Removing `fetch` leaves release CI calling a deleted command.** [PLAN.md:4137](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4137)  
+   [bundles.yml:45](/Users/markhayden/go/src/github.com/markhayden/rascal/.github/workflows/bundles.yml:45) still executes `rascal-tools fetch`. No M14 task owns its migration. Manual workflows can swallow the failure and produce an echo-only bundle; version-tag builds fail when models are required. Ordinary `just check` does not establish that this workflow works.  
+   **Fix:** Update the workflow in the command-removal commit to provision the bundled catalogue entries. Require a models-required bundle workflow run on both platforms before accepting that checkpoint.
+
+5. **Major — Acceptance dependencies and optional exits are inconsistent.** [PLAN.md:4123](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4123), [PLAN.md:4216](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4216), [PLAN.md:4322](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4322)  
+   14.2 tests reinstall/remove behavior before 14.3 owns those operations; 14.8 also tests them without depending on 14.3. 14.6’s real checker-retry acceptance needs the model-aware host work in 14.8 if it means an actual checked heal. Separately, rejecting BiRefNet strikes 14.5 but strands 14.6’s dependency on it; rejecting SAM 3 strikes 14.6 but leaves 14.12 requiring it and a three-model demonstration.  
+   **Fix:** Assign reusable lifecycle primitives explicitly to 14.2, distinguish component tests from integration acceptance, and add the necessary integration edges. Make SAM 3 depend on the common adapter interface rather than BiRefNet. Define conditional checkpoint criteria for each permitted omission.
+
+6. **Major — The final cleanup defeats the documented rollback.** [PLAN.md:4057](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4057), [PLAN.md:4312](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4312)  
+   Rollback promises that an older pack reads its own files, but 14.12 removes the flat layout containing those files. Reverting source commits cannot restore deleted external model state. An older binary also cannot simply consume a configuration containing the new `[segment]` table. Unlike M13, M14 has no concrete restore procedure or drill.  
+   **Fix:** Retain the compatibility files, or specify an isolated rollback installation with the old pack, verified Tiny artifacts and compatible configuration. Run that restore drill after the final migration.
+
+7. **Major — Installation pinning has an untested admission race.** [PLAN.md:4115](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4115), [PLAN.md:4241](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4241)  
+   Reading `current` and subsequently writing `.held/<run id>` is insufficient: a concurrent remove/reinstall can delete that installation between the two operations. The planned tests mutate installations between segmentation calls, after the hold already exists, so they miss this window.  
+   **Fix:** Make resolving the identity and acquiring its hold atomic with installer deletion under the same cross-process lock. Specify cleanup on every admission failure and terminal outcome. Add a barrier-controlled admission-versus-remove/reinstall test.
+
+8. **Major — The Wafflery maker route lacks explicit provisioning and credential plumbing.** [PLAN.md:4193](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4193), [PLAN.md:4285](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4285)  
+   Wafflery’s [environment discovery](/Users/markhayden/go/src/github.com/markhayden/wafflery/src/tools/environment.rs:12) reads only action requirements, whereas `HF_TOKEN` belongs to installable requirements. Its child `PATH` is fixed to system directories, so an ordinary user-installed `uv` will also be absent when the installer provisions the converter. Saving a credential and restarting alone does not solve either boundary.  
+   **Fix:** Explicitly assign installable-requirement discovery, Keychain-backed child-environment construction and deterministic `uv`/Python discovery to tasks. Test the complete route with a scrubbed host environment, empty converter cache and no source checkout; retain the credential-free inference and converter environments.
+
+9. **Major — The proposed parity-resource location conflicts with the commit hook.** [PLAN.md:4190](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4190)  
+   Putting parity images and PNG references directly under `rascal_tools/convert/` conflicts with the [image guard](/Users/markhayden/go/src/github.com/markhayden/rascal/scripts/hooks/pre-commit:28), which permits raster files only under `fixtures/` and `.github/assets/`. The task does not identify a packaging mapping or policy change.  
+   **Fix:** Keep tracked synthetic images under `fixtures/` and explicitly map them into wheel package data, or narrowly amend the guard and its self-tests in the same commit. Verify both wheel and source-distribution packaging.
+
+10. **Major — Several verification instructions cannot establish their acceptance.** [PLAN.md:4098](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4098), [PLAN.md:4130](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4130)  
+    The Tiny comparison script named in `segment-lab/onnxcheck/` does not exist. Bare `segment-lab round` selects the round’s cells and uses its normal output directory; it is not a protected before/after comparison. Bare `scripts/bundle-acceptance.sh` fails because its binary argument is mandatory, and without `BUNDLE_MODELS=required` it can skip segmentation. Existing segmenter tests also skip missing artifacts.  
+    **Fix:** Assign creation of the comparison harness before 14.1 acceptance; freeze baseline inputs and use separate output directories. Supply exact commands, including binary, model directory and scratch directory. Add a required-model mode that fails on skipped model coverage.
+
+11. **Major — BiRefNet’s acceptance weakens the parity gate and omits required runtime cases.** [PLAN.md:4165](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4165), [PLAN.md:4179](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4179)  
+    “IoU ≥ 0.999 … **or** records every image that does not and why” permits acceptance after parity failure. The referenced lab [parity script](/Users/markhayden/go/src/github.com/markhayden/rascal-lab/segment-lab/onnxcheck/birefnet/parity.py:77) reports results and returns success without enforcing that threshold. Furthermore, 14.5 does not carry over the spec’s explicit offline, multiple-query, empty-query and checker-retry cases for BiRefNet.  
+    **Fix:** Make the agreed comparison a failing gate with frozen references and complete corpus coverage. Any threshold exception requires a spec change. Add the missing shipped-adapter cases and a required offline verification run on each supported platform.
+
+12. **Minor — Some spec requirements remain unassigned or lack explicit acceptance.** [PLAN.md:4079](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4079), [PLAN.md:4254](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4254), [PLAN.md:4292](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4292)  
+    Beyond the gaps above, the coverage omissions are:
+
+    | Spec requirement | Gap and concrete owner |
+    |---|---|
+    | HQ-SAM listed as `unconfirmed`, installation refused — SPEC:1167 | No task adds it. Assign the entry and refusal test to 14.1/14.3. |
+    | Step-local `model` forbidden — SPEC:1105 | 14.8 describes resolution but lacks an explicit prohibition/test for recipe literals and overrides. Add both. |
+    | Removed loaded model unloads before the next call — SPEC:1259 | Installation identity and holds do not explicitly test this lifecycle. Add an in-flight removal/next-call test to 14.2/14.3. |
+    | Platform and installation-resource requirements — SPEC:1155, 1360 | Fields are named, but enforcement/refusal acceptance is missing. Add unsupported-platform and insufficient-disk cases before download. |
+    | Lab identity changes with installation and adapter version — SPEC:1331 | Implementation is assigned to 14.8, but acceptance does not verify either identity change. |
+    | Resolved default appears first; newly installed choice becomes ready in the same session — SPEC:1069 | Add explicit 14.10 browser assertions, including switching from a missing default to an installed alternative. |
+
+13. **Minor — The largest tasks need concrete reviewable slices.** [PLAN.md:4216](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4216), [PLAN.md:4261](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4261), [PLAN.md:4296](/Users/markhayden/go/src/github.com/markhayden/rascal/PLAN.md:4296)  
+    14.8 combines configuration, recipe validation, admission holds, retry behavior, estimates, replay and lab identities. 14.9 adds a process lifecycle and transport behavior; the current MCP progress type only supports run references and text. 14.10 includes new Keychain and host-control work alongside UI work. Calling these “M” and allowing later subdivision does not establish green intermediate boundaries.  
+    **Fix:** Name the slices now: metadata/resolution, admission/evidence, retry/replay; installer supervision, MCP controls, CLI; credential/backend support, installables UI, model choice/results. Keep tests and relevant documentation with each behavior change.
+
+The principal spec areas otherwise have identifiable owners: catalogue/adapters in 14.1/14.5/14.6, installation in 14.2/14.3/14.6, resolution/evidence in 14.8, contract/server in 14.7/14.9/14.11, and UI in 14.10. `tasks/todo.md` mirrors the tasks but adds no missing coverage.
+
+The path-pinned draft does **not itself** break today’s local `just check`: `test-checks.sh` uses a synthetic manifest. Keeping those commits local is appropriate; the shared-branch sequencing is the problem. This was a static review, not a gate run. The round-4 spec-review file is empty.
+
+**Verdict: not ready to begin M14.**
