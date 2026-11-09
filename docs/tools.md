@@ -265,7 +265,9 @@ the box widened by twice `pad` and a point on each piece, and the retry is kept 
 larger and stays inside). It answers one polygon region per instance (the padded box,
 labelled with the query it answered, scored, best first) and one plane per region in the
 image's frame, with `plane_px_<n>`, `outline_<n>`, `retried_<n>` and `retry_kept_<n>` per
-instance; `not_applicable` when nothing scores over the threshold. Two models do it, both
+instance; `not_applicable` when nothing scores over the threshold. `model` picks the segmenter
+from the pack's catalogue (`segmenters.toml`, default `tiny`); a parameter the chosen model does
+not use is refused. Tiny is two models, both
 exported to ONNX and run on `onnxruntime` with no PyTorch anywhere near the pack: OWLv2 base
 turns the queries into boxes with scores, SAM 2.1 Hiera-Tiny gives three candidate outlines per
 box, and the rules in `rascal_tools/outline.py` (pure functions, no model) keep one

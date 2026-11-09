@@ -1,0 +1,25 @@
+# The segmenter catalogue (SPEC.md "Choosable segmenters"; MODEL.md): one entry per model
+# `segment` can run, chosen by its `model` argument. Files are named by reference to
+# `artifacts.toml` (sizes, digests, URLs), so a file two models share is listed and installed
+# once. Exactly one entry is the `default`. `params` are the `segment` parameters the model uses;
+# a call that supplies another is refused. `lab` is copied from the round that measured the model
+# (docs/results/segment-01.md defines `remove`).
+
+[[segmenter]]
+id = "tiny"
+title = "OWLv2 + SAM 2.1 Tiny"
+adapter = "owlv2+sam2"
+params = ["threshold", "max_instances", "pad", "outline", "min_cover"]
+default = true
+licence = "Apache-2.0"
+licence_files = []
+files = [
+    "owlv2-base-patch16.onnx",
+    "owlv2-base-patch16.tokenizer.json",
+    "sam2.1-hiera-tiny.encoder.onnx",
+    "sam2.1-hiera-tiny.decoder3.onnx",
+]
+download_mb = 749
+installed_mb = 749
+platforms = ["macos-arm64", "linux-x86_64"]
+lab = { round = "segment-01", remove = 0.548, iou = 0.576, best_for = "small and fast" }

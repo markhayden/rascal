@@ -37,5 +37,12 @@ select = ["E", "F", "I", "B", "UP", "W"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["segmenter: needs the fetched model artifact; skipped when it is absent"]
+markers = [
+    "segmenter: needs a model's artifacts; skipped when they are absent",
+    "model_tiny: needs Tiny (RASCAL_TOOLS_REQUIRE_MODELS selects and requires it)",
+    "model_sam3: needs SAM 3",
+    "model_birefnet: needs BiRefNet",
+    "model_hqsam: needs HQ-SAM",
+    "model_evfsam2: needs EVF-SAM2",
+]
 addopts = "-q"

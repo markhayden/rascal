@@ -27,7 +27,19 @@ files are published as release assets of the repository (`models-2026-10` for OW
 SAM encoder, `models-2026-11` for the three-outline decoder), and a bundle carries them under
 `models/`.
 
-## The export
+## The catalogue
+
+`segment` runs the model its `model` argument names from the segmenter catalogue,
+`src/rascal_tools/segmenters.toml` (SPEC.md "Choosable segmenters"): per model its id, the
+adapter that runs it (`rascal_tools/models/adapters.py`), the `segment` parameters it uses (a
+call that supplies another is `invalid_args`, even at its default), its licence and licence
+files, its files by name in `artifacts.toml`, its sizes, the platforms it runs on and the lab
+round's figures. Exactly one entry is the default; today the catalogue holds `tiny`, the two
+models above as one adapter, `owlv2+sam2`, which carries M13's pick and retry and reports
+`outline_<n>`, `retried_<n>`, `retry_kept_<n>` and `mask_iou_predicted`. Every adapter's
+instances come back best score first, ties by query then by the box's top-left, row-major, cut
+to `max_instances`; region `n` is paired with plane `n`. One model is loaded at a time.
+
 
 `uv run --project tools/python/export python tools/python/export/export.py` on a connected
 machine: it downloads both checkpoints from the Hub, exports the graphs below with

@@ -37,6 +37,7 @@ def test_more_than_eight_points_is_refused() -> None:
 
 
 @pytest.mark.segmenter
+@pytest.mark.model_tiny
 def test_three_outlines_for_a_box_and_for_a_box_with_points() -> None:
     requires_artifact(ENCODER)
     requires_artifact(DECODER)

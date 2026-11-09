@@ -12,6 +12,8 @@ from PIL import Image
 
 from rascal_tools import harness as harness_module
 
+pytest_plugins = ["tests.require_models", "pytester"]
+
 
 def png_bytes(pixels: np.ndarray) -> bytes:
     buffer = io.BytesIO()
