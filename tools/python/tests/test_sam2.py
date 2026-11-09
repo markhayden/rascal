@@ -10,7 +10,7 @@ import pytest
 from PIL import Image
 
 from rascal_tools.models import sam2
-from tests.parity import requires_artifact
+from tests.parity import requires_model
 
 FIXTURE = Path(__file__).resolve().parents[3] / "fixtures" / "images" / "chair-blob.png"
 ENCODER = "sam2.1-hiera-tiny.encoder.onnx"
@@ -39,13 +39,10 @@ def test_more_than_eight_points_is_refused() -> None:
 @pytest.mark.segmenter
 @pytest.mark.model_tiny
 def test_three_outlines_for_a_box_and_for_a_box_with_points() -> None:
-    requires_artifact(ENCODER)
-    requires_artifact(DECODER)
-    from rascal_tools.models import cache
-
+    tiny = requires_model("tiny")
     pixels = np.asarray(Image.open(FIXTURE).convert("RGB"))
     height, width = pixels.shape[:2]
-    model = sam2.Segmenter(cache.artifact(ENCODER), cache.artifact(DECODER))
+    model = sam2.Segmenter(tiny.path(ENCODER), tiny.path(DECODER))
     features = model.embed(pixels)
     box = (130.0, 70.0, 250.0, 250.0)
     for points in ([], [(190.0, 160.0)], [(190.0, 160.0)] * 8):

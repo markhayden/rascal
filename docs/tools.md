@@ -272,13 +272,12 @@ exported to ONNX and run on `onnxruntime` with no PyTorch anywhere near the pack
 turns the queries into boxes with scores, SAM 2.1 Hiera-Tiny gives three candidate outlines per
 box, and the rules in `rascal_tools/outline.py` (pure functions, no model) keep one
 (`tools/python/MODEL.md`: the sources, the licences, the export, the preprocessing the pack
-mirrors, the parity). The model artifacts (749 MB in all) live outside the pack: `rascal-tools
-fetch` is the one network step, downloading what `artifacts.toml` names into
-`RASCAL_TOOLS_MODELS` (default `~/.cache/rascal-tools`) and verifying each SHA-256,
-discarding a mismatch; a bundle carries them under `models/` beside the environment, which
-the pack looks in when the variable is unset. The pack verifies each artifact's digest once per
-process before using it and loads the models on the first call. A call without the artifacts
-is an operational error naming the directory looked in and the command that fills it.
+mirrors, the parity). The models (Tiny's are 749 MB) live outside the pack, as installations
+in the models directory: `RASCAL_TOOLS_MODELS`, else `models/` beside the install's
+environment when it exists, else `~/.cache/rascal-tools`. The pack reads a model through its
+installation, verifies it once per process, and loads it on the first call; a call naming an
+`installation` runs exactly that one. A call for a model that is not installed is an
+operational error naming the directory looked in and `rascal-tools get <model>`.
 
 **Installing models.** `rascal-tools get <model>` installs a catalogued segmenter (the default
 with no model): its files (graphs, tokenizer, licence files) from the release assets
@@ -290,27 +289,28 @@ the same model waits or, with `--no-wait`, is refused; Ctrl-C cancels and leaves
 installation as it was. `rascal-tools remove <model>` removes one (a run holding it keeps it until
 the run ends), `rascal-tools models [--json]` lists the catalogue with each model's state
 (`installed`, `not_installed`, `installing`, `unavailable`) and last outcome, and `hold` /
-`release` pin an installation for a run (the lab uses them). Until the cutover (PLAN.md 14.4) the
-pack still reads the files `fetch` downloads.
+`release` pin an installation for a run (the lab uses them). Installing is the pack's one network
+step; serving never downloads.
 
 The pack's tests are offline (`pytest`, `ruff`; `scripts/check-python.sh`, part of `just
 check` when the environment exists), with a parity harness that compares a tool's answer to
-stored outputs within a stated tolerance and skips the `segmenter`-marked case until every
-artifact is fetched. Launch is `tools/python/.venv/bin/rascal-tools serve` after `uv sync
+stored outputs within a stated tolerance and skips the `segmenter`-marked case until its model
+is installed; `RASCAL_TOOLS_REQUIRE_MODELS=<id>` selects a model's tests (`-m model_<id>`) and
+fails instead of skipping. `scripts/model-gate.sh <model>` runs them on linux/amd64 in Docker,
+the model installed with the network on and the tests run with it off. Launch is `tools/python/.venv/bin/rascal-tools serve` after `uv sync
 --frozen` there; `crates/rascal-mask/tests/it/packs_real.rs` drives it through rascal's client,
-`segment` included when the artifacts are present.
+`segment` included when Tiny is installed.
 
 **The bundle and offline setup.** A release ships one bundle per platform (`macos-arm64`,
 `linux-x86_64`), built by `scripts/build-bundle.sh <platform> <dir>` on a connected machine:
 the directory is the provisioning project itself (`pyproject.toml` pinning the pack wheel by
 relative path for that platform only, and its `uv.lock`, resolved against the wheelhouse and
 nothing else), `wheel/` (the pack from `uv build`), `wheelhouse/` (every locked dependency as
-a wheel for the platform and Python 3.12), `MODEL.md`, `artifacts.toml`, `NOTICE` and
-`LICENSE`, the model artifacts under `models/` when the building machine's model directory
-holds every one with its digest (a bundle built without them says so and serves `echo_region`
-only; `BUNDLE_MODELS=required` makes that a failure), and `bundle.toml` naming the pack, its
-version, the Python version, the platform, whether the models are in and the SHA-256 of
-every file. On the target machine the prerequisites
+a wheel for the platform and Python 3.12), `MODEL.md`, `artifacts.toml`, `segmenters.toml`,
+`NOTICE` and `LICENSE`, and `bundle.toml` naming the pack, its version, the Python version, the
+platform and the SHA-256 of every file. A bundle carries no model: after `setup`, the person
+installs the models they want with the install's `rascal-tools get` (into `models/` beside the
+environment when that directory exists), or `--from` a copy of the release assets offline. On the target machine the prerequisites
 are `uv` and a Python 3.12 it can find without downloading one (`uv python install 3.12` on a
 connected machine). `rascal tools setup --bundle <dir|archive|url> --into <dir>` (or `--config
 rascal.toml`, installing where the pack entry's `command` points, `<dir>/.venv/bin/rascal-tools`)
@@ -343,10 +343,11 @@ uv. `setup` runs uv and the launcher with the baseline environment only (`PATH`,
 `LANG`, `LC_ALL`, `TMPDIR`), so no key and no uv setting of the shell's reaches them, and the
 environment is always `<dir>/.venv`. A bundle given as a URL (the spec's one network step)
 is built per platform by the `bundles` workflow on a version tag (`.github/workflows/bundles.yml`),
-which fetches the model files `artifacts.toml` names with `rascal-tools fetch` (required on a version tag,
-`BUNDLE_MODELS=required`, so a release bundle always carries `segment`), builds the
-bundle on that platform's runner, installs it from the packed archive with the network
-disabled, calls the pack, and uploads the archive with its `.sha256` to the tag's release.
+which fetches Tiny's release assets with `scripts/tiny-assets.sh` (the pack's own installer),
+runs Tiny's real-model tests required, builds the bundle on that platform's runner, installs it
+from the packed archive with the network disabled, installs Tiny into it from the fetched assets
+(`scripts/bundle-acceptance.sh --models`), segments the chair, and uploads the archive with its
+`.sha256` to the tag's release.
 
 **The fake pack** (`rascal fake-pack <behaviour>` with the `testkit` feature, or the testkit's
 `fake-pack` binary) serves `segment` with one selectable behaviour: `exact`, `bad-schema`,

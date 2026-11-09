@@ -1819,8 +1819,8 @@ scripts/acceptance.sh                          # release acceptance: install, re
 
 # Python tool pack
 cd tools/python && uv sync --frozen                        # development only; may download
-uv run --frozen --offline --no-sync rascal-tools fetch     # model artifacts; network, explicit
-uv run --frozen --offline --no-sync pytest                 # offline; the segmenter case skips until fetched
+uv run --frozen --no-sync rascal-tools get tiny            # a model's installation; network, explicit
+uv run --frozen --offline --no-sync pytest                 # offline; a model's tests skip until it is installed
 uv run --frozen --offline --no-sync ruff check . && uv run --frozen --offline --no-sync ruff format --check .
 
 # the binary

@@ -245,8 +245,8 @@ fn the_real_pack_sees_the_allowlisted_environment_only() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// The model directory holding the default segmenter's graphs (the files its
-/// `segmenters.toml` entry names), when it does.
+/// The model directory holding the default segmenter's installation (`tiny/current` and the
+/// files Tiny's `segmenters.toml` entry names in it), when it does.
 fn models_dir() -> Option<PathBuf> {
     let dir = std::env::var_os("RASCAL_TOOLS_MODELS")
         .map(PathBuf::from)
@@ -263,7 +263,10 @@ fn models_dir() -> Option<PathBuf> {
         .map(|l| l.trim_end_matches(',').trim_matches('"'))
         .collect();
     assert_eq!(names.len(), 4, "Tiny's catalogue entry names four files");
-    if names.iter().all(|n| dir.join(n).is_file()) {
+    let installation = std::fs::read_to_string(dir.join("tiny/current"))
+        .ok()
+        .map(|ident| dir.join("tiny").join(ident.trim()));
+    if installation.is_some_and(|i| names.iter().all(|n| i.join(n).is_file())) {
         Some(dir)
     } else {
         assert!(
@@ -272,7 +275,7 @@ fn models_dir() -> Option<PathBuf> {
             dir.display()
         );
         eprintln!(
-            "packs_real: the model artifacts are absent from {} (rascal-tools fetch); skipping segment",
+            "packs_real: Tiny is not installed in {} (rascal-tools get tiny); skipping segment",
             dir.display()
         );
         None

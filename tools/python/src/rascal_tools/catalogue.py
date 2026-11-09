@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from rascal_tools import fetch
+from rascal_tools import artifacts as manifest
 
 CATALOGUE = Path(__file__).resolve().parent / "segmenters.toml"
 
@@ -43,13 +43,13 @@ class Entry:
     lab: dict[str, Any] = field(default_factory=dict)
 
 
-def read(path: Path = CATALOGUE, artifacts: Path = fetch.ARTIFACTS) -> list[Entry]:
+def read(path: Path = CATALOGUE, artifacts: Path = manifest.ARTIFACTS) -> list[Entry]:
     """Every entry of the catalogue at `path`, checked against `artifacts`."""
     try:
         data = tomllib.loads(path.read_text())
     except (OSError, tomllib.TOMLDecodeError) as e:
         raise CatalogueError(f"{path}: {e}") from e
-    known = {a.name for a in fetch.read_artifacts(artifacts)}
+    known = {a.name for a in manifest.read(artifacts)}
     entries: list[Entry] = []
     for raw in data.get("segmenter", []):
         entries.append(_entry(path, raw, known))

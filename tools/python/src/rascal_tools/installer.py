@@ -27,7 +27,8 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import IO, Any, Protocol
 
-from rascal_tools import catalogue, fetch, installs
+from rascal_tools import artifacts as manifest
+from rascal_tools import catalogue, installs
 
 CHUNK = 1 << 20
 MB = 1 << 20
@@ -136,7 +137,7 @@ def get(
     models: installs.Models,
     *,
     entries: list[catalogue.Entry] | None = None,
-    artifacts: Path = fetch.ARTIFACTS,
+    artifacts: Path = manifest.ARTIFACTS,
     transport: Transport | None = None,
     source: Path | None = None,
     cancel: Cancel | None = None,
@@ -152,7 +153,7 @@ def get(
         raise installs.InstallError(f"no model {model!r} (have {', '.join(e.id for e in entries)})")
     if not platform(entry):
         raise Unavailable(f"{model} does not run on this platform ({', '.join(entry.platforms)})")
-    by_name = {a.name: a for a in fetch.read_artifacts(artifacts)}
+    by_name = {a.name: a for a in manifest.read(artifacts)}
     wanted = [by_name[n] for n in entry.files + entry.licence_files]
     total = sum(a.size for a in wanted)
     models.root.mkdir(parents=True, exist_ok=True)
@@ -217,9 +218,9 @@ def get(
                     },
                 )
             cancel.check()
-            manifest = installs.manifest_for(model, revision(entry), records)
+            record = installs.manifest_for(model, revision(entry), records)
             with models.lock():
-                identity = models.publish(model, staging, manifest)
+                identity = models.publish(model, staging, record)
         except BaseException as e:
             shutil.rmtree(staging, ignore_errors=True)
             state = "cancelled" if isinstance(e, Cancelled | KeyboardInterrupt) else "failed"

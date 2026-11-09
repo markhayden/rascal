@@ -418,9 +418,11 @@ pub fn models_dir(
 /// One `file` requirement per file the default segmenter needs: the `files` and
 /// `licence_files` of the entry the install's segmenter catalogue (`segmenters.toml`) marks
 /// `default`, read at the install's root (where a bundle puts it) or in the package source (a
-/// checkout's `tools/python`). Another model's files never make `remove_prompt` need setup. A
-/// file is `present` when it is there and not empty; its digest is not hashed here (the pack
-/// verifies it before use), so it is never `valid`.
+/// checkout's `tools/python`). Another model's files never make `remove_prompt` need setup. The
+/// files are looked for in the model's current installation, `<models>/<id>/<identity>/`, the
+/// identity read from `<models>/<id>/current` (`rascal_tools.installs`). A file is `present` when
+/// it is there and not empty; its digest is not hashed here (the pack verifies the installation
+/// before use), so it is never `valid`.
 fn model_files(install: &Path, models: &Path) -> Vec<Requirement> {
     let catalogue = [
         install.join("segmenters.toml"),
@@ -434,12 +436,14 @@ fn model_files(install: &Path, models: &Path) -> Vec<Requirement> {
         .and_then(|text| toml::from_str::<Catalogue>(&text).ok())
         .and_then(|c| c.segmenter.into_iter().find(|s| s.default))
         .map(|s| {
-            s.files
+            let names = s
+                .files
                 .into_iter()
                 .chain(s.licence_files)
-                .collect::<Vec<_>>()
+                .collect::<Vec<_>>();
+            (s.id, names)
         });
-    let Some(names) = names else {
+    let Some((id, names)) = names else {
         return vec![Requirement {
             kind: RequirementKind::File,
             name: "segmenters.toml".to_string(),
@@ -452,10 +456,21 @@ fn model_files(install: &Path, models: &Path) -> Vec<Requirement> {
             needed_for: None,
         }];
     };
+    // The current installation's directory; a name that is not a plain file name is no
+    // installation at all.
+    let installation = std::fs::read_to_string(models.join(&id).join("current"))
+        .ok()
+        .map(|text| text.trim().to_string())
+        .filter(|ident| {
+            !ident.is_empty() && !ident.contains(['/', '\\']) && !ident.starts_with('.')
+        })
+        .map(|ident| models.join(&id).join(ident));
     names
         .into_iter()
         .map(|name| {
-            let there = std::fs::metadata(models.join(&name)).is_ok_and(|m| m.is_file() && m.len() > 0);
+            let there = installation.as_ref().is_some_and(|dir| {
+                std::fs::metadata(dir.join(&name)).is_ok_and(|m| m.is_file() && m.len() > 0)
+            });
             Requirement {
                 kind: RequirementKind::File,
                 state: if there {
@@ -465,7 +480,7 @@ fn model_files(install: &Path, models: &Path) -> Vec<Requirement> {
                 },
                 setup: (!there).then(|| {
                     format!(
-                        "Not in {}. Run `rascal-tools fetch`, or `rascal tools setup` with a bundle that holds the models, or set `{MODELS_ENV}`.",
+                        "{id} is not installed in {}. Run `rascal-tools get {id}` with the pack's environment, or set `{MODELS_ENV}`.",
                         models.display()
                     )
                 }),
@@ -485,6 +500,7 @@ struct Catalogue {
 
 #[derive(serde::Deserialize)]
 struct CatalogueEntry {
+    id: String,
     #[serde(default)]
     default: bool,
     files: Vec<String>,

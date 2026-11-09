@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 from mcp import types
 
-from rascal_tools import __version__, catalogue, outline
+from rascal_tools import __version__, catalogue, installs, outline
 from rascal_tools.envelope import Answer
 from rascal_tools.harness import Harness
 from rascal_tools.manifest import Bounds, Param, Port, ToolSpec
@@ -81,6 +81,13 @@ SPEC = ToolSpec(
             choices=tuple(e.id for e in ENTRIES),
         ),
         Param(
+            "installation",
+            "The model's installation to run, by its identity, so a run keeps one installation "
+            "across its calls; empty runs the one installed now.",
+            "string",
+            default="",
+        ),
+        Param(
             "max_instances",
             "The most instances to return across the queries, best score first.",
             "integer",
@@ -136,20 +143,25 @@ SPEC = ToolSpec(
 )
 
 _lock = threading.Lock()
-_loaded: tuple[str, adapters.Adapter] | None = None
+_slot = installs.Slot()
 
 
-def load(entry: catalogue.Entry) -> adapters.Adapter:
-    """The entry's adapter, loaded on first use; a call for another model unloads the one held
-    first. A missing artifact raises `MissingArtifact`."""
-    global _loaded
+def load(entry: catalogue.Entry, installation: str | None = None) -> adapters.Adapter:
+    """The entry's adapter over its installation (`installation` names one, else the current
+    one), loaded on first use and kept while calls name the same model and installation; another
+    model or installation unloads it first, and so does an installation that is gone. A model
+    not installed raises `cache.MissingModel`."""
     with _lock:
-        if _loaded is not None and _loaded[0] == entry.id:
-            return _loaded[1]
-        _loaded = None
-        files = {name: cache.artifact(name) for name in entry.files}
-        adapter = adapters.BUILDERS[entry.adapter](files)
-        _loaded = (entry.id, adapter)
+
+        def build(found: installs.Installation) -> adapters.Adapter:
+            return adapters.BUILDERS[entry.adapter]({n: found.path(n) for n in entry.files})
+
+        try:
+            _, adapter = _slot.get(cache.models(), entry.id, installation or None, build)
+        except installs.InstallError as e:
+            raise cache.MissingModel(
+                f"{e}; run `rascal-tools get {entry.id}`, or set RASCAL_TOOLS_MODELS"
+            ) from e
         return adapter
 
 
@@ -192,6 +204,9 @@ def run(arguments: dict[str, Any], harness: Harness) -> types.CallToolResult:
         return answer.invalid_args(
             f"model must be one of {', '.join(e.id for e in ENTRIES)}, not {model!r}"
         )
+    installation = arguments.get("installation", "")
+    if not isinstance(installation, str):
+        return answer.invalid_args("installation must be a string")
     unused = [p for p in catalogue.SEGMENT_PARAMS if p in arguments and p not in entry.params]
     if unused:
         return answer.invalid_args(f"{entry.id} does not use {', '.join(unused)}")
@@ -214,7 +229,7 @@ def run(arguments: dict[str, Any], harness: Harness) -> types.CallToolResult:
         float(threshold), max_instances, float(pad), rule, float(min_cover)
     )
     image = harness.image("image")
-    adapter = load(entry)
+    adapter = load(entry, installation)
     instances = adapters.order(adapter.find(image.pixels, queries, settings), max_instances)
     answer.measure("queries", float(len(queries)), "count")
     if not instances:

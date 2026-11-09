@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from rascal_tools import catalogue, fetch
+from rascal_tools import artifacts, catalogue, installs
 from rascal_tools.models import adapters
 from rascal_tools.tools import segment
 
@@ -73,7 +73,7 @@ def test_the_shipped_catalogue_reads_and_tiny_is_the_default() -> None:
     tiny = catalogue.default(entries)
     assert tiny.id == "tiny" and tiny.adapter == "owlv2+sam2"
     assert set(tiny.params) == set(catalogue.SEGMENT_PARAMS)
-    names = {a.name for a in fetch.read_artifacts(fetch.ARTIFACTS)}
+    names = {a.name for a in artifacts.read()}
     assert set(tiny.files) <= names
 
 
@@ -135,7 +135,7 @@ def _use(monkeypatch, adapter, params=catalogue.SEGMENT_PARAMS, ident="fake") ->
     )
     monkeypatch.setattr(segment, "ENTRIES", [fake])
     monkeypatch.setattr(segment, "DEFAULT", ident)
-    monkeypatch.setattr(segment, "_loaded", (ident, adapter))
+    monkeypatch.setattr(segment, "load", lambda entry, installation=None: adapter)
 
 
 def test_each_region_is_paired_with_its_own_plane_in_order(harness, monkeypatch) -> None:
@@ -174,7 +174,20 @@ def test_an_unknown_model_is_refused(harness, monkeypatch) -> None:
     assert "fake" in result.structuredContent["summary"]
 
 
-def test_one_model_is_loaded_at_a_time(monkeypatch) -> None:
+def test_one_model_is_loaded_at_a_time_keyed_by_its_installation(monkeypatch, tmp_path) -> None:
+    import hashlib
+
+    models = installs.Models(tmp_path / "models")
+
+    def install(model: str, name: str, data: bytes) -> str:
+        staged = models.staging(model)
+        (staged / name).write_bytes(data)
+        record = installs.manifest_for(
+            model, "test", [(name, len(data), hashlib.sha256(data).hexdigest())]
+        )
+        with models.lock():
+            return models.publish(model, staged, record)
+
     built: list[str] = []
 
     def builder(files):
@@ -182,16 +195,28 @@ def test_one_model_is_loaded_at_a_time(monkeypatch) -> None:
         return _FakeAdapter([])
 
     mac = ("macos-arm64",)
-    one = catalogue.Entry("one", "1", "fake", (), True, "MIT", (), ("1.onnx",), 1, 1, mac)
-    two = catalogue.Entry("two", "2", "fake", (), False, "MIT", (), ("2.onnx",), 1, 1, mac)
+    one = catalogue.Entry("one", "1", "fake", (), True, "MIT", (), ("1.bin",), 1, 1, mac)
+    two = catalogue.Entry("two", "2", "fake", (), False, "MIT", (), ("2.bin",), 1, 1, mac)
     monkeypatch.setitem(adapters.BUILDERS, "fake", builder)
-    monkeypatch.setattr(segment.cache, "artifact", lambda name: Path("/models") / name)
-    monkeypatch.setattr(segment, "_loaded", None)
+    monkeypatch.setattr(segment.cache, "models", lambda: models)
+    monkeypatch.setattr(segment, "_slot", installs.Slot())
+    first_install = install("one", "1.bin", b"one")
+    install("two", "2.bin", b"two")
     first = segment.load(one)
-    assert segment.load(one) is first and built == ["1.onnx"]
+    assert segment.load(one) is first and built == ["1.bin"]
     second = segment.load(two)
-    assert second is not first and segment._loaded[0] == "two"
-    assert segment.load(one) is not first and built == ["1.onnx", "2.onnx", "1.onnx"]
+    assert second is not first
+    assert segment.load(one) is not first and built == ["1.bin", "2.bin", "1.bin"]
+    # A reinstall is a new installation: the next call loads it; naming the old one loads that.
+    models.hold("one", "run-1")
+    install("one", "1.bin", b"one, again")
+    assert segment.load(one) is not None and len(built) == 4
+    segment.load(one, first_install)
+    assert len(built) == 5
+    with models.lock():
+        models.delete("two")
+    with pytest.raises(segment.cache.MissingModel, match="rascal-tools get two"):
+        segment.load(two)
 
 
 def test_the_manifest_offers_the_catalogue_s_models() -> None:

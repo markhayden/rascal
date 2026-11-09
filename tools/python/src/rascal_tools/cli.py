@@ -1,6 +1,6 @@
 """The command line: `rascal-tools serve [--debug-tools]`; the installer's `get <model> [--from
 DIR]`, `remove <model>`, `models [--json]`, `hold <model> --run ID` and `release <model> --run ID`
-(SPEC.md "Installing a model"); and `fetch`, until the cutover (PLAN.md 14.4)."""
+(SPEC.md "Installing a model")."""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ import sys
 from pathlib import Path
 
 from rascal_tools import __version__
-from rascal_tools import fetch as fetch_module
 
 EXIT_ERROR = 3
 EXIT_USAGE = 64
@@ -28,14 +27,6 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="also serve the tools that exist to test the pack (echo_env)",
     )
-    fetch = sub.add_parser("fetch", help="download and verify the model artifacts")
-    fetch.add_argument(
-        "--artifacts",
-        type=Path,
-        default=fetch_module.ARTIFACTS,
-        help="the artifacts.toml to read (default: the pack's own)",
-    )
-    fetch.add_argument("--cache", type=Path, default=None, help="the cache directory")
     models_help = "the models directory (default: RASCAL_TOOLS_MODELS, beside the pack, the cache)"
     get = sub.add_parser("get", help="install a segmenter from the catalogue")
     get.add_argument("model", nargs="?", help="the catalogue id (default: the default model)")
@@ -62,8 +53,6 @@ def main(argv: list[str] | None = None) -> int:
         from rascal_tools import server
 
         return server.main(debug=args.debug_tools)
-    if args.command == "fetch":
-        return fetch_module.main(args.artifacts, args.cache)
     return _installer(args)
 
 
@@ -75,6 +64,7 @@ def _models(args: argparse.Namespace):
 
 
 def _installer(args: argparse.Namespace) -> int:
+    from rascal_tools import artifacts as manifest
     from rascal_tools import catalogue, installer, installs
 
     models = _models(args)
@@ -125,7 +115,10 @@ def _installer(args: argparse.Namespace) -> int:
     except installer.Cancelled as e:
         print(f"rascal-tools {args.command}: {e}", file=sys.stderr)
         return EXIT_CANCELLED
-    except (installs.InstallError, installs.Busy, catalogue.CatalogueError, OSError) as e:
+    except (
+        installs.InstallError, installs.Busy, catalogue.CatalogueError, manifest.ArtifactsError,
+        OSError,
+    ) as e:  # fmt: skip
         print(f"rascal-tools {args.command}: {e}", file=sys.stderr)
         return EXIT_ERROR
     return EXIT_USAGE
