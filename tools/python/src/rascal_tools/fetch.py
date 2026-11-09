@@ -26,6 +26,7 @@ class Artifact:
     url: str
     sha256: str
     licence: str
+    size: int = 0
 
 
 def cache_dir() -> Path:
@@ -37,12 +38,20 @@ def read_artifacts(path: Path) -> list[Artifact]:
     data = tomllib.loads(path.read_text())
     out = []
     for entry in data.get("artifact", []):
-        for key in ("name", "url", "sha256", "licence"):
+        for key in ("name", "url", "sha256", "licence", "size"):
             if key not in entry:
                 raise FetchError(f"{path}: an artifact lacks {key}")
         if "/" in entry["name"] or entry["name"] in ("", ".", ".."):
             raise FetchError(f"{path}: artifact name {entry['name']!r} is not a plain file name")
-        out.append(Artifact(entry["name"], entry["url"], entry["sha256"].lower(), entry["licence"]))
+        out.append(
+            Artifact(
+                entry["name"],
+                entry["url"],
+                entry["sha256"].lower(),
+                entry["licence"],
+                int(entry["size"]),
+            )
+        )
     return out
 
 

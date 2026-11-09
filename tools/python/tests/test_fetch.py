@@ -49,11 +49,13 @@ def test_artifacts_toml_is_read_and_checked(tmp_path: Path) -> None:
         '[[artifact]]\nname = "a.onnx"\nurl = "https://example.invalid/a"\n'
         + 'sha256 = "'
         + "AB" * 32
-        + '"\nlicence = "Apache-2.0"\n'
+        + '"\nsize = 3\nlicence = "Apache-2.0"\n'
     )
     [a] = fetch.read_artifacts(toml)
-    assert a.name == "a.onnx" and a.sha256 == "ab" * 32
-    toml.write_text('[[artifact]]\nname = "../a.onnx"\nurl = "u"\nsha256 = "0"\nlicence = "x"\n')
+    assert a.name == "a.onnx" and a.sha256 == "ab" * 32 and a.size == 3
+    toml.write_text(
+        '[[artifact]]\nname = "../a.onnx"\nurl = "u"\nsha256 = "0"\nsize = 1\nlicence = "x"\n'
+    )
     with pytest.raises(fetch.FetchError, match="plain file name"):
         fetch.read_artifacts(toml)
     toml.write_text('[[artifact]]\nname = "a.onnx"\nurl = "u"\n')
@@ -66,8 +68,11 @@ def test_artifacts_toml_is_read_and_checked(tmp_path: Path) -> None:
         "owlv2-base-patch16.tokenizer.json",
         "sam2.1-hiera-tiny.encoder.onnx",
         "sam2.1-hiera-tiny.decoder3.onnx",
+        "LICENSE.owlv2-base-patch16.txt",
+        "LICENSE.sam2.1-hiera-tiny.txt",
     ]
     assert all(a.licence == "Apache-2.0" and len(a.sha256) == 64 for a in shipped)
+    assert all(a.size > 0 for a in shipped)
 
 
 def test_a_missing_artifact_skips_a_segmenter_test() -> None:

@@ -18,12 +18,14 @@ ARTIFACTS = """
 name = "a.onnx"
 url = "https://example.invalid/a.onnx"
 sha256 = "{z}"
+size = 1
 licence = "Apache-2.0"
 
 [[artifact]]
 name = "LICENSE.a"
 url = "https://example.invalid/LICENSE.a"
 sha256 = "{z}"
+size = 1
 licence = "Apache-2.0"
 """.format(z="0" * 64)
 

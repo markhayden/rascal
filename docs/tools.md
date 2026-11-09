@@ -280,6 +280,19 @@ the pack looks in when the variable is unset. The pack verifies each artifact's 
 process before using it and loads the models on the first call. A call without the artifacts
 is an operational error naming the directory looked in and the command that fills it.
 
+**Installing models.** `rascal-tools get <model>` installs a catalogued segmenter (the default
+with no model): its files (graphs, tokenizer, licence files) from the release assets
+`artifacts.toml` names over HTTPS, each bounded by its recorded size and checked against its
+SHA-256, or with `--from <dir>` from a directory holding the same files, with no network. It
+publishes them as one installation in the models directory (`tools/python/MODEL.md`
+"Installations"), reusing any file another model already installed; a second install or remove of
+the same model waits or, with `--no-wait`, is refused; Ctrl-C cancels and leaves the previous
+installation as it was. `rascal-tools remove <model>` removes one (a run holding it keeps it until
+the run ends), `rascal-tools models [--json]` lists the catalogue with each model's state
+(`installed`, `not_installed`, `installing`, `unavailable`) and last outcome, and `hold` /
+`release` pin an installation for a run (the lab uses them). Until the cutover (PLAN.md 14.4) the
+pack still reads the files `fetch` downloads.
+
 The pack's tests are offline (`pytest`, `ruff`; `scripts/check-python.sh`, part of `just
 check` when the environment exists), with a parity harness that compares a tool's answer to
 stored outputs within a stated tolerance and skips the `segmenter`-marked case until every

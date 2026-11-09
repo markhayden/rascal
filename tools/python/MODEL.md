@@ -25,7 +25,11 @@ The digests in `artifacts.toml` are the exported files'; `rascal-tools fetch` ve
 after a download and the pack verifies them once per process before an artifact is used. The
 files are published as release assets of the repository (`models-2026-10` for OWLv2 and the
 SAM encoder, `models-2026-11` for the three-outline decoder), and a bundle carries them under
-`models/`.
+`models/`. Each model's licence texts are artifacts too, installed beside its graphs: Tiny's,
+`LICENSE.owlv2-base-patch16.txt` and `LICENSE.sam2.1-hiera-tiny.txt` (the Apache-2.0 text with a
+header naming the model, its revision and the export), are the release `models-2026-11-tiny`,
+and their sources are `export/licences/`. Every artifact records its size, which bounds a
+download.
 
 ## The catalogue
 

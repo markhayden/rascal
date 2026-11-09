@@ -12,7 +12,7 @@ adapter = "owlv2+sam2"
 params = ["threshold", "max_instances", "pad", "outline", "min_cover"]
 default = true
 licence = "Apache-2.0"
-licence_files = []
+licence_files = ["LICENSE.owlv2-base-patch16.txt", "LICENSE.sam2.1-hiera-tiny.txt"]
 files = [
     "owlv2-base-patch16.onnx",
     "owlv2-base-patch16.tokenizer.json",

@@ -1,7 +1,8 @@
 # The model artifacts `rascal-tools fetch` downloads into the cache and verifies, and a bundle
 # carries (SPEC.md "The Python pack and its bundle"; MODEL.md for the provenance of each).
 # `name` is the file name in the cache; `sha256` is checked before and after a download, and
-# by the pack before an artifact is used; `licence` is as MODEL.md records it. The files are
+# by the pack before an artifact is used; `size` bounds a download (longer or shorter is
+# refused); `licence` is as MODEL.md records it. The files are
 # published as release assets of the repository; a bundle holds them under models/. The file
 # lives inside the package so an installed pack reads the same one.
 
@@ -9,22 +10,40 @@
 name = "owlv2-base-patch16.onnx"
 url = "https://github.com/markhayden/rascal/releases/download/models-2026-10/owlv2-base-patch16.onnx"
 sha256 = "11a8711e6d8d63f7bf8bfcc0e62d5d4e00fa8b6096dbec82ee2fbbff61389767"
+size = 621767499
 licence = "Apache-2.0"
 
 [[artifact]]
 name = "owlv2-base-patch16.tokenizer.json"
 url = "https://github.com/markhayden/rascal/releases/download/models-2026-10/owlv2-base-patch16.tokenizer.json"
 sha256 = "fbf857dd4099afc6da394d17cba2f22c5d01eb6d87bb74967c90634f3bcf4e82"
+size = 3642370
 licence = "Apache-2.0"
 
 [[artifact]]
 name = "sam2.1-hiera-tiny.encoder.onnx"
 url = "https://github.com/markhayden/rascal/releases/download/models-2026-10/sam2.1-hiera-tiny.encoder.onnx"
 sha256 = "ed386472cf112f10464cdad2d2c786e171306cb31aeb2096c6a1da8789c35073"
+size = 110465900
 licence = "Apache-2.0"
 
 [[artifact]]
 name = "sam2.1-hiera-tiny.decoder3.onnx"
 url = "https://github.com/markhayden/rascal/releases/download/models-2026-11/sam2.1-hiera-tiny.decoder3.onnx"
 sha256 = "5e69b63545f044fcc000f12c9cefc52801091d1b07d553ad69af8505cd88809e"
+size = 17275379
+licence = "Apache-2.0"
+
+[[artifact]]
+name = "LICENSE.owlv2-base-patch16.txt"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-tiny/LICENSE.owlv2-base-patch16.txt"
+sha256 = "20b90b50be5a43230c4ec29242124ab43755ffb0aaaf484bc839a6260710eaa3"
+size = 10867
+licence = "Apache-2.0"
+
+[[artifact]]
+name = "LICENSE.sam2.1-hiera-tiny.txt"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-tiny/LICENSE.sam2.1-hiera-tiny.txt"
+sha256 = "84f81e331686190986f375ac30af85cc90c5fc30e7451a04b52103e112d3bc56"
+size = 10872
 licence = "Apache-2.0"

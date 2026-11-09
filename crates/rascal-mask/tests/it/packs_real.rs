@@ -245,22 +245,24 @@ fn the_real_pack_sees_the_allowlisted_environment_only() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// The model directory holding every artifact `artifacts.toml` names, when it does.
+/// The model directory holding the default segmenter's graphs (the files its
+/// `segmenters.toml` entry names), when it does.
 fn models_dir() -> Option<PathBuf> {
     let dir = std::env::var_os("RASCAL_TOOLS_MODELS")
         .map(PathBuf::from)
         .or_else(|| {
             std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache/rascal-tools"))
         })?;
-    let manifest =
-        std::fs::read_to_string(repo_root().join("tools/python/src/rascal_tools/artifacts.toml"))
+    let catalogue =
+        std::fs::read_to_string(repo_root().join("tools/python/src/rascal_tools/segmenters.toml"))
             .unwrap();
-    let names: Vec<&str> = manifest
+    let names: Vec<&str> = catalogue
         .lines()
-        .filter_map(|l| l.strip_prefix("name = \""))
-        .map(|l| l.trim_end_matches('"'))
+        .map(str::trim)
+        .filter(|l| l.starts_with('"') && (l.ends_with(".onnx\",") || l.ends_with(".json\",")))
+        .map(|l| l.trim_end_matches(',').trim_matches('"'))
         .collect();
-    assert_eq!(names.len(), 4, "artifacts.toml names four files");
+    assert_eq!(names.len(), 4, "Tiny's catalogue entry names four files");
     if names.iter().all(|n| dir.join(n).is_file()) {
         Some(dir)
     } else {
