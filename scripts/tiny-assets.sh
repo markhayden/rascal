@@ -6,7 +6,7 @@
 #   scripts/tiny-assets.sh <dir>
 set -euo pipefail
 cd "$(dirname "$0")/.."
-out="${1:?the directory to fill with Tiny's release assets}"
+out="${1:?the directory to fill with the release assets of Tiny}"
 models="$(mktemp -d "${TMPDIR:-/tmp}/rascal-tiny.XXXXXX")"
 trap 'rm -rf "$models"' EXIT
 uv run --frozen --project tools/python rascal-tools get tiny --models "$models" >&2

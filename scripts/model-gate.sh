@@ -20,10 +20,10 @@ uv_version="$(sed -n 's/^ *version: "\(0\.[0-9.]*\)"$/\1/p' .github/workflows/bu
 python="$(tr -d '[:space:]' < tools/python/.python-version)"
 context="$(mktemp -d "${TMPDIR:-/tmp}/rascal-model-gate-context.XXXXXX")"
 trap 'rm -rf "$context"' EXIT
-mkdir -p "$context/src/tools" "$context/src/fixtures"
+mkdir -p "$context/src/tools"
 rsync -a --exclude .venv --exclude __pycache__ --exclude .pytest_cache --exclude .ruff_cache \
   tools/python "$context/src/tools/"
-rsync -a fixtures/images fixtures/parity "$context/src/fixtures/"
+rsync -a fixtures "$context/src/"
 cat > "$context/Dockerfile" <<DOCKER
 FROM --platform=linux/amd64 python:${python}-slim
 RUN pip install --no-cache-dir "uv==${uv_version}"
