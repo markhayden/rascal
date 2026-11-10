@@ -123,3 +123,45 @@ url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-sam
 sha256 = "bec48f70bd37bf8280a9d1ebf01642d26086f6122ba735baa08fe03c5a6e7448"
 size = 7352
 licence = "SAM License"
+
+[[artifact]]
+name = "evf-sam2.image.onnx"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-evfsam2/evf-sam2.image.onnx"
+sha256 = "235ffae27477cb485d61e95ec7480426eb8ba35187ad38be44ad05081085343b"
+size = 852364564
+licence = "Apache-2.0"
+
+[[artifact]]
+name = "evf-sam2.prompted.onnx"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-evfsam2/evf-sam2.prompted.onnx"
+sha256 = "7bc7de9aa4ac958869b918ef774e0636a4b39bc59313e83c42fe2279515fd4f3"
+size = 1978266
+licence = "Apache-2.0"
+
+[[artifact]]
+name = "evf-sam2.prompted.0.data"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-evfsam2/evf-sam2.prompted.0.data"
+sha256 = "bdd4a2a9866407ab12d1aace12b98716ddfcec90739b566c7a5c297b4a23e9fb"
+size = 1896960000
+licence = "Apache-2.0"
+
+[[artifact]]
+name = "evf-sam2.prompted.1.data"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-evfsam2/evf-sam2.prompted.1.data"
+sha256 = "3fd32dcb053e237e52390153c0ba1fe908db33525ba83c9b65a68c4b700cac86"
+size = 815308328
+licence = "Apache-2.0"
+
+[[artifact]]
+name = "evf-sam2.tokenizer.json"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-evfsam2/evf-sam2.tokenizer.json"
+sha256 = "dea5e69c13263e106f5328da7e0407b84fa47d0c8f5ca6d4f3a8aba7577fc73d"
+size = 4494891
+licence = "Apache-2.0"
+
+[[artifact]]
+name = "LICENSE.evf-sam2.txt"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-evfsam2/LICENSE.evf-sam2.txt"
+sha256 = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+size = 11357
+licence = "Apache-2.0"

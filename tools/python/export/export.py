@@ -39,6 +39,8 @@ references under `fixtures/models/<model>/` instead (SPEC.md "The export gate").
 `--only sam3 [--references]` exports SAM 3's three graphs, its tokenizer and the SAM License into
 `--out`, then (with `--references`) freezes its references into `fixtures/models/sam3/`: it runs
 `sam3/export_sam3.py` in its own environment (`sam3/pyproject.toml`, Transformers 5).
+`--only evfsam2` runs `export/evfsam2.py` in its own environment (`export/evfsam2/`: the maker's
+code needs Transformers 4.51 and torchscale), passing `--out` or `--references` through.
 """
 
 from __future__ import annotations
@@ -300,7 +302,7 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=Path(default))
     parser.add_argument(
         "--only",
-        choices=["all", "sam_decoder", "tiny", "birefnet", "hqsam", "sam3"],
+        choices=["all", "sam_decoder", "tiny", "birefnet", "hqsam", "sam3", "evfsam2"],
         default="all",
         help="export every graph (default), the SAM decoder alone, or one catalogued model",
     )
@@ -318,6 +320,14 @@ def main() -> int:
         command = ["uv", "run", "--frozen", "--project", str(here / "sam3"), "python",
                    str(here / "sam3" / "export_sam3.py"), "--out", str(args.out)]  # fmt: skip
         return subprocess.run(command + (["--references"] if args.references else [])).returncode
+    if args.only == "evfsam2":
+        import subprocess
+
+        here = Path(__file__).resolve().parent
+        extra = ["--references"] if args.references else ["--out", str(args.out)]
+        command = ["uv", "run", "--frozen", "--project", str(here / "evfsam2"), "python",
+                   str(here / "evfsam2.py"), *extra]  # fmt: skip
+        return subprocess.run(command, check=False).returncode
     if args.only == "tiny":
         if not args.references:
             parser.error("--only tiny takes --references (tiny's graphs are the default export)")

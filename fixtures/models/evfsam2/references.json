@@ -1,0 +1,117 @@
+{
+  "model": "evfsam2",
+  "source": {
+    "code": "hustvl/EVF-SAM",
+    "code_commit": "9935dc52571678b806830821b3ddeacb30e7af07",
+    "repo": "YxZhang/evf-sam2-multitask",
+    "revision": "df3644009016a4f62d13c02f3f8fb6c9bbf94310"
+  },
+  "max_instances": 8,
+  "positive_threshold": 0.2,
+  "cases": [
+    {
+      "case": "positive",
+      "image": "chair-blob.png",
+      "prompt": "chair. table",
+      "threshold": 0.2,
+      "instances": [
+        {
+          "query": 0,
+          "score": 1.0,
+          "box": [
+            134.0,
+            70.0,
+            250.0,
+            250.0
+          ],
+          "plane": "positive-chair-blob-0.png",
+          "sha256": "b3fdfd85ab2ac7ca24f5053c18856062fbfbd0ae469c7d4e964033d4e76965e6"
+        },
+        {
+          "query": 1,
+          "score": 1.0,
+          "box": [
+            134.0,
+            69.0,
+            250.0,
+            256.0
+          ],
+          "plane": "positive-chair-blob-1.png",
+          "sha256": "5dd070acc817859d4d6c0bc4d550244346a53cbb66eb944da547238f4fc42869"
+        }
+      ]
+    },
+    {
+      "case": "positive",
+      "image": "chair-wide.png",
+      "prompt": "chair. table",
+      "threshold": 0.2,
+      "instances": [
+        {
+          "query": 0,
+          "score": 1.0,
+          "box": [
+            350.0,
+            70.0,
+            466.0,
+            264.0
+          ],
+          "plane": "positive-chair-wide-0.png",
+          "sha256": "fce28611ae42a0db64943d6d9980e5ce67516d4e421726648b3b543af1a3f9a0"
+        },
+        {
+          "query": 1,
+          "score": 1.0,
+          "box": [
+            350.0,
+            70.0,
+            466.0,
+            273.0
+          ],
+          "plane": "positive-chair-wide-1.png",
+          "sha256": "760fbd10d393ada59b4855e42de17e1f88471ef458eb1c305e942723ebabd54a"
+        }
+      ]
+    },
+    {
+      "case": "negative",
+      "image": "chair-blob.png",
+      "prompt": "giraffe",
+      "threshold": 0.2,
+      "instances": [
+        {
+          "query": 0,
+          "score": 1.0,
+          "box": [
+            134.0,
+            70.0,
+            250.0,
+            250.0
+          ],
+          "plane": "negative-chair-blob-0.png",
+          "sha256": "0a245ccac04542d6722ffe1967e3cc9fd5c79d2ba08848127591750c74b61177"
+        }
+      ]
+    },
+    {
+      "case": "negative",
+      "image": "chair-wide.png",
+      "prompt": "giraffe",
+      "threshold": 0.2,
+      "instances": [
+        {
+          "query": 0,
+          "score": 1.0,
+          "box": [
+            350.0,
+            70.0,
+            466.0,
+            251.0
+          ],
+          "plane": "negative-chair-wide-0.png",
+          "sha256": "e14194eb16d3f8e8a8739b6be37f1da5753355f0b9e65c31e7c96e9b0d0dd623"
+        }
+      ]
+    }
+  ]
+}
