@@ -190,7 +190,7 @@ with green CI on both platforms, and then the tag.
 - [ ] 14.8 SAM 3 → tag `m14.2-sam3`
 - [x] 14.9 table-manners 0.6.0 draft (`v0.6` `b7df92f`, local until 14.13): per-choice readiness, installables, install/uninstall
 - [x] 14.10 Rascal resolves, pins and records the model (`model-gate.sh --heal` built, not yet run)
-- [ ] 14.11 `describe`, `serve`'s controls and the CLI → tag `m14.3`
+- [x] 14.11 `describe`, `serve`'s controls and the CLI → tag `m14.3` (one commit for the three slices; `model-gate.sh --heal tiny` see below)
 - [ ] 14.12 Wafflery: Installables list and Model choice
 - [ ] 14.13 Publish table-manners 0.6.0 (rascal, squint, Wafflery)
 - [ ] 14.14 The checkpoint (each of 14.5–14.8 merged or excluded with its failing gate recorded) → tag `m14`

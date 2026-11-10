@@ -121,7 +121,8 @@ fn remove_prompt_follows_an_install() {
         "{pack}"
     );
 
-    // The launcher without its model files: each file missing, naming where it was looked for.
+    // The launcher without its model installed: the default model's requirement (one per
+    // catalogued model, for its `model` choice) missing, naming where it was looked for.
     fake_install::write(&install_dir, &[bin, "fake-pack", "exact"], false).unwrap();
     let readiness = remove_prompt(&home, &config, &[]);
     assert_eq!(readiness["state"], "needs_setup");
@@ -129,16 +130,23 @@ fn remove_prompt_follows_an_install() {
         requirement(&readiness, "dependency").unwrap()["state"],
         "present"
     );
-    let missing = files(&readiness);
-    assert_eq!(missing.len(), MODEL_FILES.len());
-    assert!(missing.iter().all(|(_, s)| s == "missing"), "{missing:?}");
-    let setup = requirement(&readiness, "file").unwrap()["setup"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    assert_eq!(
+        files(&readiness),
+        vec![
+            ("segmenter:tiny".to_string(), "missing".to_string()),
+            ("segmenter:sam3".to_string(), "missing".to_string())
+        ]
+    );
+    let tiny = requirement(&readiness, "file").unwrap();
+    assert_eq!(
+        tiny["for_choice"],
+        serde_json::json!({"param": "model", "value": "tiny"})
+    );
+    assert_eq!(tiny["installable"], "tiny");
+    let setup = tiny["setup"].as_str().unwrap().to_string();
     assert!(
         setup.contains(&home.join(".cache/rascal-tools").display().to_string())
-            && setup.contains("rascal-tools get tiny"),
+            && setup.contains("rascal tools get tiny"),
         "{setup}"
     );
 
@@ -146,10 +154,13 @@ fn remove_prompt_follows_an_install() {
     fake_install::write_models(&install_dir.join("models")).unwrap();
     let readiness = remove_prompt(&home, &config, &[]);
     assert_eq!(readiness["state"], "ready", "{readiness:#}");
-    let present = files(&readiness);
-    let names: Vec<&str> = present.iter().map(|(n, _)| n.as_str()).collect();
-    assert_eq!(names, MODEL_FILES);
-    assert!(present.iter().all(|(_, s)| s == "present"), "{present:?}");
+    assert_eq!(
+        files(&readiness),
+        vec![
+            ("segmenter:tiny".to_string(), "present".to_string()),
+            ("segmenter:sam3".to_string(), "missing".to_string())
+        ]
+    );
     // An empty file is not a model file.
     let third = fake_install::model_file(&install_dir.join("models"), MODEL_FILES[2]);
     std::fs::write(&third, b"").unwrap();
@@ -163,17 +174,21 @@ fn remove_prompt_follows_an_install() {
     assert_eq!(readiness["state"], "needs_setup");
     fake_install::write_models(&install_dir.join("models")).unwrap();
 
-    // Another model in the catalogue and in artifacts.toml, not installed: only the default's
-    // files are required, so remove_prompt stays ready (PLAN.md 14.2).
-    let mut artifacts = std::fs::read_to_string(install_dir.join("artifacts.toml")).unwrap();
-    artifacts.push_str("\n[[artifact]]\nname = \"other.onnx\"\nurl = \"https://example.invalid/other.onnx\"\nsha256 = \"0000000000000000000000000000000000000000000000000000000000000000\"\nlicence = \"MIT\"\n");
-    std::fs::write(install_dir.join("artifacts.toml"), artifacts).unwrap();
+    // Another model in the catalogue, not installed: listed for its choice, but only the
+    // default's counts, so remove_prompt stays ready (table-manners 3.1's truth table).
     let mut catalogue = std::fs::read_to_string(install_dir.join("segmenters.toml")).unwrap();
     catalogue.push_str("\n[[segmenter]]\nid = \"other\"\nfiles = [\"other.onnx\"]\n");
     std::fs::write(install_dir.join("segmenters.toml"), catalogue).unwrap();
     let readiness = remove_prompt(&home, &config, &[]);
     assert_eq!(readiness["state"], "ready", "{readiness:#}");
-    assert_eq!(files(&readiness).len(), MODEL_FILES.len());
+    assert_eq!(
+        files(&readiness),
+        vec![
+            ("segmenter:tiny".to_string(), "present".to_string()),
+            ("segmenter:sam3".to_string(), "missing".to_string()),
+            ("segmenter:other".to_string(), "missing".to_string())
+        ]
+    );
     // No catalogue: the install is broken, and says so.
     std::fs::remove_file(install_dir.join("segmenters.toml")).unwrap();
     let readiness = remove_prompt(&home, &config, &[]);

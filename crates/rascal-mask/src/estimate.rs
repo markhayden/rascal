@@ -383,7 +383,13 @@ pub fn price(
 ) -> Result<Price> {
     let config = setup.config.config();
     let filler = args.get("filler").and_then(|v| v.as_str());
-    let readiness = readiness::for_call(setup, action, filler.map_or(Use::MaskOnly, Use::Filler));
+    let model = args.get(readiness::MODEL_PARAM).and_then(|v| v.as_str());
+    let readiness = readiness::for_call(
+        setup,
+        action,
+        filler.map_or(Use::MaskOnly, Use::Filler),
+        model,
+    );
     let unmet = |kind: RequirementKind, prefix: &str| {
         readiness
             .requirements

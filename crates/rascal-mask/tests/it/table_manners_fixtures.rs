@@ -2,7 +2,8 @@
 //! contract's `fixtures/rascal/`, produced by `rascal serve` and `rascal estimate` through the
 //! independent client and never written by hand.
 //!
-//! v0.5 (task 13.15) adds the checked `remove_prompt` (see [`v05_set`]).
+//! v0.5 (task 13.15) adds the checked `remove_prompt` (see [`v05_set`]). The v0.6 draft (task
+//! 14.11) adds the segmenters as `model` choices and installables (see [`v06_set`]).
 //!
 //! v0.4 (task 10.2) adds `kind` to every action, `allowed_dirs` to the session and `invocation`
 //! to every result. M11's set: the description, a run per status (an unresolved charge among them), two pages of
@@ -217,6 +218,8 @@ fn conforms(name: &str, value: &Value) {
         "session"
     } else if name.starts_with("refusal-") {
         "refusal"
+    } else if name.starts_with("install-") || name.starts_with("uninstall-") {
+        "install-result"
     } else {
         panic!("{name}: not a fixture table-manners knows");
     };
@@ -278,6 +281,10 @@ fn conforms(name: &str, value: &Value) {
             for step in v["steps"].as_array().unwrap() {
                 assert_eq!(step["tool"]["name"], "rascal", "{name}");
             }
+            None
+        }
+        "install-result" => {
+            let _: table_manners::InstallResult = serde_json::from_value(v).unwrap();
             None
         }
         _ => {
@@ -1588,6 +1595,86 @@ fn v05_set(dir: &Path, out: &mut BTreeMap<&'static str, Value>, sessions: &mut V
 const BUNDLE_DIR: &str = "bundle-line-rasterize-feather";
 const BUNDLE_MANIFEST: &str = "bundle-line-rasterize-feather/invocation.json";
 
+/// The v0.6 draft's (task 14.11): the segmenters as `remove_prompt`'s `model` choices and as
+/// installables, with the default installed and with `[segment] model` naming one that is not;
+/// a call naming a model that is not installed refused `not_ready`; `install` and `uninstall`
+/// over the fake installer, and an id no installable has refused.
+fn v06_set(dir: &Path, out: &mut BTreeMap<&'static str, Value>, sessions: &mut Vec<String>) {
+    let bin = env!("CARGO_BIN_EXE_rascal");
+    let v06 = dir.join("v06");
+    let install =
+        rascal_testkit::fake_install::write(&v06.join("pack"), &[bin, "fake-pack", "exact"], true)
+            .unwrap();
+    rascal_testkit::fake_install::write_installer(&install, &[bin, "fake-pack", "exact"]).unwrap();
+    let config = v06.join("rascal.toml");
+    let write_config = |segment: &str| {
+        std::fs::write(
+            &config,
+            format!(
+                "config_version = 1\n[packs.fake]\ncommand = {}\nrevision = \"fake 1\"\n{segment}",
+                install.command_toml()
+            ),
+        )
+        .unwrap();
+    };
+    let model_of = |doc: &Value| -> Value {
+        doc["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|a| a["name"] == "remove_prompt")
+            .unwrap()["params_schema"]["properties"]["model"]
+            .clone()
+    };
+
+    write_config("");
+    let mut client = serve(dir, Some(&config), &[]);
+    sessions.push(session_id(&mut client));
+    let described = describe(&mut client);
+    assert_eq!(model_of(&described)["default"], "tiny", "{described:#}");
+    assert!(described["installables"].is_array(), "{described:#}");
+    out.insert("describe-model-choices.json", described);
+    let chair = repo_root().join("fixtures/images/chair-blob.png");
+    let refused = refusal(
+        &mut client,
+        call(
+            "model",
+            "remove_prompt",
+            json!({ "image": { "path": chair.to_str().unwrap() }, "prompt": "the chair", "model": "sam3" }),
+            None,
+        ),
+    );
+    assert_eq!(refused["reason"], "not_ready", "{refused:#}");
+    out.insert("refusal-not-ready-model.json", refused);
+    let installed = result(
+        &mut client,
+        json!({ "name": "install", "arguments": { "id": "sam3" } }),
+    );
+    assert_eq!(installed["state"], "installed", "{installed:#}");
+    out.insert("install-sam3.json", installed);
+    let removed = result(
+        &mut client,
+        json!({ "name": "uninstall", "arguments": { "id": "sam3" } }),
+    );
+    assert_eq!(removed["state"], "not_installed", "{removed:#}");
+    out.insert("uninstall-sam3.json", removed);
+    let unknown = refusal(
+        &mut client,
+        json!({ "name": "install", "arguments": { "id": "giraffe" } }),
+    );
+    assert_eq!(unknown["reason"], "unknown_installable", "{unknown:#}");
+    out.insert("refusal-unknown-installable.json", unknown);
+    client.close().unwrap();
+
+    write_config("\n[segment]\nmodel = \"sam3\"\n");
+    let mut client = serve(dir, Some(&config), &[]);
+    sessions.push(session_id(&mut client));
+    let described = describe(&mut client);
+    assert_eq!(model_of(&described)["default"], "sam3", "{described:#}");
+    out.insert("describe-model-default-missing.json", described);
+    client.close().unwrap();
+}
+
 #[test]
 fn the_table_manners_fixtures_hold() {
     let dir = scratch();
@@ -1609,6 +1696,7 @@ fn the_table_manners_fixtures_hold() {
     );
     v04_set(&dir, &mut out, &mut raw, &mut sessions, &mut issued);
     v05_set(&dir, &mut out, &mut sessions);
+    v06_set(&dir, &mut out, &mut sessions);
 
     let runs: Vec<String> = std::fs::read_dir(dir.join("runs"))
         .unwrap()

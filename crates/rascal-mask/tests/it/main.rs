@@ -22,6 +22,7 @@ mod heal_poisson;
 mod heal_scaled;
 mod inspect;
 mod inspect_json;
+mod install_controls;
 mod isolation;
 mod lab_config;
 mod lab_identity;

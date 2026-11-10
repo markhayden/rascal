@@ -21,6 +21,39 @@ verdict`, `ready` with the checker's key optional and missing), `run-remove-prom
 `scripts/check-contract.sh` warns in CI when crates.io has a newer release; moving the pin is a
 deliberate commit that also refreshes `fixtures/contract/` and `fixtures/table-manners/`.
 
+## Segmenters as choices and installables (v0.6 draft, M14)
+
+Built against the v0.6 draft by path (crate version held at `0.5.0`, PLAN.md 14.13). Each
+catalogued segmenter that runs on this platform (`segmenters.toml` in the pack's install) is a
+choice of `remove_prompt`'s `model`: a string `enum`, the resolved default first and as `default`
+(`[segment] model`, else the catalogue's), with `x-requirements` naming `segmenter:<id>`. Readiness
+lists one `file` requirement per choice, `for_choice: {param: "model", value: <id>}` and
+`installable: <id>`, `present` when the model's current installation holds every catalogued file
+non-empty; the description counts only the default's toward the action's state, and a call (or
+estimate) lists and counts only the model it runs, so a call naming a model that is not installed
+is refused `not_ready` naming it, before any run. A model that runs nowhere here is neither a choice
+nor ready: it is an installable in state `unavailable` with `notes` saying where it runs. Every
+catalogued model is an installable (`kind: model`), its state read from disk (`current`, a live
+installer's status file, the platform), its sizes from the pack's `artifacts.toml`, its
+`last_outcome` from the installer's status, and `x-rascal.lab` the catalogue's lab figures.
+
+`install` and `uninstall` (5.3) are served beside `describe` and `estimate` whenever the
+description lists installables. Each takes `{"id"}`, is never a run, never holds the execution
+permit and spends nothing. `install` starts the segmenter pack's installer (`rascal-tools get <id>
+--no-wait`, the pack's minimal environment plus the models directory, its own process group, its
+output to `<models>/.status/<id>.log`), or attaches to one under way (the status file names a live
+process), and reports progress with `_meta["table-manners/installable"]` and never a run;
+cancelling the request sends the installer SIGTERM (it deletes its staging and records
+`cancelled`); a client that goes away leaves it running. The result is the state after the call,
+read from disk: `installed` with the installation's identity, else the state and an error from the
+installer's recorded outcome (`failed`, `cancelled`, `busy`) or `unavailable` off its platforms.
+`uninstall` stops an install under way, else runs `rascal-tools remove <id>`. An id the catalogue
+does not have is refused `unknown_installable`; with no segmenter pack whose install has a
+catalogue, both are refused `not_ready`. The fixtures `describe-model-choices.json`,
+`describe-model-default-missing.json`, `refusal-not-ready-model.json`, `install-sam3.json`,
+`uninstall-sam3.json` and `refusal-unknown-installable.json` come from `rascal serve` over the
+testkit's fake installer.
+
 ## Image references (8.1)
 
 Every import records the SHA-256 of the caller's file (`file_sha256` on the `import` record), so

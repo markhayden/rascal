@@ -264,7 +264,8 @@ impl ContractActions {
             Some(name) => Use::Filler(name),
             None => Use::MaskOnly,
         };
-        let readiness = self.with_setup(|setup| readiness::for_call(setup, action, filler));
+        let model = args.get(readiness::MODEL_PARAM).and_then(|v| v.as_str());
+        let readiness = self.with_setup(|setup| readiness::for_call(setup, action, filler, model));
         not_ready(action, &readiness).map_or(Ok(()), Err)
     }
 
@@ -1202,6 +1203,10 @@ impl Actions for ContractActions {
         ));
         // `export` and `import` are reserved controls (5.1): tools, never actions.
         tools.extend(crate::transfer::tools());
+        // `install` and `uninstall` (5.3): served when the description lists installables.
+        if description["installables"].is_array() {
+            tools.extend(rascal_mask::install::tools());
+        }
         let mut empty = Map::new();
         empty.insert("type".into(), Value::String("object".into()));
         tools.push(Tool::new(
@@ -1216,6 +1221,7 @@ impl Actions for ContractActions {
         name == "describe"
             || name == "estimate"
             || crate::transfer::handles(name)
+            || rascal_mask::install::handles(name)
             || recipe_of(name).is_some()
             || self.is_operation(name)
     }
@@ -1241,6 +1247,9 @@ impl Actions for ContractActions {
         }
         if crate::transfer::handles(name) {
             return crate::transfer::call(name, args, &self.store, &self.paths);
+        }
+        if rascal_mask::install::handles(name) {
+            return rascal_mask::install::call(name, args, self.config.as_ref(), progress, &cancel);
         }
         if name == "estimate" {
             // What the input schema rejects is plain invalid params; any other wrong request

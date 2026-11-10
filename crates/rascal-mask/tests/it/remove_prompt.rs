@@ -295,15 +295,16 @@ fn the_model_is_the_calls_else_the_configs_else_the_packs_default() {
     let r = run_prompt(&config, &out, &[]);
     assert_eq!(r.status.code(), Some(0), "{}", text(&r.stderr));
     assert_eq!(journal_step(&out, "segment")["params"]["model"], "tiny");
-    // [segment] model names one that is not installed: refused before anything runs, naming the
-    // command that installs it.
+    // [segment] model names one that is not installed: refused at readiness, before anything
+    // runs, naming the command that installs it.
     let config = models_config(&dir.join("cfg"), Some("sam3"));
     let out = dir.join("configured");
     let r = run_prompt(&config, &out, &[]);
     assert_eq!(r.status.code(), Some(64), "{}", text(&r.stderr));
     let err = text(&r.stderr);
     assert!(
-        err.contains("segmenter sam3 is not installed") && err.contains("rascal tools get sam3"),
+        err.contains("not ready: file segmenter:sam3 missing")
+            && err.contains("rascal tools get sam3"),
         "{err}"
     );
     assert!(
@@ -372,6 +373,7 @@ fn a_parameter_the_model_does_not_use_is_left_out_and_refused_when_given() {
     // Install a fake sam3 so it can run.
     let models = dir.join("pack/models");
     std::fs::create_dir_all(models.join("sam3/abc")).unwrap();
+    std::fs::write(models.join("sam3/abc/sam3.onnx"), b"fake weights").unwrap();
     std::fs::write(models.join("sam3/current"), "abc\n").unwrap();
     let out = dir.join("sam3");
     let r = run_prompt(&config, &out, &["--model", "sam3"]);

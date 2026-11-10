@@ -62,8 +62,10 @@ inside against the bundle's manifest, installs offline, and prints the `[packs.r
 entry to put in `rascal.toml`. `--bundle` also takes a local archive or an unpacked directory.
 A bundle carries no model: installing one is a setup step, `rascal-tools get tiny` from the
 install's environment (Tiny, the default segmenter: 749 MB, Apache-2.0, `tools/python/MODEL.md`),
-or `--from` a directory holding its release assets on a machine with no network. `docs/tools.md`
-has the whole of it.
+or `--from` a directory holding its release assets on a machine with no network; from rascal,
+`rascal tools models --config rascal.toml` lists the segmenters and `rascal tools get <model>
+--config rascal.toml` installs one (Wafflery's Get does the same). `docs/tools.md` has the whole
+of it.
 
 ## The recipes
 

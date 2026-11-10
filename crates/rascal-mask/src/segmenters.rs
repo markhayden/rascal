@@ -138,6 +138,16 @@ impl Segmenters {
         self.entries.iter().find(|e| e.default)
     }
 
+    /// The model a call runs when it names none: `[segment] model` when it is catalogued, else
+    /// the catalogue's default.
+    pub fn default_model(&self, config: Option<&Config>) -> Option<String> {
+        config
+            .and_then(|c| c.segment.as_ref())
+            .map(|s| s.model.clone())
+            .filter(|m| self.entry(m).is_some())
+            .or_else(|| self.default_entry().map(|e| e.id.clone()))
+    }
+
     /// The model's current installation identity, when installed.
     pub fn current(&self, id: &str) -> Option<String> {
         if !plain(id) {
@@ -146,6 +156,20 @@ impl Segmenters {
         let ident = std::fs::read_to_string(self.models.join(id).join("current")).ok()?;
         let ident = ident.trim().to_string();
         (plain(&ident) && self.models.join(id).join(&ident).is_dir()).then_some(ident)
+    }
+
+    /// Whether the model's current installation holds every file the catalogue names, each
+    /// non-empty (the pack checks their digests before use; this is a local inspection).
+    pub fn complete(&self, entry: &Entry) -> bool {
+        let Some(ident) = self.current(&entry.id) else {
+            return false;
+        };
+        let dir = self.models.join(&entry.id).join(ident);
+        entry
+            .files
+            .iter()
+            .chain(&entry.licence_files)
+            .all(|f| std::fs::metadata(dir.join(f)).is_ok_and(|m| m.is_file() && m.len() > 0))
     }
 
     /// The installer's status for the model (`<models>/.status/<id>.json`), when there is one.
@@ -173,7 +197,7 @@ impl Segmenters {
         });
         if installing {
             State::Installing
-        } else if self.current(&entry.id).is_some() {
+        } else if self.complete(entry) {
             State::Installed
         } else {
             State::NotInstalled

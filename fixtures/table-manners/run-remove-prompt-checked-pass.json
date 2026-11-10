@@ -169,10 +169,7 @@
       "fillers.fake",
       "rascal",
       "packs.fake",
-      "owlv2-base-patch16.onnx",
-      "owlv2-base-patch16.tokenizer.json",
-      "sam2.1-hiera-tiny.encoder.onnx",
-      "sam2.1-hiera-tiny.decoder3.onnx",
+      "segmenter:tiny",
       "checker",
       "RASCAL_FIXTURE_CHECKER_KEY"
     ]

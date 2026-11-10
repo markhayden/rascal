@@ -308,6 +308,13 @@ the run ends), `rascal-tools models [--json]` lists the catalogue with each mode
 `release` pin an installation for a run (the lab uses them). Installing is the pack's one network
 step; serving never downloads.
 
+From rascal, `rascal tools models --config <rascal.toml> [--json]`, `rascal tools get [<model>]
+--config <rascal.toml> [--from <dir>]` and `rascal tools remove <model> --config <rascal.toml>` run
+the configured segmenter pack's installer with the pack's minimal environment and the models
+directory the pack reads, and exit as it does. Under `rascal serve` the same installer answers the
+contract's `install` and `uninstall` controls (`docs/contract.md`), started in its own process
+group with its output to `<models>/.status/<model>.log`, so an install outlives the request.
+
 The pack's tests are offline (`pytest`, `ruff`; `scripts/check-python.sh`, part of `just
 check` when the environment exists), with a parity harness that compares a tool's answer to
 stored outputs within a stated tolerance and skips the `segmenter`-marked case until its model

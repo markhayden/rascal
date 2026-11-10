@@ -483,9 +483,21 @@
             "type": "number"
           },
           "model": {
-            "description": "The recipe's model (text).",
-            "minLength": 1,
-            "type": "string"
+            "default": "tiny",
+            "description": "The segmenter that finds the prompt's objects; one not installed is got in the tool's setup or with `rascal tools get <id>`.",
+            "enum": [
+              "tiny",
+              "sam3"
+            ],
+            "type": "string",
+            "x-requirements": {
+              "sam3": [
+                "segmenter:sam3"
+              ],
+              "tiny": [
+                "segmenter:tiny"
+              ]
+            }
           },
           "projection": {
             "description": "The image's projection; without it, the projection the image's reference states, else an exactly 2:1 image is equirectangular.",
@@ -596,24 +608,25 @@
             "state": "present"
           },
           {
+            "for_choice": {
+              "param": "model",
+              "value": "tiny"
+            },
+            "installable": "tiny",
             "kind": "file",
-            "name": "owlv2-base-patch16.onnx",
+            "name": "segmenter:tiny",
             "state": "present"
           },
           {
+            "for_choice": {
+              "param": "model",
+              "value": "sam3"
+            },
+            "installable": "sam3",
             "kind": "file",
-            "name": "owlv2-base-patch16.tokenizer.json",
-            "state": "present"
-          },
-          {
-            "kind": "file",
-            "name": "sam2.1-hiera-tiny.encoder.onnx",
-            "state": "present"
-          },
-          {
-            "kind": "file",
-            "name": "sam2.1-hiera-tiny.decoder3.onnx",
-            "state": "present"
+            "name": "segmenter:sam3",
+            "setup": "Fake SAM 3 is not installed in /work/v05/pack/models. Get it in the tool's setup, or run `rascal tools get sam3`.",
+            "state": "missing"
           },
           {
             "for": "checking the result",
@@ -3155,6 +3168,36 @@
     }
   ],
   "contract": "0.5.0",
+  "installables": [
+    {
+      "download_bytes": 1000000,
+      "id": "tiny",
+      "installed_bytes": 1000000,
+      "kind": "model",
+      "last_outcome": null,
+      "licence": "Apache-2.0",
+      "requirements": [],
+      "state": "installed",
+      "title": "Fake Tiny",
+      "x-rascal": {
+        "lab": {
+          "remove": 0.548,
+          "round": "segment-01"
+        }
+      }
+    },
+    {
+      "download_bytes": 3400000000,
+      "id": "sam3",
+      "installed_bytes": 3400000000,
+      "kind": "model",
+      "last_outcome": null,
+      "licence": "SAM License",
+      "requirements": [],
+      "state": "not_installed",
+      "title": "Fake SAM 3"
+    }
+  ],
   "limits": {
     "inline_bytes": 67108864
   },

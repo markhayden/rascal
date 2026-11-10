@@ -1522,6 +1522,8 @@ fn a_retry_keeps_the_model_and_installation_and_pads_the_crop_itself() {
     );
     let models = dir.join("pack/models");
     std::fs::create_dir_all(models.join("sam3/abc")).unwrap();
+    // Installed: `current` names a directory holding every catalogued file, non-empty.
+    std::fs::write(models.join("sam3/abc/sam3.onnx"), b"fake weights").unwrap();
     std::fs::write(models.join("sam3/current"), "abc\n").unwrap();
     let o = heal(&dir, &config, &["--model", "sam3"]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
