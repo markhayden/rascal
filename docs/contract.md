@@ -21,9 +21,9 @@ verdict`, `ready` with the checker's key optional and missing), `run-remove-prom
 `scripts/check-contract.sh` warns in CI when crates.io has a newer release; moving the pin is a
 deliberate commit that also refreshes `fixtures/contract/` and `fixtures/table-manners/`.
 
-## Segmenters as choices and installables (v0.6 draft, M14)
+## Segmenters as choices and installables (v0.6, M14)
 
-Built against table-manners 0.6.0 by path until it is published (PLAN.md 14.13). Each
+Pinned to table-manners =0.6.0 (PLAN.md 14.13). Each
 catalogued segmenter that runs on this platform (`segmenters.toml` in the pack's install) is a
 choice of `remove_prompt`'s `model`: a string `enum`, the resolved default first and as `default`
 (`[segment] model`, else the catalogue's), with `x-requirements` naming `segmenter:<id>`. Readiness
