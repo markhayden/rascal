@@ -537,6 +537,34 @@ fn a_run_that_fails_or_is_cancelled_releases_its_hold() {
         "holds left: {:?}",
         holds_left(&models)
     );
+    // SIGTERM after the pack wrote the hold but before it answered with the installation.
+    std::fs::write(models.join(".slow-hold"), "").unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rascal"))
+        .args(args("slow", &dir.join("between")))
+        .env_remove("RASCAL_LOG")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while holds_left(&models).is_empty() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the run never wrote its hold"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let status = Command::new("kill")
+        .args(["-TERM", &child.id().to_string()])
+        .status()
+        .unwrap();
+    assert!(status.success());
+    assert_eq!(child.wait().unwrap().code(), Some(143));
+    assert!(
+        holds_left(&models).is_empty(),
+        "a hold written before the pack answered was left: {:?}",
+        holds_left(&models)
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 

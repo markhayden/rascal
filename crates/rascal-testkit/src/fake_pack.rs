@@ -603,8 +603,9 @@ pub fn main(args: &[String]) -> i32 {
 }
 
 /// `hold <model> --run <id> [--pid <n>]` prints the current installation after writing
-/// `<models>/<model>/<identity>/.held/<id>`; `release <model> --run <id> --installation <i>`
-/// deletes it. Exit 1 when the model is not installed.
+/// `<models>/<model>/<identity>/.held/<id>`, waiting 5 s in between when `<models>/.slow-hold`
+/// exists; `release <model> --run <id> [--installation <i>]` deletes it, from every installation
+/// without `--installation`. Exit 1 when the model is not installed.
 fn installer(args: &[String]) -> i32 {
     let flag = |name: &str| {
         args.iter()
@@ -621,7 +622,17 @@ fn installer(args: &[String]) -> i32 {
         return 64;
     };
     if args[0] == "release" {
-        if let Some(ident) = flag("--installation") {
+        let idents: Vec<_> = match flag("--installation") {
+            Some(ident) => vec![ident],
+            None => std::fs::read_dir(models.join(model))
+                .map(|d| {
+                    d.flatten()
+                        .map(|e| e.file_name().to_string_lossy().into_owned())
+                        .collect()
+                })
+                .unwrap_or_default(),
+        };
+        for ident in idents {
             let _ = std::fs::remove_file(models.join(model).join(ident).join(".held").join(&run));
         }
         return 0;
@@ -640,6 +651,9 @@ fn installer(args: &[String]) -> i32 {
     {
         eprintln!("fake-pack: {model}'s installation {ident} is gone");
         return 1;
+    }
+    if models.join(".slow-hold").exists() {
+        std::thread::sleep(std::time::Duration::from_secs(5));
     }
     println!("{ident}");
     0
