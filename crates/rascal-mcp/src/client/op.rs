@@ -210,6 +210,25 @@ impl Op for PackOp {
         self.tool.manifest.clone()
     }
 
+    /// The pack's `applies`: the chosen value (given, else the parameter's default) decides.
+    fn inapplicable(&self, given: &Params) -> Option<rascal_core::op::Inapplicable> {
+        let applies = self.tool.annotation.applies.as_ref()?;
+        let chosen = given
+            .get(&applies.param)
+            .and_then(|v| v.as_str().map(str::to_string))
+            .or_else(|| {
+                self.tool
+                    .manifest
+                    .param(&applies.param)
+                    .and_then(|p| p.default.as_ref())
+                    .and_then(|d| d.as_str().map(str::to_string))
+            })?;
+        Some(rascal_core::op::Inapplicable {
+            because: format!("{} {chosen}", applies.param),
+            params: applies.inapplicable(&chosen),
+        })
+    }
+
     fn run(&self, context: &Context<'_>, inputs: &Inputs, params: &Params) -> Result<Output> {
         let name = self.tool.manifest.name.clone();
         let pack_name = self.pack.name().to_string();
@@ -223,9 +242,11 @@ impl Op for PackOp {
         // The request's identity: the pack, the tool, the parameters and the inputs by
         // identity. Never a workspace id (an argument's value for a port), which depends on
         // the workspace's allocation history and would make a relocated run miss its recording.
+        // `installation` pins which copy of a model runs, not what is asked: it stays out of the
+        // identity, so a recording answers a replay whatever is installed now (or nothing).
         let parameters: serde_json::Map<String, serde_json::Value> = arguments
             .iter()
-            .filter(|(k, _)| self.tool.manifest.input(k).is_none())
+            .filter(|(k, _)| self.tool.manifest.input(k).is_none() && k.as_str() != "installation")
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
         let request = canonical::identity_of(

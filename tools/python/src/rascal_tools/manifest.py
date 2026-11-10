@@ -168,6 +168,10 @@ class ToolSpec:
     constants: tuple[str, ...] = ()
     returns: Bounds = field(default_factory=Bounds)
     concurrent: bool = False
+    # A choice parameter that decides which other parameters apply: (its name, per choice the
+    # parameters that choice uses). A parameter some choice lists and the chosen one does not is
+    # neither defaulted nor accepted (rascal's pack annotation, `applies`).
+    applies: tuple[str, dict[str, tuple[str, ...]]] | None = None
 
     def input_schema(self) -> dict[str, Any]:
         properties: dict[str, Any] = {}
@@ -249,4 +253,7 @@ class ToolSpec:
         }
         if self.constants:
             out["constants"] = list(self.constants)
+        if self.applies:
+            param, choices = self.applies
+            out["applies"] = {"param": param, "choices": {k: list(v) for k, v in choices.items()}}
         return out

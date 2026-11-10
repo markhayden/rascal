@@ -103,6 +103,38 @@ pub struct PackAnnotation {
     /// The constant sets a step may select; the first is the default.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub constants: Vec<String>,
+    /// A choice parameter that decides which other parameters apply (`segment`'s `model`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub applies: Option<Applies>,
+}
+
+/// Which parameters each choice of one choice parameter uses (SPEC.md "Choosable segmenters"):
+/// a parameter some choice lists and the chosen one does not is neither defaulted nor accepted;
+/// a parameter no choice lists always applies.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Applies {
+    /// The choice parameter.
+    pub param: String,
+    /// Per choice, the parameters it uses.
+    pub choices: std::collections::BTreeMap<String, Vec<String>>,
+}
+
+impl Applies {
+    /// The parameters that do not apply when `chosen` is the choice.
+    pub fn inapplicable(&self, chosen: &str) -> Vec<String> {
+        let uses = self.choices.get(chosen);
+        let mut out: Vec<String> = self
+            .choices
+            .values()
+            .flatten()
+            .filter(|p| uses.is_none_or(|u| !u.contains(p)))
+            .cloned()
+            .collect();
+        out.sort();
+        out.dedup();
+        out
+    }
 }
 
 /// The copied manifest shape (`schemas/copied/manifest-v1.json`), typed: the fields rascal

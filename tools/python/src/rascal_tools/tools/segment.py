@@ -140,6 +140,7 @@ SPEC = ToolSpec(
         # `retried_<n>` and `retry_kept_<n>`.
         max_measurements=4 * MAX_INSTANCES + 2,
     ),
+    applies=("model", {e.id: tuple(e.params) for e in ENTRIES}),
 )
 
 _lock = threading.Lock()

@@ -866,6 +866,14 @@ impl Manifest {
     }
 }
 
+/// Parameters a call does not use ([`Op::inapplicable`]), with the choice that decides it, as a
+/// person reads it (`model sam3`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Inapplicable {
+    pub because: String,
+    pub params: Vec<String>,
+}
+
 /// An invocation's outcome class. Ops never return a verdict.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -1277,6 +1285,14 @@ pub trait Op: Send + Sync {
         Params::new()
     }
 
+    /// The parameters this call does not use, and the choice that decides it (a pack's
+    /// `applies`, such as `segment`'s `model`): given explicitly they are refused; otherwise they
+    /// are neither defaulted nor passed, so the journal records only what the call uses. Most ops
+    /// use every parameter.
+    fn inapplicable(&self, _given: &Params) -> Option<Inapplicable> {
+        None
+    }
+
     /// The frames its inputs may be drawn in together, checked before a served call runs
     /// (CONTRACT 4.7, `wrong_frame`): by default every input in one frame ([`same_frame`]).
     /// `inputs` holds the inputs known, in port order (a call may give some by value, read only
@@ -1392,6 +1408,15 @@ pub fn resolve_step(op: &dyn Op, given: &Params) -> std::result::Result<Resoluti
     let manifest = op.manifest();
     let mut given = given.clone();
     let constants = given.remove("constants");
+    let inapplicable = op.inapplicable(&given);
+    if let Some(off) = &inapplicable
+        && let Some(name) = off.params.iter().find(|p| given.contains_key(*p))
+    {
+        return Err(Unresolved::Invalid(format!(
+            "parameter {name} does not apply with {}",
+            off.because
+        )));
+    }
     let named = constants
         .as_ref()
         .and_then(|c| c.as_str())
@@ -1414,6 +1439,11 @@ pub fn resolve_step(op: &dyn Op, given: &Params) -> std::result::Result<Resoluti
     let mut params = manifest
         .resolve_params(&given)
         .map_err(Unresolved::Invalid)?;
+    if let Some(off) = &inapplicable {
+        for name in &off.params {
+            params.remove(name);
+        }
+    }
     match constants {
         Some(c) => {
             params.insert("constants".to_string(), c);

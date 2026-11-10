@@ -223,3 +223,13 @@ def test_the_manifest_offers_the_catalogue_s_models() -> None:
     model = segment.SPEC.manifest()["model_schema"]["properties"]["model"]
     assert model["enum"] == [e.id for e in catalogue.read()]
     assert model["default"] == "tiny"
+
+
+def test_segment_annotation_says_which_parameters_each_model_uses():
+    """rascal leaves out (and refuses) a parameter the chosen model does not use, from this."""
+    from rascal_tools import catalogue
+    from rascal_tools.tools import segment
+
+    applies = segment.SPEC.annotation()["applies"]
+    assert applies["param"] == "model"
+    assert applies["choices"] == {e.id: list(e.params) for e in catalogue.read()}
