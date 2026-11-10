@@ -89,9 +89,12 @@ def revision(entry: catalogue.Entry) -> str:
 
 @contextlib.contextmanager
 def model_lock(models: installs.Models, model: str, wait: bool) -> Iterator[None]:
-    """The per-model lock: one install or remove of a model at a time."""
-    models.root.mkdir(parents=True, exist_ok=True)
-    with (models.root / f".install-{model}.lock").open("a+") as handle:
+    """The per-model lock, `<models>/<id>/.lock` (SPEC.md "Installing a model"): one install or
+    remove of a model at a time. It is a file, so `installations` never lists it, and it keeps the
+    model's directory after a remove."""
+    directory = models.model_dir(model)
+    directory.mkdir(parents=True, exist_ok=True)
+    with (directory / ".lock").open("a+") as handle:
         try:
             fcntl.flock(handle, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
         except OSError as e:

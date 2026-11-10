@@ -258,3 +258,17 @@ def test_the_command_line_lists_and_refuses_cleanly(tmp_path, capsys) -> None:
     assert "no model 'nope'" in capsys.readouterr().err
     assert cli.main(["hold", "tiny", "--run", "r1", "--models", models]) == 3
     assert "not installed" in capsys.readouterr().err
+
+
+def test_the_models_directory_holds_only_the_layout(setup) -> None:
+    # SPEC.md "Installing a model": the per-model lock is `<models>/<id>/.lock`, so the top level
+    # holds model ids, `files`, `.lock`, `.staging` and `.status` and nothing else (a re-run of
+    # `rascal tools setup` refuses anything else as a stray; crates/rascal-mcp provision.rs).
+    models, _, get, _, _ = setup
+    get()
+    installer.remove("tiny", models)
+    get()
+    top = {p.name for p in models.root.iterdir()}
+    assert top <= {"tiny", "files", ".lock", ".staging", ".status"}, top
+    assert (models.root / "tiny" / ".lock").is_file()
+    assert models.installations("tiny") == [models.current("tiny")]

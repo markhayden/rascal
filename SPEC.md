@@ -1279,7 +1279,8 @@ them by digest. An install:
 1. takes the model's own lock, `<models>/<id>/.lock` (another `get` or `remove` of the same
    model waits or is refused `busy`, per the caller), so a long download never blocks runs or
    other models;
-2. stages everything in `<models>/.staging/<id>-<random>/`;
+2. stages everything in `<models>/.staging/<id>-<pid>-<random>/` (the pid lets a later clean-up
+   tell a live staging directory from one a crash left);
 3. verifies every staged file;
 4. takes the models lock, `<models>/.lock`, for the publish alone (steps 4 to 6): if `<models>/<id>/<identity>/` exists and verifies, discards the staging directory and keeps
    it; if it exists and does not verify, refuses `busy` while it has a live hold, and otherwise
