@@ -26,6 +26,10 @@ The graphs:
 
 `--only sam_decoder` exports and checks the decoder alone, against features from PyTorch's
 encoder, leaving the other files as they are (the 2026-11 re-export, PLAN.md 13.1).
+
+`--only hqsam` exports HQ-SAM ViT-L's two graphs and its licence (`hqsam.py`, MODEL.md), and
+`--references` then writes its instance-parity references into `fixtures/models/hqsam/`
+(SPEC.md "The export gate", check 1).
 """
 
 from __future__ import annotations
@@ -287,13 +291,27 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=Path(default))
     parser.add_argument(
         "--only",
-        choices=["all", "sam_decoder"],
+        choices=["all", "sam_decoder", "hqsam"],
         default="all",
-        help="export every graph (default), or the SAM decoder alone",
+        help="export every graph (default), the SAM decoder alone, or HQ-SAM ViT-L",
+    )
+    parser.add_argument(
+        "--references",
+        action="store_true",
+        help="with --only hqsam: also write the instance-parity references into fixtures/",
     )
     args = parser.parse_args()
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
+    if args.only == "hqsam":
+        import hqsam
+
+        record = {"exported": time.strftime("%Y-%m-%d"), **hqsam.export(out, session, sha256)}
+        (out / "export.json").write_text(json.dumps(record, indent=2) + "\n")
+        print(json.dumps(record, indent=2))
+        if args.references:
+            hqsam.references()
+        return 0
     torch.manual_seed(0)
     image = Image.open(FIXTURE).convert("RGB")
     api = HfApi()

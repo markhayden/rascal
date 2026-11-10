@@ -589,6 +589,8 @@ dependencies = [
     { name = "onnxscript" },
     { name = "pillow" },
     { name = "scipy" },
+    { name = "segment-anything-hq" },
+    { name = "timm" },
     { name = "tokenizers" },
     { name = "torch" },
     { name = "torchvision" },
@@ -604,6 +606,8 @@ requires-dist = [
     { name = "onnxscript", specifier = ">=0.2" },
     { name = "pillow", specifier = ">=11" },
     { name = "scipy", specifier = ">=1.18.1" },
+    { name = "segment-anything-hq", specifier = "==0.3" },
+    { name = "timm", specifier = ">=1.0" },
     { name = "tokenizers", specifier = ">=0.22.2" },
     { name = "torch", specifier = ">=2.5" },
     { name = "torchvision", specifier = ">=0.20" },
@@ -695,6 +699,19 @@ wheels = [
 ]
 
 [[package]]
+name = "segment-anything-hq"
+version = "0.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "torch" },
+    { name = "torchvision" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/84/fd/437afe8dd6d3f149f65615a879f3f99803308b89b0f1d9e0704b0052ea79/segment-anything-hq-0.3.tar.gz", hash = "sha256:fab190efcd9bcf02a52cc13a628b40745aa5aeb75da1ce9e9b919b13a0206836", size = 47532, upload-time = "2023-08-10T23:53:13.894Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ea/7a/08e037dc65a78aa6c3b433771cc18207a93f1b0380f0bda298c98cc5d7ea/segment_anything_hq-0.3-py3-none-any.whl", hash = "sha256:722d6cb9157074f84d83144401216f0dd2ab1ca972a2d1c491c73b20d689d006", size = 52956, upload-time = "2023-08-10T23:53:11.928Z" },
+]
+
+[[package]]
 name = "setuptools"
 version = "84.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -713,6 +730,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/83/d3/803453b36afefb7c2bb238361cd4ae6125a569b4db67cd9e79846ba2d68c/sympy-1.14.0.tar.gz", hash = "sha256:d3d3fe8df1e5a0b42f0e7bdf50541697dbe7d23746e894990c030e2b05e72517", size = 7793921, upload-time = "2025-04-27T18:05:01.611Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl", hash = "sha256:e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5", size = 6299353, upload-time = "2025-04-27T18:04:59.103Z" },
+]
+
+[[package]]
+name = "timm"
+version = "1.0.31"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "huggingface-hub" },
+    { name = "pyyaml" },
+    { name = "safetensors" },
+    { name = "torch" },
+    { name = "torchvision" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d8/f0/ef613e01647ba8e39d073df11bfe157ea16d0280a9b4a973f1caf0601856/timm-1.0.31.tar.gz", hash = "sha256:baa0b333339c46d3d6d4965d99b69f5053afed71210e8f433d7ea5ee6a18f0ec", size = 2737241, upload-time = "2026-11-03T19:24:56.491Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/aa/bb/b909b8f0517a8fa00ffb3a9a0ddb20da9dbe3554eb68dfc3c9a2db99db76/timm-1.0.31-py3-none-any.whl", hash = "sha256:5bd50f7d0fe6d09bf9285ac2523234a1b7e6bf075c0be3e7aed09139fcb617c7", size = 2798714, upload-time = "2026-11-03T19:24:54.508Z" },
 ]
 
 [[package]]

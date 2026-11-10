@@ -256,7 +256,12 @@ fn models_dir() -> Option<PathBuf> {
     let catalogue =
         std::fs::read_to_string(repo_root().join("tools/python/src/rascal_tools/segmenters.toml"))
             .unwrap();
-    let names: Vec<&str> = catalogue
+    // Tiny's entry alone: the catalogue lists other models after it.
+    let tiny = catalogue
+        .split("[[segmenter]]")
+        .find(|block| block.contains("id = \"tiny\""))
+        .expect("the catalogue has a tiny entry");
+    let names: Vec<&str> = tiny
         .lines()
         .map(str::trim)
         .filter(|l| l.starts_with('"') && (l.ends_with(".onnx\",") || l.ends_with(".json\",")))
