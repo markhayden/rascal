@@ -23,7 +23,7 @@
 //! | `env` | answers as `exact` with the names of its environment variables in the summary |
 //! | `no-annotation` | lists the tool without rascal's annotation block |
 //! | `old-version` | speaks revision 2025-06-18 only |
-//! | `models` | as `exact`, with a `model` choice (`tiny`, the default, and `sam3`) and an `installation` string, and `applies`: `tiny` uses `threshold`, `max_instances` and `pad`, `sam3` only `threshold` and `max_instances` (SPEC.md "Choosable segmenters") |
+//! | `models` | as `exact`, with a `model` choice (`tiny`, the default, and `sam3`) and an `installation` string, and `applies`: `tiny` uses `threshold`, `max_instances` and `pad`, `sam3` only `threshold` and `max_instances` (SPEC.md "Choosable segmenters"); the prompt `die` exits mid-call and `slow` waits until cancelled |
 //!
 //! `--concurrent` anywhere in the arguments marks the tool concurrent in its manifest;
 //! `--name=<tool>` serves the tool under another name.
@@ -496,6 +496,17 @@ impl ServerHandler for Fake {
                     "fake-pack: calling upstream with token=SECRET-TOKEN-VALUE and Authorization: Bearer SECRET-BEARER-VALUE for prompt {}",
                     args["prompt"].as_str().unwrap_or("")
                 );
+            }
+            // A model that fails or never answers, to prove a run's hold is released on every
+            // outcome: the prompt `die` exits mid-call, `slow` waits until cancelled.
+            "models" if args["prompt"] == "die" => std::process::exit(7),
+            "models" if args["prompt"] == "slow" => {
+                context.ct.cancelled().await;
+                return Err(ErrorData::new(
+                    ErrorCode::INTERNAL_ERROR,
+                    "cancelled",
+                    Some(serde_json::json!({ "class": "cancelled" })),
+                ));
             }
             _ => {}
         }

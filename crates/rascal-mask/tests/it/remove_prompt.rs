@@ -462,6 +462,84 @@ fn a_parameter_the_model_does_not_use_is_left_out_and_refused_when_given() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The holds left on `tiny`'s fake installation.
+fn holds_left(models: &Path) -> Vec<std::fs::DirEntry> {
+    std::fs::read_dir(
+        models
+            .join("tiny")
+            .join(rascal_testkit::fake_install::INSTALLATION)
+            .join(".held"),
+    )
+    .map(|d| d.flatten().collect())
+    .unwrap_or_default()
+}
+
+#[test]
+fn a_run_that_fails_or_is_cancelled_releases_its_hold() {
+    // PLAN.md 14.10's acceptance: holds released on failure and cancel, not only on success.
+    let dir = scratch("model-hold-outcomes");
+    let config = models_config(&dir, None);
+    let models = dir.join("pack/models");
+    let image = repo_root().join("fixtures/images/chair-blob.png");
+    let args = |prompt: &str, out: &Path| -> Vec<String> {
+        [
+            "run",
+            "remove-prompt",
+            image.to_str().unwrap(),
+            "--prompt",
+            prompt,
+            "--config",
+            config.to_str().unwrap(),
+            "--out",
+            out.to_str().unwrap(),
+        ]
+        .map(str::to_string)
+        .to_vec()
+    };
+    // The pack dies in the middle of `segment`: the run fails, and lets go.
+    let failed = Command::new(env!("CARGO_BIN_EXE_rascal"))
+        .args(args("die", &dir.join("die")))
+        .env_remove("RASCAL_LOG")
+        .output()
+        .unwrap();
+    assert_ne!(failed.status.code(), Some(0), "{}", text(&failed.stderr));
+    assert!(
+        holds_left(&models).is_empty(),
+        "holds left: {:?}\n{}",
+        holds_left(&models),
+        text(&failed.stderr)
+    );
+    // SIGTERM while `segment` waits: the run is cancelled (143), and lets go.
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rascal"))
+        .args(args("slow", &dir.join("slow")))
+        .env_remove("RASCAL_LOG")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while holds_left(&models).is_empty() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the run never took its hold"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let status = Command::new("kill")
+        .args(["-TERM", &child.id().to_string()])
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let code = child.wait().unwrap().code();
+    assert_eq!(code, Some(143));
+    assert!(
+        holds_left(&models).is_empty(),
+        "holds left: {:?}",
+        holds_left(&models)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn a_run_holds_its_installation_names_it_on_every_call_and_releases_it() {
     let dir = scratch("model-hold");

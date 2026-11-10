@@ -930,6 +930,8 @@ pub fn watch_signals() {
         let Some(code) = code else { return };
         // A check under way is stopped with the command.
         rascal_mask::checker::call::stop_running();
+        // A run's hold on its model is released, as every other ending releases it.
+        crate::run::release_all();
         let pending = CURRENT.lock().ok().and_then(|mut c| c.take());
         if let Some(pending) = pending
             && pending.fresh
