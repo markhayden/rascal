@@ -19,8 +19,8 @@ files = [
     "sam2.1-hiera-tiny.encoder.onnx",
     "sam2.1-hiera-tiny.decoder3.onnx",
 ]
-download_mb = 749
-installed_mb = 749
+download_mb = 753
+installed_mb = 753
 platforms = ["macos-arm64", "linux-x86_64"]
 lab = { round = "segment-01", remove = 0.548, iou = 0.576, best_for = "small and fast" }
 

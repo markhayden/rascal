@@ -1137,8 +1137,8 @@ licence = "Apache-2.0"                       # the weights' licence as read on t
 licence_files = ["LICENSE.owlv2", "LICENSE.sam2"]   # artifacts installed beside the graphs
 files = ["owlv2-base-patch16.onnx", "owlv2-base-patch16.tokenizer.json",
          "sam2.1-hiera-tiny.encoder.onnx", "sam2.1-hiera-tiny.decoder3.onnx"]
-download_mb = 749
-installed_mb = 749
+download_mb = 753
+installed_mb = 753
 platforms = ["macos-arm64", "linux-x86_64"]
 lab = { round = "segment-01", remove = 0.548, iou = 0.576, best_for = "small and fast" }
 ```
