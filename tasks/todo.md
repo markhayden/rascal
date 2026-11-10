@@ -194,3 +194,4 @@ with green CI on both platforms, and then the tag.
 - [ ] 14.12 Wafflery: Installables list and Model choice
 - [ ] 14.13 Publish table-manners 0.6.0 (rascal, squint, Wafflery)
 - [ ] 14.14 The checkpoint (each of 14.5–14.8 merged or excluded with its failing gate recorded) → tag `m14`
+- [ ] Flaky (not M14): `rascal-mcp::it claims::a_request_cancelled_while_queued_keeps_its_id_with_no_run` timed out at 180 s on Linux CI (run 42744992404, 2026-11-10); the rerun and main's CI passed. Make it wait on an event, not on time.
