@@ -149,5 +149,92 @@ def _owlv2_sam2(files: dict[str, Path]) -> Adapter:
     return Owlv2Sam2(detector, segmenter)
 
 
+MEAN_IMAGENET = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+STD_IMAGENET = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+BIREFNET_SIDE = 1024
+
+
+def crop_of(box: Box, width: int, height: int) -> tuple[int, int, int, int]:
+    """The padded box rounded outward to whole pixels and clamped to the image (SPEC.md,
+    `owlv2+birefnet`): x0, y0 floored, x1, y1 ceiled."""
+    x0, y0 = max(0, int(np.floor(box[0]))), max(0, int(np.floor(box[1])))
+    x1, y1 = min(width, int(np.ceil(box[2]))), min(height, int(np.ceil(box[3])))
+    return x0, y0, x1, y1
+
+
+def birefnet_input(crop: np.ndarray) -> np.ndarray:
+    """A crop's pixels as BiRefNet's [1, 3, 1024, 1024] input: Pillow bilinear, [0, 1], the
+    ImageNet mean and deviation."""
+    from PIL import Image
+
+    resized = Image.fromarray(crop).resize(
+        (BIREFNET_SIDE, BIREFNET_SIDE), Image.Resampling.BILINEAR
+    )
+    x = (np.asarray(resized, dtype=np.float32) / 255.0 - MEAN_IMAGENET) / STD_IMAGENET
+    return np.ascontiguousarray(x.transpose(2, 0, 1)[None])
+
+
+def birefnet_plane(probabilities: np.ndarray, size: tuple[int, int]) -> np.ndarray:
+    """BiRefNet's [1024, 1024] probabilities back to a crop of `size` (width, height): quantised
+    to 8 bits (truncating), resized as an 8-bit image (Pillow bilinear), kept above 127."""
+    from PIL import Image
+
+    quantised = (probabilities * 255).astype(np.uint8)
+    back = Image.fromarray(quantised).resize(size, Image.Resampling.BILINEAR)
+    return np.asarray(back) > 127
+
+
+class Owlv2BiRefNet:
+    """OWLv2 proposes boxes per query; BiRefNet cuts out the most salient object in each padded
+    box, one outline per box (no pick, no retry: it takes no points). `soft` maps BiRefNet's
+    input to its probabilities, [1024, 1024]: the ONNX graph in the pack, the maker's PyTorch
+    model when the export's references are made."""
+
+    def __init__(self, detector: Any, soft: Callable[[np.ndarray], np.ndarray]) -> None:
+        self.detector = detector
+        self.soft = soft
+
+    def find(self, pixels: np.ndarray, queries: list[str], settings: Settings) -> list[Instance]:
+        height, width = pixels.shape[:2]
+        detections = self.detector.detect(
+            pixels, queries, settings.threshold, settings.max_instances
+        )
+        out = []
+        for detection in detections:
+            box = outline.pad_box(detection.box, settings.pad, width, height)
+            x0, y0, x1, y1 = crop_of(box, width, height)
+            plane = np.zeros((height, width), dtype=bool)
+            if x1 - x0 >= 2 and y1 - y0 >= 2:
+                probabilities = self.soft(birefnet_input(pixels[y0:y1, x0:x1]))
+                plane[y0:y1, x0:x1] = birefnet_plane(probabilities, (x1 - x0, y1 - y0))
+            out.append(Instance(detection.query, detection.score, box, plane))
+        return out
+
+
+def onnx_soft(path: Path) -> Callable[[np.ndarray], np.ndarray]:
+    """BiRefNet's ONNX graph (`input_image` to `output_image` logits) as probabilities."""
+    import onnxruntime as ort
+
+    session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+
+    def soft(x: np.ndarray) -> np.ndarray:
+        logits = session.run(None, {"input_image": x})[0][0, 0]
+        return 1.0 / (1.0 + np.exp(-logits))
+
+    return soft
+
+
+def _owlv2_birefnet(files: dict[str, Path]) -> Adapter:
+    from rascal_tools.models.owlv2 import Detector
+
+    detector = Detector(
+        files["owlv2-base-patch16.onnx"], files["owlv2-base-patch16.tokenizer.json"]
+    )
+    return Owlv2BiRefNet(detector, onnx_soft(files["birefnet.onnx"]))
+
+
 # The adapter for each catalogue `adapter` name, built from the model's files by name.
-BUILDERS: dict[str, Callable[[dict[str, Path]], Adapter]] = {"owlv2+sam2": _owlv2_sam2}
+BUILDERS: dict[str, Callable[[dict[str, Path]], Adapter]] = {
+    "owlv2+sam2": _owlv2_sam2,
+    "owlv2+birefnet": _owlv2_birefnet,
+}

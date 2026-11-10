@@ -46,3 +46,17 @@ url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-tin
 sha256 = "84f81e331686190986f375ac30af85cc90c5fc30e7451a04b52103e112d3bc56"
 size = 10872
 licence = "Apache-2.0"
+
+[[artifact]]
+name = "birefnet.onnx"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-birefnet/birefnet.onnx"
+sha256 = "58fdda8d0f8c7d79583ccb94a0520d6066e08bd7bcac6205802f7b179360f26b"
+size = 897150996
+licence = "MIT"
+
+[[artifact]]
+name = "LICENSE.birefnet.txt"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-birefnet/LICENSE.birefnet.txt"
+sha256 = "92a7089e0915fc32bc40067560b398f1e6a7a5958abd7d04eda393629a5acefb"
+size = 1066
+licence = "MIT"

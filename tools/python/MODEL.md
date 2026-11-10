@@ -37,11 +37,27 @@ download.
 adapter that runs it (`rascal_tools/models/adapters.py`), the `segment` parameters it uses (a
 call that supplies another is `invalid_args`, even at its default), its licence and licence
 files, its files by name in `artifacts.toml`, its sizes, the platforms it runs on and the lab
-round's figures. Exactly one entry is the default; today the catalogue holds `tiny`, the two
+round's figures. Exactly one entry is the default (`tiny`); the catalogue holds `tiny`, the two
 models above as one adapter, `owlv2+sam2`, which carries M13's pick and retry and reports
-`outline_<n>`, `retried_<n>`, `retry_kept_<n>` and `mask_iou_predicted`. Every adapter's
+`outline_<n>`, `retried_<n>`, `retry_kept_<n>` and `mask_iou_predicted`, and `birefnet`
+(below). Every adapter's
 instances come back best score first, ties by query then by the box's top-left, row-major, cut
 to `max_instances`; region `n` is paired with plane `n`. One model is loaded at a time.
+
+## BiRefNet (`birefnet`)
+
+| | |
+|---|---|
+| adapter | `owlv2+birefnet`: OWLv2 as Tiny's, then BiRefNet in each padded box, one outline per box (no pick, no retry); `segment` parameters `threshold`, `max_instances`, `pad` |
+| source | [`ZhengPeng7/BiRefNet`](https://huggingface.co/ZhengPeng7/BiRefNet), revision `e2bf8e4460fc8fa32bba5ea4d94b3233d367b0e4` (the lab's), the maker's own code loaded with `trust_remote_code` on the exporting machine only |
+| licence | MIT (the card's licence tag, read 2026-11-09); the text is the maker's GitHub `LICENSE` at `2713d1293ce8a923d5878f1f30177b78770bf24c` (the Hub repository has none), installed as `LICENSE.birefnet.txt` |
+| export | `export.py --only birefnet` (`export/birefnet.py`): the last and finest output through the dynamo exporter at **opset 19**, which writes torchvision's `deform_conv2d` as ONNX's `DeformConv` (new in opset 19; opset 18 fails the checker); onnxruntime 1.31.1 runs it on the CPU. `birefnet.onnx`: `input_image` [1, 3, 1024, 1024] to `output_image` [1, 1, 1024, 1024] logits, 897 MB, one file |
+| release | `models-2026-11-birefnet` (the graph and the licence); with OWLv2's two files, 1.5 GB to download |
+| preprocessing | the padded box rounded outward to whole pixels and clamped, cropped, resized to 1024² (Pillow bilinear), [0, 1], the ImageNet mean and deviation; the output's sigmoid quantised to 8 bits (truncating), resized to the crop as an 8-bit image (Pillow bilinear), kept above 127, placed at the crop. A crop under 2 px on a side gives an empty plane. Exactly the lab's `birefnet` cell |
+| export parity | on the chair fixture's padded box: probabilities within 1.9e-4 of PyTorch, the kept plane identical (IoU 1.000000) |
+| instance parity | `fixtures/models/birefnet/references.json` (`export.py --only birefnet --references`): the maker's PyTorch model through this adapter on `chair-blob.png` and `chair-wide.png` (the chair mirrored on a wider canvas, made for the purpose; a version rotated to portrait gave no detection at any threshold), "chair. table" at 0.01 (the highest of 0.2, 0.1, 0.05, 0.01 with an instance on each image) and "giraffe" at 0.2; `tests/test_model_parity.py` holds the installed graph to it |
+| corpus gate | pending (14.5 (2/3)) |
+| lab | segment-01: IoU 0.736, remove score 0.731, the least spill of the five (0.066) |
 
 ## Installations
 
