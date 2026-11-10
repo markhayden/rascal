@@ -89,6 +89,40 @@ const REQUIRED: [&str; 2] = ["pyproject.toml", "uv.lock"];
 /// What an install leaves beside the listed files, and what a replacement removes with them.
 const INSTALL_EXTRAS: [&str; 2] = [".venv", "bundle.toml"];
 
+/// The models directory beside an install, where `rascal-tools get` writes installations
+/// (SPEC.md "Installing a model"). A replacement keeps it untouched.
+const MODELS_DIR: &str = "models";
+
+/// The names the models layout uses at its top level besides one directory per model id.
+const MODELS_LAYOUT: [&str; 4] = ["files", ".lock", ".staging", ".status"];
+
+/// The entries of an install's models directory that are not the models layout: a model id
+/// directory (lower-case letters, digits and `-`, starting with a letter or digit) or one of
+/// [`MODELS_LAYOUT`]. Empty when the directory holds the layout and nothing else.
+fn models_strays(models: &Path) -> Vec<String> {
+    let is_id = |name: &str| {
+        name.chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+            && name
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    };
+    let mut strays: Vec<String> = std::fs::read_dir(models)
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let name = e.file_name().to_str()?.to_string();
+            let is_dir = e.file_type().is_ok_and(|t| t.is_dir());
+            let layout = MODELS_LAYOUT.contains(&name.as_str()) || (is_dir && is_id(&name));
+            (!layout).then(|| format!("{MODELS_DIR}/{name}"))
+        })
+        .collect();
+    strays.sort();
+    strays
+}
+
 fn read_manifest(path: &Path) -> Result<(BundleManifest, Vec<u8>)> {
     let text = std::fs::read(path).map_err(|source| {
         Error::usage(format!(
@@ -230,19 +264,30 @@ impl Bundle {
             )));
         }
         // Everything there must be the earlier install's: its listed files' top-level
-        // entries, the environment and the manifest.
+        // entries, the environment and the manifest, and a models directory that holds the
+        // models layout and nothing else (kept as it is).
+        let models = into.join(MODELS_DIR);
+        let models_kept = models.is_dir() && models_strays(&models).is_empty();
         let owned: BTreeSet<&str> = existing
             .files
             .keys()
             .filter_map(|rel| Path::new(rel).components().next())
             .filter_map(|c| c.as_os_str().to_str())
             .chain(INSTALL_EXTRAS)
+            .chain(models_kept.then_some(MODELS_DIR))
             .collect();
-        let others: Vec<&str> = names
+        let mut others: Vec<String> = names
             .iter()
-            .map(String::as_str)
-            .filter(|n| !owned.contains(n))
+            .filter(|n| !owned.contains(n.as_str()) && n.as_str() != MODELS_DIR)
+            .cloned()
             .collect();
+        if models.exists() && !models_kept {
+            if models.is_dir() {
+                others.extend(models_strays(&models));
+            } else {
+                others.push(MODELS_DIR.to_string());
+            }
+        }
         if !others.is_empty() {
             return Err(Error::usage(format!(
                 "{}: holds an earlier install of {} and also {}; move those aside before replacing it",
@@ -279,7 +324,7 @@ impl Bundle {
                     std::fs::remove_file(&path).map_err(|e| io(&path, e))?;
                 }
             }
-            remove_empty_dirs(into)?;
+            remove_empty_dirs(into, Some(&into.join(MODELS_DIR)))?;
         }
         if destination != Destination::InPlace {
             std::fs::create_dir_all(into).map_err(|e| io(into, e))?;
@@ -374,15 +419,18 @@ fn baseline_env(command: &mut Command) {
 }
 
 /// Removes directories under `root` that an earlier install's files left empty.
-fn remove_empty_dirs(root: &Path) -> Result<()> {
+fn remove_empty_dirs(root: &Path, keep: Option<&Path>) -> Result<()> {
     let entries = std::fs::read_dir(root).map_err(|source| Error::Io {
         path: root.to_path_buf(),
         source,
     })?;
     for entry in entries.filter_map(|e| e.ok()) {
         let path = entry.path();
+        if keep == Some(path.as_path()) {
+            continue;
+        }
         if path.is_dir() {
-            remove_empty_dirs(&path)?;
+            remove_empty_dirs(&path, keep)?;
             if std::fs::read_dir(&path)
                 .map(|mut d| d.next().is_none())
                 .unwrap_or(false)

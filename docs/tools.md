@@ -326,9 +326,12 @@ file, before anything is written), copies exactly the listed files, runs `uv syn
 --no-dev --offline --no-index --find-links wheelhouse --no-cache` with interpreter downloads
 forbidden, smokes the launcher's `--version`, and prints the `command` line for the pack
 entry; an earlier install of the same pack in the same directory (one holding its
-`bundle.toml` and nothing beyond its listed files and `.venv`) has those replaced, and any other
-non-empty directory, another pack's install or an install with other files beside it is
-refused naming what is there. The SHA-256 of `bundle.toml` is the bundle
+`bundle.toml` and nothing beyond its listed files, `.venv` and a `models/` directory) has those
+replaced, and its `models/` (the models `rascal tools get` installed) is kept untouched, so an
+upgrade keeps its models. `models/` counts as the install's only when it holds the models layout
+and nothing else (a directory per model id, `files/`, `.lock`, `.staging/`, `.status/`); any
+other non-empty directory, another pack's install, or an install with other files beside it or
+inside `models/` is refused naming what is there. The SHA-256 of `bundle.toml` is the bundle
 digest the lab records. Launch never touches the network. `scripts/bundle-acceptance.sh`
 (part of `scripts/acceptance.sh`, and a macOS job in the package workflow) builds this
 machine's bundle, installs it with the network disabled where the kernel allows (`unshare
