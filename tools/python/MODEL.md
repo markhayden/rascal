@@ -57,6 +57,8 @@ to `max_instances`; region `n` is paired with plane `n`. One model is loaded at 
 | export parity | the graphs against the lab cell's own path (the maker's `inference`) on `chair-blob.png` and `chair-wide.png`, "chair", "table" and "giraffe": the planes identical in all six (IoU 1.000000) |
 | instance parity | `fixtures/models/evfsam2/references.json` (`export.py --only evfsam2 --references`): the maker's PyTorch model through this adapter on the two fixtures, "chair. table" at 0.2 (the first of 0.2, 0.1, 0.05, 0.01; EVF-SAM2 ignores the threshold) and "giraffe" at 0.2, which EVF-SAM2 answers with a plane on each image (it always answers, even on a blank image), recorded and compared like any other; `tests/test_model_parity.py` holds the installed graphs to it. Passed 2026-11-09 from an installation made with `get evfsam2 --from` the export, `HF_HOME` empty, `HF_HUB_OFFLINE=1`, the network denied (`sandbox-exec`) |
 | corpus gate | passed 2026-11-09: `segment-lab pack-round --model evfsam2` with the branch's own rascal and pack, offline from the same installation, then `compare` against the lab's `evfsam2` cell: 20 of 20 images at IoU ≥ 0.999, lowest 0.999989 (`parts-03`) |
+| download | passed 2026-11-10: `rascal-tools get evfsam2` from the release into a fresh models directory gave the gated installation's identity (`7931bdfe…`), and `RASCAL_TOOLS_REQUIRE_MODELS=evfsam2 pytest -m model_evfsam2` passed offline from it on macOS arm64 |
+| Linux gate | pending: `scripts/model-gate.sh evfsam2` not run, because Docker's 8 GB VM kills the emulated test process (BiRefNet and HQ-SAM exit 137 there) |
 | lab | segment-01: IoU 0.664, remove score 0.581; 4 to 9 s an image on a CPU for three queries |
 
 ## Installations
