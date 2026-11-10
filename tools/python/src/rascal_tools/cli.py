@@ -115,9 +115,12 @@ def _installer(args: argparse.Namespace) -> int:
     except installer.Cancelled as e:
         print(f"rascal-tools {args.command}: {e}", file=sys.stderr)
         return EXIT_CANCELLED
+    except installs.Busy as e:
+        # rascal answers `busy` from this word in the install's log (install.rs).
+        print(f"rascal-tools {args.command}: busy: {e}", file=sys.stderr)
+        return EXIT_ERROR
     except (
-        installs.InstallError, installs.Busy, catalogue.CatalogueError, manifest.ArtifactsError,
-        OSError,
+        installs.InstallError, catalogue.CatalogueError, manifest.ArtifactsError, OSError,
     ) as e:  # fmt: skip
         print(f"rascal-tools {args.command}: {e}", file=sys.stderr)
         return EXIT_ERROR
