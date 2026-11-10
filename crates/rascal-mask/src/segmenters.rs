@@ -217,6 +217,14 @@ pub fn platform() -> &'static str {
 }
 
 /// A name that is a plain file name (no separator, not hidden).
+impl Segmenters {
+    /// Whether `ident` names an installation of `model` that is on disk: a plain name (no
+    /// separator, not hidden), so a caller's string never leaves the model's directory.
+    pub fn has_installation(&self, model: &str, ident: &str) -> bool {
+        plain(model) && plain(ident) && self.models.join(model).join(ident).is_dir()
+    }
+}
+
 fn plain(name: &str) -> bool {
     !name.is_empty() && !name.contains(['/', '\\']) && !name.starts_with('.')
 }

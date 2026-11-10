@@ -141,11 +141,42 @@ pub struct Prepared {
 /// held installation is never deleted, so a reinstall or removal during the run cannot strand
 /// its retries.
 pub struct Hold {
-    launcher: PathBuf,
-    models: PathBuf,
-    pub model: String,
     run: String,
     pub installation: String,
+}
+
+/// The holds this process has taken and not released, so a signal that ends the process
+/// (`run_json::watch_signals`, which exits without unwinding) can still release them.
+static HELD: std::sync::Mutex<Vec<Taken>> = std::sync::Mutex::new(Vec::new());
+
+/// One hold as the pack's `rascal-tools release` needs it named.
+struct Taken {
+    launcher: PathBuf,
+    models: PathBuf,
+    model: String,
+    run: String,
+    installation: String,
+}
+
+impl Taken {
+    fn release(&self) {
+        let _ = std::process::Command::new(&self.launcher)
+            .args(["release", &self.model, "--run", &self.run, "--installation"])
+            .arg(&self.installation)
+            .env(rascal_mask::readiness::MODELS_ENV, &self.models)
+            .output();
+    }
+}
+
+/// Releases every hold still taken: called when a signal ends the process.
+pub fn release_all() {
+    let held = HELD
+        .lock()
+        .map(|mut h| std::mem::take(&mut *h))
+        .unwrap_or_default();
+    for taken in held {
+        taken.release();
+    }
 }
 
 impl Hold {
@@ -170,23 +201,29 @@ impl Hold {
                 String::from_utf8_lossy(&out.stderr).trim()
             )));
         }
-        Ok(Hold {
-            launcher,
-            models: segmenters.models.clone(),
-            model: model.to_string(),
-            run,
-            installation,
-        })
+        if let Ok(mut held) = HELD.lock() {
+            held.push(Taken {
+                launcher,
+                models: segmenters.models.clone(),
+                model: model.to_string(),
+                run: run.clone(),
+                installation: installation.clone(),
+            });
+        }
+        Ok(Hold { run, installation })
     }
 }
 
 impl Drop for Hold {
     fn drop(&mut self) {
-        let _ = std::process::Command::new(&self.launcher)
-            .args(["release", &self.model, "--run", &self.run, "--installation"])
-            .arg(&self.installation)
-            .env(rascal_mask::readiness::MODELS_ENV, &self.models)
-            .output();
+        // Released here unless a signal's release_all took it first.
+        let mine = HELD.lock().ok().and_then(|mut held| {
+            let at = held.iter().position(|h| h.run == self.run)?;
+            Some(held.remove(at))
+        });
+        if let Some(taken) = mine {
+            taken.release();
+        }
     }
 }
 
@@ -227,7 +264,12 @@ pub fn pin_installation(
         .map(str::to_string);
     let given = given.map(str::to_string).or(set);
     let (installation, hold) = match given.as_deref() {
-        Some(ident) => (ident.to_string(), None),
+        Some(ident) if segmenters.has_installation(model, ident) => (ident.to_string(), None),
+        Some(ident) => {
+            return Err(Error::usage(format!(
+                "segment.installation: {ident:?} is not an installation of {model}"
+            )));
+        }
         None => {
             let hold = Hold::take(&segmenters, model)?;
             (hold.installation.clone(), Some(hold))

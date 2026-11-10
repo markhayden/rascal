@@ -345,6 +345,63 @@ fn an_unknown_model_and_a_step_level_model_are_refused() {
 }
 
 #[test]
+fn a_pinned_installation_must_be_a_real_one_and_a_call_cannot_pin_one() {
+    // M14 checkpoint review, finding 2: `--set segment.installation=` is for a harness that took
+    // its own hold (segment-lab's cell); the name is checked before it reaches a path, and the
+    // installation must exist. A call's `set` cannot pin one: the run takes its own hold.
+    let dir = scratch("model-pinned");
+    let config = models_config(&dir, None);
+    for (name, bad) in [("dots", "../../x"), ("missing", "nope")] {
+        let out = dir.join(name);
+        let r = run_prompt(
+            &config,
+            &out,
+            &["--set", &format!("segment.installation={bad}")],
+        );
+        assert_eq!(r.status.code(), Some(64), "{bad}: {}", text(&r.stderr));
+        assert!(
+            text(&r.stderr).contains("is not an installation of tiny"),
+            "{}",
+            text(&r.stderr)
+        );
+        assert!(!out.join("segmenter-install.json").exists());
+    }
+    let arguments = dir.join("args.json");
+    std::fs::write(
+        &arguments,
+        serde_json::json!({
+            "image": { "path": repo_root().join("fixtures/images/chair-blob.png").to_str().unwrap() },
+            "prompt": "the chair",
+            "set": { "segment.installation": "abc" }
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let root = repo_root();
+    let r = rascal(&[
+        "call",
+        "remove_prompt",
+        "--arguments",
+        arguments.to_str().unwrap(),
+        "--workspace",
+        dir.join("ws").to_str().unwrap(),
+        "--runs",
+        dir.join("runs").to_str().unwrap(),
+        "--config",
+        config.to_str().unwrap(),
+        "--allow-dir",
+        root.to_str().unwrap(),
+    ]);
+    assert_eq!(r.status.code(), Some(64), "{}", text(&r.stdout));
+    assert!(
+        text(&r.stdout).contains("segment.installation"),
+        "{}",
+        text(&r.stdout)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_pack_without_model_keeps_working_and_refuses_one() {
     let dir = scratch("model-none");
     let config = config(&dir);
@@ -401,6 +458,84 @@ fn a_parameter_the_model_does_not_use_is_left_out_and_refused_when_given() {
         text(&r.stderr).contains("pad does not apply with model sam3"),
         "{}",
         text(&r.stderr)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The holds left on `tiny`'s fake installation.
+fn holds_left(models: &Path) -> Vec<std::fs::DirEntry> {
+    std::fs::read_dir(
+        models
+            .join("tiny")
+            .join(rascal_testkit::fake_install::INSTALLATION)
+            .join(".held"),
+    )
+    .map(|d| d.flatten().collect())
+    .unwrap_or_default()
+}
+
+#[test]
+fn a_run_that_fails_or_is_cancelled_releases_its_hold() {
+    // PLAN.md 14.10's acceptance: holds released on failure and cancel, not only on success.
+    let dir = scratch("model-hold-outcomes");
+    let config = models_config(&dir, None);
+    let models = dir.join("pack/models");
+    let image = repo_root().join("fixtures/images/chair-blob.png");
+    let args = |prompt: &str, out: &Path| -> Vec<String> {
+        [
+            "run",
+            "remove-prompt",
+            image.to_str().unwrap(),
+            "--prompt",
+            prompt,
+            "--config",
+            config.to_str().unwrap(),
+            "--out",
+            out.to_str().unwrap(),
+        ]
+        .map(str::to_string)
+        .to_vec()
+    };
+    // The pack dies in the middle of `segment`: the run fails, and lets go.
+    let failed = Command::new(env!("CARGO_BIN_EXE_rascal"))
+        .args(args("die", &dir.join("die")))
+        .env_remove("RASCAL_LOG")
+        .output()
+        .unwrap();
+    assert_ne!(failed.status.code(), Some(0), "{}", text(&failed.stderr));
+    assert!(
+        holds_left(&models).is_empty(),
+        "holds left: {:?}\n{}",
+        holds_left(&models),
+        text(&failed.stderr)
+    );
+    // SIGTERM while `segment` waits: the run is cancelled (143), and lets go.
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rascal"))
+        .args(args("slow", &dir.join("slow")))
+        .env_remove("RASCAL_LOG")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while holds_left(&models).is_empty() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the run never took its hold"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let status = Command::new("kill")
+        .args(["-TERM", &child.id().to_string()])
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let code = child.wait().unwrap().code();
+    assert_eq!(code, Some(143));
+    assert!(
+        holds_left(&models).is_empty(),
+        "holds left: {:?}",
+        holds_left(&models)
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

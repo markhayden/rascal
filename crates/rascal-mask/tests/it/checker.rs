@@ -1611,6 +1611,33 @@ fn checked_retry_real_model() {
             .iter()
             .all(|s| s["params"]["model"] == model.as_str())
     );
+    // Every call, the retry's included, carries only the parameters the model uses (its
+    // catalogue entry's `params`): EVF-SAM2's retry gets neither `threshold` nor `pad`.
+    let catalogue: toml::Table =
+        std::fs::read_to_string(pack.join("src/rascal_tools/segmenters.toml"))
+            .unwrap()
+            .parse()
+            .unwrap();
+    let uses: Vec<&str> = catalogue["segmenter"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["id"].as_str() == Some(model.as_str()))
+        .expect("the model is catalogued")["params"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|p| p.as_str())
+        .collect();
+    for segment in &segments {
+        for param in ["threshold", "max_instances", "pad", "outline", "min_cover"] {
+            assert!(
+                segment["params"].get(param).is_none() || uses.contains(&param),
+                "{model} does not use {param}: {}",
+                segment["params"]
+            );
+        }
+    }
     let result = run_json(&dir);
     let transition = &stored(&result)[0]["transition"];
     assert!(

@@ -288,7 +288,7 @@ exported to ONNX and run on `onnxruntime` with no PyTorch anywhere near the pack
 turns the queries into boxes with scores, SAM 2.1 Hiera-Tiny gives three candidate outlines per
 box, and the rules in `rascal_tools/outline.py` (pure functions, no model) keep one
 (`tools/python/MODEL.md`: the sources, the licences, the export, the preprocessing the pack
-mirrors, the parity). The models (Tiny's are 749 MB) live outside the pack, as installations
+mirrors, the parity). The models (Tiny's are 753 MB) live outside the pack, as installations
 in the models directory: `RASCAL_TOOLS_MODELS`, else `models/` beside the install's
 environment when it exists, else `~/.cache/rascal-tools`. The pack reads a model through its
 installation, verifies it once per process, and loads it on the first call; a call naming an

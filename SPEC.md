@@ -1137,8 +1137,8 @@ licence = "Apache-2.0"                       # the weights' licence as read on t
 licence_files = ["LICENSE.owlv2", "LICENSE.sam2"]   # artifacts installed beside the graphs
 files = ["owlv2-base-patch16.onnx", "owlv2-base-patch16.tokenizer.json",
          "sam2.1-hiera-tiny.encoder.onnx", "sam2.1-hiera-tiny.decoder3.onnx"]
-download_mb = 749
-installed_mb = 749
+download_mb = 753
+installed_mb = 753
 platforms = ["macos-arm64", "linux-x86_64"]
 lab = { round = "segment-01", remove = 0.548, iou = 0.576, best_for = "small and fast" }
 ```
@@ -1279,7 +1279,8 @@ them by digest. An install:
 1. takes the model's own lock, `<models>/<id>/.lock` (another `get` or `remove` of the same
    model waits or is refused `busy`, per the caller), so a long download never blocks runs or
    other models;
-2. stages everything in `<models>/.staging/<id>-<random>/`;
+2. stages everything in `<models>/.staging/<id>-<pid>-<random>/` (the pid lets a later clean-up
+   tell a live staging directory from one a crash left);
 3. verifies every staged file;
 4. takes the models lock, `<models>/.lock`, for the publish alone (steps 4 to 6): if `<models>/<id>/<identity>/` exists and verifies, discards the staging directory and keeps
    it; if it exists and does not verify, refuses `busy` while it has a live hold, and otherwise
@@ -1295,6 +1296,11 @@ its process id), and only then releases the lock; the hold is deleted when the r
 outcome, and a hold whose process is gone is stale and ignored. `get` and `remove` check holds
 and delete under the same lock, so a run is never admitted onto an installation being deleted,
 and a held directory is never deleted (the next `get` or `remove` after the hold ends does it).
+A harness that holds an installation itself (segment-lab's cell) pins it with `--set
+segment.installation=<identity>` on the command line; the name must be a plain one naming an
+installation of the model on disk, else the run is refused (64). A call's `set` (`serve`, `rascal
+call`) cannot name `segment.installation`: a remote caller never pins an installation it does
+not hold.
 
 `current` always names a complete, verified installation or does not exist. A crash leaves at
 worst a staging directory or an unreferenced installation directory, both deleted by the next

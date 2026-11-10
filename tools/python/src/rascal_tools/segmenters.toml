@@ -19,8 +19,8 @@ files = [
     "sam2.1-hiera-tiny.encoder.onnx",
     "sam2.1-hiera-tiny.decoder3.onnx",
 ]
-download_mb = 749
-installed_mb = 749
+download_mb = 753
+installed_mb = 753
 platforms = ["macos-arm64", "linux-x86_64"]
 lab = { round = "segment-01", remove = 0.548, iou = 0.576, best_for = "small and fast" }
 
@@ -29,7 +29,7 @@ id = "birefnet"
 title = "OWLv2 + BiRefNet"
 adapter = "owlv2+birefnet"
 params = ["threshold", "max_instances", "pad"]
-licence = "MIT"
+licence = "MIT and Apache-2.0"
 licence_files = ["LICENSE.owlv2-base-patch16.txt", "LICENSE.birefnet.txt"]
 files = [
     "owlv2-base-patch16.onnx",
