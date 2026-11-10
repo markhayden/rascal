@@ -29,6 +29,9 @@ encoder, leaving the other files as they are (the 2026-11 re-export, PLAN.md 13.
 
 `--only tiny --references` freezes Tiny's instance-parity references under `fixtures/models/tiny/`
 (`export/tiny.py`; SPEC.md "The export gate").
+`--only hqsam` exports HQ-SAM ViT-L's two graphs and its licence (`hqsam.py`, MODEL.md), and
+`--references` then writes its instance-parity references into `fixtures/models/hqsam/`
+(SPEC.md "The export gate", check 1).
 """
 
 from __future__ import annotations
@@ -290,12 +293,16 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=Path(default))
     parser.add_argument(
         "--only",
-        choices=["all", "sam_decoder", "tiny"],
+        choices=["all", "sam_decoder", "tiny", "hqsam"],
         default="all",
-        help="export every graph (default), the SAM decoder alone, or (with --references) tiny",
+        help="export every graph (default), the SAM decoder alone, HQ-SAM ViT-L, or (with "
+        "--references) tiny's references",
     )
     parser.add_argument(
-        "--references", action="store_true", help="freeze the model's parity references instead"
+        "--references",
+        action="store_true",
+        help="freeze the model's instance-parity references (tiny: instead of exporting; hqsam: "
+        "after exporting)",
     )
     args = parser.parse_args()
     if args.only == "tiny":
@@ -307,6 +314,15 @@ def main() -> int:
         return 0
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
+    if args.only == "hqsam":
+        import hqsam
+
+        record = {"exported": time.strftime("%Y-%m-%d"), **hqsam.export(out, session, sha256)}
+        (out / "export.json").write_text(json.dumps(record, indent=2) + "\n")
+        print(json.dumps(record, indent=2))
+        if args.references:
+            hqsam.references()
+        return 0
     torch.manual_seed(0)
     image = Image.open(FIXTURE).convert("RGB")
     api = HfApi()

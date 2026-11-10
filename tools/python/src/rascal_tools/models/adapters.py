@@ -93,11 +93,13 @@ def trace(
 
 class Owlv2Sam2:
     """OWLv2 proposes boxes per query; SAM 2.1 traces each padded box with M13's pick and
-    retry (`rascal_tools.outline`)."""
+    retry (`rascal_tools.outline`). `three_outlines` False (HQ-SAM, one outline per box) leaves
+    the pick with nothing to choose, so the kept outline's index is not reported."""
 
-    def __init__(self, detector: Any, segmenter: Any) -> None:
+    def __init__(self, detector: Any, segmenter: Any, three_outlines: bool = True) -> None:
         self.detector = detector
         self.segmenter = segmenter
+        self.three_outlines = three_outlines
 
     def find(self, pixels: np.ndarray, queries: list[str], settings: Settings) -> list[Instance]:
         height, width = pixels.shape[:2]
@@ -119,17 +121,19 @@ class Owlv2Sam2:
                 width,
                 height,
             )
+            diagnostics = {
+                "retried": (float(traced.retried), "flag"),
+                "retry_kept": (float(traced.retry_kept), "flag"),
+            }
+            if self.three_outlines:
+                diagnostics = {"outline": (float(traced.index), "index"), **diagnostics}
             out.append(
                 Instance(
                     query=detection.query,
                     score=detection.score,
                     box=traced.box,
                     plane=traced.plane,
-                    diagnostics={
-                        "outline": (float(traced.index), "index"),
-                        "retried": (float(traced.retried), "flag"),
-                        "retry_kept": (float(traced.retry_kept), "flag"),
-                    },
+                    diagnostics=diagnostics,
                     iou=traced.iou,
                 )
             )
@@ -149,5 +153,19 @@ def _owlv2_sam2(files: dict[str, Path]) -> Adapter:
     return Owlv2Sam2(detector, segmenter)
 
 
+def _owlv2_hqsam(files: dict[str, Path]) -> Adapter:
+    from rascal_tools.models.hqsam import Segmenter
+    from rascal_tools.models.owlv2 import Detector
+
+    detector = Detector(
+        files["owlv2-base-patch16.onnx"], files["owlv2-base-patch16.tokenizer.json"]
+    )
+    segmenter = Segmenter(files["sam-hq-vit-l.encoder.onnx"], files["sam-hq-vit-l.decoder.onnx"])
+    return Owlv2Sam2(detector, segmenter, three_outlines=False)
+
+
 # The adapter for each catalogue `adapter` name, built from the model's files by name.
-BUILDERS: dict[str, Callable[[dict[str, Path]], Adapter]] = {"owlv2+sam2": _owlv2_sam2}
+BUILDERS: dict[str, Callable[[dict[str, Path]], Adapter]] = {
+    "owlv2+sam2": _owlv2_sam2,
+    "owlv2+hqsam": _owlv2_hqsam,
+}

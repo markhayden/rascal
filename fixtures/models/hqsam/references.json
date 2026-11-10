@@ -1,0 +1,136 @@
+{
+  "model": "hqsam",
+  "max_instances": 8,
+  "positive_threshold": 0.01,
+  "cases": [
+    {
+      "case": "positive",
+      "image": "chair-blob.png",
+      "prompt": "chair. table",
+      "threshold": 0.01,
+      "instances": [
+        {
+          "query": 1,
+          "score": 0.024251018808432237,
+          "box": [
+            0.0,
+            0.0,
+            480.0,
+            320.0
+          ],
+          "plane": "positive-chair-blob-0.png"
+        },
+        {
+          "query": 0,
+          "score": 0.01917149213083394,
+          "box": [
+            128.3005006313324,
+            62.029767751693726,
+            256.8138163089752,
+            261.22908997535706
+          ],
+          "plane": "positive-chair-blob-1.png"
+        },
+        {
+          "query": 1,
+          "score": 0.014783219864606564,
+          "box": [
+            127.85350513458252,
+            141.83165431022644,
+            258.17067432403564,
+            256.7675793170929
+          ],
+          "plane": "positive-chair-blob-2.png"
+        },
+        {
+          "query": 1,
+          "score": 0.013316191905660168,
+          "box": [
+            102.42085933685303,
+            230.23908233642578,
+            342.552809715271,
+            281.6922798156738
+          ],
+          "plane": "positive-chair-blob-3.png"
+        },
+        {
+          "query": 0,
+          "score": 0.011463046288118589,
+          "box": [
+            0.0,
+            0.0,
+            480.0,
+            320.0
+          ],
+          "plane": "positive-chair-blob-4.png"
+        }
+      ]
+    },
+    {
+      "case": "positive",
+      "image": "chair-blob-tall.png",
+      "prompt": "chair. table",
+      "threshold": 0.01,
+      "instances": [
+        {
+          "query": 1,
+          "score": 0.04151065320298615,
+          "box": [
+            128.334547996521,
+            300.29168033599854,
+            257.37681674957275,
+            413.5609350204468
+          ],
+          "plane": "positive-chair-blob-tall-0.png"
+        },
+        {
+          "query": 0,
+          "score": 0.025488150736862655,
+          "box": [
+            129.70942497253418,
+            220.8714828491211,
+            257.71496772766113,
+            416.89466857910156
+          ],
+          "plane": "positive-chair-blob-tall-1.png"
+        },
+        {
+          "query": 1,
+          "score": 0.016879735559482106,
+          "box": [
+            0.0,
+            146.47268867492676,
+            480.0,
+            493.2870235443115
+          ],
+          "plane": "positive-chair-blob-tall-2.png"
+        },
+        {
+          "query": 0,
+          "score": 0.015202378434036766,
+          "box": [
+            0.0,
+            146.47268867492676,
+            480.0,
+            493.2870235443115
+          ],
+          "plane": "positive-chair-blob-tall-3.png"
+        }
+      ]
+    },
+    {
+      "case": "negative",
+      "image": "chair-blob.png",
+      "prompt": "giraffe",
+      "threshold": 0.2,
+      "instances": []
+    },
+    {
+      "case": "negative",
+      "image": "chair-blob-tall.png",
+      "prompt": "giraffe",
+      "threshold": 0.2,
+      "instances": []
+    }
+  ]
+}
