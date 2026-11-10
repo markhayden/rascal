@@ -1,5 +1,30 @@
 {
   "$defs": {
+    "Applies": {
+      "additionalProperties": false,
+      "description": "Which parameters each choice of one choice parameter uses (SPEC.md \"Choosable segmenters\"):\na parameter some choice lists and the chosen one does not is neither defaulted nor accepted;\na parameter no choice lists always applies.",
+      "properties": {
+        "choices": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Per choice, the parameters it uses.",
+          "type": "object"
+        },
+        "param": {
+          "description": "The choice parameter.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "param",
+        "choices"
+      ],
+      "type": "object"
+    },
     "ArtifactType": {
       "description": "The artifact types a port can declare.",
       "enum": [
@@ -158,6 +183,17 @@
       "format": "uint32",
       "minimum": 0,
       "type": "integer"
+    },
+    "applies": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Applies"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "A choice parameter that decides which other parameters apply (`segment`'s `model`)."
     },
     "constants": {
       "description": "The constant sets a step may select; the first is the default.",

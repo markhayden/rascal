@@ -931,3 +931,66 @@ fn many_output_ports_take_numbered_artifacts_and_require_at_least_one() {
         "{e}"
     );
 }
+
+// --- choices that decide which parameters apply (SPEC.md "Choosable segmenters") ----------------
+
+/// The probe, with `mode = "lie"` using `amount` and `count` only: `label`, `flag` and `pair`
+/// do not apply then; every other mode uses them all.
+struct Choosy;
+
+impl Op for Choosy {
+    fn group(&self) -> rascal_core::op::Group {
+        rascal_core::op::Group::Refine
+    }
+    fn manifest(&self) -> Manifest {
+        Probe.manifest()
+    }
+    fn run(
+        &self,
+        context: &Context<'_>,
+        inputs: &Inputs,
+        params: &Params,
+    ) -> rascal_core::error::Result<Output> {
+        Probe.run(context, inputs, params)
+    }
+    fn inapplicable(&self, given: &Params) -> Option<op::Inapplicable> {
+        let mode = given.get("mode").and_then(|v| v.as_str()).unwrap_or("ok");
+        Some(op::Inapplicable {
+            because: format!("mode {mode}"),
+            params: if mode == "lie" {
+                vec!["flag".into(), "label".into(), "pair".into()]
+            } else {
+                vec![]
+            },
+        })
+    }
+}
+
+#[test]
+fn a_choice_drops_the_parameters_it_does_not_use_and_refuses_them_given() {
+    let p = |text: &str| -> Params { toml::from_str(text).unwrap() };
+    // Unchosen: every default fills, as before.
+    let all = op::resolve_step(&Choosy, &p("amount = 1")).unwrap().params;
+    assert!(all.contains_key("label") && all.contains_key("flag"));
+    // Chosen: the unused parameters are neither defaulted nor passed.
+    let some = op::resolve_step(&Choosy, &p("amount = 1\nmode = 'lie'"))
+        .unwrap()
+        .params;
+    for gone in ["flag", "label", "pair"] {
+        assert!(
+            !some.contains_key(gone),
+            "{gone} should be left out: {some:?}"
+        );
+    }
+    assert_eq!(some["count"].as_integer(), Some(1));
+    // Given explicitly, one is refused even when it equals its default.
+    match op::resolve_step(&Choosy, &p("amount = 1\nmode = 'lie'\nlabel = 'x'")) {
+        Err(op::Unresolved::Invalid(message)) => {
+            assert!(
+                message.contains("label does not apply with mode lie"),
+                "{message}"
+            );
+        }
+        other => panic!("expected a refusal, got {other:?}"),
+    }
+}

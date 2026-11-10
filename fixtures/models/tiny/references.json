@@ -1,0 +1,163 @@
+{
+  "model": "tiny",
+  "source": {
+    "repos": [
+      "google/owlv2-base-patch16",
+      "facebook/sam2.1-hiera-tiny"
+    ]
+  },
+  "max_instances": 8,
+  "positive_threshold": 0.01,
+  "cases": [
+    {
+      "case": "positive",
+      "image": "chair-blob.png",
+      "prompt": "chair. table",
+      "threshold": 0.01,
+      "instances": [
+        {
+          "query": 1,
+          "score": 0.024249506885053666,
+          "box": [
+            0.0,
+            0.0,
+            480.0,
+            320.0
+          ],
+          "plane": "positive-chair-blob-0.png",
+          "sha256": "c01257454a451ab8c1c449bd2948bf80579ffba9cd8fcd6ec42235aca9c3b784"
+        },
+        {
+          "query": 0,
+          "score": 0.019170438604844704,
+          "box": [
+            128.30043160915375,
+            62.029736280441284,
+            256.8137708902359,
+            261.2291214466095
+          ],
+          "plane": "positive-chair-blob-1.png",
+          "sha256": "21880ae3e112545145194153e2306bb086c30b7b3702768ec5b7ad9491787abc"
+        },
+        {
+          "query": 1,
+          "score": 0.014783532391908499,
+          "box": [
+            127.8535144329071,
+            141.83165287971497,
+            258.17063641548157,
+            256.76760935783386
+          ],
+          "plane": "positive-chair-blob-2.png",
+          "sha256": "ca6823458341d80b9452b07cf957db945ed2f9e107836177394f98c54985bee1"
+        },
+        {
+          "query": 1,
+          "score": 0.013316148050018246,
+          "box": [
+            102.42099952697754,
+            230.23909306526184,
+            342.552640914917,
+            281.69226908683777
+          ],
+          "plane": "positive-chair-blob-3.png",
+          "sha256": "5f9901da66bb5f7d375fa8994db0f98754057a9b2a12ec77cc482ca6a901c401"
+        },
+        {
+          "query": 0,
+          "score": 0.011462354680026652,
+          "box": [
+            0.0,
+            0.0,
+            480.0,
+            320.0
+          ],
+          "plane": "positive-chair-blob-4.png",
+          "sha256": "c01257454a451ab8c1c449bd2948bf80579ffba9cd8fcd6ec42235aca9c3b784"
+        }
+      ]
+    },
+    {
+      "case": "positive",
+      "image": "chair-wide.png",
+      "prompt": "chair. table",
+      "threshold": 0.01,
+      "instances": [
+        {
+          "query": 1,
+          "score": 0.02367101122599961,
+          "box": [
+            96.22271633148193,
+            0.0,
+            622.9369583129883,
+            320.0
+          ],
+          "plane": "positive-chair-wide-0.png",
+          "sha256": "eca9f18425cb17dd894e1247b32c9dc17b6876efbfe9063710b524227f895217"
+        },
+        {
+          "query": 0,
+          "score": 0.021813269082266117,
+          "box": [
+            96.22271633148193,
+            0.0,
+            622.9369583129883,
+            320.0
+          ],
+          "plane": "positive-chair-wide-1.png",
+          "sha256": "eca9f18425cb17dd894e1247b32c9dc17b6876efbfe9063710b524227f895217"
+        },
+        {
+          "query": 0,
+          "score": 0.01887954165542382,
+          "box": [
+            343.47356325387955,
+            60.90424203872681,
+            474.03859609365463,
+            259.22723150253296
+          ],
+          "plane": "positive-chair-wide-2.png",
+          "sha256": "d76c926666e99cb8f0ebf664fde49e6942d13142336043db84b75bb99f01ab2d"
+        },
+        {
+          "query": 1,
+          "score": 0.012607260169268109,
+          "box": [
+            343.41279673576355,
+            139.79393845796585,
+            474.3225224018097,
+            253.9024173617363
+          ],
+          "plane": "positive-chair-wide-3.png",
+          "sha256": "238f0219d33d2ad201e83bd2c8112d33d5ea218fa37de45a6f15b7553871f378"
+        },
+        {
+          "query": 1,
+          "score": 0.010581850334182309,
+          "box": [
+            0.0,
+            315.95898750796914,
+            720.0,
+            320.0
+          ],
+          "plane": "positive-chair-wide-4.png",
+          "sha256": "0e2bd7b916ea1cd6a3089968f51d94e869fc6b6be1b8d32db93b8748cd55cb35"
+        }
+      ]
+    },
+    {
+      "case": "negative",
+      "image": "chair-blob.png",
+      "prompt": "giraffe",
+      "threshold": 0.2,
+      "instances": []
+    },
+    {
+      "case": "negative",
+      "image": "chair-wide.png",
+      "prompt": "giraffe",
+      "threshold": 0.2,
+      "instances": []
+    }
+  ]
+}
