@@ -248,11 +248,17 @@ fn the_models_variable_is_an_env_requirement_when_the_pack_receives_it() {
     assert_eq!(env["state"], "missing");
     assert!(files(&readiness).iter().all(|(_, s)| s == "missing"));
 
-    // Unset, and the install's models/ holds them: nothing stands in the way, so it is omitted.
+    // Unset, and the install's models/ holds them: nothing stands in the way, but it is still
+    // listed, optional, so a host that passes only the variables a tool names (Wafflery's probe
+    // runs with none) knows to pass it when it is set there.
     fake_install::write_models(&install.dir.join("models")).unwrap();
     let readiness = remove_prompt(&home, &config, &[]);
     assert_eq!(readiness["state"], "ready", "{readiness:#}");
-    assert!(requirement(&readiness, "env").is_none(), "{readiness:#}");
+    let env = requirement(&readiness, "env").expect("listed when unset");
+    assert_eq!(env["name"], "RASCAL_TOOLS_MODELS");
+    assert_eq!(env["state"], "missing");
+    assert_eq!(env["optional"], true, "{env:#}");
+    assert!(env["for"].is_string(), "{env:#}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
