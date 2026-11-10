@@ -26,6 +26,9 @@ The graphs:
 
 `--only sam_decoder` exports and checks the decoder alone, against features from PyTorch's
 encoder, leaving the other files as they are (the 2026-11 re-export, PLAN.md 13.1).
+
+`--only tiny --references` freezes Tiny's instance-parity references under `fixtures/models/tiny/`
+(`export/tiny.py`; SPEC.md "The export gate").
 """
 
 from __future__ import annotations
@@ -287,11 +290,21 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=Path(default))
     parser.add_argument(
         "--only",
-        choices=["all", "sam_decoder"],
+        choices=["all", "sam_decoder", "tiny"],
         default="all",
-        help="export every graph (default), or the SAM decoder alone",
+        help="export every graph (default), the SAM decoder alone, or (with --references) tiny",
+    )
+    parser.add_argument(
+        "--references", action="store_true", help="freeze the model's parity references instead"
     )
     args = parser.parse_args()
+    if args.only == "tiny":
+        if not args.references:
+            parser.error("--only tiny takes --references (tiny's graphs are the default export)")
+        import tiny
+
+        tiny.references()
+        return 0
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(0)
