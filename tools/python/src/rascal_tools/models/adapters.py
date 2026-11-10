@@ -149,5 +149,14 @@ def _owlv2_sam2(files: dict[str, Path]) -> Adapter:
     return Owlv2Sam2(detector, segmenter)
 
 
+def _sam3(files: dict[str, Path]) -> Adapter:
+    from rascal_tools.models import sam3
+
+    return sam3.build(files)
+
+
 # The adapter for each catalogue `adapter` name, built from the model's files by name.
-BUILDERS: dict[str, Callable[[dict[str, Path]], Adapter]] = {"owlv2+sam2": _owlv2_sam2}
+BUILDERS: dict[str, Callable[[dict[str, Path]], Adapter]] = {
+    "owlv2+sam2": _owlv2_sam2,
+    "sam3": _sam3,
+}

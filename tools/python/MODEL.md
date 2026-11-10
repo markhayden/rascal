@@ -41,7 +41,52 @@ round's figures. Exactly one entry is the default; today the catalogue holds `ti
 models above as one adapter, `owlv2+sam2`, which carries M13's pick and retry and reports
 `outline_<n>`, `retried_<n>`, `retry_kept_<n>` and `mask_iou_predicted`. Every adapter's
 instances come back best score first, ties by query then by the box's top-left, row-major, cut
-to `max_instances`; region `n` is paired with plane `n`. One model is loaded at a time.
+to `max_instances`; region `n` is paired with plane `n`. One model is loaded at a time. `sam3`
+(below) is another entry.
+
+## SAM 3 (`sam3`, task 14.8; not yet released)
+
+- **Source.** [`facebook/sam3`](https://huggingface.co/facebook/sam3) (Transformers `Sam3Model`,
+  safetensors), revision `3c879f39826c281e95690f02c7821c4de09afae7`; the **SAM License** (Meta,
+  custom; gated on the Hub, accepted by the owner 2026-11-05). The export is a derivative of SAM
+  Materials and is redistributed under that licence, whose text, `LICENSE.sam3.txt` (the
+  repository's `LICENSE` as downloaded), goes with every copy (owner decision 15).
+- **Export.** `export.py --only sam3 [--references]` runs `export/sam3/export_sam3.py` in its
+  own environment, `export/sam3/` (Transformers 5.22.1, torch 2.15.0: `Sam3Model` is not in the
+  Transformers 4 line the shared export environment pins). Dynamo exporter, opset 18, three
+  graphs: `sam3.vision.onnx` with its external data `sam3.vision.onnx.data` (7 MB + 1,816 MB:
+  one file would pass protobuf's 2 GB; each release asset is under GitHub's 2 GB per file),
+  pixel_values [1,3,1008,1008] to three FPN levels and their position encodings;
+  `sam3.text.onnx` (1,416 MB), input_ids and attention_mask [1,32] to text_features [1,32,256];
+  `sam3.head.onnx` (134 MB), the six vision tensors, text_features and attention_mask to
+  pred_logits [1,200], pred_boxes [1,200,4] (xyxy fractions), pred_masks [1,200,288,288]
+  (logits) and presence_logits [1,1]. The head carries the lab's text-only workaround: one box
+  labelled -10, which makes Transformers run the geometry encoder as Meta's own code does
+  (segment-lab `adapters/sam3_hf.py`). With them `sam3.tokenizer.json` (the checkpoint's CLIP
+  tokenizer) and the licence: 3,377 MB in all. Release `models-2026-11-sam3` (to come); the digests are in
+  `artifacts.toml`.
+- **Preprocessing** (`rascal_tools/models/sam3.py`), as `Sam3Processor`: the image resized to
+  1008x1008 exactly as torchvision resizes a uint8 image (bilinear, antialiased, int16
+  fixed-point weights, horizontal then vertical, each pass rounded; `resize_uint8`, checked bit
+  for bit against torchvision 0.29.2 by `tests/test_sam3.py`), then `(x - 127.5) / 127.5`. Pillow's
+  own bilinear resize differs by one level in about 0.5% of values, enough to move the corpus
+  gate's `hole-01` to IoU 0.990, so it is not used. The query is tokenised with the CLIP
+  tokenizer, padded with `<|endoftext|>` to 32 tokens with its attention mask, cut at 32.
+- **Post-processing**, as `post_process_instance_segmentation`: score sigmoid(logit) times
+  sigmoid(presence logit), kept at `threshold` or above; the mask the sigmoid of the 288x288
+  logits resized to the image (bilinear, `align_corners=False`) and kept above 0.5; an empty mask
+  gives no instance; the region the predicted box in image pixels, clipped to the image. No
+  NMS, as the lab's cell.
+- **Adapter** `sam3`, end to end: one vision pass per image, one text and one head pass per
+  query; no OWLv2, no outliner, no pick, no retry, no diagnostics. Parameters: `threshold`,
+  `max_instances`.
+- **Parity** (2026-11-09). The graphs against PyTorch on the chair fixture: vision features
+  within 7.7e-4, text features 2.2e-5, head logits 8.3e-5, mask logits 4.1e-3, presence 7.7e-7;
+  through the adapter the same one instance, score within 6e-6, plane IoU 1.0. Instance parity
+  (`tests/test_model_parity.py`, references in `fixtures/models/sam3/`, positive case at
+  threshold 0.2, the first of 0.2, 0.1, 0.05, 0.01 to find the chair on both images, one
+  instance each; "giraffe" at 0.2 finds nothing): passes from an installation made with
+  `get sam3 --from` the export, with `HF_HOME` empty and the network denied (`sandbox-exec`).
 
 ## Installations
 
@@ -137,3 +182,8 @@ calls `segment` from a bundle that carries the models.
 Apache-2.0 permits redistributing the exports with the licence text and a notice of changes;
 the export is the change. `tools/python/NOTICE` carries both for each model and travels with
 the bundle and the release assets.
+
+SAM 3 is not Apache-2.0: its export is redistributed under the SAM License (owner decision 15),
+whose copy, `LICENSE.sam3.txt`, is a release asset beside the graphs and is installed with them;
+its use restrictions bind whoever uses the model. The release notes name the licence and the
+source.

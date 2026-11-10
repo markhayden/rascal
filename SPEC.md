@@ -1211,8 +1211,10 @@ only (ADR 0018).
   tokenised with SAM 3's CLIP tokenizer to 32 tokens. The head carries the lab's text-only
   workaround (one box labelled -10, `onnxcheck/sam3`). An instance's score is the sigmoid of
   its logit times the sigmoid of the presence logit, as Transformers' post-processing computes
-  it; masks are the head's 288² logits resized to the image (bilinear) and thresholded at 0;
-  the region is the predicted box in image pixels. Params: `threshold`, `max_instances`.
+  it; a mask is the sigmoid of the head's 288² mask logits resized to the image (bilinear,
+  `align_corners=False`) and kept above 0.5, also as Transformers computes it, and an empty one
+  gives no instance; the region is the predicted box in image pixels, clipped to the image.
+  Params: `threshold`, `max_instances`.
 
 At most one segmenter's graphs are loaded at a time; a call for another model unloads the first.
 Loaded models are keyed by installation identity. A `segment` call names the installation it

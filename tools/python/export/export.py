@@ -29,6 +29,10 @@ encoder, leaving the other files as they are (the 2026-11 re-export, PLAN.md 13.
 
 `--only tiny --references` freezes Tiny's instance-parity references under `fixtures/models/tiny/`
 (`export/tiny.py`; SPEC.md "The export gate").
+
+`--only sam3 [--references]` exports SAM 3's three graphs, its tokenizer and the SAM License into
+`--out`, then (with `--references`) freezes its references into `fixtures/models/sam3/`: it runs
+`sam3/export_sam3.py` in its own environment (`sam3/pyproject.toml`, Transformers 5).
 """
 
 from __future__ import annotations
@@ -290,14 +294,22 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=Path(default))
     parser.add_argument(
         "--only",
-        choices=["all", "sam_decoder", "tiny"],
+        choices=["all", "sam_decoder", "tiny", "sam3"],
         default="all",
-        help="export every graph (default), the SAM decoder alone, or (with --references) tiny",
+        help="export every graph (default), the SAM decoder alone, SAM 3 (in its own "
+        "environment), or (with --references) tiny",
     )
     parser.add_argument(
         "--references", action="store_true", help="freeze the model's parity references instead"
     )
     args = parser.parse_args()
+    if args.only == "sam3":
+        import subprocess
+
+        here = Path(__file__).resolve().parent
+        command = ["uv", "run", "--frozen", "--project", str(here / "sam3"), "python",
+                   str(here / "sam3" / "export_sam3.py"), "--out", str(args.out)]  # fmt: skip
+        return subprocess.run(command + (["--references"] if args.references else [])).returncode
     if args.only == "tiny":
         if not args.references:
             parser.error("--only tiny takes --references (tiny's graphs are the default export)")

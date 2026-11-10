@@ -23,3 +23,22 @@ download_mb = 749
 installed_mb = 749
 platforms = ["macos-arm64", "linux-x86_64"]
 lab = { round = "segment-01", remove = 0.548, iou = 0.576, best_for = "small and fast" }
+
+[[segmenter]]
+id = "sam3"
+title = "SAM 3"
+adapter = "sam3"
+params = ["threshold", "max_instances"]
+licence = "SAM License"
+licence_files = ["LICENSE.sam3.txt"]
+files = [
+    "sam3.vision.onnx",
+    "sam3.vision.onnx.data",
+    "sam3.text.onnx",
+    "sam3.head.onnx",
+    "sam3.tokenizer.json",
+]
+download_mb = 3377
+installed_mb = 3377
+platforms = ["macos-arm64", "linux-x86_64"]
+lab = { round = "segment-01", remove = 0.777, iou = 0.724, best_for = "the best remove score; end to end, it finds and draws each instance itself" }
