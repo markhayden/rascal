@@ -23,3 +23,21 @@ download_mb = 749
 installed_mb = 749
 platforms = ["macos-arm64", "linux-x86_64"]
 lab = { round = "segment-01", remove = 0.548, iou = 0.576, best_for = "small and fast" }
+
+[[segmenter]]
+id = "evfsam2"
+title = "EVF-SAM2"
+adapter = "evfsam2"
+params = ["max_instances"]
+licence = "Apache-2.0"
+licence_files = ["LICENSE.evf-sam2.txt"]
+files = [
+    "evf-sam2.image.onnx",
+    "evf-sam2.prompted.onnx",
+    "evf-sam2.prompted.onnx.data",
+    "evf-sam2.tokenizer.json",
+]
+download_mb = 3571
+installed_mb = 3571
+platforms = ["macos-arm64", "linux-x86_64"]
+lab = { round = "segment-01", remove = 0.581, iou = 0.664, best_for = "reading the prompt itself: no detector, one mask per query" }

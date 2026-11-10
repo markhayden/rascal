@@ -151,3 +151,103 @@ def _owlv2_sam2(files: dict[str, Path]) -> Adapter:
 
 # The adapter for each catalogue `adapter` name, built from the model's files by name.
 BUILDERS: dict[str, Callable[[dict[str, Path]], Adapter]] = {"owlv2+sam2": _owlv2_sam2}
+
+
+def _bilinear_axis(n_in: int, n_out: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """`F.interpolate`'s bilinear source indices and weights on one axis, `align_corners=False`
+    and no antialiasing: half-pixel centres, a negative source clamped to 0."""
+    scale = np.float32(n_in / n_out)
+    src = (np.arange(n_out, dtype=np.float32) + np.float32(0.5)) * scale - np.float32(0.5)
+    src = np.maximum(src, np.float32(0.0))
+    i0 = np.minimum(src.astype(np.int64), n_in - 1)
+    i1 = np.minimum(i0 + 1, n_in - 1)
+    return i0, i1, (src - i0.astype(np.float32)).astype(np.float32)
+
+
+def bilinear(x: np.ndarray, height: int, width: int) -> np.ndarray:
+    """A [..., h, w] float32 array resized to [..., height, width] as `F.interpolate(mode=
+    "bilinear", align_corners=False)` does."""
+    y0, y1, wy = _bilinear_axis(x.shape[-2], height)
+    x0, x1, wx = _bilinear_axis(x.shape[-1], width)
+    rows = x[..., y0, :] * (1 - wy)[:, None] + x[..., y1, :] * wy[:, None]
+    return (rows[..., x0] * (1 - wx) + rows[..., x1] * wx).astype(np.float32)
+
+
+def evfsam2_input(pixels: np.ndarray) -> np.ndarray:
+    """An RGB image as EVF-SAM2's image graph takes it: [1, 3, H, W], 0 to 255, float32 (the
+    graph resizes and normalises for SAM 2.1 and BEIT-3 itself)."""
+    return np.ascontiguousarray(pixels.astype(np.float32).transpose(2, 0, 1)[None])
+
+
+def evfsam2_plane(low_res_mask: np.ndarray, size: tuple[int, int]) -> np.ndarray:
+    """The kept outline's [1, 1, 256, 256] logits resized to the image's (height, width),
+    bilinear, kept above 0."""
+    return bilinear(low_res_mask[0, 0], size[0], size[1]) > 0
+
+
+def plane_box(plane: np.ndarray) -> Box:
+    """A plane's bounding box (x0, y0, x1, y1), whole pixels, x1 and y1 exclusive."""
+    ys, xs = np.nonzero(plane)
+    return float(xs.min()), float(ys.min()), float(xs.max() + 1), float(ys.max() + 1)
+
+
+class EvfSam2:
+    """End to end: per query BEIT-3 reads the image and the query and prompts SAM 2.1 Large,
+    whose most confident of three outlines is kept. No detection score (1.0) and no threshold;
+    a query whose plane is empty gives no instance; the region is the plane's bounding box.
+    `backend` runs the model: `embed` (the image graph, once per image), `ids` (the tokenizer)
+    and `mask` (the prompted graph, once per query); the ONNX graphs in the pack, the maker's
+    PyTorch model when the export's references are made."""
+
+    def __init__(self, backend: Any) -> None:
+        self.backend = backend
+
+    def find(self, pixels: np.ndarray, queries: list[str], settings: Settings) -> list[Instance]:
+        features = self.backend.embed(evfsam2_input(pixels))
+        out = []
+        for q, query in enumerate(queries):
+            low = self.backend.mask(features, self.backend.ids(query))
+            plane = evfsam2_plane(low, pixels.shape[:2])
+            if plane.any():
+                out.append(Instance(q, 1.0, plane_box(plane), plane))
+        return out
+
+
+class OnnxEvfSam2:
+    """EVF-SAM2's two graphs and its tokenizer, as `EvfSam2`'s backend."""
+
+    def __init__(self, image_graph: Path, prompted_graph: Path, tokenizer: Path) -> None:
+        import onnxruntime as ort
+        from tokenizers import Tokenizer
+
+        providers = ["CPUExecutionProvider"]
+        self.image = ort.InferenceSession(str(image_graph), providers=providers)
+        self.prompted = ort.InferenceSession(str(prompted_graph), providers=providers)
+        self.tokenizer = Tokenizer.from_file(str(tokenizer))
+
+    def embed(self, image: np.ndarray) -> tuple[np.ndarray, ...]:
+        return tuple(self.image.run(None, {"image": image}))
+
+    def ids(self, query: str) -> np.ndarray:
+        return np.asarray([self.tokenizer.encode(query).ids], dtype=np.int64)
+
+    def mask(self, features: tuple[np.ndarray, ...], ids: np.ndarray) -> np.ndarray:
+        image_embed, high_res_0, high_res_1, beit = features
+        low, _ = self.prompted.run(None, {
+            "beit_image": beit, "input_ids": ids, "image_embed": image_embed,
+            "high_res_0": high_res_0, "high_res_1": high_res_1,
+        })  # fmt: skip
+        return low
+
+
+def _evfsam2(files: dict[str, Path]) -> Adapter:
+    return EvfSam2(
+        OnnxEvfSam2(
+            files["evf-sam2.image.onnx"],
+            files["evf-sam2.prompted.onnx"],
+            files["evf-sam2.tokenizer.json"],
+        )
+    )
+
+
+BUILDERS["evfsam2"] = _evfsam2
