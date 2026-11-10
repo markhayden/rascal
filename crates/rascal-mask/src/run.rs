@@ -31,6 +31,11 @@ pub struct RunArgs {
     pub protect: Option<MaskIn>,
     pub mask: Option<MaskIn>,
     pub prompt: Option<String>,
+    /// `--model`: the segmenter, for a recipe that declares `inputs.model` (remove-prompt).
+    pub model: Option<String>,
+    /// The model's installation, pinned by a caller that holds it already (a lab cell);
+    /// otherwise the run takes its own hold when it is admitted.
+    pub installation: Option<String>,
     pub config: Option<PathBuf>,
     pub workspace: Option<PathBuf>,
     pub projection: Option<Projection>,
@@ -126,6 +131,128 @@ pub struct Prepared {
     pub packs: Vec<Arc<rascal_mcp::client::Pack>>,
     /// The recipe as loaded, so `heal` knows what `--prompt` bound.
     pub recipe: Recipe,
+    /// The run's hold on its model's installation, released when this is dropped.
+    pub hold: Option<Hold>,
+}
+
+/// A run's hold on its segmenter's installation (SPEC.md "Runs hold their installation"):
+/// taken through the pack's own `rascal-tools hold` (under the models lock: `current` read,
+/// the installation checked, the hold written), released when dropped, on every outcome. A
+/// held installation is never deleted, so a reinstall or removal during the run cannot strand
+/// its retries.
+pub struct Hold {
+    launcher: PathBuf,
+    models: PathBuf,
+    pub model: String,
+    run: String,
+    pub installation: String,
+}
+
+impl Hold {
+    /// Holds `model`'s current installation for a run of this process.
+    pub fn take(segmenters: &rascal_mask::segmenters::Segmenters, model: &str) -> Result<Hold> {
+        let launcher = segmenters.install.join(".venv/bin/rascal-tools");
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or_default();
+        let run = format!("rascal-{}-{nanos}", std::process::id());
+        let out = std::process::Command::new(&launcher)
+            .args(["hold", model, "--run", &run, "--pid"])
+            .arg(std::process::id().to_string())
+            .env(rascal_mask::readiness::MODELS_ENV, &segmenters.models)
+            .output()
+            .map_err(|e| Error::io(&launcher, e))?;
+        let installation = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if !out.status.success() || installation.is_empty() {
+            return Err(Error::usage(format!(
+                "segmenter {model} could not be held for the run: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            )));
+        }
+        Ok(Hold {
+            launcher,
+            models: segmenters.models.clone(),
+            model: model.to_string(),
+            run,
+            installation,
+        })
+    }
+}
+
+impl Drop for Hold {
+    fn drop(&mut self) {
+        let _ = std::process::Command::new(&self.launcher)
+            .args(["release", &self.model, "--run", &self.run, "--installation"])
+            .arg(&self.installation)
+            .env(rascal_mask::readiness::MODELS_ENV, &self.models)
+            .output();
+    }
+}
+
+/// Pins the run's installation of `model` (SPEC.md "Choosing a model"): the caller's when it
+/// holds one already, else a hold taken now; every `segment` step then names it, so the first
+/// call and every retry run the same installation. Nothing is pinned under `--replay` (the
+/// recording answers), for a pack whose `segment` takes no `installation`, or without a
+/// catalogue to hold through. The installation's `install.json` is copied into the run's
+/// directory as `segmenter-install.json`, so removing the model later leaves the evidence.
+pub fn pin_installation(
+    recipe: &mut Recipe,
+    registry: &rascal_core::registry::OpRegistry,
+    config: Option<&rascal_core::config::Config>,
+    model: Option<&str>,
+    given: Option<&str>,
+    run_dir: &Path,
+    replay: bool,
+) -> Result<Option<Hold>> {
+    let Some(model) = model else { return Ok(None) };
+    let takes = registry
+        .get(crate::retry::SEGMENT)
+        .is_some_and(|op| op.manifest().param("installation").is_some());
+    if replay || !takes {
+        return Ok(None);
+    }
+    let Some(segmenters) = config.and_then(rascal_mask::segmenters::Segmenters::of) else {
+        return Ok(None);
+    };
+    // A caller that holds an installation already names it: the lab's cell (`given`), or a
+    // `--set segment.installation=` from a harness that took its own hold.
+    let set = recipe
+        .step
+        .iter()
+        .find(|s| s.op == crate::retry::SEGMENT)
+        .and_then(|s| s.params.get("installation"))
+        .and_then(|v| v.as_str())
+        .filter(|v| !v.is_empty())
+        .map(str::to_string);
+    let given = given.map(str::to_string).or(set);
+    let (installation, hold) = match given.as_deref() {
+        Some(ident) => (ident.to_string(), None),
+        None => {
+            let hold = Hold::take(&segmenters, model)?;
+            (hold.installation.clone(), Some(hold))
+        }
+    };
+    for step in recipe
+        .step
+        .iter_mut()
+        .filter(|s| s.op == crate::retry::SEGMENT)
+    {
+        step.params.insert(
+            "installation".to_string(),
+            toml::Value::String(installation.clone()),
+        );
+    }
+    let record = segmenters
+        .models
+        .join(model)
+        .join(&installation)
+        .join("install.json");
+    if record.is_file() {
+        let to = run_dir.join("segmenter-install.json");
+        std::fs::copy(&record, &to).map_err(|e| Error::io(&to, e))?;
+    }
+    Ok(hold)
 }
 
 /// What `run` did.
@@ -143,6 +270,97 @@ pub fn declares_prompt(recipe: &Recipe) -> bool {
         .inputs
         .get("prompt")
         .is_some_and(|d| d.kind == InputType::Text)
+}
+
+/// Whether a recipe declares `inputs.model`, which `--model` binds (SPEC.md "Choosable
+/// segmenters").
+pub fn declares_model(recipe: &Recipe) -> bool {
+    recipe
+        .inputs
+        .get("model")
+        .is_some_and(|d| d.kind == InputType::Text)
+}
+
+/// The segmenter a run of `recipe` uses, resolved once (SPEC.md "Choosable segmenters"): the
+/// call's `model`, else `[segment] model`, else the pack's default. A step may not set `model`
+/// itself (a literal, or an override): the only way in is `inputs.model`. With a pack whose
+/// `segment` takes no `model`, the binding is dropped and naming a model is refused. A model
+/// that is not installed is refused before anything runs, naming the command that installs it;
+/// under `--replay` nothing is checked on disk, since the recording answers.
+pub fn resolve_model(
+    recipe: &mut Recipe,
+    registry: &rascal_core::registry::OpRegistry,
+    config: Option<&rascal_core::config::Config>,
+    call: Option<&str>,
+    replay: bool,
+) -> Result<Option<String>> {
+    if !declares_model(recipe) {
+        if call.is_some() {
+            return Err(Error::usage(format!(
+                "recipe {} declares no inputs.model; --model does not apply (remove-prompt takes one)",
+                recipe.name
+            )));
+        }
+        return Ok(None);
+    }
+    for step in recipe.step.iter().filter(|s| s.op == crate::retry::SEGMENT) {
+        if let Some(value) = step.params.get("model")
+            && value.as_str() != Some("inputs.model")
+        {
+            return Err(Error::usage(format!(
+                "recipe {} step {}: a step cannot set model itself ({value}); pass --model, the call's model or [segment] model",
+                recipe.name, step.id
+            )));
+        }
+    }
+    let manifest = registry.get(crate::retry::SEGMENT).map(|op| op.manifest());
+    let param = manifest.as_ref().and_then(|m| m.param("model").cloned());
+    let choices = param.as_ref().map(|p| {
+        (
+            p.choices.clone(),
+            p.default
+                .as_ref()
+                .and_then(|d| d.as_str())
+                .map(str::to_string),
+        )
+    });
+    let resolved = rascal_mask::segmenters::resolve(
+        call,
+        config,
+        choices.as_ref().map(|(c, d)| (c.as_slice(), d.as_deref())),
+    )?;
+    let Some((model, _)) = resolved else {
+        for step in recipe
+            .step
+            .iter_mut()
+            .filter(|s| s.op == crate::retry::SEGMENT)
+        {
+            step.params.remove("model");
+        }
+        return Ok(None);
+    };
+    if !replay
+        && let Some(segmenters) = config.and_then(rascal_mask::segmenters::Segmenters::of)
+        && let Some(entry) = segmenters.entry(&model)
+    {
+        use rascal_mask::segmenters::State;
+        match segmenters.state(entry) {
+            State::Installed => {}
+            State::Unavailable => {
+                return Err(Error::usage(format!(
+                    "segmenter {model} does not run on {}",
+                    rascal_mask::segmenters::platform()
+                )));
+            }
+            State::NotInstalled | State::Installing => {
+                return Err(Error::usage(format!(
+                    "segmenter {model} is not installed in {}: run `rascal tools get {model}` (or Get it in Wafflery)",
+                    segmenters.models.display()
+                )));
+            }
+        }
+    }
+    Ok(Some(model))
 }
 
 /// Runs a recipe. The run directory must be new or empty. Every declared input is bound from
@@ -269,6 +487,22 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
             toml::Value::from(&value)
         ))?;
     }
+    let model = resolve_model(
+        &mut recipe,
+        &registry,
+        config.as_ref(),
+        args.model.as_deref(),
+        args.replay.is_some(),
+    )?;
+    let hold = pin_installation(
+        &mut recipe,
+        &registry,
+        config.as_ref(),
+        model.as_deref(),
+        args.installation.as_deref(),
+        &out,
+        args.replay.is_some(),
+    )?;
     recipe.validate(&registry).map_err(|e| {
         let no_packs = config.as_ref().is_none_or(|c| c.packs.is_empty());
         match e {
@@ -377,6 +611,9 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
     {
         texts.insert("prompt".to_string(), prompt.clone());
     }
+    if let Some(model) = &model {
+        texts.insert("model".to_string(), model.clone());
+    }
     let input_image = inputs["image"].clone();
     let outcome = recipe.run(&registry, inputs, &texts, &run)?;
     Ok(Prepared {
@@ -386,6 +623,7 @@ pub fn run_recipe(args: &RunArgs) -> Result<Prepared> {
         registry,
         packs,
         recipe,
+        hold,
     })
 }
 

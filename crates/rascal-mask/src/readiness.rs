@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 use rascal_core::config::{Config, ConfigState, FillerConfig, PackConfig};
 use rascal_core::contract::table_manners::{
-    Readiness, ReadinessState, Requirement, RequirementKind, RequirementState,
+    ForChoice, Readiness, ReadinessState, Requirement, RequirementKind, RequirementState,
 };
 use rascal_mcp::provision::{PACK_NAME, install_dir_of};
 
@@ -27,6 +27,14 @@ pub const CHECK_FOR: &str = "checking the result";
 
 /// The variable the segmenter pack reads its model directory from.
 pub const MODELS_ENV: &str = "RASCAL_TOOLS_MODELS";
+
+/// The parameter whose choices are the catalogued segmenters (table-manners 3.1's `for_choice`).
+pub const MODEL_PARAM: &str = "model";
+
+/// The requirement a model choice names: `segmenter:<id>`, met when the model is installed.
+pub fn model_requirement_name(id: &str) -> String {
+    format!("segmenter:{id}")
+}
 
 /// What a provider said about a credential in this session (table-manners 3.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,9 +71,18 @@ pub struct Setup<'a> {
     pub failed_packs: &'a BTreeMap<String, String>,
 }
 
-/// The readiness of `action` for the use `filler`: every requirement that use reads, and
-/// `needs_setup` when one is `missing` or `invalid` (rascal never reports `unavailable`).
-pub fn for_call(setup: &Setup<'_>, action: &str, filler: Use<'_>) -> Readiness {
+/// The readiness of `action` for the use `filler` and the segmenter `model` the call names: every
+/// requirement that use reads, and `needs_setup` when one is `missing` or `invalid` (rascal never
+/// reports `unavailable`). Each catalogued segmenter is a requirement for its `model` choice
+/// (table-manners 3.1's truth table): the description lists every choice's and counts only the
+/// resolved default's (`model` none); a call lists and counts only the model it runs (its own,
+/// else the default).
+pub fn for_call(
+    setup: &Setup<'_>,
+    action: &str,
+    filler: Use<'_>,
+    model: Option<&str>,
+) -> Readiness {
     let mut requirements: Vec<Requirement> = Vec::new();
     let segmenter = action == SEGMENTER_ACTION;
     let reads_config = match filler {
@@ -90,6 +107,8 @@ pub fn for_call(setup: &Setup<'_>, action: &str, filler: Use<'_>) -> Readiness {
                     )),
                     optional: false,
                     needed_for: None,
+                    for_choice: None,
+                    installable: None,
                 }),
             },
             Use::Configured => {
@@ -99,8 +118,14 @@ pub fn for_call(setup: &Setup<'_>, action: &str, filler: Use<'_>) -> Readiness {
             }
         }
     }
+    let mut chosen = None;
     if segmenter {
-        segmenter_requirements(setup, &mut requirements);
+        chosen = segmenter_requirements(
+            setup,
+            model,
+            matches!(filler, Use::Configured),
+            &mut requirements,
+        );
         let fills = match filler {
             Use::MaskOnly => false,
             Use::Filler(_) => true,
@@ -113,13 +138,36 @@ pub fn for_call(setup: &Setup<'_>, action: &str, filler: Use<'_>) -> Readiness {
     let mut seen = std::collections::BTreeSet::new();
     requirements.retain(|r| seen.insert((format!("{:?}", r.kind), r.name.clone())));
     Readiness {
-        state: if requirements.iter().any(unmet) {
+        state: if requirements
+            .iter()
+            .any(|r| unmet(r) && counts(r, chosen.as_deref()))
+        {
             ReadinessState::NeedsSetup
         } else {
             ReadinessState::Ready
         },
         requirements,
     }
+}
+
+/// Whether a requirement counts toward an action's state when `chosen` is the model the call (or
+/// the description's default) runs: one with no `for_choice`, or the chosen model's.
+pub fn counts(requirement: &Requirement, chosen: Option<&str>) -> bool {
+    requirement
+        .for_choice
+        .as_ref()
+        .is_none_or(|c| Some(c.value.as_str()) == chosen)
+}
+
+/// The requirements that stand in the way of `readiness`, with `default` the action's resolved
+/// default model (the description's readiness lists every choice's; only the default's count).
+pub fn blocking(readiness: &Readiness, default: Option<&str>) -> Vec<Requirement> {
+    readiness
+        .requirements
+        .iter()
+        .filter(|r| unmet(r) && counts(r, default))
+        .cloned()
+        .collect()
 }
 
 /// Whether a requirement stands in the way: `missing` or `invalid`, and not optional (an
@@ -158,6 +206,8 @@ fn checker_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
             }),
             optional: false,
             needed_for: None,
+            for_choice: None,
+            installable: None,
         }));
     }
     if let Some(var) = &checker.key_env {
@@ -197,6 +247,8 @@ fn config_requirement(state: &ConfigState, segmenter: bool) -> Requirement {
         setup,
         optional: false,
         needed_for: None,
+        for_choice: None,
+        installable: None,
     }
 }
 
@@ -213,6 +265,8 @@ fn filler_requirements(
         setup: None,
         optional: false,
         needed_for: None,
+        for_choice: None,
+        installable: None,
     });
     if let Some(var) = &entry.key_env {
         out.push(credential(setup.answers, var));
@@ -232,6 +286,8 @@ fn filler_requirements(
             }),
             optional: false,
             needed_for: None,
+            for_choice: None,
+            installable: None,
         });
     }
 }
@@ -261,6 +317,8 @@ fn credential(answers: &Answers, var: &str) -> Requirement {
         setup: Some(setup),
         optional: false,
         needed_for: None,
+        for_choice: None,
+        installable: None,
     }
 }
 
@@ -287,9 +345,17 @@ fn is_executable(path: &Path) -> bool {
 }
 
 /// The segmenter pack: the entry whose command is `<dir>/.venv/bin/rascal-tools` (the rule
-/// `rascal tools setup` uses), the non-secret variables it passes, and its model files.
-fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
-    let entry = setup.config.config().and_then(segmenter_entry);
+/// `rascal tools setup` uses), the non-secret variables it passes, and one requirement per
+/// catalogued segmenter that runs here (`segmenter:<id>`, for its `model` choice, met when it is
+/// installed): all of them when `all_choices` (the description), else only the one a call runs.
+/// Returns the model that counts: the call's, else the resolved default.
+fn segmenter_requirements(
+    setup: &Setup<'_>,
+    model: Option<&str>,
+    all_choices: bool,
+    out: &mut Vec<Requirement>,
+) -> Option<String> {
+    let entry = setup.config.config().and_then(segmenter_pack);
     let Some((name, entry, dir)) = entry else {
         out.push(Requirement {
             kind: RequirementKind::Dependency,
@@ -298,8 +364,10 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
             setup: Some("Run `rascal tools setup --bundle <bundle> --config <path>`.".to_string()),
             optional: false,
             needed_for: None,
+            for_choice: None,
+            installable: None,
         });
-        return;
+        return None;
     };
     let launcher = Path::new(&entry.command[0]);
     if !launcher.is_file() {
@@ -313,8 +381,10 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
             )),
             optional: false,
             needed_for: None,
+            for_choice: None,
+            installable: None,
         });
-        return;
+        return None;
     }
     if let Some(reason) = setup.failed_packs.get(name) {
         out.push(Requirement {
@@ -326,8 +396,10 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
             )),
             optional: false,
             needed_for: None,
+            for_choice: None,
+            installable: None,
         });
-        return;
+        return None;
     }
     out.push(Requirement {
         kind: RequirementKind::Dependency,
@@ -336,6 +408,8 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
         setup: None,
         optional: false,
         needed_for: None,
+        for_choice: None,
+        installable: None,
     });
     let passes_models = entry.env.iter().any(|v| v == MODELS_ENV);
     let models_env = passes_models
@@ -343,8 +417,18 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
         .flatten();
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let models = models_dir(&dir, models_env.as_deref(), home.as_deref());
-    let files = model_files(&dir, &models);
-    let all_present = files.iter().all(|f| !unmet(f));
+    let catalogue = crate::segmenters::Segmenters::read(&dir, models.clone());
+    let default = catalogue
+        .as_ref()
+        .and_then(|c| c.default_model(setup.config.config()));
+    let chosen = model.map(str::to_string).or(default);
+    let files = match &catalogue {
+        Some(catalogue) => model_requirements(catalogue, chosen.as_deref(), all_choices),
+        None => vec![no_catalogue(&dir)],
+    };
+    let all_present = files
+        .iter()
+        .all(|f| !(unmet(f) && counts(f, chosen.as_deref())));
     let key_envs = setup
         .config
         .config()
@@ -362,6 +446,8 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
                 setup: None,
                 optional: false,
                 needed_for: None,
+                for_choice: None,
+                installable: None,
             });
         } else if var == MODELS_ENV && !all_present {
             out.push(Requirement {
@@ -374,14 +460,91 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
                 )),
                 optional: false,
                 needed_for: None,
+                for_choice: None,
+                installable: None,
             });
         }
     }
     out.extend(files);
+    chosen
+}
+
+/// One `segmenter:<id>` requirement per catalogued model that runs on this platform (all, or only
+/// `chosen`), for its `model` choice and its installable, `present` when installed.
+fn model_requirements(
+    catalogue: &crate::segmenters::Segmenters,
+    chosen: Option<&str>,
+    all_choices: bool,
+) -> Vec<Requirement> {
+    use crate::segmenters::State;
+    catalogue
+        .entries
+        .iter()
+        .filter(|e| all_choices || Some(e.id.as_str()) == chosen)
+        .filter_map(|entry| {
+            let state = catalogue.state(entry);
+            if state == State::Unavailable && all_choices {
+                return None;
+            }
+            let installed = state == State::Installed;
+            let title = if entry.title.is_empty() {
+                entry.id.as_str()
+            } else {
+                entry.title.as_str()
+            };
+            Some(Requirement {
+                kind: RequirementKind::File,
+                name: model_requirement_name(&entry.id),
+                state: if installed {
+                    RequirementState::Present
+                } else {
+                    RequirementState::Missing
+                },
+                setup: (!installed).then(|| match state {
+                    State::Unavailable => format!(
+                        "{title} does not run on {}.",
+                        crate::segmenters::platform()
+                    ),
+                    State::Installing => format!(
+                        "{title} is being installed; wait for it, or see `rascal tools models`."
+                    ),
+                    _ => format!(
+                        "{title} is not installed in {}. Get it in the tool's setup, or run `rascal tools get {}`.",
+                        catalogue.models.display(),
+                        entry.id
+                    ),
+                }),
+                optional: false,
+                needed_for: None,
+                for_choice: Some(ForChoice {
+                    param: MODEL_PARAM.to_string(),
+                    value: entry.id.clone(),
+                }),
+                installable: Some(entry.id.clone()),
+            })
+        })
+        .collect()
+}
+
+/// The requirement when the install holds no readable catalogue.
+fn no_catalogue(install: &Path) -> Requirement {
+    Requirement {
+        kind: RequirementKind::File,
+        name: "segmenters.toml".to_string(),
+        state: RequirementState::Missing,
+        setup: Some(format!(
+            "{} holds no readable segmenters.toml with a default model. Run `rascal tools setup --bundle <bundle> --config <path>` again.",
+            install.display()
+        )),
+        optional: false,
+        needed_for: None,
+        for_choice: None,
+        installable: None,
+    }
 }
 
 /// The first entry (by name) that is a `rascal tools setup` install, with its directory.
-fn segmenter_entry(config: &Config) -> Option<(&String, &PackConfig, PathBuf)> {
+pub fn segmenter_pack(config: &Config) -> Option<(&String, &PackConfig, PathBuf)> {
     config.packs.iter().find_map(|(name, entry)| {
         install_dir_of(&entry.command, PACK_NAME).map(|d| (name, entry, d))
     })
@@ -413,99 +576,6 @@ pub fn models_dir(
     home.map(Path::to_path_buf)
         .unwrap_or_default()
         .join(".cache/rascal-tools")
-}
-
-/// One `file` requirement per file the default segmenter needs: the `files` and
-/// `licence_files` of the entry the install's segmenter catalogue (`segmenters.toml`) marks
-/// `default`, read at the install's root (where a bundle puts it) or in the package source (a
-/// checkout's `tools/python`). Another model's files never make `remove_prompt` need setup. The
-/// files are looked for in the model's current installation, `<models>/<id>/<identity>/`, the
-/// identity read from `<models>/<id>/current` (`rascal_tools.installs`). A file is `present` when
-/// it is there and not empty; its digest is not hashed here (the pack verifies the installation
-/// before use), so it is never `valid`.
-fn model_files(install: &Path, models: &Path) -> Vec<Requirement> {
-    let catalogue = [
-        install.join("segmenters.toml"),
-        install.join("src/rascal_tools/segmenters.toml"),
-    ]
-    .into_iter()
-    .find(|p| p.is_file());
-    let names = catalogue
-        .as_deref()
-        .and_then(|p| std::fs::read_to_string(p).ok())
-        .and_then(|text| toml::from_str::<Catalogue>(&text).ok())
-        .and_then(|c| c.segmenter.into_iter().find(|s| s.default))
-        .map(|s| {
-            let names = s
-                .files
-                .into_iter()
-                .chain(s.licence_files)
-                .collect::<Vec<_>>();
-            (s.id, names)
-        });
-    let Some((id, names)) = names else {
-        return vec![Requirement {
-            kind: RequirementKind::File,
-            name: "segmenters.toml".to_string(),
-            state: RequirementState::Missing,
-            setup: Some(format!(
-                "{} holds no readable segmenters.toml with a default model. Run `rascal tools setup --bundle <bundle> --config <path>` again.",
-                install.display()
-            )),
-            optional: false,
-            needed_for: None,
-        }];
-    };
-    // The current installation's directory; a name that is not a plain file name is no
-    // installation at all.
-    let installation = std::fs::read_to_string(models.join(&id).join("current"))
-        .ok()
-        .map(|text| text.trim().to_string())
-        .filter(|ident| {
-            !ident.is_empty() && !ident.contains(['/', '\\']) && !ident.starts_with('.')
-        })
-        .map(|ident| models.join(&id).join(ident));
-    names
-        .into_iter()
-        .map(|name| {
-            let there = installation.as_ref().is_some_and(|dir| {
-                std::fs::metadata(dir.join(&name)).is_ok_and(|m| m.is_file() && m.len() > 0)
-            });
-            Requirement {
-                kind: RequirementKind::File,
-                state: if there {
-                    RequirementState::Present
-                } else {
-                    RequirementState::Missing
-                },
-                setup: (!there).then(|| {
-                    format!(
-                        "{id} is not installed in {}. Run `rascal-tools get {id}` with the pack's environment, or set `{MODELS_ENV}`.",
-                        models.display()
-                    )
-                }),
-                name,
-                optional: false,
-                needed_for: None,
-            }
-        })
-        .collect()
-}
-
-#[derive(serde::Deserialize)]
-struct Catalogue {
-    #[serde(default)]
-    segmenter: Vec<CatalogueEntry>,
-}
-
-#[derive(serde::Deserialize)]
-struct CatalogueEntry {
-    id: String,
-    #[serde(default)]
-    default: bool,
-    files: Vec<String>,
-    #[serde(default)]
-    licence_files: Vec<String>,
 }
 
 /// The requirements as one line for people: `config rascal.toml missing; credential KEY

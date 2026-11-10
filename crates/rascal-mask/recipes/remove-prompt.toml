@@ -2,6 +2,8 @@
 # every plane as the core, then the same shaping as `remove`: grown a little and further downward
 # for the shadow, closed, small holes filled, kept off anything protected, feathered. Needs
 # --config with a [packs.*] entry that serves segment; `--prompt` binds inputs.prompt.
+# `model` picks the segmenter (SPEC.md "Choosable segmenters"): `--model` or the call's `model`,
+# else `[segment] model`, else the pack's default; rascal fills it, so no step sets it itself.
 version = 1
 name = "remove-prompt"
 use_case = "remove"
@@ -9,6 +11,7 @@ use_case = "remove"
 [inputs]
 image = { type = "Image" }
 prompt = { type = "Text" }
+model = { type = "Text", optional = true }
 protect = { type = "Mask", optional = true }
 
 [[step]]
@@ -16,6 +19,7 @@ id = "segment"
 op = "segment"
 inputs = { image = "inputs.image" }
 prompt = "inputs.prompt"
+model = "inputs.model"
 max_instances = 8
 
 [[step]]

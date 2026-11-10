@@ -78,6 +78,10 @@ enum Command {
         /// Bind inputs.prompt, a recipe's text input (remove-prompt's finder prompt).
         #[arg(long)]
         prompt: Option<String>,
+        /// The segmenter, for a recipe that declares inputs.model (remove-prompt): an id from
+        /// `rascal tools models`; else `[segment] model`, else the pack's default.
+        #[arg(long)]
+        model: Option<String>,
         /// Override a step parameter or constant set for this run, <step>.<param>=<value>
         /// (segment.threshold=0.4, grow.px=8, fan.constants=fan-v2); repeatable, journaled.
         #[arg(long = "set", value_name = "STEP.PARAM=VALUE")]
@@ -134,6 +138,10 @@ enum Command {
         /// filler's, when it takes one.
         #[arg(long)]
         prompt: Option<String>,
+        /// The segmenter, for a recipe that declares inputs.model (remove-prompt): an id from
+        /// `rascal tools models`; else `[segment] model`, else the pack's default.
+        #[arg(long)]
+        model: Option<String>,
         /// Override a step parameter or constant set for this heal, <step>.<param>=<value>;
         /// repeatable, journaled, and it wins over the filler entry's overrides.
         #[arg(long = "set", value_name = "STEP.PARAM=VALUE")]
@@ -635,6 +643,36 @@ enum ToolsCommand {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// The segmenter pack's catalogue with each model's state (installed, not installed,
+    /// installing, unavailable): `rascal-tools models` with the pack's environment.
+    Models {
+        /// The configuration file (rascal.toml) naming the segmenter pack.
+        #[arg(long)]
+        config: PathBuf,
+        /// Print the listing as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Install a catalogued segmenter from its release (or `--from` a directory of its release
+    /// assets, with no network): `rascal-tools get` with the pack's environment.
+    Get {
+        /// The model's id (`rascal tools models`); without it, the catalogue's default.
+        model: Option<String>,
+        /// The configuration file (rascal.toml) naming the segmenter pack.
+        #[arg(long)]
+        config: PathBuf,
+        /// A directory holding the model's release assets, for an offline install.
+        #[arg(long)]
+        from: Option<PathBuf>,
+    },
+    /// Remove an installed segmenter: `rascal-tools remove` with the pack's environment.
+    Remove {
+        /// The model's id.
+        model: String,
+        /// The configuration file (rascal.toml) naming the segmenter pack.
+        #[arg(long)]
+        config: PathBuf,
+    },
     /// Install the Python pack from a bundle with no network: verify every digest, copy the
     /// listed files, sync the environment from the wheelhouse, smoke the launcher.
     Setup {
@@ -751,6 +789,7 @@ fn main() {
             protect,
             mask,
             prompt,
+            model,
             set,
             config,
             workspace,
@@ -768,6 +807,8 @@ fn main() {
                 protect: protect.map(run::MaskIn::Dir),
                 mask: mask.map(run::MaskIn::Dir),
                 prompt,
+                model,
+                installation: None,
                 config,
                 workspace,
                 projection: projection.map(Into::into),
@@ -779,7 +820,12 @@ fn main() {
                 cancel: None,
             };
             if args.replay.is_none()
-                && let Err(error) = ready_for(&args.recipe, args.config.as_deref(), None)
+                && let Err(error) = ready_for(
+                    &args.recipe,
+                    args.config.as_deref(),
+                    None,
+                    args.model.as_deref(),
+                )
             {
                 eprintln!("rascal run: {error}");
                 std::process::exit(exit::code_for(&error));
@@ -846,6 +892,7 @@ fn main() {
             protect,
             mask,
             prompt,
+            model,
             set,
             workspace,
             projection,
@@ -864,6 +911,8 @@ fn main() {
                 protect: protect.map(run::MaskIn::Dir),
                 mask: mask.map(run::MaskIn::Dir),
                 prompt,
+                model,
+                installation: None,
                 config: Some(config),
                 workspace,
                 projection: projection.map(Into::into),
@@ -875,7 +924,12 @@ fn main() {
                 cancel: None,
             };
             if replay.is_none()
-                && let Err(error) = ready_for(&run.recipe, run.config.as_deref(), Some(&filler))
+                && let Err(error) = ready_for(
+                    &run.recipe,
+                    run.config.as_deref(),
+                    Some(&filler),
+                    run.model.as_deref(),
+                )
             {
                 eprintln!("rascal heal: {error}");
                 std::process::exit(exit::code_for(&error));
@@ -1028,6 +1082,29 @@ fn main() {
                     workspace,
                     args,
                 } => tools::call(&pack, &tool, &config, &workspace, &args),
+                ToolsCommand::Models { config, json } => {
+                    let mut args = vec!["models".to_string()];
+                    if json {
+                        args.push("--json".to_string());
+                    }
+                    tools::installer(&config, &args)
+                }
+                ToolsCommand::Get {
+                    model,
+                    config,
+                    from,
+                } => {
+                    let mut args = vec!["get".to_string()];
+                    args.extend(model);
+                    if let Some(from) = from {
+                        args.push("--from".to_string());
+                        args.push(from.display().to_string());
+                    }
+                    tools::installer(&config, &args)
+                }
+                ToolsCommand::Remove { model, config } => {
+                    tools::installer(&config, &["remove".to_string(), model])
+                }
                 ToolsCommand::Setup {
                     bundle,
                     sha256,
@@ -1487,15 +1564,10 @@ fn describe_cmd(json: bool, config: Option<&std::path::Path>) -> rascal_core::er
             rascal_core::contract::table_manners::ReadinessState::Ready => String::new(),
             _ => format!(
                 " (needs setup: {})",
-                readiness::summary(
-                    &action
-                        .readiness
-                        .requirements
-                        .iter()
-                        .filter(|r| readiness::unmet(r))
-                        .cloned()
-                        .collect::<Vec<_>>()
-                )
+                readiness::summary(&readiness::blocking(
+                    &action.readiness,
+                    action.params_schema["properties"][readiness::MODEL_PARAM]["default"].as_str()
+                ))
             ),
         };
         let mut kind = match action.kind {
@@ -1601,6 +1673,7 @@ fn ready_for(
     recipe: &str,
     config: Option<&std::path::Path>,
     filler: Option<&str>,
+    model: Option<&str>,
 ) -> rascal_core::error::Result<()> {
     let state = rascal_core::config::ConfigState::read(config);
     let action = rascal_mask::describe::action_name(recipe);
@@ -1612,6 +1685,7 @@ fn ready_for(
         },
         &action,
         filler.map_or(readiness::Use::MaskOnly, readiness::Use::Filler),
+        model,
     );
     let unmet: Vec<_> = readiness
         .requirements

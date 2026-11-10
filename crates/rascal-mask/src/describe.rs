@@ -217,7 +217,181 @@ pub fn defaults(recipe: &str) -> Result<serde_json::Map<String, Value>> {
 }
 
 /// The names the contract reserves for its own tools (3, 5): never an action's.
-pub const RESERVED: [&str; 4] = ["describe", "estimate", "export", "import"];
+pub const RESERVED: [&str; 6] = [
+    "describe",
+    "estimate",
+    "export",
+    "import",
+    "install",
+    "uninstall",
+];
+
+/// `model` as remove_prompt declares it: a string `enum` of the catalogued segmenters that run
+/// on this platform, the resolved default (`[segment] model`, else the catalogue's) first and as
+/// `default`, with `x-requirements` naming each choice's requirement. None when no choice runs
+/// here or the default is not one of them.
+fn model_schema(
+    segmenters: &crate::segmenters::Segmenters,
+    config: Option<&rascal_core::config::Config>,
+) -> Option<Value> {
+    use crate::segmenters::State;
+    let default = segmenters.default_model(config)?;
+    let mut ids: Vec<&str> = segmenters
+        .entries
+        .iter()
+        .filter(|e| segmenters.state(e) != State::Unavailable)
+        .map(|e| e.id.as_str())
+        .collect();
+    let at = ids.iter().position(|id| *id == default)?;
+    let first = ids.remove(at);
+    ids.insert(0, first);
+    let requirements: serde_json::Map<String, Value> = ids
+        .iter()
+        .map(|id| {
+            (
+                (*id).to_string(),
+                json!([readiness::model_requirement_name(id)]),
+            )
+        })
+        .collect();
+    Some(json!({
+        "type": "string",
+        "enum": ids,
+        "default": default,
+        "x-requirements": requirements,
+        "description": "The segmenter that finds the prompt's objects; one not installed is got in the tool's setup or with `rascal tools get <id>`.",
+    }))
+}
+
+/// Every catalogued segmenter as an installable (table-manners 3.5), its state read from disk:
+/// the installation `current` names, a live installer's status, the platform. Sizes are the
+/// files' recorded sizes in the pack's `artifacts.toml`, else the catalogue's megabytes.
+pub fn installables(
+    segmenters: &crate::segmenters::Segmenters,
+) -> Vec<rascal_core::contract::table_manners::Installable> {
+    use crate::segmenters::State;
+    use rascal_core::contract::table_manners::{
+        InstallAction, InstallError, InstallErrorCode, InstallOutcome, Installable,
+        InstallableKind, InstallableState, OutcomeState,
+    };
+    let sizes = artifact_sizes(&segmenters.install);
+    segmenters
+        .entries
+        .iter()
+        .map(|entry| {
+            let state = segmenters.state(entry);
+            let status = segmenters.status(&entry.id);
+            let bytes = entry
+                .files
+                .iter()
+                .chain(&entry.licence_files)
+                .map(|f| sizes.get(f).copied())
+                .sum::<Option<u64>>();
+            let last_outcome = status
+                .as_ref()
+                .and_then(|s| s.get("last_outcome"))
+                .filter(|o| !o.is_null())
+                .and_then(|o| {
+                    let action = match o.get("action")?.as_str()? {
+                        "install" => InstallAction::Install,
+                        "uninstall" => InstallAction::Uninstall,
+                        _ => return None,
+                    };
+                    let state = match o.get("state")?.as_str()? {
+                        "succeeded" => OutcomeState::Succeeded,
+                        "failed" => OutcomeState::Failed,
+                        "cancelled" => OutcomeState::Cancelled,
+                        _ => return None,
+                    };
+                    Some(InstallOutcome {
+                        action,
+                        state,
+                        error: (state == OutcomeState::Failed).then(|| InstallError {
+                            code: InstallErrorCode::Failed,
+                            message: o
+                                .get("error")
+                                .and_then(|e| e.as_str())
+                                .unwrap_or("failed")
+                                .to_string(),
+                        }),
+                        at: o.get("at")?.as_str()?.to_string(),
+                    })
+                });
+            let mut extensions = BTreeMap::new();
+            if let Some(lab) = &entry.lab
+                && let Ok(lab) = serde_json::to_value(lab)
+            {
+                extensions.insert("x-rascal".to_string(), json!({ "lab": lab }));
+            }
+            Installable {
+                id: entry.id.clone(),
+                title: if entry.title.is_empty() {
+                    entry.id.clone()
+                } else {
+                    entry.title.clone()
+                },
+                kind: InstallableKind::Model,
+                download_bytes: bytes.unwrap_or(entry.download_mb * 1_000_000),
+                installed_bytes: bytes.unwrap_or(entry.installed_mb * 1_000_000),
+                licence: entry.licence.clone(),
+                state: match state {
+                    State::Installed => InstallableState::Installed,
+                    State::NotInstalled => InstallableState::NotInstalled,
+                    State::Installing => InstallableState::Installing,
+                    State::Unavailable => InstallableState::Unavailable,
+                },
+                progress: (state == State::Installing).then(|| {
+                    status
+                        .as_ref()
+                        .and_then(|s| s.get("progress"))
+                        .and_then(Value::as_f64)
+                        .unwrap_or(0.0)
+                        .clamp(0.0, 1.0)
+                }),
+                requirements: Vec::new(),
+                notes: (state == State::Unavailable).then(|| {
+                    format!(
+                        "Does not run on {} (runs on {}).",
+                        crate::segmenters::platform(),
+                        entry.platforms.join(", ")
+                    )
+                }),
+                last_outcome,
+                extensions,
+            }
+        })
+        .collect()
+}
+
+/// Each artifact's recorded size, by file name, from the pack's `artifacts.toml` (at the
+/// install's root, or under `src/rascal_tools/` in a checkout).
+fn artifact_sizes(install: &std::path::Path) -> BTreeMap<String, u64> {
+    #[derive(serde::Deserialize)]
+    struct Manifest {
+        #[serde(default)]
+        artifact: Vec<Artifact>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Artifact {
+        name: String,
+        size: Option<u64>,
+    }
+    [
+        install.join("artifacts.toml"),
+        install.join("src/rascal_tools/artifacts.toml"),
+    ]
+    .into_iter()
+    .find(|p| p.is_file())
+    .and_then(|p| std::fs::read_to_string(p).ok())
+    .and_then(|text| toml::from_str::<Manifest>(&text).ok())
+    .map(|m| {
+        m.artifact
+            .into_iter()
+            .filter_map(|a| Some((a.name, a.size?)))
+            .collect()
+    })
+    .unwrap_or_default()
+}
 
 /// The longest a built-in operation is expected to take, as a multiple of its manifest's
 /// `cost.seconds`, and at least [`OPERATION_MAX_S_FLOOR`] seconds: a large image takes many
@@ -343,6 +517,7 @@ pub fn description(setup: &Setup<'_>) -> Result<Description> {
         .unwrap_or(0)
         .max(60) as f64
         + 60.0;
+    let segmenters = config.and_then(crate::segmenters::Segmenters::of);
     let mut actions = Vec::new();
     for (name, _) in SHIPPED {
         let recipe = load_recipe(name)?;
@@ -389,6 +564,14 @@ pub fn description(setup: &Setup<'_>) -> Result<Description> {
             }
         }
         properties.extend(common_properties(&recipe, &fillers));
+        // remove_prompt's `model` (SPEC.md "Choosable segmenters"): the catalogued segmenters
+        // that run here, the resolved default first and as the default, each naming the
+        // requirement its choice needs (table-manners 3.1's `x-requirements`).
+        if properties.contains_key(readiness::MODEL_PARAM)
+            && let Some(schema) = segmenters.as_ref().and_then(|s| model_schema(s, config))
+        {
+            properties.insert(readiness::MODEL_PARAM.to_string(), schema);
+        }
         // With a checker configured, remove_prompt asks it whether the object is gone after a
         // fill and tries again (ADR 0023); `check` turns that off for one call.
         let checked = checker && action_name(name) == readiness::SEGMENTER_ACTION;
@@ -429,7 +612,7 @@ pub fn description(setup: &Setup<'_>) -> Result<Description> {
                 may_spend: remote,
                 basis: remote.then_some(SpendBasis::Estimated),
             },
-            readiness: readiness::for_call(setup, &action_name(name), Use::Configured),
+            readiness: readiness::for_call(setup, &action_name(name), Use::Configured, None),
             duration: Duration {
                 typical_s: if found { 20.0 } else { 5.0 },
                 max_s,
@@ -448,6 +631,7 @@ pub fn description(setup: &Setup<'_>) -> Result<Description> {
             purpose: "Finds, masks and composites regions of an image.".to_string(),
         },
         actions,
+        installables: segmenters.as_ref().map(installables),
         vocabulary: Some(Vocabulary {
             group: Some(Group::ALL.map(|g| g.name().to_string()).to_vec()),
             disposition: Some(vec![]),

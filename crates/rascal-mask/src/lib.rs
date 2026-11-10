@@ -4,6 +4,8 @@
 pub mod checker;
 pub mod describe;
 pub mod filler;
+pub mod install;
 pub mod lab;
 pub mod readiness;
 pub mod recipes;
+pub mod segmenters;

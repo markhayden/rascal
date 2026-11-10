@@ -266,8 +266,24 @@ larger and stays inside). It answers one polygon region per instance (the padded
 labelled with the query it answered, scored, best first) and one plane per region in the
 image's frame, with `plane_px_<n>`, `outline_<n>`, `retried_<n>` and `retry_kept_<n>` per
 instance; `not_applicable` when nothing scores over the threshold. `model` picks the segmenter
-from the pack's catalogue (`segmenters.toml`, default `tiny`); a parameter the chosen model does
-not use is refused. Tiny is two models, both
+from the pack's catalogue (`segmenters.toml`, default `tiny`); the tool's annotation says which
+parameters each model uses (`applies`), and rascal leaves the others out of the call (not even
+defaulted) and refuses one given explicitly. Rascal resolves the model once per run: the call's
+`model` (`--model` on `run` and `heal`, `remove_prompt`'s `model`), else `[segment] model` in
+`rascal.toml`, else the pack's default; a recipe step cannot set it itself (remove-prompt binds
+it from `inputs.model`), and a model that is not installed is refused before the run starts with
+`rascal tools get <model>` in the message. With a pack whose `segment` takes no `model`, naming
+one is refused and the recipe runs as before. The installation is pinned the same way: at
+admission rascal holds the model's current installation (`rascal-tools hold`, under the models
+lock), names it as `installation` on every `segment` call of the run, M13's crop retries
+included, copies its `install.json` into the run directory (`segmenter-install.json`) and
+releases the hold when the run ends; a lab run holds one installation before any cell's identity
+is computed. `installation` is not part of a pack request's identity, so `--replay` answers from
+the recording with the model removed. A retry halves the threshold only for a model that uses
+one, and pads its crop by the model's `pad`, or by 0.05 for a model without one (recorded in the
+try's transition as `crop_pad`, never passed to the model). The estimate and the invocation
+carry `effective["x-rascal"].segmenter`: the model, its installation and the pack's version.
+Tiny is two models, both
 exported to ONNX and run on `onnxruntime` with no PyTorch anywhere near the pack: OWLv2 base
 turns the queries into boxes with scores, SAM 2.1 Hiera-Tiny gives three candidate outlines per
 box, and the rules in `rascal_tools/outline.py` (pure functions, no model) keep one
@@ -291,6 +307,13 @@ the run ends), `rascal-tools models [--json]` lists the catalogue with each mode
 (`installed`, `not_installed`, `installing`, `unavailable`) and last outcome, and `hold` /
 `release` pin an installation for a run (the lab uses them). Installing is the pack's one network
 step; serving never downloads.
+
+From rascal, `rascal tools models --config <rascal.toml> [--json]`, `rascal tools get [<model>]
+--config <rascal.toml> [--from <dir>]` and `rascal tools remove <model> --config <rascal.toml>` run
+the configured segmenter pack's installer with the pack's minimal environment and the models
+directory the pack reads, and exit as it does. Under `rascal serve` the same installer answers the
+contract's `install` and `uninstall` controls (`docs/contract.md`), started in its own process
+group with its output to `<models>/.status/<model>.log`, so an install outlives the request.
 
 The pack's tests are offline (`pytest`, `ruff`; `scripts/check-python.sh`, part of `just
 check` when the environment exists), with a parity harness that compares a tool's answer to

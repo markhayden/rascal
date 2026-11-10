@@ -145,6 +145,7 @@ pub fn outcome(
             }
         }
         Progress::Line(line) => eprintln!("rascal call {action}: {line}"),
+        Progress::Installable(id) => eprintln!("rascal call {action}: installing {id}"),
     };
     let meta = CallMeta {
         notes,

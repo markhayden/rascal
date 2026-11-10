@@ -146,6 +146,9 @@ pub enum Progress {
     Run(serde_json::Value),
     /// A line about a step, for people.
     Line(String),
+    /// The installable an `install` or `uninstall` control is working on (table-manners 5.3),
+    /// which every later progress notification carries in `_meta` in place of a run.
+    Installable(String),
 }
 
 /// The request `_meta` key a caller's correlation id comes under (table-manners 4.4).
@@ -156,6 +159,9 @@ pub const ESTIMATE: &str = "table-manners/estimate";
 
 /// The notification `_meta` key the run's reference goes under (table-manners 4.1).
 pub const RUN_META: &str = "table-manners/run";
+
+/// The notification `_meta` key an install's installable goes under (table-manners 5.3).
+pub const INSTALLABLE_META: &str = "table-manners/installable";
 
 /// A correlation id's form: 1 to 128 of `[A-Za-z0-9._:-]` (table-manners 4.4).
 fn valid_client_run_id(id: &str) -> bool {
@@ -423,21 +429,24 @@ impl Server {
         let mut heartbeat = tokio::time::interval(HEARTBEAT);
         heartbeat.tick().await;
         let mut last_line = String::from("started");
-        // The run's reference, once allocated: in every later notification's `_meta`.
-        let mut run: Option<serde_json::Value> = None;
-        let notification = |sent: f64, message: String, run: &Option<serde_json::Value>| {
-            token.clone().map(|token| {
-                let mut param = ProgressNotificationParam::new(token, sent).with_message(message);
-                if let Some(run) = run {
-                    let mut meta = serde_json::Map::new();
-                    meta.insert(RUN_META.to_string(), run.clone());
-                    param.meta = Some(rmcp::model::NotificationMetaObject(
-                        rmcp::model::MetaObject(meta),
-                    ));
-                }
-                param
-            })
-        };
+        // The run's reference once allocated, or the installable an install works on: in every
+        // later notification's `_meta`.
+        let mut run: Option<(&'static str, serde_json::Value)> = None;
+        let notification =
+            |sent: f64, message: String, run: &Option<(&'static str, serde_json::Value)>| {
+                token.clone().map(|token| {
+                    let mut param =
+                        ProgressNotificationParam::new(token, sent).with_message(message);
+                    if let Some((key, value)) = run {
+                        let mut meta = serde_json::Map::new();
+                        meta.insert((*key).to_string(), value.clone());
+                        param.meta = Some(rmcp::model::NotificationMetaObject(
+                            rmcp::model::MetaObject(meta),
+                        ));
+                    }
+                    param
+                })
+            };
         let outcome = loop {
             tokio::select! {
                 r = &mut task => break r,
@@ -447,7 +456,10 @@ impl Server {
                             self.inner.claims.lock().unwrap_or_else(|e| e.into_inner())
                                 .insert(id.clone(), Some(reference.clone()));
                         }
-                        run = Some(reference);
+                        run = Some((RUN_META, reference));
+                    }
+                    Progress::Installable(id) => {
+                        run = Some((INSTALLABLE_META, serde_json::Value::String(id)));
                     }
                     Progress::Line(line) => {
                         last_line = line.clone();

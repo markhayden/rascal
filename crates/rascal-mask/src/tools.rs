@@ -15,6 +15,27 @@ use rascal_core::workspace::Workspace;
 use rascal_mcp::client::Pack;
 use rascal_mcp::provision::{Bundle, install_dir_of, prerequisites, same_dir};
 
+/// Runs the segmenter pack's installer (`rascal-tools models|get|remove`) with `args`, its
+/// output straight to this terminal, and exits as it does (SPEC.md "Installing a model").
+pub fn installer(config: &Path, args: &[String]) -> Result<i32> {
+    let config = Config::read(config)?;
+    let (launcher, env) = rascal_mask::install::installer_command(&config).ok_or_else(|| {
+        Error::usage(
+            "no segmenter pack with a model catalogue is configured; run `rascal tools setup --bundle <bundle> --config <path>`",
+        )
+    })?;
+    let status = std::process::Command::new(&launcher)
+        .args(args)
+        .env_clear()
+        .envs(env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+        .status()
+        .map_err(|source| Error::Io {
+            path: launcher.clone(),
+            source,
+        })?;
+    Ok(status.code().unwrap_or(crate::exit::OPERATIONAL))
+}
+
 /// Prints every configured pack's tools: the op view (name, version, purpose, ports,
 /// parameters, bounds) or, with `--json`, the native manifests by pack.
 pub fn list(config: &Path, json: bool) -> Result<()> {

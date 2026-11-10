@@ -23,6 +23,7 @@
 //! | `env` | answers as `exact` with the names of its environment variables in the summary |
 //! | `no-annotation` | lists the tool without rascal's annotation block |
 //! | `old-version` | speaks revision 2025-06-18 only |
+//! | `models` | as `exact`, with a `model` choice (`tiny`, the default, and `sam3`) and an `installation` string, and `applies`: `tiny` uses `threshold`, `max_instances` and `pad`, `sam3` only `threshold` and `max_instances` (SPEC.md "Choosable segmenters") |
 //!
 //! `--concurrent` anywhere in the arguments marks the tool concurrent in its manifest;
 //! `--name=<tool>` serves the tool under another name.
@@ -73,8 +74,9 @@ image = "inputs.image"
 "#;
 
 /// The behaviours by name, as the first argument selects them.
-pub const BEHAVIOURS: [&str; 18] = [
+pub const BEHAVIOURS: [&str; 19] = [
     "exact",
+    "models",
     "empty-crops",
     "bad-schema",
     "over-bounds",
@@ -128,8 +130,8 @@ fn compat_manifest(name: &str, concurrent: bool, mutated: bool) -> serde_json::V
 }
 
 /// rascal's annotation block of `segment`.
-fn annotation() -> serde_json::Value {
-    serde_json::json!({
+fn annotation(models: bool) -> serde_json::Value {
+    let mut out = serde_json::json!({
         "annotation_version": 1,
         "inputs": [
             { "name": "image", "artifact_type": "Image", "required": true, "purpose": "The image to segment." }
@@ -147,7 +149,17 @@ fn annotation() -> serde_json::Value {
             { "name": "pad", "purpose": "How far each found box is widened (the fake ignores it).", "kind": "number", "required": false, "default": 0.05, "min": 0.0, "max": 0.5 },
             { "name": "delay_ms", "purpose": "A pause before answering, for tests of timing.", "kind": "integer", "required": false, "default": 0, "min": 0, "max": 60000 }
         ]
-    })
+    });
+    if models {
+        let params = out["params"].as_array_mut().expect("params");
+        params.push(serde_json::json!({ "name": "model", "purpose": "Which segmenter.", "kind": "choice", "required": false, "default": "tiny", "choices": ["tiny", "sam3"] }));
+        params.push(serde_json::json!({ "name": "installation", "purpose": "The installation to run.", "kind": "string", "required": false, "default": "" }));
+        out["applies"] = serde_json::json!({
+            "param": "model",
+            "choices": { "tiny": ["threshold", "max_instances", "pad"], "sam3": ["threshold", "max_instances"] }
+        });
+    }
+    out
 }
 
 fn tool(fake: &Fake) -> Tool {
@@ -160,7 +172,9 @@ fn tool(fake: &Fake) -> Tool {
                 "max_instances": { "type": "integer" },
                 "threshold": { "type": "number" },
                 "pad": { "type": "number" },
-                "delay_ms": { "type": "integer" }
+                "delay_ms": { "type": "integer" },
+                "model": { "type": "string" },
+                "installation": { "type": "string" }
             }
         }))
         .expect("a schema object");
@@ -175,7 +189,7 @@ fn tool(fake: &Fake) -> Tool {
         compat_manifest(&fake.name, fake.concurrent, fake.mutated),
     );
     if fake.behaviour != "no-annotation" {
-        meta.insert("rascal".to_string(), annotation());
+        meta.insert("rascal".to_string(), annotation(fake.behaviour == "models"));
     }
     tool.meta = Some(rmcp::model::MetaObject(meta));
     tool
@@ -559,6 +573,12 @@ pub async fn serve(args: &[String]) -> i32 {
 
 /// The fake as a program: a current-thread runtime around [`serve`].
 pub fn main(args: &[String]) -> i32 {
+    // The installer's `hold` and `release`, as the launcher passes them after the behaviour
+    // (`<behaviour> hold <model> --run <id> --pid <n>`): the fake keeps holds as the real pack
+    // does, in `RASCAL_TOOLS_MODELS`, so a run's hold can be seen and its release checked.
+    if let Some(at) = args.iter().position(|a| a == "hold" || a == "release") {
+        return installer(&args[at..]);
+    }
     match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -569,4 +589,47 @@ pub fn main(args: &[String]) -> i32 {
             3
         }
     }
+}
+
+/// `hold <model> --run <id> [--pid <n>]` prints the current installation after writing
+/// `<models>/<model>/<identity>/.held/<id>`; `release <model> --run <id> --installation <i>`
+/// deletes it. Exit 1 when the model is not installed.
+fn installer(args: &[String]) -> i32 {
+    let flag = |name: &str| {
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|i| args.get(i + 1))
+            .cloned()
+    };
+    let Some(models) = std::env::var_os("RASCAL_TOOLS_MODELS").map(std::path::PathBuf::from) else {
+        eprintln!("fake-pack: no RASCAL_TOOLS_MODELS");
+        return 1;
+    };
+    let (Some(model), Some(run)) = (args.get(1), flag("--run")) else {
+        eprintln!("fake-pack: {} needs a model and --run", args[0]);
+        return 64;
+    };
+    if args[0] == "release" {
+        if let Some(ident) = flag("--installation") {
+            let _ = std::fs::remove_file(models.join(model).join(ident).join(".held").join(&run));
+        }
+        return 0;
+    }
+    let Ok(ident) = std::fs::read_to_string(models.join(model).join("current")) else {
+        eprintln!(
+            "fake-pack: {model} is not installed in {}",
+            models.display()
+        );
+        return 1;
+    };
+    let ident = ident.trim().to_string();
+    let held = models.join(model).join(&ident).join(".held");
+    if std::fs::create_dir_all(&held).is_err()
+        || std::fs::write(held.join(&run), flag("--pid").unwrap_or_default()).is_err()
+    {
+        eprintln!("fake-pack: {model}'s installation {ident} is gone");
+        return 1;
+    }
+    println!("{ident}");
+    0
 }

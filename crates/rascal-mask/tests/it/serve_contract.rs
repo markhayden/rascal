@@ -2065,3 +2065,191 @@ fn a_task_preview_equals_what_the_artifact_resource_returns() {
     client.close().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Task 14.11 (1/3), table-manners 3.1 and 3.5: each catalogued segmenter is a `model` choice
+/// and an installable. The description lists every choice's requirement and counts only the
+/// resolved default's; a call naming a model that is not installed is refused `not_ready` naming
+/// it, before any run; one naming an installed model is not refused for the default.
+#[test]
+fn each_segmenter_is_a_model_choice_and_an_installable() {
+    let dir = scratch("choices");
+    let bin = env!("CARGO_BIN_EXE_rascal");
+    let install = dir.join("pack");
+    rascal_testkit::fake_install::write(&install, &[bin, "fake-pack", "exact"], true).unwrap();
+    // A third entry that runs nowhere: neither a choice nor installable here.
+    let mut catalogue = std::fs::read_to_string(install.join("segmenters.toml")).unwrap();
+    catalogue.push_str("\n[[segmenter]]\nid = \"far\"\ntitle = \"Far\"\nlicence = \"MIT\"\nfiles = [\"far.onnx\"]\nplatforms = [\"nowhere\"]\n");
+    std::fs::write(install.join("segmenters.toml"), catalogue).unwrap();
+    let write_config = |segment: Option<&str>| {
+        let path = dir.join("rascal.toml");
+        let mut text = format!(
+            "config_version = 1\n[packs.segmenter]\ncommand = [{:?}, \"serve\"]\n",
+            install.join(".venv/bin/rascal-tools").display().to_string()
+        );
+        if let Some(model) = segment {
+            text.push_str(&format!("\n[segment]\nmodel = \"{model}\"\n"));
+        }
+        std::fs::write(&path, text).unwrap();
+        path
+    };
+
+    // The catalogue's default, installed: ready; sam3 listed for its choice, missing.
+    let config = write_config(None);
+    let described = cli_describe(&dir, Some(&config), &[]);
+    valid("urn:table-manners:core:description", &described);
+    let action = described["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["name"] == "remove_prompt")
+        .unwrap();
+    let model = &action["params_schema"]["properties"]["model"];
+    assert_eq!(
+        model["enum"],
+        serde_json::json!(["tiny", "sam3"]),
+        "{model:#}"
+    );
+    assert_eq!(model["default"], "tiny");
+    assert_eq!(
+        model["x-requirements"],
+        serde_json::json!({ "tiny": ["segmenter:tiny"], "sam3": ["segmenter:sam3"] })
+    );
+    let readiness = &action["readiness"];
+    assert_eq!(readiness["state"], "ready", "{readiness:#}");
+    let sam3 = readiness["requirements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["name"] == "segmenter:sam3")
+        .unwrap();
+    assert_eq!(sam3["state"], "missing");
+    assert_eq!(sam3["installable"], "sam3");
+    let installables = described["installables"].as_array().unwrap();
+    let state = |id: &str| {
+        installables.iter().find(|i| i["id"] == id).unwrap()["state"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    assert_eq!(
+        (state("tiny"), state("sam3"), state("far")),
+        (
+            "installed".to_string(),
+            "not_installed".to_string(),
+            "unavailable".to_string()
+        )
+    );
+    let tiny = installables.iter().find(|i| i["id"] == "tiny").unwrap();
+    assert_eq!(tiny["kind"], "model");
+    assert_eq!(tiny["x-rascal"]["lab"]["remove"], 0.548);
+    assert_eq!(tiny["last_outcome"], serde_json::Value::Null);
+    assert!(
+        installables.iter().find(|i| i["id"] == "far").unwrap()["notes"]
+            .as_str()
+            .unwrap()
+            .contains("nowhere")
+    );
+
+    // An install under way and a failed one, as the installer's status file says.
+    let status = install.join("models/.status");
+    std::fs::create_dir_all(&status).unwrap();
+    std::fs::write(
+        status.join("sam3.json"),
+        serde_json::json!({ "state": "installing", "progress": 0.4, "pid": std::process::id() })
+            .to_string(),
+    )
+    .unwrap();
+    let described = cli_describe(&dir, Some(&config), &[]);
+    valid("urn:table-manners:core:description", &described);
+    let sam3 = described["installables"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["id"] == "sam3")
+        .unwrap()
+        .clone();
+    assert_eq!(
+        (sam3["state"].clone(), sam3["progress"].clone()),
+        (serde_json::json!("installing"), serde_json::json!(0.4))
+    );
+    std::fs::write(
+        status.join("sam3.json"),
+        serde_json::json!({ "last_outcome": { "action": "install", "state": "failed", "error": "sam3.onnx: SHA-256 mismatch", "at": "2026-11-09T20:00:00Z" } })
+            .to_string(),
+    )
+    .unwrap();
+    let described = cli_describe(&dir, Some(&config), &[]);
+    valid("urn:table-manners:core:description", &described);
+    let sam3 = described["installables"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["id"] == "sam3")
+        .unwrap()
+        .clone();
+    assert_eq!(sam3["state"], "not_installed");
+    assert_eq!(sam3["last_outcome"]["state"], "failed");
+    assert_eq!(sam3["last_outcome"]["error"]["code"], "failed");
+
+    // `[segment] model` names sam3, not installed: it is the default, first, and counts.
+    let config = write_config(Some("sam3"));
+    let described = cli_describe(&dir, Some(&config), &[]);
+    valid("urn:table-manners:core:description", &described);
+    let action = described["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["name"] == "remove_prompt")
+        .unwrap();
+    assert_eq!(
+        action["params_schema"]["properties"]["model"]["enum"],
+        serde_json::json!(["sam3", "tiny"])
+    );
+    assert_eq!(action["readiness"]["state"], "needs_setup");
+
+    // Over MCP: sam3 named (or defaulted) is refused not_ready naming it, with no run; tiny is
+    // not refused for readiness.
+    let runs = dir.join("runs");
+    let mut client = start_with(
+        &dir,
+        &[
+            "--config",
+            config.to_str().unwrap(),
+            "--runs",
+            runs.to_str().unwrap(),
+        ],
+        &[],
+    );
+    let image = repo_root().join("fixtures/images/chair-blob.png");
+    let data = rascal_core::panel::base64(&std::fs::read(&image).unwrap());
+    let call = |model: Option<&str>| {
+        let mut args = serde_json::json!({
+            "image": { "inline": { "media_type": "image/png", "data": data } },
+            "prompt": "chair",
+        });
+        if let Some(m) = model {
+            args["model"] = serde_json::json!(m);
+        }
+        args
+    };
+    for model in [Some("sam3"), None] {
+        let data = not_ready(client.call("remove_prompt", call(model)).unwrap_err());
+        let names: Vec<&str> = data["requirements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(names, ["segmenter:sam3"], "{data:#}");
+    }
+    assert!(run_dirs(&runs).is_empty(), "no run for a refused call");
+    match client.call("remove_prompt", call(Some("tiny"))) {
+        Ok(_) => {}
+        Err(Failure::Rpc { data, .. }) => {
+            assert_ne!(data.unwrap_or_default()["reason"], "not_ready")
+        }
+        Err(other) => panic!("{other}"),
+    }
+    client.close().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+}

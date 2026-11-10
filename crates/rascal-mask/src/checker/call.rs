@@ -119,6 +119,10 @@ pub struct Transition {
     /// The next try's `grow.px`, when an empty answer widened the mask.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grow_px: Option<f64>,
+    /// How far each place's box was widened before it was cut (rascal's own crop pad: the
+    /// model's `pad` when it takes one, else 0.05), when any place was segmented.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crop_pad: Option<f64>,
 }
 
 impl CallStarted {

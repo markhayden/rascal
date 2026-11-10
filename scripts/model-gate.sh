@@ -7,9 +7,16 @@
 # a skipped test or a model no test is marked for fails it. On an arm64 host the image runs
 # under emulation: slow, but the same machine code a Linux x86_64 user runs.
 #
-#   scripts/model-gate.sh <model> [models dir]
+# With --heal it also builds this checkout's rascal in the image (the pinned toolchain) and runs
+# `checked_retry_real_model` there with the model, offline: a scripted checker fails the first
+# try with a place, and the test fails unless the retry's `segment` ran on a crop through the
+# shipped adapter (PLAN.md 14.10 (3/3)). `RASCAL_TEST_NO_THRESHOLD=1` for a model without one.
+#
+#   scripts/model-gate.sh [--heal] <model> [models dir]
 set -euo pipefail
 cd "$(dirname "$0")/.."
+heal=0
+if [ "${1:-}" = "--heal" ]; then heal=1; shift; fi
 model="${1:?the catalogue id of the model to gate}"
 command -v docker >/dev/null 2>&1 || { echo "model-gate: docker is not installed" >&2; exit 1; }
 docker info >/dev/null 2>&1 || { echo "model-gate: the docker daemon is not running" >&2; exit 1; }
@@ -24,16 +31,31 @@ mkdir -p "$context/src/tools"
 rsync -a --exclude .venv --exclude __pycache__ --exclude .pytest_cache --exclude .ruff_cache \
   tools/python "$context/src/tools/"
 rsync -a fixtures "$context/src/"
+toolchain="$(sed -n 's/^channel *= *"\(.*\)"$/\1/p' rust-toolchain.toml)"
+if [ "$heal" = 1 ]; then
+  rsync -a --exclude target Cargo.toml Cargo.lock rust-toolchain.toml crates schemas "$context/src/"
+  [ -d ../table-manners ] && grep -q 'path = "../table-manners"' Cargo.toml \
+    && rsync -a --exclude target ../table-manners "$context/"
+fi
 cat > "$context/Dockerfile" <<DOCKER
 FROM --platform=linux/amd64 python:${python}-slim
 RUN pip install --no-cache-dir "uv==${uv_version}"
-COPY src /src
+$( [ "$heal" = 1 ] && printf '%s\n' \
+  "RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates build-essential && rm -rf /var/lib/apt/lists/*" \
+  "RUN curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain ${toolchain}" \
+  "ENV PATH=/root/.cargo/bin:\$PATH" )
+COPY . /ctx
+RUN mv /ctx/src /src && { [ -d /ctx/table-manners ] && mv /ctx/table-manners /table-manners || true; }
 WORKDIR /src/tools/python
 RUN uv sync --frozen
+$( [ "$heal" = 1 ] && printf '%s\n' \
+  "WORKDIR /src" \
+  "RUN cargo test --locked -p rascal-mask --features rascal-mask/testkit --test it --no-run" \
+  "WORKDIR /src/tools/python" )
 DOCKER
 image="rascal-model-gate:$(git rev-parse --short HEAD)"
 echo "model-gate: building $image (linux/amd64, Python $python, uv $uv_version)"
-docker build --platform linux/amd64 -q -t "$image" "$context" >/dev/null
+docker build --platform linux/amd64 -q -t "$image" -f "$context/Dockerfile" "$context" >/dev/null
 
 echo "model-gate: installing $model into $models (network on)"
 docker run --rm --platform linux/amd64 -v "$models:/models" "$image" \
@@ -43,4 +65,13 @@ echo "model-gate: $model's tests with the network off"
 docker run --rm --platform linux/amd64 --network none -v "$models:/models:ro" \
   -e RASCAL_TOOLS_MODELS=/models -e RASCAL_TOOLS_REQUIRE_MODELS="$model" -e UV_OFFLINE=1 \
   "$image" uv run --frozen --offline pytest tests -m "model_$model" -p no:cacheprovider
+if [ "$heal" = 1 ]; then
+  echo "model-gate: $model's checked retry through rascal with the network off"
+  # The run holds the installation, which writes under the models directory: mounted writable.
+  docker run --rm --platform linux/amd64 --network none -v "$models:/models" \
+    -e RASCAL_TOOLS_MODELS=/models -e RASCAL_TEST_MODEL="$model" -e RASCAL_TEST_PACK=/src/tools/python \
+    -e RASCAL_TEST_NO_THRESHOLD="${RASCAL_TEST_NO_THRESHOLD:-}" -e UV_OFFLINE=1 -w /src "$image" \
+    cargo test --locked --offline -p rascal-mask --features rascal-mask/testkit --test it \
+      checker::checked_retry_real_model -- --ignored --exact
+fi
 echo "model-gate ok: $model on linux/amd64"

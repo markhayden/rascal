@@ -284,6 +284,20 @@
       ],
       "type": "object"
     },
+    "SegmentConfig": {
+      "additionalProperties": false,
+      "description": "`[segment]`: the default segmenter, by its id in the segmenter pack's catalogue. Checked\nagainst the pack's `segment` manifest when the pack is known (`rascal_mask::segmenters`).",
+      "properties": {
+        "model": {
+          "description": "The model `remove-prompt` runs when a call names none.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model"
+      ],
+      "type": "object"
+    },
     "ServeConfig": {
       "additionalProperties": false,
       "description": "`[serve]`: `allow_dirs` narrows the directories `rascal serve --allow-dir` allows, never\nwidens them (PLAN.md 10.1): where a listed directory and a flag directory overlap the deeper\none is allowed, a listed directory under no flag allows nothing, and `[]` allows nothing.",
@@ -389,6 +403,17 @@
       },
       "description": "The tool packs by name.",
       "type": "object"
+    },
+    "segment": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SegmentConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The segmenter a prompt uses when a call names none (SPEC.md \"Choosable segmenters\")."
     },
     "serve": {
       "anyOf": [

@@ -1,0 +1,17 @@
+{
+  "reason": "not_ready",
+  "requirements": [
+    {
+      "for_choice": {
+        "param": "model",
+        "value": "sam3"
+      },
+      "installable": "sam3",
+      "kind": "file",
+      "name": "segmenter:sam3",
+      "setup": "Fake SAM 3 is not installed in /work/v06/pack/models. Get it in the tool's setup, or run `rascal tools get sam3`.",
+      "state": "missing"
+    }
+  ],
+  "run": null
+}

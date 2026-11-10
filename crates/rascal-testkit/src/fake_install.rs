@@ -66,7 +66,7 @@ pub fn write(dir: &Path, program: &[&str], models: bool) -> std::io::Result<Fake
     std::fs::write(
         dir.join("segmenters.toml"),
         format!(
-            "[[segmenter]]\nid = \"tiny\"\ndefault = true\nfiles = [{files}]\nlicence_files = []\n"
+            "[[segmenter]]\nid = \"tiny\"\ntitle = \"Fake Tiny\"\nlicence = \"Apache-2.0\"\ndefault = true\nparams = [\"threshold\", \"max_instances\", \"pad\"]\nfiles = [{files}]\nlicence_files = []\ndownload_mb = 1\ninstalled_mb = 1\nlab = {{ round = \"segment-01\", remove = 0.548 }}\n\n[[segmenter]]\nid = \"sam3\"\ntitle = \"Fake SAM 3\"\nlicence = \"SAM License\"\nparams = [\"threshold\", \"max_instances\"]\nfiles = [\"sam3.onnx\"]\nlicence_files = []\ndownload_mb = 3400\ninstalled_mb = 3400\n"
         ),
     )?;
     if models {
@@ -94,4 +94,41 @@ pub fn write_models(models: &Path) -> std::io::Result<()> {
         std::fs::write(installation.join(name), b"fake weights")?;
     }
     std::fs::write(models.join("tiny/current"), format!("{INSTALLATION}\n"))
+}
+
+/// Makes the install's launcher also a fake installer (SPEC.md "Installing a model"), standing in
+/// for `rascal-tools get` and `rascal-tools remove` and otherwise exec'ing `program` as before.
+/// `get <id>` touches `<models>/.got-<id>`, writes the status file `installing` with its pid and
+/// progress 0.5, waits (until SIGTERM when `<models>/.slow` exists, else a second), then publishes
+/// `<models>/<id>/abc/<id>.onnx` and `current` and records the outcome; SIGTERM records
+/// `cancelled` and exits 130. `remove <id>` deletes the model's directory and records the outcome.
+/// `<models>` is `RASCAL_TOOLS_MODELS`, which the installer is always given (`serve` needs
+/// none).
+pub fn write_installer(install: &FakeInstall, program: &[&str]) -> std::io::Result<()> {
+    let quoted: Vec<String> = program
+        .iter()
+        .map(|a| format!("'{}'", a.replace('\'', "'\\''")))
+        .collect();
+    let script = format!(
+        r#"#!/bin/sh
+done='{{"last_outcome":{{"action":"ACTION","state":"STATE","error":null,"at":"2026-11-09T00:00:00Z"}}}}'
+case "$1" in
+  get)
+    M="${{RASCAL_TOOLS_MODELS:?}}"; id="${{2:?}}"; mkdir -p "$M/.status"; touch "$M/.got-$id"
+    trap 'echo "$done" | sed "s/ACTION/install/;s/STATE/cancelled/" > "$M/.status/$id.json"; exit 130' TERM
+    echo "{{\"state\":\"installing\",\"progress\":0.5,\"pid\":$$}}" > "$M/.status/$id.json"
+    if [ -e "$M/.slow" ]; then sleep 60 & wait $!; else sleep 1 & wait $!; fi
+    mkdir -p "$M/$id/abc"; echo w > "$M/$id/abc/$id.onnx"; echo abc > "$M/$id/current"
+    echo "$done" | sed "s/ACTION/install/;s/STATE/succeeded/" > "$M/.status/$id.json"
+    echo "$id: installed abc";;
+  remove)
+    M="${{RASCAL_TOOLS_MODELS:?}}"; id="${{2:?}}"; rm -rf "${{M:?}}/${{id:?}}"; mkdir -p "$M/.status"
+    echo "$done" | sed "s/ACTION/uninstall/;s/STATE/succeeded/" > "$M/.status/$id.json"
+    echo "$id: removed";;
+  *) exec {} "$@";;
+esac
+"#,
+        quoted.join(" ")
+    );
+    std::fs::write(&install.launcher, script)
 }

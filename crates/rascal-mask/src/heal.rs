@@ -124,6 +124,8 @@ pub fn heal(args: &HealArgs) -> Result<HealReport> {
         registry,
         packs: _packs,
         recipe,
+        // Held until the heal ends, every try's retry included, then released.
+        hold: _hold,
     } = run::run_recipe(&run::RunArgs {
         overrides: entry.overrides.clone(),
         overrides_from: Some(args.filler.clone()),
