@@ -19,6 +19,10 @@ dependencies = [
     "huggingface-hub>=0.30",
     "tokenizers>=0.22.2",
     "scipy>=1.18.1",
+    # BiRefNet's own code (loaded with trust_remote_code at a pinned revision) imports these
+    "timm>=1.0",
+    "kornia>=0.8",
+    "einops>=0.8",
 ]
 
 [tool.uv]
