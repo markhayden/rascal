@@ -227,7 +227,12 @@ pub fn pin_installation(
         .map(str::to_string);
     let given = given.map(str::to_string).or(set);
     let (installation, hold) = match given.as_deref() {
-        Some(ident) => (ident.to_string(), None),
+        Some(ident) if segmenters.has_installation(model, ident) => (ident.to_string(), None),
+        Some(ident) => {
+            return Err(Error::usage(format!(
+                "segment.installation: {ident:?} is not an installation of {model}"
+            )));
+        }
         None => {
             let hold = Hold::take(&segmenters, model)?;
             (hold.installation.clone(), Some(hold))

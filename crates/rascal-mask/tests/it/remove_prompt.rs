@@ -345,6 +345,63 @@ fn an_unknown_model_and_a_step_level_model_are_refused() {
 }
 
 #[test]
+fn a_pinned_installation_must_be_a_real_one_and_a_call_cannot_pin_one() {
+    // M14 checkpoint review, finding 2: `--set segment.installation=` is for a harness that took
+    // its own hold (segment-lab's cell); the name is checked before it reaches a path, and the
+    // installation must exist. A call's `set` cannot pin one: the run takes its own hold.
+    let dir = scratch("model-pinned");
+    let config = models_config(&dir, None);
+    for (name, bad) in [("dots", "../../x"), ("missing", "nope")] {
+        let out = dir.join(name);
+        let r = run_prompt(
+            &config,
+            &out,
+            &["--set", &format!("segment.installation={bad}")],
+        );
+        assert_eq!(r.status.code(), Some(64), "{bad}: {}", text(&r.stderr));
+        assert!(
+            text(&r.stderr).contains("is not an installation of tiny"),
+            "{}",
+            text(&r.stderr)
+        );
+        assert!(!out.join("segmenter-install.json").exists());
+    }
+    let arguments = dir.join("args.json");
+    std::fs::write(
+        &arguments,
+        serde_json::json!({
+            "image": { "path": repo_root().join("fixtures/images/chair-blob.png").to_str().unwrap() },
+            "prompt": "the chair",
+            "set": { "segment.installation": "abc" }
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let root = repo_root();
+    let r = rascal(&[
+        "call",
+        "remove_prompt",
+        "--arguments",
+        arguments.to_str().unwrap(),
+        "--workspace",
+        dir.join("ws").to_str().unwrap(),
+        "--runs",
+        dir.join("runs").to_str().unwrap(),
+        "--config",
+        config.to_str().unwrap(),
+        "--allow-dir",
+        root.to_str().unwrap(),
+    ]);
+    assert_eq!(r.status.code(), Some(64), "{}", text(&r.stdout));
+    assert!(
+        text(&r.stdout).contains("segment.installation"),
+        "{}",
+        text(&r.stdout)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_pack_without_model_keeps_working_and_refuses_one() {
     let dir = scratch("model-none");
     let config = config(&dir);

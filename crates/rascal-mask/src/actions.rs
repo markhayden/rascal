@@ -366,6 +366,13 @@ impl ContractActions {
         let mut sets = Vec::new();
         if let Some(set) = args.get("set").and_then(|s| s.as_object()) {
             for (key, value) in set {
+                // The run holds its own installation (SPEC.md "Runs hold their installation");
+                // only a harness holding one already pins it, from the command line.
+                if key == "segment.installation" {
+                    return Err(Error::usage(
+                        "set: segment.installation is not a call's to set; the run holds the model's current installation",
+                    ));
+                }
                 let rendered = match value {
                     Value::String(s) => toml::Value::String(s.clone()).to_string(),
                     other => other.to_string(),

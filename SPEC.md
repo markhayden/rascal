@@ -1296,6 +1296,11 @@ its process id), and only then releases the lock; the hold is deleted when the r
 outcome, and a hold whose process is gone is stale and ignored. `get` and `remove` check holds
 and delete under the same lock, so a run is never admitted onto an installation being deleted,
 and a held directory is never deleted (the next `get` or `remove` after the hold ends does it).
+A harness that holds an installation itself (segment-lab's cell) pins it with `--set
+segment.installation=<identity>` on the command line; the name must be a plain one naming an
+installation of the model on disk, else the run is refused (64). A call's `set` (`serve`, `rascal
+call`) cannot name `segment.installation`: a remote caller never pins an installation it does
+not hold.
 
 `current` always names a complete, verified installation or does not exist. A crash leaves at
 worst a staging directory or an unreferenced installation directory, both deleted by the next
