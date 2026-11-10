@@ -242,10 +242,15 @@ fn the_destination_is_checked_before_anything_is_written_and_exactly_the_listed_
     );
     let beside = dir.join("beside");
     synthetic(&beside, platform);
+    std::fs::write(beside.join("notes.txt"), "mine").unwrap();
+    let err = bundle.check_destination(&beside).unwrap_err().to_string();
+    assert!(err.contains("and also notes.txt"), "{err}");
+    std::fs::remove_file(beside.join("notes.txt")).unwrap();
+    // A models directory is kept only when it holds the models layout and nothing else.
     std::fs::create_dir_all(beside.join("models")).unwrap();
     std::fs::write(beside.join("models/weights.bin"), "precious").unwrap();
     let err = bundle.check_destination(&beside).unwrap_err().to_string();
-    assert!(err.contains("and also models"), "{err}");
+    assert!(err.contains("models/weights.bin"), "{err}");
     assert!(beside.join("models/weights.bin").is_file(), "untouched");
     // A fresh directory: the listed files and bundle.toml are copied, the stray file is not,
     // and only then does uv fail to start.
@@ -284,6 +289,54 @@ fn the_destination_is_checked_before_anything_is_written_and_exactly_the_listed_
         expected,
         "the old wheel and the environment are gone, the new files are there"
     );
+    // An earlier install holding installed models (`rascal-tools get`): the reinstall keeps
+    // the models directory byte for byte, empty layout directories included, and replaces
+    // the pack's own files as before.
+    let kept = dir.join("kept");
+    synthetic(&kept, platform);
+    let models = kept.join("models");
+    let installed = [
+        ("tiny/current", b"61238e7a\n".to_vec()),
+        (
+            "tiny/61238e7a/install.json",
+            b"{\"model\": \"tiny\"}".to_vec(),
+        ),
+        ("tiny/61238e7a/sam2.onnx", vec![7u8; 4096]),
+        ("tiny/.lock", Vec::new()),
+        ("files/ab12", vec![9u8; 64]),
+        (".lock", Vec::new()),
+        (".status/tiny.json", b"{\"state\": \"installed\"}".to_vec()),
+    ];
+    for (rel, bytes) in &installed {
+        let path = models.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, bytes).unwrap();
+    }
+    std::fs::create_dir_all(models.join(".staging")).unwrap();
+    std::fs::create_dir_all(models.join("tiny/61238e7a/.held")).unwrap();
+    assert!(matches!(
+        bundle.check_destination(&kept).unwrap(),
+        Destination::Replace(_)
+    ));
+    let err = bundle.install(&kept, &no_uv()).unwrap_err().to_string();
+    assert!(err.contains("uv sync could not start"), "{err}");
+    for (rel, bytes) in &installed {
+        assert_eq!(
+            &std::fs::read(models.join(rel)).unwrap(),
+            bytes,
+            "{rel} kept"
+        );
+    }
+    assert!(
+        models.join(".staging").is_dir(),
+        "empty layout directories kept"
+    );
+    assert!(models.join("tiny/61238e7a/.held").is_dir());
+    let pack_files: Vec<String> = walk(&kept)
+        .into_iter()
+        .filter(|p| !p.starts_with("models/"))
+        .collect();
+    assert_eq!(pack_files, expected);
     // In place: nothing copied, the stray file stays.
     assert_eq!(
         bundle.check_destination(&bundle_dir).unwrap(),
