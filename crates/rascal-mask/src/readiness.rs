@@ -90,6 +90,8 @@ pub fn for_call(setup: &Setup<'_>, action: &str, filler: Use<'_>) -> Readiness {
                     )),
                     optional: false,
                     needed_for: None,
+                    for_choice: None,
+                    installable: None,
                 }),
             },
             Use::Configured => {
@@ -158,6 +160,8 @@ fn checker_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
             }),
             optional: false,
             needed_for: None,
+            for_choice: None,
+            installable: None,
         }));
     }
     if let Some(var) = &checker.key_env {
@@ -197,6 +201,8 @@ fn config_requirement(state: &ConfigState, segmenter: bool) -> Requirement {
         setup,
         optional: false,
         needed_for: None,
+        for_choice: None,
+        installable: None,
     }
 }
 
@@ -213,6 +219,8 @@ fn filler_requirements(
         setup: None,
         optional: false,
         needed_for: None,
+        for_choice: None,
+        installable: None,
     });
     if let Some(var) = &entry.key_env {
         out.push(credential(setup.answers, var));
@@ -232,6 +240,8 @@ fn filler_requirements(
             }),
             optional: false,
             needed_for: None,
+            for_choice: None,
+            installable: None,
         });
     }
 }
@@ -261,6 +271,8 @@ fn credential(answers: &Answers, var: &str) -> Requirement {
         setup: Some(setup),
         optional: false,
         needed_for: None,
+        for_choice: None,
+        installable: None,
     }
 }
 
@@ -289,7 +301,7 @@ fn is_executable(path: &Path) -> bool {
 /// The segmenter pack: the entry whose command is `<dir>/.venv/bin/rascal-tools` (the rule
 /// `rascal tools setup` uses), the non-secret variables it passes, and its model files.
 fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
-    let entry = setup.config.config().and_then(segmenter_entry);
+    let entry = setup.config.config().and_then(segmenter_pack);
     let Some((name, entry, dir)) = entry else {
         out.push(Requirement {
             kind: RequirementKind::Dependency,
@@ -298,6 +310,8 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
             setup: Some("Run `rascal tools setup --bundle <bundle> --config <path>`.".to_string()),
             optional: false,
             needed_for: None,
+            for_choice: None,
+            installable: None,
         });
         return;
     };
@@ -313,6 +327,8 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
             )),
             optional: false,
             needed_for: None,
+            for_choice: None,
+            installable: None,
         });
         return;
     }
@@ -326,6 +342,8 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
             )),
             optional: false,
             needed_for: None,
+            for_choice: None,
+            installable: None,
         });
         return;
     }
@@ -336,6 +354,8 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
         setup: None,
         optional: false,
         needed_for: None,
+        for_choice: None,
+        installable: None,
     });
     let passes_models = entry.env.iter().any(|v| v == MODELS_ENV);
     let models_env = passes_models
@@ -362,6 +382,8 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
                 setup: None,
                 optional: false,
                 needed_for: None,
+                for_choice: None,
+                installable: None,
             });
         } else if var == MODELS_ENV && !all_present {
             out.push(Requirement {
@@ -374,6 +396,8 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
                 )),
                 optional: false,
                 needed_for: None,
+                for_choice: None,
+                installable: None,
             });
         }
     }
@@ -381,7 +405,7 @@ fn segmenter_requirements(setup: &Setup<'_>, out: &mut Vec<Requirement>) {
 }
 
 /// The first entry (by name) that is a `rascal tools setup` install, with its directory.
-fn segmenter_entry(config: &Config) -> Option<(&String, &PackConfig, PathBuf)> {
+pub fn segmenter_pack(config: &Config) -> Option<(&String, &PackConfig, PathBuf)> {
     config.packs.iter().find_map(|(name, entry)| {
         install_dir_of(&entry.command, PACK_NAME).map(|d| (name, entry, d))
     })
@@ -454,6 +478,8 @@ fn model_files(install: &Path, models: &Path) -> Vec<Requirement> {
             )),
             optional: false,
             needed_for: None,
+            for_choice: None,
+            installable: None,
         }];
     };
     // The current installation's directory; a name that is not a plain file name is no
@@ -487,6 +513,8 @@ fn model_files(install: &Path, models: &Path) -> Vec<Requirement> {
                 name,
                 optional: false,
                 needed_for: None,
+                for_choice: None,
+                installable: None,
             }
         })
         .collect()

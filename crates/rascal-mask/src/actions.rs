@@ -414,6 +414,8 @@ impl ContractActions {
             protect: bound.get("protect").cloned(),
             mask: bound.get("mask").cloned(),
             prompt: text("prompt"),
+            model: text("model"),
+            installation: None,
             config: self.config_path.clone(),
             workspace: None,
             projection,

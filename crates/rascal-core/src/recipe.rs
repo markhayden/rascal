@@ -413,11 +413,11 @@ impl Recipe {
                         format!("op {}: unknown parameter {name}", step.op),
                     )
                 })?;
-                if param.kind != op::ParamKind::String {
+                if !matches!(param.kind, op::ParamKind::String | op::ParamKind::Choice) {
                     return Err(self.fail(
                         &step.id,
                         format!(
-                            "parameter {name} takes text input inputs.{text}, but it is a {:?} parameter, not a string",
+                            "parameter {name} takes text input inputs.{text}, but it is a {:?} parameter, not a string or a choice",
                             param.kind
                         ),
                     ));
@@ -432,8 +432,21 @@ impl Recipe {
                     ));
                 }
             }
+            // A choice bound to a text input is checked against its choices when the run binds
+            // it; here it is left out, as an absent optional text leaves it out of the run.
+            let checked: Params = step
+                .params
+                .iter()
+                .filter(|(name, value)| {
+                    self.text_binding(value).is_none()
+                        || manifest
+                            .param(name)
+                            .is_some_and(|p| p.kind == op::ParamKind::String)
+                })
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
             manifest
-                .resolve_params(&step.params)
+                .resolve_params(&checked)
                 .map_err(|m| self.fail(&step.id, format!("op {}: {m}", step.op)))?;
 
             if let Some(constants) = &step.constants {

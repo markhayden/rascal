@@ -433,6 +433,11 @@
           "name": "fake",
           "paste": "feather",
           "revision": "fake exact"
+        },
+        "segmenter": {
+          "adapter_version": null,
+          "installation": "f00dfeedf00dfeedf00dfeedf00dfeedf00dfeedf00dfeedf00dfeedf00dfeed",
+          "model": "tiny"
         }
       }
     },

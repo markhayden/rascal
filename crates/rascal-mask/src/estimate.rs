@@ -335,6 +335,9 @@ pub struct Price {
     /// What one try may spend (its filler, and its check when one runs); none when the call
     /// cannot be priced.
     pub try_usd: Option<f64>,
+    /// `x-rascal.segmenter`: the model, installation and adapters' version a `remove_prompt` call
+    /// runs; null for every other action, or without a segmenter catalogue.
+    pub segmenter: Value,
     /// The most tries the call makes: [`rascal_mask::checker::MAX_TRIES`] when its result is checked,
     /// else 1.
     pub max_tries: u32,
@@ -419,6 +422,14 @@ pub fn price(
             })
         }),
         try_usd: priced.then_some(fill_usd + check_usd),
+        segmenter: match config {
+            Some(config) if action == SEGMENTER_ACTION => {
+                rascal_mask::segmenters::Segmenters::of(config).map_or(Value::Null, |s| {
+                    s.effective(args.get("model").and_then(|v| v.as_str()), config)
+                })
+            }
+            _ => Value::Null,
+        },
         max_tries: if check.on() {
             rascal_mask::checker::MAX_TRIES
         } else {
@@ -479,6 +490,9 @@ pub fn effective(price: &Price) -> Effective {
     let mut rascal = json!({ "filler": price.filler, "constants": price.constants });
     if let Some(check) = price.check.record() {
         rascal["check"] = check;
+    }
+    if !price.segmenter.is_null() {
+        rascal["segmenter"] = price.segmenter.clone();
     }
     extensions.insert("x-rascal".to_string(), rascal);
     Effective {
@@ -772,6 +786,7 @@ mod tests {
             constants: BTreeMap::new(),
             check: rascal_mask::checker::Check::Off(rascal_mask::checker::Off::NotChecked),
             try_usd: Some(try_usd),
+            segmenter: Value::Null,
             max_tries,
             cap_usd,
         }

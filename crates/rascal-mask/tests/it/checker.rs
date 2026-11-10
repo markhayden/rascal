@@ -1502,3 +1502,118 @@ fn a_checked_and_an_unchecked_run_never_share_an_input_identity() {
     assert_ne!(unchecked, no_key);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A checked retry on a model that takes no `pad` (SPEC.md "Choosing a model"): the retry runs
+/// the run's model on its held installation, its crop is padded by rascal's 0.05, which is
+/// recorded and never passed to the model, and the threshold the model does use is halved.
+#[test]
+fn a_retry_keeps_the_model_and_installation_and_pads_the_crop_itself() {
+    let dir = scratch("model-retry");
+    let config = config(
+        &dir,
+        &Setup {
+            script: json!({ "answers": [
+                { "verdict": "fail", "where": [[0.25, 0.5, 0.75, 0.625]] },
+                { "verdict": "pass" }
+            ] }),
+            pack: "models",
+            ..Setup::default()
+        },
+    );
+    let models = dir.join("pack/models");
+    std::fs::create_dir_all(models.join("sam3/abc")).unwrap();
+    std::fs::write(models.join("sam3/current"), "abc\n").unwrap();
+    let o = heal(&dir, &config, &["--model", "sam3"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let result = run_json(&dir);
+    let journal = journal(&dir);
+    let segments = steps(&journal, "segment");
+    assert_eq!(segments.len(), 2);
+    for s in &segments {
+        assert_eq!(s["params"]["model"], "sam3", "{s}");
+        assert_eq!(s["params"]["installation"], "abc", "{s}");
+        assert!(
+            s["params"].get("pad").is_none(),
+            "pad never reaches sam3: {s}"
+        );
+    }
+    assert_eq!(segments[1]["params"]["threshold"], 0.1);
+    let transition = &stored(&result)[0]["transition"];
+    assert_eq!(transition["crop_pad"], 0.05, "{transition:#}");
+    assert_eq!(
+        transition["crops"],
+        json!([[108, 158, 372, 202]]),
+        "{transition:#}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The real pack's model `RASCAL_TEST_MODEL` (already installed where `RASCAL_TOOLS_MODELS`
+/// says), offline: a scripted checker fails the first try with a place, so the retry runs
+/// through the shipped adapter; the test fails unless the second try's `segment` ran on a crop
+/// (PLAN.md 14.10 (3/3), and `scripts/model-gate.sh --heal`). The pack is this checkout's
+/// `tools/python` (its `.venv`), or `RASCAL_TEST_PACK`.
+#[test]
+#[ignore = "needs a real pack and an installed model: RASCAL_TEST_MODEL=<id>"]
+fn checked_retry_real_model() {
+    let model = std::env::var("RASCAL_TEST_MODEL").expect("RASCAL_TEST_MODEL names the model");
+    let pack = std::env::var_os("RASCAL_TEST_PACK")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| repo_root().join("tools/python"));
+    let launcher = pack.join(".venv/bin/rascal-tools");
+    assert!(launcher.is_file(), "no pack at {}", launcher.display());
+    let dir = scratch(&format!("real-{model}"));
+    let bin = env!("CARGO_BIN_EXE_rascal");
+    std::fs::write(
+        dir.join("script.json"),
+        json!({ "answers": [
+            { "verdict": "fail", "where": [[0.25, 0.5, 0.75, 0.625]] },
+            { "verdict": "pass" }
+        ] })
+        .to_string(),
+    )
+    .unwrap();
+    let config = dir.join("rascal.toml");
+    std::fs::write(
+        &config,
+        format!(
+            "config_version = 1\n\
+             [packs.rascal-tools]\ncommand = [{launcher:?}, \"serve\"]\nenv = [\"RASCAL_TOOLS_MODELS\"]\nrevision = \"real\"\ncall_timeout_s = 600\n\
+             [fillers.fake]\ncommand = [{bin:?}, \"fake-filler\", \"exact\", \"{{image}}\", \"{{mask}}\", \"{{out}}\"]\nprofile = \"grey\"\nrevision = \"fake exact\"\n\
+             [checker]\ncommand = [{bin:?}, \"fake-checker\", {:?}]\n\
+             arguments = {{ source = {{ path = \"{{source}}\" }}, candidate = {{ path = \"{{candidate}}\" }}, requirements = [{{ id = \"RQ1\", kind = \"must_not\", text = \"Any part of {{prompt}} is visible.\" }}] }}\n\
+             spend_usd_per_call = 0.0\ntimeout_s = 30\nrevision = \"fake checker\"\n",
+            dir.join("script.json").display().to_string(),
+        ),
+    )
+    .unwrap();
+    // The chair fixture's chair scores about 0.019 with OWLv2 (SPEC.md "The export gate"), so
+    // the positive case's 0.01; a model that takes no threshold (EVF-SAM2) would refuse it, so
+    // `RASCAL_TEST_NO_THRESHOLD=1` leaves it out.
+    let mut extra = vec!["--model", &model];
+    if std::env::var("RASCAL_TEST_NO_THRESHOLD").is_ok_and(|v| v.is_empty())
+        || std::env::var_os("RASCAL_TEST_NO_THRESHOLD").is_none()
+    {
+        extra.extend(["--set", "segment.threshold=0.01"]);
+    }
+    let o = heal(&dir, &config, &extra);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let journal = journal(&dir);
+    let segments = steps(&journal, "segment");
+    assert!(
+        segments.len() >= 2,
+        "the retry's segment did not run: {segments:?}"
+    );
+    assert!(
+        segments
+            .iter()
+            .all(|s| s["params"]["model"] == model.as_str())
+    );
+    let result = run_json(&dir);
+    let transition = &stored(&result)[0]["transition"];
+    assert!(
+        !transition["crops"].as_array().unwrap().is_empty(),
+        "the second try segmented no crop: {transition:#}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

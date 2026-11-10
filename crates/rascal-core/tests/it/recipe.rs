@@ -387,6 +387,13 @@ impl rascal_core::op::Op for StandInSegment {
             vec![
                 Param::required("prompt", "What to find.", ParamKind::String),
                 Param::optional(
+                    "model",
+                    "Which segmenter.",
+                    ParamKind::Choice,
+                    serde_json::json!("tiny"),
+                )
+                .choices(&["tiny", "sam3"]),
+                Param::optional(
                     "max_instances",
                     "The most instances.",
                     ParamKind::Integer,

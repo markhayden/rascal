@@ -66,7 +66,7 @@ pub fn write(dir: &Path, program: &[&str], models: bool) -> std::io::Result<Fake
     std::fs::write(
         dir.join("segmenters.toml"),
         format!(
-            "[[segmenter]]\nid = \"tiny\"\ndefault = true\nfiles = [{files}]\nlicence_files = []\n"
+            "[[segmenter]]\nid = \"tiny\"\ntitle = \"Fake Tiny\"\nlicence = \"Apache-2.0\"\ndefault = true\nparams = [\"threshold\", \"max_instances\", \"pad\"]\nfiles = [{files}]\nlicence_files = []\ndownload_mb = 1\ninstalled_mb = 1\nlab = {{ round = \"segment-01\", remove = 0.548 }}\n\n[[segmenter]]\nid = \"sam3\"\ntitle = \"Fake SAM 3\"\nlicence = \"SAM License\"\nparams = [\"threshold\", \"max_instances\"]\nfiles = [\"sam3.onnx\"]\nlicence_files = []\ndownload_mb = 3400\ninstalled_mb = 3400\n"
         ),
     )?;
     if models {

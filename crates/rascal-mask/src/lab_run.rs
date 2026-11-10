@@ -126,6 +126,34 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
     let finders: Vec<&str> = finder_names.iter().map(String::as_str).collect();
     let validated = resolve_matrix(&args.matrix, &registry, &finders)?;
 
+    // The segmenter the cells run ([segment] model, else the pack's default) and its
+    // installation, held for the whole lab before any cell's identity is computed, so every
+    // identity and every pack call name the same installation (SPEC.md "Choosable segmenters").
+    let segment_param = registry
+        .get(crate::retry::SEGMENT)
+        .and_then(|op| op.manifest().param("model").cloned());
+    let lab_model = rascal_mask::segmenters::resolve(
+        None,
+        Some(&config),
+        segment_param.as_ref().map(|p| {
+            (
+                p.choices.as_slice(),
+                p.default.as_ref().and_then(|d| d.as_str()),
+            )
+        }),
+    )?
+    .map(|(m, _)| m);
+    let takes_installation = registry
+        .get(crate::retry::SEGMENT)
+        .is_some_and(|op| op.manifest().param("installation").is_some());
+    let lab_hold = match (&lab_model, rascal_mask::segmenters::Segmenters::of(&config)) {
+        (Some(model), Some(segmenters)) if takes_installation => {
+            Some(crate::run::Hold::take(&segmenters, model)?)
+        }
+        _ => None,
+    };
+    let lab_installation = lab_hold.as_ref().map(|h| h.installation.clone());
+
     // The corpus: every image the matrix uses, verified before anything runs.
     let root = Corpus::root(args.corpus_root.as_deref());
     let mut image_files: BTreeMap<&str, PathBuf> = BTreeMap::new();
@@ -240,6 +268,7 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
                 &packs,
                 &finders,
                 filler_entries[arm.name.as_str()].clone(),
+                (lab_model.as_deref(), lab_installation.as_deref()),
             )?;
             let cell = CellRecord {
                 cell_version: 1,
@@ -308,6 +337,8 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
                 protect: plan.inputs.get("protect").cloned().map(MaskIn::Dir),
                 mask: plan.inputs.get("mask").cloned().map(MaskIn::Dir),
                 prompt: None,
+                model: None,
+                installation: lab_installation.clone(),
                 config: Some(args.config.clone()),
                 workspace: None,
                 projection: None,
@@ -460,6 +491,7 @@ fn components(
     packs: &[Arc<Pack>],
     finders: &[&str],
     filler: FillerEntry,
+    segmenter: (Option<&str>, Option<&str>),
 ) -> Result<CellComponents> {
     let mut overrides = BTreeMap::new();
     for (key, value) in arm.overrides.iter().chain(&image.overrides) {
@@ -504,8 +536,29 @@ fn components(
             .filter(|p| p.is_file())
             .map(|p| rascal_core::lab::file_digest(&p))
             .transpose()?;
+        // The cell's segmenter in place of its binding, and the held installation, so the
+        // identity changes when either does.
+        let mut params = step.params.clone();
+        if params.get("model").and_then(|v| v.as_str()) == Some("inputs.model") {
+            match segmenter.0 {
+                Some(model) => {
+                    params.insert("model".into(), toml::Value::String(model.to_string()));
+                }
+                None => {
+                    params.remove("model");
+                }
+            }
+        }
+        if let Some(installation) = segmenter.1
+            && manifest.param("installation").is_some()
+        {
+            params.insert(
+                "installation".into(),
+                toml::Value::String(installation.to_string()),
+            );
+        }
         let arguments = manifest
-            .resolve_params(&step.params)
+            .resolve_params(&params)
             .map_err(|m| Error::usage(format!("step {}: {m}", step.id)))?;
         let mut descriptor_inputs = BTreeMap::new();
         for (port, binding) in &step.inputs {

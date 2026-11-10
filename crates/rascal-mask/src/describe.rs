@@ -448,6 +448,7 @@ pub fn description(setup: &Setup<'_>) -> Result<Description> {
             purpose: "Finds, masks and composites regions of an image.".to_string(),
         },
         actions,
+        installables: None,
         vocabulary: Some(Vocabulary {
             group: Some(Group::ALL.map(|g| g.name().to_string()).to_vec()),
             disposition: Some(vec![]),

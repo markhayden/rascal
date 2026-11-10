@@ -244,3 +244,200 @@ fn set_overrides_a_step_parameter_for_one_run_and_refuses_a_bad_one() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// --- choosing the segmenter (SPEC.md "Choosable segmenters", task 14.10) ------------------------
+
+/// A config over the fake pack that declares `model` (`models`), with `[segment] model` when
+/// given; the fake install has `tiny` installed and `sam3` catalogued but not installed.
+fn models_config(dir: &Path, segment: Option<&str>) -> PathBuf {
+    let path = dir.join("rascal.toml");
+    let bin = env!("CARGO_BIN_EXE_rascal");
+    let install =
+        rascal_testkit::fake_install::write(&dir.join("pack"), &[bin, "fake-pack", "models"], true)
+            .unwrap();
+    let segment = segment
+        .map(|m| format!("[segment]\nmodel = \"{m}\"\n"))
+        .unwrap_or_default();
+    std::fs::write(
+        &path,
+        format!(
+            "config_version = 1\n{segment}[packs.fake]\ncommand = {}\nrevision = \"fake 1\"\n",
+            install.command_toml()
+        ),
+    )
+    .unwrap();
+    path
+}
+
+fn run_prompt(config: &Path, out: &Path, extra: &[&str]) -> Output {
+    let image = repo_root().join("fixtures/images/chair-blob.png");
+    let mut args = vec![
+        "run",
+        "remove-prompt",
+        image.to_str().unwrap(),
+        "--prompt",
+        "the chair",
+        "--config",
+        config.to_str().unwrap(),
+        "--out",
+        out.to_str().unwrap(),
+    ];
+    args.extend_from_slice(extra);
+    rascal(&args)
+}
+
+#[test]
+fn the_model_is_the_calls_else_the_configs_else_the_packs_default() {
+    let dir = scratch("model-order");
+    // No call, no [segment]: the pack's default, passed explicitly.
+    let config = models_config(&dir, None);
+    let out = dir.join("default");
+    let r = run_prompt(&config, &out, &[]);
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r.stderr));
+    assert_eq!(journal_step(&out, "segment")["params"]["model"], "tiny");
+    // [segment] model names one that is not installed: refused before anything runs, naming the
+    // command that installs it.
+    let config = models_config(&dir.join("cfg"), Some("sam3"));
+    let out = dir.join("configured");
+    let r = run_prompt(&config, &out, &[]);
+    assert_eq!(r.status.code(), Some(64), "{}", text(&r.stderr));
+    let err = text(&r.stderr);
+    assert!(
+        err.contains("segmenter sam3 is not installed") && err.contains("rascal tools get sam3"),
+        "{err}"
+    );
+    assert!(
+        !out.join("journal.jsonl").is_file()
+            || !std::fs::read_to_string(out.join("journal.jsonl"))
+                .unwrap()
+                .contains("\"step\":\"segment\"")
+    );
+    // The call wins over [segment].
+    let out = dir.join("call");
+    let r = run_prompt(&config, &out, &["--model", "tiny"]);
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r.stderr));
+    assert_eq!(journal_step(&out, "segment")["params"]["model"], "tiny");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_unknown_model_and_a_step_level_model_are_refused() {
+    let dir = scratch("model-refused");
+    let config = models_config(&dir, None);
+    let r = run_prompt(&config, &dir.join("a"), &["--model", "giraffe"]);
+    assert_eq!(r.status.code(), Some(64));
+    assert!(
+        text(&r.stderr)
+            .contains("model \"giraffe\" is not a catalogued segmenter (have tiny, sam3)"),
+        "{}",
+        text(&r.stderr)
+    );
+    // An override cannot set it on the step: the only way in is inputs.model.
+    let r = run_prompt(&config, &dir.join("b"), &["--set", "segment.model=tiny"]);
+    assert_eq!(r.status.code(), Some(64));
+    assert!(
+        text(&r.stderr).contains("a step cannot set model itself"),
+        "{}",
+        text(&r.stderr)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_pack_without_model_keeps_working_and_refuses_one() {
+    let dir = scratch("model-none");
+    let config = config(&dir);
+    let out = dir.join("plain");
+    let r = run_prompt(&config, &out, &[]);
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r.stderr));
+    assert!(
+        journal_step(&out, "segment")["params"]
+            .get("model")
+            .is_none()
+    );
+    let r = run_prompt(&config, &dir.join("named"), &["--model", "tiny"]);
+    assert_eq!(r.status.code(), Some(64));
+    assert!(
+        text(&r.stderr).contains("takes no model"),
+        "{}",
+        text(&r.stderr)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_parameter_the_model_does_not_use_is_left_out_and_refused_when_given() {
+    let dir = scratch("model-applies");
+    let config = models_config(&dir, None);
+    // Install a fake sam3 so it can run.
+    let models = dir.join("pack/models");
+    std::fs::create_dir_all(models.join("sam3/abc")).unwrap();
+    std::fs::write(models.join("sam3/current"), "abc\n").unwrap();
+    let out = dir.join("sam3");
+    let r = run_prompt(&config, &out, &["--model", "sam3"]);
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r.stderr));
+    let params = &journal_step(&out, "segment")["params"];
+    assert_eq!(params["model"], "sam3");
+    assert!(
+        params.get("pad").is_none(),
+        "pad does not apply to sam3: {params}"
+    );
+    assert!(params.get("threshold").is_some());
+    // Tiny keeps pad.
+    let out = dir.join("tiny");
+    let r = run_prompt(&config, &out, &[]);
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r.stderr));
+    assert!(journal_step(&out, "segment")["params"].get("pad").is_some());
+    // Given explicitly for sam3, even at its default, it is refused.
+    let r = run_prompt(
+        &config,
+        &dir.join("given"),
+        &["--model", "sam3", "--set", "segment.pad=0.05"],
+    );
+    assert_ne!(r.status.code(), Some(0));
+    assert!(
+        text(&r.stderr).contains("pad does not apply with model sam3"),
+        "{}",
+        text(&r.stderr)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_run_holds_its_installation_names_it_on_every_call_and_releases_it() {
+    let dir = scratch("model-hold");
+    let config = models_config(&dir, None);
+    let models = dir.join("pack/models");
+    let installation = rascal_testkit::fake_install::INSTALLATION;
+    std::fs::write(
+        models.join("tiny").join(installation).join("install.json"),
+        "{\"model\":\"tiny\"}",
+    )
+    .unwrap();
+    let out = dir.join("run");
+    let r = run_prompt(&config, &out, &[]);
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r.stderr));
+    // The segment call named the installation held at admission.
+    assert_eq!(
+        journal_step(&out, "segment")["params"]["installation"],
+        installation
+    );
+    // The evidence stays with the run.
+    assert_eq!(
+        std::fs::read_to_string(out.join("segmenter-install.json")).unwrap(),
+        "{\"model\":\"tiny\"}"
+    );
+    // The hold was released when the run ended.
+    let held = models.join("tiny").join(installation).join(".held");
+    let left: Vec<_> = std::fs::read_dir(&held)
+        .map(|d| d.flatten().collect())
+        .unwrap_or_default();
+    assert!(left.is_empty(), "holds left: {left:?}");
+    // Replay answers from the recording with the model removed: the installation is not part
+    // of a pack request's identity, and nothing is held or checked on disk.
+    std::fs::remove_dir_all(models.join("tiny")).unwrap();
+    let again = dir.join("replay");
+    let r = run_prompt(&config, &again, &["--replay", out.to_str().unwrap()]);
+    assert_eq!(r.status.code(), Some(0), "{}", text(&r.stderr));
+    let _ = std::fs::remove_dir_all(&dir);
+}

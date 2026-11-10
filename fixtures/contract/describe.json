@@ -411,6 +411,11 @@
             "exclusiveMinimum": 0,
             "type": "number"
           },
+          "model": {
+            "description": "The recipe's model (text).",
+            "minLength": 1,
+            "type": "string"
+          },
           "projection": {
             "description": "The image's projection; without it, the projection the image's reference states, else an exactly 2:1 image is equirectangular.",
             "enum": [

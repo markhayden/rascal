@@ -7,3 +7,4 @@ pub mod filler;
 pub mod lab;
 pub mod readiness;
 pub mod recipes;
+pub mod segmenters;

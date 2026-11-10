@@ -58,6 +58,18 @@ pub struct Config {
     /// The tool `heal remove-prompt` asks whether the object is gone (ADR 0023); at most one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checker: Option<CheckerConfig>,
+    /// The segmenter a prompt uses when a call names none (SPEC.md "Choosable segmenters").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub segment: Option<SegmentConfig>,
+}
+
+/// `[segment]`: the default segmenter, by its id in the segmenter pack's catalogue. Checked
+/// against the pack's `segment` manifest when the pack is known (`rascal_mask::segmenters`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SegmentConfig {
+    /// The model `remove-prompt` runs when a call names none.
+    pub model: String,
 }
 
 /// `[checker]`: a table-manners tool action that answers with a verdict (table-manners 2.4),
@@ -217,6 +229,18 @@ impl Config {
             checker
                 .check()
                 .map_err(|e| Error::usage(format!("{origin}: {e}")))?;
+        }
+        if let Some(segment) = &config.segment
+            && (segment.model.is_empty()
+                || !segment
+                    .model
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_'))
+        {
+            return Err(Error::usage(format!(
+                "{origin}: segment.model {:?} is not a model id (lower-case letters, digits, - and _)",
+                segment.model
+            )));
         }
         if let Some(limits) = &config.limits {
             for (what, value) in [

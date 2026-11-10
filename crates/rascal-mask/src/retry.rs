@@ -25,6 +25,10 @@ use rascal_mask::checker::call::Transition;
 /// The steps of the shipped `remove-prompt` the loop names: the find, where the planes are
 /// rebound, and the widening.
 pub const SEGMENT: &str = "segment";
+
+/// The crop pad for a model that takes no `pad` (`segment`'s default; SPEC.md "Choosing a
+/// model").
+pub const CROP_PAD: f64 = 0.05;
 pub const SELECT: &str = "select";
 pub const GROW: &str = "grow";
 
@@ -78,6 +82,7 @@ impl Retry<'_> {
             };
             let crop = padded(rect, segment.pad, self.raw.width, self.raw.height);
             transition.crops.push(crop);
+            transition.crop_pad = Some(segment.pad);
             let found = self.segment_in(next, i, crop, &segment)?;
             let made = if found.is_empty() {
                 let core = core.unwrap_or_default();
@@ -100,7 +105,10 @@ impl Retry<'_> {
         Ok(Ok(planes))
     }
 
-    /// `segment`'s parameters as the run resolved them, with the threshold halved, and the pad.
+    /// `segment`'s parameters as the run resolved them (its model and pinned installation
+    /// included, from the step), with the threshold halved when the model uses one, and the crop
+    /// pad: the model's `pad` when it uses one, else 0.05 (`segment`'s default), which is
+    /// rascal's own and never passed to a model that does not take it.
     fn segment_params(&self) -> Result<Segment> {
         let step = self
             .recipe
@@ -132,9 +140,20 @@ impl Retry<'_> {
                     )
                 })
         };
-        let threshold = resolved("threshold")?;
-        let pad = resolved("pad")?;
-        params.insert("threshold".into(), toml::Value::Float(threshold / 2.0));
+        let op = self.registry.require(&step.op)?;
+        let unused = op
+            .inapplicable(&params)
+            .map(|off| off.params)
+            .unwrap_or_default();
+        let pad = if unused.iter().any(|p| p == "pad") {
+            CROP_PAD
+        } else {
+            resolved("pad")?
+        };
+        if !unused.iter().any(|p| p == "threshold") {
+            let threshold = resolved("threshold")?;
+            params.insert("threshold".into(), toml::Value::Float(threshold / 2.0));
+        }
         Ok(Segment {
             op: step.op.clone(),
             params,

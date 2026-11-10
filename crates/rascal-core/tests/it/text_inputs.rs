@@ -200,8 +200,8 @@ fn validation_refuses_text_on_a_port_a_number_and_an_optional_behind_a_required(
         .validate(&registry)
         .unwrap_err();
     assert!(
-        err.to_string()
-            .contains("takes text input inputs.note, but it is a Choice parameter"),
+        err.to_string().contains("is required by")
+            && err.to_string().contains("inputs.note is an optional input"),
         "{err}"
     );
     let behind_required = RECIPE
@@ -212,7 +212,8 @@ fn validation_refuses_text_on_a_port_a_number_and_an_optional_behind_a_required(
         .validate(&registry)
         .unwrap_err();
     assert!(
-        err.to_string().contains("takes text input inputs.colour"),
+        err.to_string()
+            .contains("inputs.colour is an optional input"),
         "{err}"
     );
     // An unknown input type is a parse error.

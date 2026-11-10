@@ -419,6 +419,7 @@ impl ContractActions {
             constants: BTreeMap::new(),
             check: rascal_mask::checker::Check::Off(rascal_mask::checker::Off::NotChecked),
             try_usd: Some(0.0),
+            segmenter: serde_json::Value::Null,
             max_tries: 1,
             cap_usd,
         };

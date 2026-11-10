@@ -78,6 +78,10 @@ enum Command {
         /// Bind inputs.prompt, a recipe's text input (remove-prompt's finder prompt).
         #[arg(long)]
         prompt: Option<String>,
+        /// The segmenter, for a recipe that declares inputs.model (remove-prompt): an id from
+        /// `rascal tools models`; else `[segment] model`, else the pack's default.
+        #[arg(long)]
+        model: Option<String>,
         /// Override a step parameter or constant set for this run, <step>.<param>=<value>
         /// (segment.threshold=0.4, grow.px=8, fan.constants=fan-v2); repeatable, journaled.
         #[arg(long = "set", value_name = "STEP.PARAM=VALUE")]
@@ -134,6 +138,10 @@ enum Command {
         /// filler's, when it takes one.
         #[arg(long)]
         prompt: Option<String>,
+        /// The segmenter, for a recipe that declares inputs.model (remove-prompt): an id from
+        /// `rascal tools models`; else `[segment] model`, else the pack's default.
+        #[arg(long)]
+        model: Option<String>,
         /// Override a step parameter or constant set for this heal, <step>.<param>=<value>;
         /// repeatable, journaled, and it wins over the filler entry's overrides.
         #[arg(long = "set", value_name = "STEP.PARAM=VALUE")]
@@ -751,6 +759,7 @@ fn main() {
             protect,
             mask,
             prompt,
+            model,
             set,
             config,
             workspace,
@@ -768,6 +777,8 @@ fn main() {
                 protect: protect.map(run::MaskIn::Dir),
                 mask: mask.map(run::MaskIn::Dir),
                 prompt,
+                model,
+                installation: None,
                 config,
                 workspace,
                 projection: projection.map(Into::into),
@@ -846,6 +857,7 @@ fn main() {
             protect,
             mask,
             prompt,
+            model,
             set,
             workspace,
             projection,
@@ -864,6 +876,8 @@ fn main() {
                 protect: protect.map(run::MaskIn::Dir),
                 mask: mask.map(run::MaskIn::Dir),
                 prompt,
+                model,
+                installation: None,
                 config: Some(config),
                 workspace,
                 projection: projection.map(Into::into),
