@@ -3,7 +3,7 @@
   "allowed": false,
   "binding": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb0004",
   "cap_usd": 0.1,
-  "contract": "0.5.0",
+  "contract": "0.6.0",
   "effective": {
     "config_identity": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0001",
     "model": null,
@@ -38,7 +38,7 @@
       "/tmp"
     ],
     "budget_usd": 0.05,
-    "contract": "0.5.0",
+    "contract": "0.6.0",
     "id": "00000000-0000-4000-8000-000000000004",
     "remaining_usd": 0.05,
     "reserved_usd": 0.0,

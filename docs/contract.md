@@ -23,7 +23,7 @@ deliberate commit that also refreshes `fixtures/contract/` and `fixtures/table-m
 
 ## Segmenters as choices and installables (v0.6 draft, M14)
 
-Built against the v0.6 draft by path (crate version held at `0.5.0`, PLAN.md 14.13). Each
+Built against table-manners 0.6.0 by path until it is published (PLAN.md 14.13). Each
 catalogued segmenter that runs on this platform (`segmenters.toml` in the pack's install) is a
 choice of `remove_prompt`'s `model`: a string `enum`, the resolved default first and as `default`
 (`[segment] model`, else the catalogue's), with `x-requirements` naming `segmenter:<id>`. Readiness

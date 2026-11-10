@@ -14,7 +14,7 @@
     "tool": "rascal",
     "type": "rascal:Mask"
   },
-  "contract": "0.5.0",
+  "contract": "0.6.0",
   "preview": {
     "image": {
       "file_sha256": "ba0497b0e84fd647cee5d61fb4f5a084a506a10bb6b0cea55b02a5b66fad63d3",
