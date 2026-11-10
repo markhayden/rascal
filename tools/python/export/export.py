@@ -26,6 +26,10 @@ The graphs:
 
 `--only sam_decoder` exports and checks the decoder alone, against features from PyTorch's
 encoder, leaving the other files as they are (the 2026-11 re-export, PLAN.md 13.1).
+
+`--only <model>` exports one catalogued model (`birefnet`: `export/birefnet.py`) into DIR with its
+licence file and `export.json`; `--references` with it freezes that model's instance-parity
+references under `fixtures/models/<model>/` instead (SPEC.md "The export gate").
 """
 
 from __future__ import annotations
@@ -287,12 +291,25 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=Path(default))
     parser.add_argument(
         "--only",
-        choices=["all", "sam_decoder"],
+        choices=["all", "sam_decoder", "birefnet"],
         default="all",
-        help="export every graph (default), or the SAM decoder alone",
+        help="export every graph (default), the SAM decoder alone, or one catalogued model",
+    )
+    parser.add_argument(
+        "--references", action="store_true", help="freeze the model's parity references instead"
     )
     args = parser.parse_args()
     out: Path = args.out
+    if args.only == "birefnet":
+        import birefnet
+
+        if args.references:
+            birefnet.references()
+            return 0
+        record = {"exported": time.strftime("%Y-%m-%d"), **birefnet.export(out)}
+        (out / "export.json").write_text(json.dumps(record, indent=2) + "\n")
+        print(json.dumps(record, indent=2))
+        return 0
     out.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(0)
     image = Image.open(FIXTURE).convert("RGB")
