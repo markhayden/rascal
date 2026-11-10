@@ -253,7 +253,10 @@ def references() -> dict:
         shutil.rmtree(REFERENCES)
     REFERENCES.mkdir(parents=True)
     record: dict = {
-        "model": "hqsam", "max_instances": 8, "positive_threshold": threshold, "cases": []
+        "model": "hqsam",
+        "max_instances": 8,
+        "positive_threshold": threshold,
+        "cases": [],
     }
     for case, prompt_text, t in (
         ("positive", "chair. table", threshold),
