@@ -44,7 +44,7 @@ instances come back best score first, ties by query then by the box's top-left, 
 to `max_instances`; region `n` is paired with plane `n`. One model is loaded at a time. `sam3`
 (below) is another entry.
 
-## SAM 3 (`sam3`, task 14.8; not yet released)
+## SAM 3 (`sam3`, task 14.8)
 
 - **Source.** [`facebook/sam3`](https://huggingface.co/facebook/sam3) (Transformers `Sam3Model`,
   safetensors), revision `3c879f39826c281e95690f02c7821c4de09afae7`; the **SAM License** (Meta,
@@ -63,7 +63,7 @@ to `max_instances`; region `n` is paired with plane `n`. One model is loaded at 
   (logits) and presence_logits [1,1]. The head carries the lab's text-only workaround: one box
   labelled -10, which makes Transformers run the geometry encoder as Meta's own code does
   (segment-lab `adapters/sam3_hf.py`). With them `sam3.tokenizer.json` (the checkpoint's CLIP
-  tokenizer) and the licence: 3,377 MB in all. Release `models-2026-11-sam3` (to come); the digests are in
+  tokenizer) and the licence: 3,377 MB in all. Published as the release `models-2026-11-sam3`; the digests are in
   `artifacts.toml`.
 - **Preprocessing** (`rascal_tools/models/sam3.py`), as `Sam3Processor`: the image resized to
   1008x1008 exactly as torchvision resizes a uint8 image (bilinear, antialiased, int16
@@ -92,6 +92,12 @@ to `max_instances`; region `n` is paired with plane `n`. One model is loaded at 
   from the same installation: 20 of 20 images at IoU >= 0.999, lowest 0.999987 (`hole-01`),
   eight at 1.000000. With Pillow's resize in place of torchvision's it was 19 of 20 (`hole-01`
   0.990382), which is why the pack carries the port.
+- **Release download** (2026-11-10): `rascal-tools get sam3` from the release into a fresh models
+  directory, then `RASCAL_TOOLS_REQUIRE_MODELS=sam3 pytest -m model_sam3` offline (`HF_HOME`
+  empty, network denied): installed with the same identity as from the export (`593e11a3…`), and
+  instance parity passes. The Linux x86_64 gate (`scripts/model-gate.sh sam3`)
+  is pending: Docker's 8 GB VM kills the emulated test process (BiRefNet and HQ-SAM exit 137
+  there too).
 
 ## Installations
 
