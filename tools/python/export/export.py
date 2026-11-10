@@ -30,17 +30,15 @@ encoder, leaving the other files as they are (the 2026-11 re-export, PLAN.md 13.
 `--only tiny --references` freezes Tiny's instance-parity references under `fixtures/models/tiny/`
 (`export/tiny.py`; SPEC.md "The export gate").
 
-`--only <model>` exports one catalogued model (`birefnet`: `export/birefnet.py`) into DIR with its
-licence file and `export.json`; `--references` with it freezes that model's instance-parity
-references under `fixtures/models/<model>/` instead (SPEC.md "The export gate").
-`--only hqsam` exports HQ-SAM ViT-L's two graphs and its licence (`hqsam.py`, MODEL.md), and
-`--references` then writes its instance-parity references into `fixtures/models/hqsam/`
-(SPEC.md "The export gate", check 1).
-`--only sam3 [--references]` exports SAM 3's three graphs, its tokenizer and the SAM License into
-`--out`, then (with `--references`) freezes its references into `fixtures/models/sam3/`: it runs
-`sam3/export_sam3.py` in its own environment (`sam3/pyproject.toml`, Transformers 5).
-`--only evfsam2` runs `export/evfsam2.py` in its own environment (`export/evfsam2/`: the maker's
-code needs Transformers 4.51 and torchscale), passing `--out` or `--references` through.
+`--only <model>` exports one catalogued model into DIR with its licence file, and with
+`--references` freezes its instance-parity references under `fixtures/models/<model>/` (SPEC.md
+"The export gate"; MODEL.md has each model's section):
+
+- `birefnet`: `export/birefnet.py`; `--references` instead of exporting.
+- `hqsam`: `export/hqsam.py`, HQ-SAM ViT-L's two graphs; `--references` after exporting.
+- `sam3`: `export/sam3/export_sam3.py`, in its own environment (`export/sam3/`, Transformers 5).
+- `evfsam2`: `export/evfsam2.py`, in its own environment (`export/evfsam2/`: the maker's code
+  needs Transformers 4.51 and torchscale).
 """
 
 from __future__ import annotations

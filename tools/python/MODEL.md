@@ -37,12 +37,12 @@ download.
 adapter that runs it (`rascal_tools/models/adapters.py`), the `segment` parameters it uses (a
 call that supplies another is `invalid_args`, even at its default), its licence and licence
 files, its files by name in `artifacts.toml`, its sizes, the platforms it runs on and the lab
-round's figures. Exactly one entry is the default (`tiny`); the catalogue holds `tiny`, the two
-models above as one adapter, `owlv2+sam2`, which carries M13's pick and retry and reports
-`outline_<n>`, `retried_<n>`, `retry_kept_<n>` and `mask_iou_predicted`, `birefnet` and `evfsam2`
-(below). Every adapter's
-instances come back best score first, ties by query then by the box's top-left, row-major, cut
-to `max_instances`; region `n` is paired with plane `n`. One model is loaded at a time. `hqsam` (below) is the second entry.
+round's figures. Exactly one entry is the default (`tiny`). The catalogue holds five models:
+`tiny`, the two models above as one adapter, `owlv2+sam2`, which carries M13's pick and retry and
+reports `outline_<n>`, `retried_<n>`, `retry_kept_<n>` and `mask_iou_predicted`; and the four
+below, `hqsam`, `birefnet`, `sam3` and `evfsam2`. Every adapter's instances come back best score
+first, ties by query then by the box's top-left, row-major, cut to `max_instances`; region `n` is
+paired with plane `n`. One model is loaded at a time.
 
 ## HQ-SAM ViT-L (`hqsam`, task 14.6)
 
