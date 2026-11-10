@@ -34,7 +34,8 @@ licence_files = ["LICENSE.evf-sam2.txt"]
 files = [
     "evf-sam2.image.onnx",
     "evf-sam2.prompted.onnx",
-    "evf-sam2.prompted.onnx.data",
+    "evf-sam2.prompted.0.data",
+    "evf-sam2.prompted.1.data",
     "evf-sam2.tokenizer.json",
 ]
 download_mb = 3571

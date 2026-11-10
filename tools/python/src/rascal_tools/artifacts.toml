@@ -57,15 +57,22 @@ licence = "Apache-2.0"
 [[artifact]]
 name = "evf-sam2.prompted.onnx"
 url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-evfsam2/evf-sam2.prompted.onnx"
-sha256 = "824eed35b9027e61051d2950de89fe0814177464fdca047f8770728d06a75ac6"
-size = 1972076
+sha256 = "7bc7de9aa4ac958869b918ef774e0636a4b39bc59313e83c42fe2279515fd4f3"
+size = 1978266
 licence = "Apache-2.0"
 
 [[artifact]]
-name = "evf-sam2.prompted.onnx.data"
-url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-evfsam2/evf-sam2.prompted.onnx.data"
-sha256 = "5e68c45e93a711a68636baf92888c2791595ce22d8a8ce93e09ecc386d9461f8"
-size = 2712281088
+name = "evf-sam2.prompted.0.data"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-evfsam2/evf-sam2.prompted.0.data"
+sha256 = "bdd4a2a9866407ab12d1aace12b98716ddfcec90739b566c7a5c297b4a23e9fb"
+size = 1896960000
+licence = "Apache-2.0"
+
+[[artifact]]
+name = "evf-sam2.prompted.1.data"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-evfsam2/evf-sam2.prompted.1.data"
+sha256 = "3fd32dcb053e237e52390153c0ba1fe908db33525ba83c9b65a68c4b700cac86"
+size = 815308328
 licence = "Apache-2.0"
 
 [[artifact]]

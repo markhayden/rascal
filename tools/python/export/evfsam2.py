@@ -19,7 +19,8 @@ Two graphs:
   deviation, `no_mem_embed` added, as `EvfSam2Model.inference`), and BEIT-3's input `beit_image`
   [1, 3, 224, 224] (the image over 255, bicubic without antialiasing, as torchvision's `Resize`
   with `antialias=None` does to a tensor, then normalised to [-1, 1]). Run once per image.
-- `evf-sam2.prompted.onnx`: `beit_image`, `input_ids` [1, T] (the query, XLM-R's tokenizer) and
+- `evf-sam2.prompted.onnx`, its weights in two external-data parts (`evf-sam2.prompted.0.data`
+  and `.1.data`, each under GitHub's 2 GiB limit on a release asset): `beit_image`, `input_ids` [1, T] (the query, XLM-R's tokenizer) and
   the three feature levels to `low_res_mask` [1, 1, 256, 256] (the logits of the outline with the
   highest predicted IoU) and `iou` [1, 3]. Run once per query.
 
@@ -62,6 +63,8 @@ REPO = "YxZhang/evf-sam2-multitask"
 REVISION = "df3644009016a4f62d13c02f3f8fb6c9bbf94310"
 IMAGE_GRAPH = "evf-sam2.image.onnx"
 PROMPTED_GRAPH = "evf-sam2.prompted.onnx"
+PROMPTED_DATA = ("evf-sam2.prompted.0.data", "evf-sam2.prompted.1.data")
+PART_BYTES = 1_900_000_000  # each part under GitHub's 2 GiB limit on a release asset
 TOKENIZER = "evf-sam2.tokenizer.json"
 LICENCE = "LICENSE.evf-sam2.txt"
 OPSET = 17
@@ -251,6 +254,32 @@ def tokenizer_json(out: Path) -> Path:
     return path
 
 
+def split_external(graph, out: Path) -> None:
+    """Every tensor over 1 KiB moved to external data, filled in order into the parts of
+    `PROMPTED_DATA`, a part closing before it would pass `PART_BYTES`."""
+    from onnx.external_data_helper import (
+        _get_all_tensors,
+        set_external_data,
+        uses_external_data,
+        write_external_data_tensors,
+    )
+
+    part, filled = 0, 0
+    for tensor in _get_all_tensors(graph):
+        size = len(tensor.raw_data) if tensor.HasField("raw_data") else 0
+        if size <= 1024 or uses_external_data(tensor):
+            continue
+        if filled and filled + size > PART_BYTES:
+            part, filled = part + 1, 0
+        if part >= len(PROMPTED_DATA):
+            raise SystemExit("the weights need more parts than PROMPTED_DATA names")
+        set_external_data(tensor, location=PROMPTED_DATA[part])
+        filled += size
+    if part != len(PROMPTED_DATA) - 1:
+        raise SystemExit(f"the weights filled {part + 1} parts, not {len(PROMPTED_DATA)}")
+    write_external_data_tensors(graph, str(out))
+
+
 def export(out: Path) -> dict:
     import onnx
     import onnxruntime as ort
@@ -282,18 +311,18 @@ def export(out: Path) -> dict:
         dynamic_axes={"input_ids": {1: "tokens"}},
         opset_version=OPSET, dynamo=False,
     )  # fmt: skip
-    # over 2 GB: the weights go beside the graph as one external-data file
+    # Over 2 GB: the weights go beside the graph as external data, in parts under GitHub's 2 GiB
+    # limit on a release asset.
     graph = onnx.load(str(out / PROMPTED_GRAPH))
     for stale in out.glob("*"):
         if stale.name not in (IMAGE_GRAPH, PROMPTED_GRAPH) and stale.suffix != ".json":
             stale.unlink()
-    onnx.save_model(
-        graph, str(out / PROMPTED_GRAPH), save_as_external_data=True, all_tensors_to_one_file=True,
-        location=PROMPTED_GRAPH + ".data", size_threshold=1024,
-    )  # fmt: skip
+    split_external(graph, out)
+    onnx.save_model(graph, str(out / PROMPTED_GRAPH))
     del graph
-    print(f"  {PROMPTED_GRAPH}: {(out / (PROMPTED_GRAPH + '.data')).stat().st_size / 1e6:.1f} MB "
-          f"of weights in {time.monotonic() - t0:.0f} s")  # fmt: skip
+    weights = sum((out / n).stat().st_size for n in PROMPTED_DATA)
+    print(f"  {PROMPTED_GRAPH}: {weights / 1e6:.1f} MB of weights in {len(PROMPTED_DATA)} parts "
+          f"in {time.monotonic() - t0:.0f} s")  # fmt: skip
     for name in (IMAGE_GRAPH, PROMPTED_GRAPH):
         onnx.checker.check_model(str(out / name))
     tokenizer_json(out)
@@ -317,7 +346,7 @@ def export(out: Path) -> dict:
             print(f"  parity {name} {query!r}: IoU {iou:.6f} ({int(want.sum())} px)")
     worst = min(p["plane_iou"] for p in parity)
     assert worst >= 0.999, parity
-    files = (IMAGE_GRAPH, PROMPTED_GRAPH, PROMPTED_GRAPH + ".data", TOKENIZER, LICENCE)
+    files = (IMAGE_GRAPH, PROMPTED_GRAPH, *PROMPTED_DATA, TOKENIZER, LICENCE)
     return {
         "source": {
             "code": CODE,

@@ -37,11 +37,27 @@ download.
 adapter that runs it (`rascal_tools/models/adapters.py`), the `segment` parameters it uses (a
 call that supplies another is `invalid_args`, even at its default), its licence and licence
 files, its files by name in `artifacts.toml`, its sizes, the platforms it runs on and the lab
-round's figures. Exactly one entry is the default; today the catalogue holds `tiny`, the two
+round's figures. Exactly one entry is the default (`tiny`); the catalogue holds `tiny`, the two
 models above as one adapter, `owlv2+sam2`, which carries M13's pick and retry and reports
-`outline_<n>`, `retried_<n>`, `retry_kept_<n>` and `mask_iou_predicted`. Every adapter's
+`outline_<n>`, `retried_<n>`, `retry_kept_<n>` and `mask_iou_predicted`, and `evfsam2`
+(below). Every adapter's
 instances come back best score first, ties by query then by the box's top-left, row-major, cut
 to `max_instances`; region `n` is paired with plane `n`. One model is loaded at a time.
+
+## EVF-SAM2 (`evfsam2`)
+
+| | |
+|---|---|
+| adapter | `evfsam2`: end to end, no detector. Per query BEIT-3 Large reads the image and the query and its first token, projected, prompts SAM 2.1 Large's decoder (no box, no points); of the three outlines the one with the highest predicted IoU is kept. One instance per query, score 1.0, region the plane's bounding box; a query whose plane is empty gives no instance. `segment` parameter `max_instances` alone: `threshold`, `pad`, `outline` and `min_cover` are refused, and a checker-directed crop retry sends none of them (rascal's crop pad is 0.05, SPEC.md "Choosable segmenters") |
+| source | code [`hustvl/EVF-SAM`](https://github.com/hustvl/EVF-SAM) at `9935dc52571678b806830821b3ddeacb30e7af07` (GitHub's archive, SHA-256 `37d84f8c…aff13`; not on PyPI); weights [`YxZhang/evf-sam2-multitask`](https://huggingface.co/YxZhang/evf-sam2-multitask), revision `df3644009016a4f62d13c02f3f8fb6c9bbf94310` (safetensors; only the -multitask checkpoints load at this commit), as the lab's `evfsam2` cell |
+| licence | Apache-2.0: the card's licence tag (read 2026-11-09) and the code repository's `LICENSE`, installed as `LICENSE.evf-sam2.txt` |
+| export | `export.py --only evfsam2` runs `export/evfsam2.py` in its own environment, `export/evfsam2/` (Transformers 4.51.3, torchscale 0.2.0, hydra, timm: the maker's code predates the main export environment's Transformers). TorchScript exporter, opset 17, float32. **`evf-sam2.image.onnx`** (852 MB): `image` [1, 3, H, W] (RGB 0 to 255, any size) to `image_embed` [1, 256, 64, 64], `high_res_0` [1, 32, 256, 256], `high_res_1` [1, 64, 128, 128] (stretched to 1024² bilinear, SAM 2's mean and deviation, `no_mem_embed` added) and `beit_image` [1, 3, 224, 224] (over 255, bicubic without antialiasing, normalised to [-1, 1]); both resizes are inside the graph. **`evf-sam2.prompted.onnx`** (2.7 GB of weights in two external-data parts, `evf-sam2.prompted.0.data` and `.1.data`, each under GitHub's 2 GiB limit on a release asset): `beit_image`, `input_ids` [1, T] and the three feature levels to `low_res_mask` [1, 1, 256, 256] (the kept outline's logits) and `iou` [1, 3]. **`evf-sam2.tokenizer.json`**: the checkpoint's XLM-R sentencepiece model converted to `tokenizers` JSON, its ids checked equal to the slow tokenizer's on fifteen queries |
+| release | `models-2026-11-evfsam2` (the two graphs, the two weight parts, the tokenizer, the licence); 3.6 GB to download |
+| preprocessing | in the pack, the image as float32 planes (the graph resizes and normalises); the query tokenised with `<s>` and `</s>`; the kept outline's 256² logits resized to the image bilinear with half-pixel centres, a negative source clamped to 0, no antialiasing (`F.interpolate`'s `align_corners=False`, in numpy: `adapters.bilinear`), kept above 0. The image graph runs once per image, the prompted graph once per query. Exactly the lab's `evfsam2` cell (`EvfSam2Model.inference`) |
+| export parity | the graphs against the lab cell's own path (the maker's `inference`) on `chair-blob.png` and `chair-wide.png`, "chair", "table" and "giraffe": the planes identical in all six (IoU 1.000000) |
+| instance parity | `fixtures/models/evfsam2/references.json` (`export.py --only evfsam2 --references`): the maker's PyTorch model through this adapter on the two fixtures, "chair. table" at 0.2 (the first of 0.2, 0.1, 0.05, 0.01; EVF-SAM2 ignores the threshold) and "giraffe" at 0.2, which EVF-SAM2 answers with a plane on each image (it always answers, even on a blank image), recorded and compared like any other; `tests/test_model_parity.py` holds the installed graphs to it. Passed 2026-11-09 from an installation made with `get evfsam2 --from` the export, `HF_HOME` empty, `HF_HUB_OFFLINE=1`, the network denied (`sandbox-exec`) |
+| corpus gate | passed 2026-11-09: `segment-lab pack-round --model evfsam2` with the branch's own rascal and pack, offline from the same installation, then `compare` against the lab's `evfsam2` cell: 20 of 20 images at IoU ≥ 0.999, lowest 0.999989 (`parts-03`) |
+| lab | segment-01: IoU 0.664, remove score 0.581; 4 to 9 s an image on a CPU for three queries |
 
 ## Installations
 
