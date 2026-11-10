@@ -20,9 +20,10 @@ Two graphs:
   [1, 3, 224, 224] (the image over 255, bicubic without antialiasing, as torchvision's `Resize`
   with `antialias=None` does to a tensor, then normalised to [-1, 1]). Run once per image.
 - `evf-sam2.prompted.onnx`, its weights in two external-data parts (`evf-sam2.prompted.0.data`
-  and `.1.data`, each under GitHub's 2 GiB limit on a release asset): `beit_image`, `input_ids` [1, T] (the query, XLM-R's tokenizer) and
-  the three feature levels to `low_res_mask` [1, 1, 256, 256] (the logits of the outline with the
-  highest predicted IoU) and `iou` [1, 3]. Run once per query.
+  and `.1.data`, each under GitHub's 2 GiB limit on a release asset): `beit_image`, `input_ids`
+  [1, T] (the query, XLM-R's tokenizer) and the three feature levels to `low_res_mask` [1, 1,
+  256, 256] (the logits of the outline with the highest predicted IoU) and `iou` [1, 3]. Run
+  once per query.
 
 The pack resizes the low-resolution logits to the image (bilinear, half-pixel centres, as
 `F.interpolate` with `align_corners=False`) and keeps logits above 0 (`adapters.evfsam2_plane`).
