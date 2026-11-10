@@ -1613,7 +1613,7 @@ fn checked_retry_real_model() {
     );
     // Every call, the retry's included, carries only the parameters the model uses (its
     // catalogue entry's `params`): EVF-SAM2's retry gets neither `threshold` nor `pad`.
-    let catalogue: toml::Value =
+    let catalogue: toml::Table =
         std::fs::read_to_string(pack.join("src/rascal_tools/segmenters.toml"))
             .unwrap()
             .parse()
