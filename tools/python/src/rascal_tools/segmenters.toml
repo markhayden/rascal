@@ -40,3 +40,21 @@ download_mb = 1523
 installed_mb = 1523
 platforms = ["macos-arm64", "linux-x86_64"]
 lab = { round = "segment-01", remove = 0.731, iou = 0.736, best_for = "the least spill, and thin parts" }
+
+[[segmenter]]
+id = "hqsam"
+title = "OWLv2 + HQ-SAM ViT-L"
+adapter = "owlv2+hqsam"
+params = ["threshold", "max_instances", "pad", "min_cover"]
+licence = "Apache-2.0"
+licence_files = ["LICENSE.owlv2-base-patch16.txt", "LICENSE.sam-hq-vit-l.txt"]
+files = [
+    "owlv2-base-patch16.onnx",
+    "owlv2-base-patch16.tokenizer.json",
+    "sam-hq-vit-l.encoder.onnx",
+    "sam-hq-vit-l.decoder.onnx",
+]
+download_mb = 1881
+installed_mb = 1881
+platforms = ["macos-arm64", "linux-x86_64"]
+lab = { round = "segment-01", remove = 0.679, iou = 0.714, best_for = "objects with parts (0.812); one outline per box, high-quality edges" }

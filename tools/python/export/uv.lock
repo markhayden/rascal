@@ -627,6 +627,7 @@ dependencies = [
     { name = "onnxscript" },
     { name = "pillow" },
     { name = "scipy" },
+    { name = "segment-anything-hq" },
     { name = "timm" },
     { name = "tokenizers" },
     { name = "torch" },
@@ -645,6 +646,7 @@ requires-dist = [
     { name = "onnxscript", specifier = ">=0.2" },
     { name = "pillow", specifier = ">=11" },
     { name = "scipy", specifier = ">=1.18.1" },
+    { name = "segment-anything-hq", specifier = "==0.3" },
     { name = "timm", specifier = ">=1.0" },
     { name = "tokenizers", specifier = ">=0.22.2" },
     { name = "torch", specifier = ">=2.5" },
@@ -734,6 +736,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/91/4c/075e4f66471bac101141ac739e9e135549be1bae584571bd03a530c056e1/scipy-1.18.1-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:d2924a03db38dc2e848bca2fe9f077dafb891480b91a00a0963a8cf86dfc31c1", size = 37480330, upload-time = "2026-08-21T23:24:19.608Z" },
     { url = "https://files.pythonhosted.org/packages/39/e7/979fd14e75008623df31ba70d6bb144700f68feadcea042021c06a05bf82/scipy-1.18.1-cp312-cp312-win_amd64.whl", hash = "sha256:5e4d44984abc0020154ea81b247adeddcc3ac5527b975ff798bd1ba0adc513c2", size = 36658278, upload-time = "2026-08-21T23:24:25.463Z" },
     { url = "https://files.pythonhosted.org/packages/c7/0b/e1525354ff9d7d5feb6d1b31af6d14072e5c91e9607b421fa1ec889660b3/scipy-1.18.1-cp312-cp312-win_arm64.whl", hash = "sha256:d65d448389b8436493abcf629cc94ad0cf32aecaf06e1acca1de53cc795f2f12", size = 24400588, upload-time = "2026-08-21T23:24:30.579Z" },
+]
+
+[[package]]
+name = "segment-anything-hq"
+version = "0.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "torch" },
+    { name = "torchvision" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/84/fd/437afe8dd6d3f149f65615a879f3f99803308b89b0f1d9e0704b0052ea79/segment-anything-hq-0.3.tar.gz", hash = "sha256:fab190efcd9bcf02a52cc13a628b40745aa5aeb75da1ce9e9b919b13a0206836", size = 47532, upload-time = "2023-08-10T23:53:13.894Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ea/7a/08e037dc65a78aa6c3b433771cc18207a93f1b0380f0bda298c98cc5d7ea/segment_anything_hq-0.3-py3-none-any.whl", hash = "sha256:722d6cb9157074f84d83144401216f0dd2ab1ca972a2d1c491c73b20d689d006", size = 52956, upload-time = "2023-08-10T23:53:11.928Z" },
 ]
 
 [[package]]

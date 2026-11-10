@@ -42,7 +42,42 @@ models above as one adapter, `owlv2+sam2`, which carries M13's pick and retry an
 `outline_<n>`, `retried_<n>`, `retry_kept_<n>` and `mask_iou_predicted`, and `birefnet`
 (below). Every adapter's
 instances come back best score first, ties by query then by the box's top-left, row-major, cut
-to `max_instances`; region `n` is paired with plane `n`. One model is loaded at a time.
+to `max_instances`; region `n` is paired with plane `n`. One model is loaded at a time. `hqsam` (below) is the second entry.
+
+## HQ-SAM ViT-L (`hqsam`, task 14.6)
+
+- **Source.** [`lkeab/hq-sam`](https://huggingface.co/lkeab/hq-sam) `sam_hq_vit_l.pth`, revision
+  `09b02a333b37772133eff3997bdba997867374b7`; `apache-2.0` (the card's licence tag, read
+  2026-11-09); the code, SysCV/sam-hq (PyPI `segment-anything-hq` 0.3), Apache-2.0. The
+  checkpoint is a pickle and is read only by the export, with `weights_only=True`.
+- **Export.** `export.py --only hqsam [--references]` (`export/hqsam.py`; torch 2.15.0, the
+  TorchScript exporter, opset 17): `sam-hq-vit-l.encoder.onnx` (1,234 MB: pixel_values to
+  image_embeddings and the ViT's first global-attention output, the one the HQ decoder reads) and
+  `sam-hq-vit-l.decoder.onnx` (22 MB: SAM-HQ's own `SamOnnxModel` with `hq_token_only=True` and
+  `multimask_output=False`, its mask post-processing included, so the output is in image pixels),
+  and `LICENSE.sam-hq-vit-l.txt` (the repository's Apache-2.0 text). Published
+  as the release `models-2026-11-hqsam`; the digests are in `artifacts.toml`.
+- **Preprocessing** (`rascal_tools/models/hqsam.py`), as `SamPredictor`: the longest side resized
+  to 1024 (Pillow bilinear, `ResizeLongestSide`'s rounding), normalised with SAM's mean and
+  deviation on the 0-255 scale, padded with zeros at the bottom and right; positive points (label
+  1) then the box's corners (labels 2, 3) in the resized frame; the output thresholded at 0.
+- **Adapter** `owlv2+hqsam`: OWLv2 as Tiny's, one outline per padded box, M13's retry (it takes
+  points), no pick and no `outline_<n>`. Parameters: `threshold`, `max_instances`, `pad`,
+  `min_cover`.
+- **Parity** (2026-11-09). The export against the maker's predictor on the chair fixture: plane
+  IoU 1.0 for a box alone and with 1 and 3 points, predicted IoU within 2.4e-7. Instance parity
+  (`tests/test_model_parity.py`, references in `fixtures/models/hqsam/`, positive case at
+  threshold 0.01, the first of 0.2, 0.1, 0.05, 0.01 to find the chair on both images; "giraffe"
+  at 0.2 finds nothing): passes from an installation made with `get hqsam --from` the export, with
+  `HF_HOME` empty and the network denied (`sandbox-exec`). The corpus gate (`segment-lab
+  pack-round` with the branch's own rascal and pack, then `compare` against the lab's
+  `hqsam-vitl-hqonly` cell), offline from the same installation: 20 of 20 images at IoU ≥ 0.999,
+  lowest 0.999996 (`thin-02`), the other 19 at 1.000000.
+- **Release download** (2026-11-10, macOS arm64): `rascal-tools get hqsam` from the release into a
+  fresh models directory (installation `6be1130e…`), then `RASCAL_TOOLS_REQUIRE_MODELS=hqsam pytest
+  -m model_hqsam` with `HF_HOME` empty and the network denied: passed. **Linux x86_64:** pending;
+  `scripts/model-gate.sh hqsam` installs from the release, then its test is OOM-killed in Docker
+  Desktop's 8 GB VM under amd64 emulation (exit 137); rerun with more VM memory.
 
 ## BiRefNet (`birefnet`)
 

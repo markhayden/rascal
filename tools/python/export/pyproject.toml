@@ -23,6 +23,8 @@ dependencies = [
     "timm>=1.0",
     "kornia>=0.8",
     "einops>=0.8",
+    # HQ-SAM (SysCV/sam-hq, PyPI segment-anything-hq), for the hqsam export (MODEL.md)
+    "segment-anything-hq==0.3",
 ]
 
 [tool.uv]

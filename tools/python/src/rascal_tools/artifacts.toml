@@ -60,3 +60,24 @@ url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-bir
 sha256 = "92a7089e0915fc32bc40067560b398f1e6a7a5958abd7d04eda393629a5acefb"
 size = 1066
 licence = "MIT"
+
+[[artifact]]
+name = "sam-hq-vit-l.encoder.onnx"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-hqsam/sam-hq-vit-l.encoder.onnx"
+sha256 = "ed86911200252baa5df61d078b2fbb97141b411b0d460297dff23a8150c94987"
+size = 1234133410
+licence = "Apache-2.0"
+
+[[artifact]]
+name = "sam-hq-vit-l.decoder.onnx"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-hqsam/sam-hq-vit-l.decoder.onnx"
+sha256 = "73b259f3df872bec32c99662fe576bdaeea283987b407fefc9c435359220a522"
+size = 22136975
+licence = "Apache-2.0"
+
+[[artifact]]
+name = "LICENSE.sam-hq-vit-l.txt"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-hqsam/LICENSE.sam-hq-vit-l.txt"
+sha256 = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+size = 11357
+licence = "Apache-2.0"
