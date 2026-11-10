@@ -320,7 +320,8 @@ check` when the environment exists), with a parity harness that compares a tool'
 stored outputs within a stated tolerance and skips the `segmenter`-marked case until its model
 is installed; `RASCAL_TOOLS_REQUIRE_MODELS=<id>` selects a model's tests (`-m model_<id>`) and
 fails instead of skipping. `scripts/model-gate.sh <model>` runs them on linux/amd64 in Docker,
-the model installed with the network on and the tests run with it off. Launch is `tools/python/.venv/bin/rascal-tools serve` after `uv sync
+the model installed with the network on and the tests run with it off; on an arm64 Mac it
+emulates x86_64, and the larger models need Docker's VM at 16 GB or more (it warns below). Launch is `tools/python/.venv/bin/rascal-tools serve` after `uv sync
 --frozen` there; `crates/rascal-mask/tests/it/packs_real.rs` drives it through rascal's client,
 `segment` included when Tiny is installed.
 

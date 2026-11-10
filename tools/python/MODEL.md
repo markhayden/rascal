@@ -75,9 +75,7 @@ paired with plane `n`. One model is loaded at a time.
   lowest 0.999996 (`thin-02`), the other 19 at 1.000000.
 - **Release download** (2026-11-10, macOS arm64): `rascal-tools get hqsam` from the release into a
   fresh models directory (installation `6be1130e…`), then `RASCAL_TOOLS_REQUIRE_MODELS=hqsam pytest
-  -m model_hqsam` with `HF_HOME` empty and the network denied: passed. **Linux x86_64:** pending;
-  `scripts/model-gate.sh hqsam` installs from the release, then its test is OOM-killed in Docker
-  Desktop's 8 GB VM under amd64 emulation (exit 137); rerun with more VM memory.
+  -m model_hqsam` with `HF_HOME` empty and the network denied: passed. **Linux x86_64:** passed 2026-11-10: `scripts/model-gate.sh hqsam` (linux/amd64 under emulation, Docker's VM at 32 GB; it ran out of memory at 8 GB) installed from the release with the same identity (`6be1130e…`) and passed its 1 test with the network off in 42 s.
 
 ## BiRefNet (`birefnet`)
 
@@ -94,7 +92,7 @@ paired with plane `n`. One model is loaded at a time.
 | instance parity, installed | passed 2026-11-09: `get birefnet --from` the export into an isolated models directory, `HF_HOME` empty, `HF_HUB_OFFLINE=1`; `RASCAL_TOOLS_REQUIRE_MODELS=birefnet pytest -m model_birefnet tests/test_model_parity.py`, 1 passed |
 | corpus gate | passed 2026-11-09: `segment-lab pack-round --model birefnet` with the branch's own rascal and pack (rascal forwarding only `threshold`, `max_instances` and `pad`, d798d91), then `compare` against the lab's `birefnet` cell: 20 of 20 images at IoU 1.000000 |
 | release download | passed 2026-11-10 on macOS arm64: `rascal-tools get birefnet` from the release into a fresh models directory (installation `62824792…`), then `RASCAL_TOOLS_REQUIRE_MODELS=birefnet pytest -m model_birefnet` with `HF_HOME` empty and the network denied: passed |
-| Linux x86_64 | pending: `scripts/model-gate.sh birefnet` installs from the release, then its test is OOM-killed in Docker Desktop's 8 GB VM under amd64 emulation (exit 137, about 7.5 GB resident); rerun with more VM memory |
+| Linux x86_64 | passed 2026-11-10: `scripts/model-gate.sh birefnet` (linux/amd64 under emulation, Docker's VM at 32 GB; it ran out of memory at 8 GB) installed from the release with the same identity (`62824792…`) and passed its 1 test with the network off in 118 s |
 | lab | segment-01: IoU 0.736, remove score 0.731, the least spill of the five (0.066) |
 
 ## SAM 3 (`sam3`, task 14.8)
@@ -148,9 +146,7 @@ paired with plane `n`. One model is loaded at a time.
 - **Release download** (2026-11-10): `rascal-tools get sam3` from the release into a fresh models
   directory, then `RASCAL_TOOLS_REQUIRE_MODELS=sam3 pytest -m model_sam3` offline (`HF_HOME`
   empty, network denied): installed with the same identity as from the export (`593e11a3…`), and
-  instance parity passes. The Linux x86_64 gate (`scripts/model-gate.sh sam3`)
-  is pending: Docker's 8 GB VM kills the emulated test process (BiRefNet and HQ-SAM exit 137
-  there too).
+  instance parity passes. The Linux x86_64 gate passed 2026-11-10: `scripts/model-gate.sh sam3` (linux/amd64 under emulation, Docker's VM at 32 GB; it ran out of memory at 8 GB) installed from the release with the same identity (`593e11a3…`) and passed its 1 test with the network off in 84 s.
 
 ## EVF-SAM2 (`evfsam2`)
 
@@ -166,7 +162,7 @@ paired with plane `n`. One model is loaded at a time.
 | instance parity | `fixtures/models/evfsam2/references.json` (`export.py --only evfsam2 --references`): the maker's PyTorch model through this adapter on the two fixtures, "chair. table" at 0.2 (the first of 0.2, 0.1, 0.05, 0.01; EVF-SAM2 ignores the threshold) and "giraffe" at 0.2, which EVF-SAM2 answers with a plane on each image (it always answers, even on a blank image), recorded and compared like any other; `tests/test_model_parity.py` holds the installed graphs to it. Passed 2026-11-09 from an installation made with `get evfsam2 --from` the export, `HF_HOME` empty, `HF_HUB_OFFLINE=1`, the network denied (`sandbox-exec`) |
 | corpus gate | passed 2026-11-09: `segment-lab pack-round --model evfsam2` with the branch's own rascal and pack, offline from the same installation, then `compare` against the lab's `evfsam2` cell: 20 of 20 images at IoU ≥ 0.999, lowest 0.999989 (`parts-03`) |
 | download | passed 2026-11-10: `rascal-tools get evfsam2` from the release into a fresh models directory gave the gated installation's identity (`7931bdfe…`), and `RASCAL_TOOLS_REQUIRE_MODELS=evfsam2 pytest -m model_evfsam2` passed offline from it on macOS arm64 |
-| Linux gate | pending: `scripts/model-gate.sh evfsam2` not run, because Docker's 8 GB VM kills the emulated test process (BiRefNet and HQ-SAM exit 137 there) |
+| Linux gate | passed 2026-11-10: `scripts/model-gate.sh evfsam2` (linux/amd64 under emulation, Docker's VM at 32 GB; it ran out of memory at 8 GB) installed from the release with the same identity (`7931bdfe…`) and passed its 4 tests with the network off in 76 s |
 | lab | segment-01: IoU 0.664, remove score 0.581; 4 to 9 s an image on a CPU for three queries |
 
 ## Installations

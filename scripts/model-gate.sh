@@ -5,7 +5,9 @@
 # one step with the network); then runs the model's tests, `RASCAL_TOOLS_REQUIRE_MODELS=<model>
 # pytest -m model_<model>`, in a second container with `--network none`. A missing prerequisite,
 # a skipped test or a model no test is marked for fails it. On an arm64 host the image runs
-# under emulation: slow, but the same machine code a Linux x86_64 user runs.
+# under emulation: slow, but the same machine code a Linux x86_64 user runs. The larger models
+# need more than Docker Desktop's default 8 GB VM under emulation (BiRefNet reached about 7.5 GB
+# resident and was killed, exit 137); it warns below 16 GB, and all four passed at 32 GB.
 #
 # With --heal it also builds this checkout's rascal in the image (the pinned toolchain) and runs
 # `checked_retry_real_model` there with the model, offline: a scripted checker fails the first
@@ -20,6 +22,10 @@ if [ "${1:-}" = "--heal" ]; then heal=1; shift; fi
 model="${1:?the catalogue id of the model to gate}"
 command -v docker >/dev/null 2>&1 || { echo "model-gate: docker is not installed" >&2; exit 1; }
 docker info >/dev/null 2>&1 || { echo "model-gate: the docker daemon is not running" >&2; exit 1; }
+memory=$(docker info --format '{{.MemTotal}}' 2>/dev/null || echo 0)
+if [ "$memory" -lt 17179869184 ]; then
+  echo "model-gate: warning: docker's VM has $((memory / 1073741824)) GB; the larger models need 16 GB or more under emulation" >&2
+fi
 models="${2:-$(mktemp -d "${TMPDIR:-/tmp}/rascal-model-gate.XXXXXX")}"
 mkdir -p "$models"
 models="$(cd "$models" && pwd)"
