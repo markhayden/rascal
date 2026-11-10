@@ -81,3 +81,45 @@ url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-hqs
 sha256 = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
 size = 11357
 licence = "Apache-2.0"
+
+[[artifact]]
+name = "sam3.vision.onnx"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-sam3/sam3.vision.onnx"
+sha256 = "c72df0870c377807fae0ff5f487b3902da91e92b1f3d5ad8932839feda6edfd6"
+size = 7442673
+licence = "SAM License"
+
+[[artifact]]
+name = "sam3.vision.onnx.data"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-sam3/sam3.vision.onnx.data"
+sha256 = "4e891207758721eaa6af2ea85fd49395309fbf8813580efa033800281968bd1e"
+size = 1815846912
+licence = "SAM License"
+
+[[artifact]]
+name = "sam3.text.onnx"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-sam3/sam3.text.onnx"
+sha256 = "a76853be542be9f924282f709443b0b95fc4f89bfc3a2dbdfc4aed6ba5e96dea"
+size = 1416217285
+licence = "SAM License"
+
+[[artifact]]
+name = "sam3.head.onnx"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-sam3/sam3.head.onnx"
+sha256 = "6510cf55fcdbe3e42b52c7d88dd99d6cc4f4fae56b64990b58d52ae1fad5429d"
+size = 133599339
+licence = "SAM License"
+
+[[artifact]]
+name = "sam3.tokenizer.json"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-sam3/sam3.tokenizer.json"
+sha256 = "6d9109cc838977f3ca94a379eec36aecc7c807e1785cd729660ca2fc0171fb35"
+size = 3642073
+licence = "SAM License"
+
+[[artifact]]
+name = "LICENSE.sam3.txt"
+url = "https://github.com/markhayden/rascal/releases/download/models-2026-11-sam3/LICENSE.sam3.txt"
+sha256 = "bec48f70bd37bf8280a9d1ebf01642d26086f6122ba735baa08fe03c5a6e7448"
+size = 7352
+licence = "SAM License"

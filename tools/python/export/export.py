@@ -36,6 +36,9 @@ references under `fixtures/models/<model>/` instead (SPEC.md "The export gate").
 `--only hqsam` exports HQ-SAM ViT-L's two graphs and its licence (`hqsam.py`, MODEL.md), and
 `--references` then writes its instance-parity references into `fixtures/models/hqsam/`
 (SPEC.md "The export gate", check 1).
+`--only sam3 [--references]` exports SAM 3's three graphs, its tokenizer and the SAM License into
+`--out`, then (with `--references`) freezes its references into `fixtures/models/sam3/`: it runs
+`sam3/export_sam3.py` in its own environment (`sam3/pyproject.toml`, Transformers 5).
 """
 
 from __future__ import annotations
@@ -297,7 +300,7 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=Path(default))
     parser.add_argument(
         "--only",
-        choices=["all", "sam_decoder", "tiny", "birefnet", "hqsam"],
+        choices=["all", "sam_decoder", "tiny", "birefnet", "hqsam", "sam3"],
         default="all",
         help="export every graph (default), the SAM decoder alone, or one catalogued model",
     )
@@ -308,6 +311,13 @@ def main() -> int:
         "after exporting)",
     )
     args = parser.parse_args()
+    if args.only == "sam3":
+        import subprocess
+
+        here = Path(__file__).resolve().parent
+        command = ["uv", "run", "--frozen", "--project", str(here / "sam3"), "python",
+                   str(here / "sam3" / "export_sam3.py"), "--out", str(args.out)]  # fmt: skip
+        return subprocess.run(command + (["--references"] if args.references else [])).returncode
     if args.only == "tiny":
         if not args.references:
             parser.error("--only tiny takes --references (tiny's graphs are the default export)")

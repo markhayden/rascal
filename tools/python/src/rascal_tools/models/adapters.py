@@ -248,9 +248,16 @@ def _owlv2_birefnet(files: dict[str, Path]) -> Adapter:
     return Owlv2BiRefNet(detector, onnx_soft(files["birefnet.onnx"]))
 
 
+def _sam3(files: dict[str, Path]) -> Adapter:
+    from rascal_tools.models import sam3
+
+    return sam3.build(files)
+
+
 # The adapter for each catalogue `adapter` name, built from the model's files by name.
 BUILDERS: dict[str, Callable[[dict[str, Path]], Adapter]] = {
     "owlv2+sam2": _owlv2_sam2,
     "owlv2+birefnet": _owlv2_birefnet,
     "owlv2+hqsam": _owlv2_hqsam,
+    "sam3": _sam3,
 }

@@ -19,7 +19,7 @@ CATALOGUE = Path(__file__).resolve().parent / "segmenters.toml"
 # The `segment` parameters a model may use; `prompt` (and `model`) are always taken.
 SEGMENT_PARAMS = ("threshold", "max_instances", "pad", "outline", "min_cover")
 PLATFORMS = ("macos-arm64", "linux-x86_64")
-ADAPTERS = ("owlv2+sam2", "owlv2+birefnet", "owlv2+hqsam")
+ADAPTERS = ("owlv2+sam2", "owlv2+birefnet", "owlv2+hqsam", "sam3")
 _ID = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 
