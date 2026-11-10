@@ -87,6 +87,11 @@ to `max_instances`; region `n` is paired with plane `n`. One model is loaded at 
   threshold 0.2, the first of 0.2, 0.1, 0.05, 0.01 to find the chair on both images, one
   instance each; "giraffe" at 0.2 finds nothing): passes from an installation made with
   `get sam3 --from` the export, with `HF_HOME` empty and the network denied (`sandbox-exec`).
+  The corpus gate (`segment-lab pack-round --model sam3` with the branch's own rascal and pack,
+  then `compare` against the lab's `sam3-own` cell, which ran PyTorch on the Apple GPU), offline
+  from the same installation: 20 of 20 images at IoU >= 0.999, lowest 0.999987 (`hole-01`),
+  eight at 1.000000. With Pillow's resize in place of torchvision's it was 19 of 20 (`hole-01`
+  0.990382), which is why the pack carries the port.
 
 ## Installations
 
