@@ -184,14 +184,14 @@ with green CI on both platforms, and then the tag.
 - [x] 14.3 Installations (layout, `current`, holds, checks), inactive
 - [x] 14.4 The installer and the cutover (no models in the bundle; `get --from`; model gate) → merge `m14p-pack`, tag `m14.1`
 - [x] 14.4a Follow-up: `rascal tools setup` into an install that already holds `models/` is refused (extra files); allow the models directory so a pack upgrade keeps its models
-- [ ] 14.5 BiRefNet → tag `m14.2-birefnet`
-- [ ] 14.6 HQ-SAM → tag `m14.2-hqsam`
-- [ ] 14.7 EVF-SAM2 → tag `m14.2-evfsam2`
-- [ ] 14.8 SAM 3 → tag `m14.2-sam3`
+- [x] 14.5 BiRefNet → tag `m14.2-birefnet` (corpus 20/20 at 1.000000; macOS and Linux release gates passed)
+- [x] 14.6 HQ-SAM → tag `m14.2-hqsam` (corpus 20/20, lowest 0.999996; macOS and Linux release gates passed)
+- [x] 14.7 EVF-SAM2 → tag `m14.2-evfsam2` (corpus 20/20, lowest 0.999989; macOS and Linux release gates passed)
+- [x] 14.8 SAM 3 → tag `m14.2-sam3` (corpus 20/20, lowest 0.999987; macOS and Linux release gates passed)
 - [x] 14.9 table-manners 0.6.0 draft (`v0.6` `b7df92f`, local until 14.13): per-choice readiness, installables, install/uninstall
 - [x] 14.10 Rascal resolves, pins and records the model (`model-gate.sh --heal` built, not yet run)
 - [x] 14.11 `describe`, `serve`'s controls and the CLI → tag `m14.3` (one commit for the three slices; `model-gate.sh --heal tiny` see below)
-- [ ] 14.12 Wafflery: Installables list and Model choice
-- [ ] 14.13 Publish table-manners 0.6.0 (rascal, squint, Wafflery)
+- [x] 14.12 Wafflery: Installables list and Model choice (`m14-installables`)
+- [x] 14.13 Publish table-manners 0.6.0 (rascal, squint, Wafflery): published 2026-11-10; all three pin `=0.6.0` from crates.io
 - [ ] 14.14 The checkpoint (each of 14.5–14.8 merged or excluded with its failing gate recorded) → tag `m14`
 - [ ] Flaky (not M14): `rascal-mcp::it claims::a_request_cancelled_while_queued_keeps_its_id_with_no_run` timed out at 180 s on Linux CI (run 42744992404, 2026-11-10); the rerun and main's CI passed. Make it wait on an event, not on time.
