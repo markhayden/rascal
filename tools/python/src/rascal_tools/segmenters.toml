@@ -29,7 +29,7 @@ id = "birefnet"
 title = "OWLv2 + BiRefNet"
 adapter = "owlv2+birefnet"
 params = ["threshold", "max_instances", "pad"]
-licence = "MIT"
+licence = "MIT and Apache-2.0"
 licence_files = ["LICENSE.owlv2-base-patch16.txt", "LICENSE.birefnet.txt"]
 files = [
     "owlv2-base-patch16.onnx",
