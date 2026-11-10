@@ -56,7 +56,8 @@ to `max_instances`; region `n` is paired with plane `n`. One model is loaded at 
 | preprocessing | the padded box rounded outward to whole pixels and clamped, cropped, resized to 1024² (Pillow bilinear), [0, 1], the ImageNet mean and deviation; the output's sigmoid quantised to 8 bits (truncating), resized to the crop as an 8-bit image (Pillow bilinear), kept above 127, placed at the crop. A crop under 2 px on a side gives an empty plane. Exactly the lab's `birefnet` cell |
 | export parity | on the chair fixture's padded box: probabilities within 1.9e-4 of PyTorch, the kept plane identical (IoU 1.000000) |
 | instance parity | `fixtures/models/birefnet/references.json` (`export.py --only birefnet --references`): the maker's PyTorch model through this adapter on `chair-blob.png` and `chair-wide.png` (the chair mirrored on a wider canvas, made for the purpose; a version rotated to portrait gave no detection at any threshold), "chair. table" at 0.01 (the highest of 0.2, 0.1, 0.05, 0.01 with an instance on each image) and "giraffe" at 0.2; `tests/test_model_parity.py` holds the installed graph to it |
-| corpus gate | pending (14.5 (2/3)) |
+| instance parity, installed | passed 2026-11-09: `get birefnet --from` the export into an isolated models directory, `HF_HOME` empty, `HF_HUB_OFFLINE=1`; `RASCAL_TOOLS_REQUIRE_MODELS=birefnet pytest -m model_birefnet tests/test_model_parity.py`, 1 passed |
+| corpus gate | blocked, not failed (2026-11-09): through `rascal run remove-prompt`, every image ends `step segment: segment: birefnet does not use outline, min_cover` (exit 64), because rascal fills every default of `segment`'s manifest before the call. Forwarding only a model's applicable parameters is rascal's side, PLAN.md 14.10 (1/3); the gate runs after it, and the release `models-2026-11-birefnet` waits for it |
 | lab | segment-01: IoU 0.736, remove score 0.731, the least spill of the five (0.066) |
 
 ## Installations
