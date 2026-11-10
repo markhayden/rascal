@@ -4250,7 +4250,10 @@ Each on its own branch `m14e-<model>`, in the same shape:
 - **Verification.** The two checks above; `RASCAL_TOOLS_REQUIRE_MODELS=<model> uv run --frozen
   pytest -m model_<model>` on macOS arm64; `scripts/model-gate.sh <model>`; the release-download
   check.
-- **Dependencies.** `m14.1`. **Size.** S each (SAM 3 and EVF-SAM2 M: three and two graphs).
+- **Dependencies.** `m14.1`, and the applicability fix merged at `d798d91` (rascal fills and
+  forwards only the parameters a model uses; built as 14.10 (1/3)'s first part and moved ahead,
+  since a corpus gate through rascal refuses any model that does not take Tiny's five parameters).
+  **Size.** S each (SAM 3 and EVF-SAM2 M: three and two graphs).
 
 | task | model | lab cell (frozen reference) | notes |
 |---|---|---|---|
