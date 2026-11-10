@@ -43,7 +43,7 @@ models above as one adapter, `owlv2+sam2`, which carries M13's pick and retry an
 instances come back best score first, ties by query then by the box's top-left, row-major, cut
 to `max_instances`; region `n` is paired with plane `n`. One model is loaded at a time. `hqsam` (below) is the second entry.
 
-## HQ-SAM ViT-L (`hqsam`, task 14.6; not yet released)
+## HQ-SAM ViT-L (`hqsam`, task 14.6)
 
 - **Source.** [`lkeab/hq-sam`](https://huggingface.co/lkeab/hq-sam) `sam_hq_vit_l.pth`, revision
   `09b02a333b37772133eff3997bdba997867374b7`; `apache-2.0` (the card's licence tag, read
@@ -54,8 +54,8 @@ to `max_instances`; region `n` is paired with plane `n`. One model is loaded at 
   image_embeddings and the ViT's first global-attention output, the one the HQ decoder reads) and
   `sam-hq-vit-l.decoder.onnx` (22 MB: SAM-HQ's own `SamOnnxModel` with `hq_token_only=True` and
   `multimask_output=False`, its mask post-processing included, so the output is in image pixels),
-  and `LICENSE.sam-hq-vit-l.txt` (the repository's Apache-2.0 text). Release
-  `models-2026-11-hqsam` (to come); the digests are in `artifacts.toml`.
+  and `LICENSE.sam-hq-vit-l.txt` (the repository's Apache-2.0 text). Published
+  as the release `models-2026-11-hqsam`; the digests are in `artifacts.toml`.
 - **Preprocessing** (`rascal_tools/models/hqsam.py`), as `SamPredictor`: the longest side resized
   to 1024 (Pillow bilinear, `ResizeLongestSide`'s rounding), normalised with SAM's mean and
   deviation on the 0-255 scale, padded with zeros at the bottom and right; positive points (label
@@ -69,10 +69,14 @@ to `max_instances`; region `n` is paired with plane `n`. One model is loaded at 
   threshold 0.01, the first of 0.2, 0.1, 0.05, 0.01 to find the chair on both images; "giraffe"
   at 0.2 finds nothing): passes from an installation made with `get hqsam --from` the export, with
   `HF_HOME` empty and the network denied (`sandbox-exec`). The corpus gate (`segment-lab
-  pack-round` then `compare` against the lab's `hqsam-vitl-hqonly` cell): 20 of 20 images, lowest
-  IoU 0.999996, but only with rascal not forwarding `outline` to HQ-SAM, which today's rascal
-  does (it fills every declared default); it is rerun once rascal forwards only the parameters
-  the chosen model uses, before the release.
+  pack-round` with the branch's own rascal and pack, then `compare` against the lab's
+  `hqsam-vitl-hqonly` cell), offline from the same installation: 20 of 20 images at IoU ≥ 0.999,
+  lowest 0.999996 (`thin-02`), the other 19 at 1.000000.
+- **Release download** (2026-11-10, macOS arm64): `rascal-tools get hqsam` from the release into a
+  fresh models directory (installation `6be1130e…`), then `RASCAL_TOOLS_REQUIRE_MODELS=hqsam pytest
+  -m model_hqsam` with `HF_HOME` empty and the network denied: passed. **Linux x86_64:** pending;
+  `scripts/model-gate.sh hqsam` installs from the release, then its test is OOM-killed in Docker
+  Desktop's 8 GB VM under amd64 emulation (exit 137); rerun with more VM memory.
 
 ## Installations
 
