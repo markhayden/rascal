@@ -73,7 +73,7 @@ def test_birefnet_takes_no_outline_or_min_cover() -> None:
     entry = catalogue.by_id(catalogue.read(), "birefnet")
     assert entry is not None and entry.adapter == "owlv2+birefnet"
     assert set(entry.params) == {"threshold", "max_instances", "pad"}
-    assert entry.licence == "MIT and Apache-2.0" and not entry.default
+    assert entry.licence == "MIT and Apache-2.0" and entry.rank == 2
 
 
 @pytest.mark.parametrize("param", ["outline", "min_cover"])

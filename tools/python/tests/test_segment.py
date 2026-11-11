@@ -97,7 +97,8 @@ def test_a_model_not_installed_names_where_it_looked_and_how_to_get_it(
     monkeypatch.setattr(segment, "_slot", segment.installs.Slot())
     with pytest.raises(cache.MissingModel) as error:
         segment.run({"prompt": "chair"}, harness)
-    assert str(tmp_path) in str(error.value) and "rascal-tools get tiny" in str(error.value)
+    # Nothing installed: the default is the best-ranked model that runs here, SAM 3.
+    assert str(tmp_path) in str(error.value) and "rascal-tools get sam3" in str(error.value)
 
 
 def test_the_manifest_holds_the_bounds_rascal_ceilings_allow() -> None:
@@ -130,7 +131,9 @@ def test_every_instance_fits_the_declared_bounds(harness, monkeypatch) -> None:
 
     adapter = adapters.Owlv2Sam2(Detector(), Segmenter())
     monkeypatch.setattr(segment, "load", lambda entry, installation=None: adapter)
-    result = segment.run({"prompt": "collar", "max_instances": segment.MAX_INSTANCES}, harness)
+    result = segment.run(
+        {"prompt": "collar", "model": "tiny", "max_instances": segment.MAX_INSTANCES}, harness
+    )
     assert result.isError is not True, result.structuredContent
     returns = segment.SPEC.manifest()["returns"]
     answer = result.structuredContent
@@ -150,7 +153,8 @@ def test_the_chair_is_found_with_parity() -> None:
     # it far below the default threshold (0.07 for "a wooden chair", 0.02 for "chair"), as
     # PyTorch does on the same pixels (MODEL.md); the test lowers the threshold.
     result = segment.run(
-        {"prompt": "a wooden chair", "max_instances": 1, "threshold": 0.05}, harness
+        {"prompt": "a wooden chair", "model": "tiny", "max_instances": 1, "threshold": 0.05},
+        harness,
     )
     assert result.isError is False, result.content[0]
     envelope = result.structuredContent
@@ -174,7 +178,8 @@ def test_several_instances_decode_one_box_per_call() -> None:
     # A threshold low enough to keep the whole-frame proposal beside the chair: two boxes,
     # two planes, each decoded in its own call (the graph takes one box at a time).
     result = segment.run(
-        {"prompt": "a wooden chair", "max_instances": 4, "threshold": 0.03}, harness
+        {"prompt": "a wooden chair", "model": "tiny", "max_instances": 4, "threshold": 0.03},
+        harness,
     )
     assert result.isError is False, result.content[0]
     envelope = result.structuredContent
@@ -227,7 +232,7 @@ def _measures(result) -> dict[str, float]:
 def test_the_box_is_padded_and_the_whole_object_outline_is_kept(harness, monkeypatch) -> None:
     part, whole = _rect((12, 12, 16, 16)), _rect((10, 10, 30, 30))
     calls = _fake_models(monkeypatch, lambda box, points: ([part, part, whole], [0.9, 0.8, 0.7]))
-    result = segment.run({"prompt": "collar"}, harness)
+    result = segment.run({"prompt": "collar", "model": "tiny"}, harness)
     assert result.structuredContent["status"] == "ok", result.structuredContent
     # Padded by 0.05 of the 20-pixel sides: one pixel each way.
     assert calls == [((9.0, 9.0, 31.0, 31.0), [])]
@@ -241,7 +246,9 @@ def test_the_box_is_padded_and_the_whole_object_outline_is_kept(harness, monkeyp
 def test_best_keeps_the_most_confident_outline(harness, monkeypatch) -> None:
     part, whole = _rect((12, 12, 22, 22)), _rect((10, 10, 30, 30))
     _fake_models(monkeypatch, lambda box, points: ([part, part, whole], [0.9, 0.8, 0.7]))
-    result = segment.run({"prompt": "collar", "outline": "best", "pad": 0.0}, harness)
+    result = segment.run(
+        {"prompt": "collar", "model": "tiny", "outline": "best", "pad": 0.0}, harness
+    )
     measures = _measures(result)
     assert measures["outline_0"] == 0 and measures["plane_px_0"] == 100
 
@@ -256,7 +263,7 @@ def test_a_thin_outline_is_retried_with_a_wider_box_and_its_pieces_points(
         return ([full, full, full], [0.9] * 3) if points else ([thin, thin, thin], [0.9] * 3)
 
     calls = _fake_models(monkeypatch, answer)
-    result = segment.run({"prompt": "collar", "pad": 0.0}, harness)
+    result = segment.run({"prompt": "collar", "model": "tiny", "pad": 0.0}, harness)
     assert len(calls) == 2
     # The retry: the detector's box padded by 2 x pad (0 here) and the thin piece's point.
     assert calls[1][0] == (10.0, 10.0, 30.0, 30.0) and len(calls[1][1]) == 1
@@ -275,6 +282,6 @@ def test_a_retry_that_spills_out_is_refused(harness, monkeypatch) -> None:
         return ([spills, spills, spills], [0.9] * 3) if points else ([thin, thin, thin], [0.9] * 3)
 
     _fake_models(monkeypatch, answer)
-    measures = _measures(segment.run({"prompt": "collar", "pad": 0.0}, harness))
+    measures = _measures(segment.run({"prompt": "collar", "model": "tiny", "pad": 0.0}, harness))
     assert measures["retried_0"] == 1 and measures["retry_kept_0"] == 0
     assert measures["plane_px_0"] == 40

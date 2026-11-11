@@ -1,10 +1,11 @@
 """`segment`: a text prompt to instances, by the model the `model` argument names from the
-segmenter catalogue (`segmenters.toml`, SPEC.md "Choosable segmenters"). The default, Tiny:
-OWLv2 proposes boxes for each query in the prompt; each kept box is padded, SAM 2.1 gives three
-candidate outlines for it, and the rules in `rascal_tools.outline` keep one: the whole object by
-default, retried once with a wider box and a point on each piece when the outline is thin or in
-pieces (SPEC.md "Self-correcting remove"). The answer is one polygon region (the box) with its
-score per instance and one plane per region, in the image's frame, best score first
+segmenter catalogue (`segmenters.toml`, SPEC.md "Choosable segmenters"); a call naming none runs
+the default, resolved once per call: the best-ranked model installed here (`installer.default`).
+Tiny: OWLv2 proposes boxes for each query in the prompt; each kept box is padded, SAM 2.1 gives
+three candidate outlines for it, and the rules in `rascal_tools.outline` keep one: the whole
+object by default, retried once with a wider box and a point on each piece when the outline is
+thin or in pieces (SPEC.md "Self-correcting remove"). The answer is one polygon region (the box)
+with its score per instance and one plane per region, in the image's frame, best score first
 (`MODEL.md`). One model is loaded at a time, on its first call, and stays loaded until a call
 names another."""
 
@@ -17,7 +18,7 @@ from typing import Any
 import numpy as np
 from mcp import types
 
-from rascal_tools import __version__, catalogue, installs, outline
+from rascal_tools import __version__, catalogue, installer, installs, outline
 from rascal_tools.envelope import Answer
 from rascal_tools.harness import Harness
 from rascal_tools.manifest import Bounds, Param, Port, ToolSpec
@@ -33,7 +34,9 @@ MAX_QUERIES = 16
 MAX_PROMPT_BYTES = 1024
 
 ENTRIES = catalogue.read()
-DEFAULT = catalogue.default(ENTRIES).id
+# The manifest's default is the one this machine resolves when the pack starts; a call naming no
+# model resolves it again, so an install while the pack runs is seen.
+DEFAULT = installer.default(cache.models(), ENTRIES).id
 
 SPEC = ToolSpec(
     name="segment",
@@ -199,7 +202,9 @@ def run(arguments: dict[str, Any], harness: Harness) -> types.CallToolResult:
         return answer.invalid_args("prompt names no query")
     if len(queries) > MAX_QUERIES:
         return answer.invalid_args(f"prompt names {len(queries)} queries; at most {MAX_QUERIES}")
-    model = arguments.get("model", DEFAULT)
+    model = arguments.get("model")
+    if model is None:
+        model = installer.default(cache.models(), ENTRIES).id
     entry = catalogue.by_id(ENTRIES, model) if isinstance(model, str) else None
     if entry is None:
         return answer.invalid_args(

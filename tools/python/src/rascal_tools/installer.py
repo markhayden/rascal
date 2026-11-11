@@ -263,31 +263,76 @@ def remove(model: str, models: installs.Models, *, wait: bool = True) -> list[st
         return kept
 
 
-def listing(models: installs.Models, entries: list[catalogue.Entry]) -> list[dict[str, Any]]:
-    """Every catalogued model with its state, as `models --json` prints it."""
-    out = []
-    for entry in entries:
-        status = models.status(entry.id)
-        installing = status.get("state") == "installing" and installs.alive(
-            int(status.get("pid", 0) or 0)
-        )
+def complete(models: installs.Models, entry: catalogue.Entry) -> bool:
+    """Whether the model's current installation holds every file the catalogue names, each
+    non-empty: a local inspection, as rascal's (`segmenters.rs`); the digests are checked when the
+    model is loaded."""
+    try:
         ident = models.current(entry.id)
-        if not platform_ok(entry):
-            state = "unavailable"
-        elif installing:
-            state = "installing"
-        elif ident is not None:
-            state = "installed"
-        else:
-            state = "not_installed"
+        if ident is None:
+            return False
+        directory = models.installation_dir(entry.id, ident)
+    except installs.InstallError:
+        return False
+    return all(
+        (directory / n).is_file() and (directory / n).stat().st_size > 0
+        for n in entry.files + entry.licence_files
+    )
+
+
+def state(
+    models: installs.Models,
+    entry: catalogue.Entry,
+    platform: Callable[[catalogue.Entry], bool] | None = None,
+) -> str:
+    """`unavailable` off its platforms, `installing` while a live installer says so, else
+    `installed` when complete or `not_installed`."""
+    if not (platform or platform_ok)(entry):
+        return "unavailable"
+    status = models.status(entry.id)
+    if status.get("state") == "installing" and installs.alive(int(status.get("pid", 0) or 0)):
+        return "installing"
+    return "installed" if complete(models, entry) else "not_installed"
+
+
+def default(
+    models: installs.Models,
+    entries: list[catalogue.Entry],
+    platform: Callable[[catalogue.Entry], bool] | None = None,
+) -> catalogue.Entry:
+    """The model a call that names none runs (SPEC.md "Choosable segmenters"): the best-ranked
+    one that is installed, complete and runs on this platform; with none, the best-ranked one
+    that runs here (so it is the one reported missing); with none of those, the best-ranked."""
+    ranked = sorted(entries, key=lambda e: e.rank)
+    states = {e.id: state(models, e, platform) for e in ranked}
+    return (
+        next((e for e in ranked if states[e.id] == "installed"), None)
+        or next((e for e in ranked if states[e.id] != "unavailable"), None)
+        or ranked[0]
+    )
+
+
+def listing(
+    models: installs.Models,
+    entries: list[catalogue.Entry],
+    platform: Callable[[catalogue.Entry], bool] | None = None,
+) -> list[dict[str, Any]]:
+    """Every catalogued model with its state, as `models --json` prints it, best rank first;
+    `default` marks the model a call naming none would run on this machine."""
+    chosen = default(models, entries, platform).id
+    out = []
+    for entry in sorted(entries, key=lambda e: e.rank):
+        status = models.status(entry.id)
+        current = state(models, entry, platform)
         out.append(
             {
                 "id": entry.id,
                 "title": entry.title,
-                "default": entry.default,
-                "state": state,
-                "progress": status.get("progress") if installing else None,
-                "installation": ident,
+                "rank": entry.rank,
+                "default": entry.id == chosen,
+                "state": current,
+                "progress": status.get("progress") if current == "installing" else None,
+                "installation": models.current(entry.id),
                 "licence": entry.licence,
                 "download_mb": entry.download_mb,
                 "installed_mb": entry.installed_mb,
