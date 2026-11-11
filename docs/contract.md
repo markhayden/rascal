@@ -26,7 +26,8 @@ deliberate commit that also refreshes `fixtures/contract/` and `fixtures/table-m
 Pinned to table-manners =0.6.0 (PLAN.md 14.13). Each
 catalogued segmenter that runs on this platform (`segmenters.toml` in the pack's install) is a
 choice of `remove_prompt`'s `model`: a string `enum`, the resolved default first and as `default`
-(`[segment] model`, else the catalogue's), with `x-requirements` naming `segmenter:<id>`. Readiness
+(`[segment] model`, else the best-ranked model installed, complete and running here, else the
+best-ranked that runs here: SPEC.md "Choosing a model: one rule"), with `x-requirements` naming `segmenter:<id>`. Readiness
 lists one `file` requirement per choice, `for_choice: {param: "model", value: <id>}` and
 `installable: <id>`, `present` when the model's current installation holds every catalogued file
 non-empty; the description counts only the default's toward the action's state, and a call (or
@@ -182,7 +183,8 @@ The directory the pack reads its models from is resolved exactly as the pack doe
 install directory when it exists, else `~/.cache/rascal-tools`. `fixtures/readiness/models-dir.json`
 is the table both the Rust and the Python suites check. The install's `segmenters.toml` is the one
 at its root (a bundle install) or under `src/rascal_tools/` (a checkout's `tools/python`); without
-one readable with a default model, the requirement is `segmenters.toml` `missing`. A
+one readable with one preference order (`rank`, 1 to the number of entries, each once), the
+requirement is `segmenters.toml` `missing`. A
 command filler passes no variables of its own, so it adds no `env` requirement.
 
 The session keeps what providers said about each credential (task 12.3): when a run ends,

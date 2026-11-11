@@ -2,7 +2,9 @@
 //! the configured segmenter pack's `segmenters.toml` and each model's installation state, read
 //! from disk with no network and no pack started (a local inspection, as `describe` must be).
 //! The model a call runs is resolved here, once: the call's `model`, else `[segment] model`,
-//! else the catalogue's default.
+//! else the default this machine resolves from the catalogue's ranking (`rank`, 1 best): the
+//! best-ranked model installed, complete and running on this platform; with none, the
+//! best-ranked that runs here, so readiness reports it missing. A named model is never swapped.
 
 use std::path::{Path, PathBuf};
 
@@ -24,8 +26,9 @@ pub struct Entry {
     pub title: String,
     #[serde(default)]
     pub params: Vec<String>,
+    /// The preference order, 1 best; the catalogue holds one order (1 to its length, each once).
     #[serde(default)]
-    pub default: bool,
+    pub rank: Option<u32>,
     #[serde(default)]
     pub licence: String,
     #[serde(default)]
@@ -82,7 +85,8 @@ impl Segmenters {
         Segmenters::read(&install, models)
     }
 
-    /// The catalogue in `install` (at its root, or under `src/rascal_tools/` in a checkout).
+    /// The catalogue in `install` (at its root, or under `src/rascal_tools/` in a checkout); none
+    /// when it does not read or its ranks are not one preference order.
     pub fn read(install: &Path, models: PathBuf) -> Option<Segmenters> {
         let path = [
             install.join(CATALOGUE),
@@ -92,6 +96,15 @@ impl Segmenters {
         .find(|p| p.is_file())?;
         let text = std::fs::read_to_string(path).ok()?;
         let file: File = toml::from_str(&text).ok()?;
+        let mut ranks: Vec<u32> = file
+            .segmenter
+            .iter()
+            .map(|e| e.rank)
+            .collect::<Option<_>>()?;
+        ranks.sort_unstable();
+        if !ranks.iter().copied().eq(1..=ranks.len() as u32) {
+            return None;
+        }
         Some(Segmenters {
             install: install.to_path_buf(),
             models,
@@ -113,13 +126,13 @@ impl Segmenters {
 
     /// What a call of `remove_prompt` would run, for its estimate and invocation
     /// (`effective["x-rascal"].segmenter`): the model (the call's, else `[segment] model`, else
-    /// the default), its current installation (null when not installed) and the adapters'
-    /// version.
+    /// the default this machine resolves), its current installation (null when not installed)
+    /// and the adapters' version.
     pub fn effective(&self, call: Option<&str>, config: &Config) -> serde_json::Value {
         let model = call
             .map(str::to_string)
             .or_else(|| config.segment.as_ref().map(|s| s.model.clone()))
-            .or_else(|| self.default_entry().map(|e| e.id.clone()));
+            .or_else(|| self.preferred().map(|e| e.id.clone()));
         match model {
             Some(model) => serde_json::json!({
                 "model": model,
@@ -134,18 +147,35 @@ impl Segmenters {
         self.entries.iter().find(|e| e.id == id)
     }
 
-    pub fn default_entry(&self) -> Option<&Entry> {
-        self.entries.iter().find(|e| e.default)
+    /// The catalogue's entries best first.
+    pub fn ranked(&self) -> Vec<&Entry> {
+        let mut ranked: Vec<&Entry> = self.entries.iter().collect();
+        ranked.sort_by_key(|e| e.rank);
+        ranked
     }
 
-    /// The model a call runs when it names none: `[segment] model` when it is catalogued, else
-    /// the catalogue's default.
+    /// The model a call naming none runs on this machine when no `[segment] model` names one
+    /// (SPEC.md "Choosable segmenters"): the best-ranked that is installed and complete and runs
+    /// on this platform; with none installed, the best-ranked that runs here; with none of
+    /// those, the best-ranked. None only for an empty catalogue.
+    pub fn preferred(&self) -> Option<&Entry> {
+        let ranked = self.ranked();
+        let states: Vec<State> = ranked.iter().map(|e| self.state(e)).collect();
+        let at = |want: &dyn Fn(State) -> bool| states.iter().position(|s| want(*s));
+        at(&|s| s == State::Installed)
+            .or_else(|| at(&|s| s != State::Unavailable))
+            .or((!ranked.is_empty()).then_some(0))
+            .map(|i| ranked[i])
+    }
+
+    /// The model a call runs when it names none: `[segment] model` when it is catalogued
+    /// (installed or not: an explicit choice is never swapped), else [`Segmenters::preferred`].
     pub fn default_model(&self, config: Option<&Config>) -> Option<String> {
         config
             .and_then(|c| c.segment.as_ref())
             .map(|s| s.model.clone())
             .filter(|m| self.entry(m).is_some())
-            .or_else(|| self.default_entry().map(|e| e.id.clone()))
+            .or_else(|| self.preferred().map(|e| e.id.clone()))
     }
 
     /// The model's current installation identity, when installed.
@@ -239,6 +269,22 @@ fn alive(pid: u64) -> bool {
         .is_ok_and(|s| s.success())
 }
 
+/// The default a run naming no model uses, resolved once for the run: the one this machine
+/// resolves from the configured pack's catalogue ([`Segmenters::preferred`]), so it agrees with
+/// `describe`, readiness and the estimate; without a catalogue, or under `--replay` (which must
+/// not depend on what is installed now), the pack's manifest default, `manifest`.
+pub fn run_default(
+    config: Option<&Config>,
+    manifest: Option<&str>,
+    replay: bool,
+) -> Option<String> {
+    let resolved = (!replay)
+        .then(|| config.and_then(Segmenters::of))
+        .flatten()
+        .and_then(|s| s.preferred().map(|e| e.id.clone()));
+    resolved.or_else(|| manifest.map(str::to_string))
+}
+
 /// How a call's model was chosen.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Source {
@@ -247,9 +293,9 @@ pub enum Source {
     Default,
 }
 
-/// The model a call runs: the call's, else `[segment] model`, else `default` (the pack's own
-/// default, from its manifest). None when the pack takes no `model` and nothing names one; a
-/// model named for a pack that takes none is refused.
+/// The model a call runs: the call's, else `[segment] model`, else `default` (from
+/// [`run_default`]). None when the pack takes no `model` and nothing names one; a model named
+/// for a pack that takes none is refused.
 pub fn resolve(
     call: Option<&str>,
     config: Option<&Config>,
@@ -360,7 +406,7 @@ mod tests {
         std::fs::write(
             install.join(CATALOGUE),
             format!(
-                "[[segmenter]]\nid = \"tiny\"\ntitle = \"T\"\nlicence = \"Apache-2.0\"\ndefault = true\nplatforms = [\"{}\"]\n\n[[segmenter]]\nid = \"far\"\ntitle = \"F\"\nlicence = \"MIT\"\nplatforms = [\"nowhere\"]\n",
+                "[[segmenter]]\nid = \"tiny\"\ntitle = \"T\"\nlicence = \"Apache-2.0\"\nrank = 1\nplatforms = [\"{}\"]\n\n[[segmenter]]\nid = \"far\"\ntitle = \"F\"\nlicence = \"MIT\"\nrank = 2\nplatforms = [\"nowhere\"]\n",
                 platform()
             ),
         )
@@ -376,7 +422,7 @@ mod tests {
         std::fs::write(models.join("tiny/current"), "gone").unwrap();
         assert_eq!(s.state(&tiny), State::NotInstalled);
         assert_eq!(s.state(s.entry("far").unwrap()), State::Unavailable);
-        assert_eq!(s.default_entry().unwrap().id, "tiny");
+        assert_eq!(s.preferred().unwrap().id, "tiny");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -37,7 +37,11 @@ download.
 adapter that runs it (`rascal_tools/models/adapters.py`), the `segment` parameters it uses (a
 call that supplies another is `invalid_args`, even at its default), its licence and licence
 files, its files by name in `artifacts.toml`, its sizes, the platforms it runs on and the lab
-round's figures. Exactly one entry is the default (`tiny`). The catalogue holds five models:
+round's figures, and its `rank`, the one preference order (1 best, each rank once): `sam3`,
+`birefnet`, `hqsam`, `evfsam2`, `tiny`. There is no fixed default: a call naming no model runs
+the best-ranked model installed, complete and running on this platform, else the best-ranked that
+runs here (`installer.default`; the manifest's `default` is that model as of the pack's start).
+The catalogue holds five models:
 `tiny`, the two models above as one adapter, `owlv2+sam2`, which carries M13's pick and retry and
 reports `outline_<n>`, `retried_<n>`, `retry_kept_<n>` and `mask_iou_predicted`; and the four
 below, `hqsam`, `birefnet`, `sam3` and `evfsam2`. Every adapter's instances come back best score

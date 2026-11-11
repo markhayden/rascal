@@ -126,7 +126,8 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
     let finders: Vec<&str> = finder_names.iter().map(String::as_str).collect();
     let validated = resolve_matrix(&args.matrix, &registry, &finders)?;
 
-    // The segmenter the cells run ([segment] model, else the pack's default) and its
+    // The segmenter the cells run ([segment] model, else the default this machine resolves from
+    // the catalogue's ranking, else the pack's manifest default) and its
     // installation, held for the whole lab before any cell's identity is computed, so every
     // identity and every pack call name the same installation (SPEC.md "Choosable segmenters").
     let segment_param = registry
@@ -135,12 +136,20 @@ pub fn lab_run(args: &LabRunArgs) -> Result<LabRunReport> {
     let lab_model = rascal_mask::segmenters::resolve(
         None,
         Some(&config),
-        segment_param.as_ref().map(|p| {
-            (
-                p.choices.as_slice(),
-                p.default.as_ref().and_then(|d| d.as_str()),
-            )
-        }),
+        segment_param
+            .as_ref()
+            .map(|p| {
+                (
+                    p.choices.as_slice(),
+                    rascal_mask::segmenters::run_default(
+                        Some(&config),
+                        p.default.as_ref().and_then(|d| d.as_str()),
+                        false,
+                    ),
+                )
+            })
+            .as_ref()
+            .map(|(c, d)| (*c, d.as_deref())),
     )?
     .map(|(m, _)| m);
     let takes_installation = registry

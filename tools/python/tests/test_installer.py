@@ -79,11 +79,12 @@ def setup(tmp_path: Path):
     cat = tmp_path / "segmenters.toml"
     cat.write_text(
         '[[segmenter]]\nid = "tiny"\ntitle = "T"\nadapter = "owlv2+sam2"\nparams = []\n'
-        'default = true\nlicence = "Apache-2.0"\nlicence_files = ["LICENSE.g"]\n'
+        'rank = 1\nlicence = "Apache-2.0"\nlicence_files = ["LICENSE.g"]\n'
         'files = ["g.bin", "t.json"]\ndownload_mb = 1\ninstalled_mb = 1\n'
         'platforms = ["macos-arm64", "linux-x86_64"]\n\n'
         '[[segmenter]]\nid = "other"\ntitle = "O"\nadapter = "owlv2+sam2"\nparams = []\n'
-        'licence = "MIT"\nfiles = ["g.bin", "other.bin"]\ndownload_mb = 1\ninstalled_mb = 1\n'
+        'rank = 2\nlicence = "MIT"\nfiles = ["g.bin", "other.bin"]\n'
+        "download_mb = 1\ninstalled_mb = 1\n"
         'platforms = ["linux-x86_64"]\n'
     )
     entries = catalogue.read(cat, artifacts)
@@ -266,9 +267,11 @@ def test_the_command_line_lists_and_refuses_cleanly(tmp_path, capsys) -> None:
     assert cli.main(["models", "--json", "--models", models]) == 0
     listed = json.loads(capsys.readouterr().out)
     assert listed["models_dir"] == models
-    [tiny] = [m for m in listed["models"] if m["id"] == "tiny"]
-    assert tiny["default"] is True and tiny["installation"] is None
-    assert tiny["state"] in ("not_installed", "unavailable")
+    # Nothing installed: the default is the best-ranked model that runs here (SAM 3 on the
+    # catalogue's platforms), not installed.
+    [default] = [m for m in listed["models"] if m["default"]]
+    assert default["id"] == "sam3", default
+    assert default["installation"] is None and default["rank"] == 1
     assert cli.main(["get", "nope", "--models", models]) == 3
     assert "no model 'nope'" in capsys.readouterr().err
     assert cli.main(["hold", "tiny", "--run", "r1", "--models", models]) == 3

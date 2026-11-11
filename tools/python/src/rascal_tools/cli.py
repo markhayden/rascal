@@ -29,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     models_help = "the models directory (default: RASCAL_TOOLS_MODELS, beside the pack, the cache)"
     get = sub.add_parser("get", help="install a segmenter from the catalogue")
-    get.add_argument("model", nargs="?", help="the catalogue id (default: the default model)")
+    get.add_argument("model", nargs="?", help="the catalogue id (default: the default model here)")
     get.add_argument("--from", dest="source", type=Path, help="a directory of its release assets")
     get.add_argument("--no-wait", action="store_true", help="refuse when another install runs")
     get.add_argument("--models", type=Path, help=models_help)
@@ -71,7 +71,7 @@ def _installer(args: argparse.Namespace) -> int:
     try:
         entries = catalogue.read()
         if args.command == "get":
-            model = args.model or catalogue.default(entries).id
+            model = args.model or installer.default(models, entries).id
             cancel = installer.Cancel()
             for sig in (signal.SIGINT, signal.SIGTERM):
                 signal.signal(sig, lambda *_: cancel.set())
@@ -100,9 +100,13 @@ def _installer(args: argparse.Namespace) -> int:
             if args.json:
                 print(json.dumps({"models_dir": str(models.root), "models": rows}, indent=2))
             else:
+                # Best first; `(default)` marks the model a call naming none runs here.
                 for row in rows:
                     mark = " (default)" if row["default"] else ""
-                    print(f"{row['id']:<10} {row['state']:<14} {row['title']}{mark}")
+                    print(
+                        f"{row['rank']}. {row['id']:<10} {row['state']:<14} {row['title']} "
+                        f"[{row['licence']}]{mark}"
+                    )
             return 0
         if args.command == "hold":
             print(models.hold(args.model, args.run, pid=args.pid))

@@ -2078,7 +2078,7 @@ fn each_segmenter_is_a_model_choice_and_an_installable() {
     rascal_testkit::fake_install::write(&install, &[bin, "fake-pack", "exact"], true).unwrap();
     // A third entry that runs nowhere: neither a choice nor installable here.
     let mut catalogue = std::fs::read_to_string(install.join("segmenters.toml")).unwrap();
-    catalogue.push_str("\n[[segmenter]]\nid = \"far\"\ntitle = \"Far\"\nlicence = \"MIT\"\nfiles = [\"far.onnx\"]\nplatforms = [\"nowhere\"]\n");
+    catalogue.push_str("\n[[segmenter]]\nid = \"far\"\ntitle = \"Far\"\nlicence = \"MIT\"\nrank = 3\nfiles = [\"far.onnx\"]\nplatforms = [\"nowhere\"]\n");
     std::fs::write(install.join("segmenters.toml"), catalogue).unwrap();
     let write_config = |segment: Option<&str>| {
         let path = dir.join("rascal.toml");
@@ -2093,7 +2093,8 @@ fn each_segmenter_is_a_model_choice_and_an_installable() {
         path
     };
 
-    // The catalogue's default, installed: ready; sam3 listed for its choice, missing.
+    // Tiny, the only model installed, is the default though sam3 is ranked first: ready; sam3
+    // listed for its choice, missing.
     let config = write_config(None);
     let described = cli_describe(&dir, Some(&config), &[]);
     valid("urn:table-manners:core:description", &described);

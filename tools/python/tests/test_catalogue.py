@@ -9,8 +9,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from rascal_tools import artifacts, catalogue, installs
-from rascal_tools.models import adapters
+from rascal_tools import artifacts, catalogue, installer, installs
+from rascal_tools.models import adapters, cache
 from rascal_tools.tools import segment
 
 ARTIFACTS = """
@@ -35,7 +35,7 @@ id = "{id}"
 title = "A"
 adapter = "owlv2+sam2"
 params = {params}
-default = {default}
+rank = {rank}
 licence = "Apache-2.0"
 licence_files = ["LICENSE.a"]
 files = {files}
@@ -48,11 +48,11 @@ platforms = {platforms}
 def entry(
     id: str = "a",
     params: str = '["threshold"]',
-    default: str = "true",
+    rank: str = "1",
     files: str = '["a.onnx"]',
     platforms: str = '["macos-arm64"]',
 ) -> str:
-    return ENTRY.format(id=id, params=params, default=default, files=files, platforms=platforms)
+    return ENTRY.format(id=id, params=params, rank=rank, files=files, platforms=platforms)
 
 
 @pytest.fixture
@@ -68,13 +68,24 @@ def write(tmp_path: Path):
     return _write
 
 
-def test_the_shipped_catalogue_reads_and_tiny_is_the_default() -> None:
+def test_the_shipped_catalogue_reads_best_first() -> None:
     entries = catalogue.read()
-    tiny = catalogue.default(entries)
-    assert tiny.id == "tiny" and tiny.adapter == "owlv2+sam2"
+    # The owner's preference (the hand check of five segmenters on seven prompts, 2026-11-10).
+    assert [e.id for e in entries] == ["sam3", "birefnet", "hqsam", "evfsam2", "tiny"]
+    assert [e.rank for e in entries] == [1, 2, 3, 4, 5]
+    tiny = catalogue.by_id(entries, "tiny")
+    assert tiny is not None and tiny.adapter == "owlv2+sam2"
     assert set(tiny.params) == set(catalogue.SEGMENT_PARAMS)
     names = {a.name for a in artifacts.read()}
     assert set(tiny.files) <= names
+    # Each model keeps its own licence; the ranking changes none of them.
+    licences = {e.id: e.licence for e in entries}
+    assert licences["sam3"] == "SAM License" and licences["tiny"] == "Apache-2.0"
+
+
+def test_entries_come_back_in_rank_order_whatever_the_file_order(write) -> None:
+    entries = write(entry(id="b", rank="2") + entry(id="a", rank="1"))
+    assert [(e.id, e.rank) for e in entries] == [("a", 1), ("b", 2)]
 
 
 def test_a_good_catalogue_reads(write) -> None:
@@ -86,8 +97,11 @@ def test_a_good_catalogue_reads(write) -> None:
     ("text", "message"),
     [
         (entry() + entry(), "appears twice"),
-        (entry(default="false"), "exactly one entry must be the default"),
-        (entry() + entry(id="b"), "exactly one entry must be the default"),
+        (entry().replace("rank = 1\n", ""), "lacks rank"),
+        (entry(rank="0"), "ranks must be 1..1"),
+        (entry(rank='"1"'), "ranks must be 1..1"),
+        (entry() + entry(id="b"), "ranks must be 1..2"),
+        (entry() + entry(id="b", rank="3"), "ranks must be 1..2"),
         (entry(id="Big"), "lower-case"),
         (entry(params='["prompt"]'), "not segment parameters"),
         (entry(files='["b.onnx"]'), "not in artifacts.toml"),
@@ -131,10 +145,9 @@ class _FakeAdapter:
 
 def _use(monkeypatch, adapter, params=catalogue.SEGMENT_PARAMS, ident="fake") -> None:
     fake = catalogue.Entry(
-        ident, "Fake", "fake", tuple(params), True, "MIT", (), ("f.onnx",), 1, 1, ("macos-arm64",)
+        ident, "Fake", "fake", tuple(params), 1, "MIT", (), ("f.onnx",), 1, 1, ("macos-arm64",)
     )
     monkeypatch.setattr(segment, "ENTRIES", [fake])
-    monkeypatch.setattr(segment, "DEFAULT", ident)
     monkeypatch.setattr(segment, "load", lambda entry, installation=None: adapter)
 
 
@@ -195,8 +208,8 @@ def test_one_model_is_loaded_at_a_time_keyed_by_its_installation(monkeypatch, tm
         return _FakeAdapter([])
 
     mac = ("macos-arm64",)
-    one = catalogue.Entry("one", "1", "fake", (), True, "MIT", (), ("1.bin",), 1, 1, mac)
-    two = catalogue.Entry("two", "2", "fake", (), False, "MIT", (), ("2.bin",), 1, 1, mac)
+    one = catalogue.Entry("one", "1", "fake", (), 1, "MIT", (), ("1.bin",), 1, 1, mac)
+    two = catalogue.Entry("two", "2", "fake", (), 2, "MIT", (), ("2.bin",), 1, 1, mac)
     monkeypatch.setitem(adapters.BUILDERS, "fake", builder)
     monkeypatch.setattr(segment.cache, "models", lambda: models)
     monkeypatch.setattr(segment, "_slot", installs.Slot())
@@ -222,7 +235,9 @@ def test_one_model_is_loaded_at_a_time_keyed_by_its_installation(monkeypatch, tm
 def test_the_manifest_offers_the_catalogue_s_models() -> None:
     model = segment.SPEC.manifest()["model_schema"]["properties"]["model"]
     assert model["enum"] == [e.id for e in catalogue.read()]
-    assert model["default"] == "tiny"
+    # The default as of the pack's start: the best-ranked model installed here, else the best
+    # that runs here.
+    assert model["default"] == installer.default(cache.models(), catalogue.read()).id
 
 
 def test_segment_annotation_says_which_parameters_each_model_uses():

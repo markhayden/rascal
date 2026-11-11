@@ -1,7 +1,8 @@
 """The segmenter catalogue (`segmenters.toml`, SPEC.md "Choosable segmenters"): which models
-`segment` can run, the adapter that runs each, the parameters each uses, and the files each needs
-by reference to `artifacts.toml`. Read and checked once; a broken catalogue is a packaging error,
-so it raises rather than answering."""
+`segment` can run, best first by `rank`, the adapter that runs each, the parameters each uses,
+and the files each needs by reference to `artifacts.toml`. Read and checked once; a broken
+catalogue is a packaging error, so it raises rather than answering. Which model is the default
+depends on what is installed, so the installer resolves it (`installer.default`)."""
 
 from __future__ import annotations
 
@@ -33,7 +34,7 @@ class Entry:
     title: str
     adapter: str
     params: tuple[str, ...]
-    default: bool
+    rank: int
     licence: str
     licence_files: tuple[str, ...]
     files: tuple[str, ...]
@@ -44,7 +45,7 @@ class Entry:
 
 
 def read(path: Path = CATALOGUE, artifacts: Path = manifest.ARTIFACTS) -> list[Entry]:
-    """Every entry of the catalogue at `path`, checked against `artifacts`."""
+    """Every entry of the catalogue at `path`, checked against `artifacts`, best rank first."""
     try:
         data = tomllib.loads(path.read_text())
     except (OSError, tomllib.TOMLDecodeError) as e:
@@ -56,10 +57,14 @@ def read(path: Path = CATALOGUE, artifacts: Path = manifest.ARTIFACTS) -> list[E
     ids = [e.id for e in entries]
     if len(set(ids)) != len(ids):
         raise CatalogueError(f"{path}: an id appears twice in {ids}")
-    defaults = [e.id for e in entries if e.default]
-    if len(defaults) != 1:
-        raise CatalogueError(f"{path}: exactly one entry must be the default, not {defaults}")
-    return entries
+    # One preference order: the ranks are 1 to the number of entries, each once.
+    ranks = sorted(e.rank for e in entries)
+    if ranks != list(range(1, len(entries) + 1)):
+        raise CatalogueError(
+            f"{path}: ranks must be 1..{len(entries)}, each once, not "
+            f"{ {e.id: e.rank for e in entries} }"
+        )
+    return sorted(entries, key=lambda e: e.rank)
 
 
 def _entry(path: Path, raw: dict[str, Any], known: set[str]) -> Entry:
@@ -94,7 +99,7 @@ def _entry(path: Path, raw: dict[str, Any], known: set[str]) -> Entry:
         title=str(need("title")),
         adapter=adapter,
         params=params,
-        default=bool(raw.get("default", False)),
+        rank=_rank(need("rank")),
         licence=str(need("licence")),
         licence_files=licence_files,
         files=files,
@@ -105,8 +110,9 @@ def _entry(path: Path, raw: dict[str, Any], known: set[str]) -> Entry:
     )
 
 
-def default(entries: list[Entry]) -> Entry:
-    return next(e for e in entries if e.default)
+def _rank(value: Any) -> int:
+    # A rank that is not a whole number reads as 0, which the order check refuses.
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
 def by_id(entries: list[Entry], ident: str) -> Entry | None:

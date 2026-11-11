@@ -36,6 +36,36 @@ pub fn installer(config: &Path, args: &[String]) -> Result<i32> {
     Ok(status.code().unwrap_or(crate::exit::OPERATIONAL))
 }
 
+/// `rascal tools models`: the pack's listing, whose `default` is the model a call naming none
+/// runs on this machine (the best-ranked installed, else the best-ranked here); then, without
+/// `--json`, a line naming `[segment] model` when the configuration pins another, since rascal's
+/// calls run that one.
+pub fn models(config_path: &Path, json: bool) -> Result<i32> {
+    let mut args = vec!["models".to_string()];
+    if json {
+        args.push("--json".to_string());
+    }
+    let code = installer(config_path, &args)?;
+    if code == 0 && !json {
+        let config = Config::read(config_path)?;
+        if let Some(segment) = &config.segment {
+            println!(
+                "[segment] model = {:?} in {}: rascal's calls that name no model run it",
+                segment.model,
+                config_path.display()
+            );
+        }
+    }
+    Ok(code)
+}
+
+/// The model a call naming none runs under `config` (`[segment] model`, else the default this
+/// machine resolves), as `describe` shows it; none without a readable catalogue.
+pub fn default_model(config_path: &Path) -> Option<String> {
+    let config = Config::read(config_path).ok()?;
+    rascal_mask::segmenters::Segmenters::of(&config)?.default_model(Some(&config))
+}
+
 /// Prints every configured pack's tools: the op view (name, version, purpose, ports,
 /// parameters, bounds) or, with `--json`, the native manifests by pack.
 pub fn list(config: &Path, json: bool) -> Result<()> {

@@ -227,7 +227,8 @@ pub const RESERVED: [&str; 6] = [
 ];
 
 /// `model` as remove_prompt declares it: a string `enum` of the catalogued segmenters that run
-/// on this platform, the resolved default (`[segment] model`, else the catalogue's) first and as
+/// on this platform, the resolved default (`[segment] model`, else the best-ranked model
+/// installed here, else the best-ranked that runs here; `Segmenters::default_model`) first and as
 /// `default`, with `x-requirements` naming each choice's requirement. None when no choice runs
 /// here or the default is not one of them.
 fn model_schema(

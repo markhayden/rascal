@@ -1,34 +1,42 @@
 # The segmenter catalogue (SPEC.md "Choosable segmenters"; MODEL.md): one entry per model
 # `segment` can run, chosen by its `model` argument. Files are named by reference to
 # `artifacts.toml` (sizes, digests, URLs), so a file two models share is listed and installed
-# once. Exactly one entry is the `default`. `params` are the `segment` parameters the model uses;
-# a call that supplies another is refused. `lab` is copied from the round that measured the model
-# (docs/results/segment-01.md defines `remove`).
+# once. `rank` is the preference order, best first: the ranks are 1 to the number of entries,
+# each once (the owner's hand check of the five on seven prompts, 2026-11-10: sam3, birefnet,
+# hqsam, evfsam2, tiny). There is no fixed default: a call that names no model (and a rascal
+# config with no `[segment] model`) runs the best-ranked model that is installed, complete and
+# runs on this platform; with none installed, the best-ranked that runs here, reported missing.
+# A model named explicitly is run as named, never swapped. `params` are the `segment` parameters
+# the model uses; a call that supplies another is refused. `lab` is copied from the round that
+# measured the model (docs/results/segment-01.md defines `remove`). The entries are listed in
+# rank order, for the reader; the rank decides.
 
 [[segmenter]]
-id = "tiny"
-title = "OWLv2 + SAM 2.1 Tiny"
-adapter = "owlv2+sam2"
-params = ["threshold", "max_instances", "pad", "outline", "min_cover"]
-default = true
-licence = "Apache-2.0"
-licence_files = ["LICENSE.owlv2-base-patch16.txt", "LICENSE.sam2.1-hiera-tiny.txt"]
+id = "sam3"
+title = "SAM 3"
+adapter = "sam3"
+params = ["threshold", "max_instances"]
+rank = 1
+licence = "SAM License"
+licence_files = ["LICENSE.sam3.txt"]
 files = [
-    "owlv2-base-patch16.onnx",
-    "owlv2-base-patch16.tokenizer.json",
-    "sam2.1-hiera-tiny.encoder.onnx",
-    "sam2.1-hiera-tiny.decoder3.onnx",
+    "sam3.vision.onnx",
+    "sam3.vision.onnx.data",
+    "sam3.text.onnx",
+    "sam3.head.onnx",
+    "sam3.tokenizer.json",
 ]
-download_mb = 753
-installed_mb = 753
+download_mb = 3377
+installed_mb = 3377
 platforms = ["macos-arm64", "linux-x86_64"]
-lab = { round = "segment-01", remove = 0.548, iou = 0.576, best_for = "small and fast" }
+lab = { round = "segment-01", remove = 0.777, iou = 0.724, best_for = "the best remove score; end to end, it finds and draws each instance itself" }
 
 [[segmenter]]
 id = "birefnet"
 title = "OWLv2 + BiRefNet"
 adapter = "owlv2+birefnet"
 params = ["threshold", "max_instances", "pad"]
+rank = 2
 licence = "MIT and Apache-2.0"
 licence_files = ["LICENSE.owlv2-base-patch16.txt", "LICENSE.birefnet.txt"]
 files = [
@@ -46,6 +54,7 @@ id = "hqsam"
 title = "OWLv2 + HQ-SAM ViT-L"
 adapter = "owlv2+hqsam"
 params = ["threshold", "max_instances", "pad", "min_cover"]
+rank = 3
 licence = "Apache-2.0"
 licence_files = ["LICENSE.owlv2-base-patch16.txt", "LICENSE.sam-hq-vit-l.txt"]
 files = [
@@ -60,29 +69,11 @@ platforms = ["macos-arm64", "linux-x86_64"]
 lab = { round = "segment-01", remove = 0.679, iou = 0.714, best_for = "objects with parts (0.812); one outline per box, high-quality edges" }
 
 [[segmenter]]
-id = "sam3"
-title = "SAM 3"
-adapter = "sam3"
-params = ["threshold", "max_instances"]
-licence = "SAM License"
-licence_files = ["LICENSE.sam3.txt"]
-files = [
-    "sam3.vision.onnx",
-    "sam3.vision.onnx.data",
-    "sam3.text.onnx",
-    "sam3.head.onnx",
-    "sam3.tokenizer.json",
-]
-download_mb = 3377
-installed_mb = 3377
-platforms = ["macos-arm64", "linux-x86_64"]
-lab = { round = "segment-01", remove = 0.777, iou = 0.724, best_for = "the best remove score; end to end, it finds and draws each instance itself" }
-
-[[segmenter]]
 id = "evfsam2"
 title = "EVF-SAM2"
 adapter = "evfsam2"
 params = ["max_instances"]
+rank = 4
 licence = "Apache-2.0"
 licence_files = ["LICENSE.evf-sam2.txt"]
 files = [
@@ -96,3 +87,22 @@ download_mb = 3571
 installed_mb = 3571
 platforms = ["macos-arm64", "linux-x86_64"]
 lab = { round = "segment-01", remove = 0.581, iou = 0.664, best_for = "reading the prompt itself: no detector, one mask per query" }
+
+[[segmenter]]
+id = "tiny"
+title = "OWLv2 + SAM 2.1 Tiny"
+adapter = "owlv2+sam2"
+params = ["threshold", "max_instances", "pad", "outline", "min_cover"]
+rank = 5
+licence = "Apache-2.0"
+licence_files = ["LICENSE.owlv2-base-patch16.txt", "LICENSE.sam2.1-hiera-tiny.txt"]
+files = [
+    "owlv2-base-patch16.onnx",
+    "owlv2-base-patch16.tokenizer.json",
+    "sam2.1-hiera-tiny.encoder.onnx",
+    "sam2.1-hiera-tiny.decoder3.onnx",
+]
+download_mb = 753
+installed_mb = 753
+platforms = ["macos-arm64", "linux-x86_64"]
+lab = { round = "segment-01", remove = 0.548, iou = 0.576, best_for = "small and fast" }

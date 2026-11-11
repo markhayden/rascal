@@ -555,7 +555,7 @@ fn no_catalogue(install: &Path) -> Requirement {
         name: "segmenters.toml".to_string(),
         state: RequirementState::Missing,
         setup: Some(format!(
-            "{} holds no readable segmenters.toml with a default model. Run `rascal tools setup --bundle <bundle> --config <path>` again.",
+            "{} holds no readable segmenters.toml with one preference order (`rank`). Run `rascal tools setup --bundle <bundle> --config <path>` again.",
             install.display()
         )),
         optional: false,
