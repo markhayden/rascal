@@ -283,3 +283,37 @@ fn a_catalogue_without_one_preference_order_is_not_read() {
         );
     }
 }
+
+/// `rascal tools get` with no model gets the model a call naming none would run: `[segment]
+/// model` when set, else the default this machine resolves.
+#[test]
+fn tools_get_without_a_model_gets_the_resolved_default() {
+    let pack = Pack::new("get", &[]);
+    let bin = env!("CARGO_BIN_EXE_rascal");
+    let install = fake_install::FakeInstall {
+        dir: pack.install.clone(),
+        launcher: pack.install.join(".venv/bin/rascal-tools"),
+    };
+    fake_install::write_installer(&install, &[bin, "fake-pack", "exact"]).unwrap();
+    pack.install("tiny");
+    pack.install("birefnet");
+    let get = |model: Option<&str>| {
+        let (config, _) = pack.config(model);
+        let out = Command::new(bin)
+            .args(["tools", "get", "--config", config.to_str().unwrap()])
+            .env_remove("RASCAL_TOOLS_MODELS")
+            .env("HOME", pack.dir.join("home"))
+            .output()
+            .unwrap();
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    };
+    get(None);
+    assert!(pack.models.join(".got-birefnet").exists());
+    get(Some("hqsam"));
+    assert!(pack.models.join(".got-hqsam").exists());
+}

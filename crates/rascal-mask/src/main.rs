@@ -643,8 +643,10 @@ enum ToolsCommand {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
-    /// The segmenter pack's catalogue with each model's state (installed, not installed,
-    /// installing, unavailable): `rascal-tools models` with the pack's environment.
+    /// The segmenter pack's catalogue, best first, with each model's rank, state (installed, not
+    /// installed, installing, unavailable) and licence, `(default)` marking the model a call
+    /// naming none runs on this machine: `rascal-tools models` with the pack's environment, then
+    /// a line naming `[segment] model` when it overrides that default.
     Models {
         /// The configuration file (rascal.toml) naming the segmenter pack.
         #[arg(long)]
@@ -656,7 +658,8 @@ enum ToolsCommand {
     /// Install a catalogued segmenter from its release (or `--from` a directory of its release
     /// assets, with no network): `rascal-tools get` with the pack's environment.
     Get {
-        /// The model's id (`rascal tools models`); without it, the catalogue's default.
+        /// The model's id (`rascal tools models`); without it, `[segment] model`, else the default
+        /// this machine resolves (the best-ranked model installed, else the best-ranked here).
         model: Option<String>,
         /// The configuration file (rascal.toml) naming the segmenter pack.
         #[arg(long)]
@@ -1082,20 +1085,16 @@ fn main() {
                     workspace,
                     args,
                 } => tools::call(&pack, &tool, &config, &workspace, &args),
-                ToolsCommand::Models { config, json } => {
-                    let mut args = vec!["models".to_string()];
-                    if json {
-                        args.push("--json".to_string());
-                    }
-                    tools::installer(&config, &args)
-                }
+                ToolsCommand::Models { config, json } => tools::models(&config, json),
                 ToolsCommand::Get {
                     model,
                     config,
                     from,
                 } => {
                     let mut args = vec!["get".to_string()];
-                    args.extend(model);
+                    // Without a model, the one a call naming none would run: `[segment] model`,
+                    // else the default this machine resolves (as `describe` shows it).
+                    args.extend(model.or_else(|| tools::default_model(&config)));
                     if let Some(from) = from {
                         args.push("--from".to_string());
                         args.push(from.display().to_string());
