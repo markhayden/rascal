@@ -174,8 +174,8 @@ with green CI on both platforms, and then the tag.
 - [x] 13.13 Replay and cancellation → tag `m13.3`
 - [ ] 13.14 Wafflery shows checks → tag `m13.4`
 - [x] 13.15 Version 0.5.0 everywhere at once; publish; pins from crates.io (2026-11-05: the v0.5 fixtures regenerated with the loop's four; table-manners 0.5.0 published; pinned `=0.5.0` from crates.io)
-- [ ] 13.16 Merge and the by-hand check
-- [ ] Checkpoint M13 → tag `m13`
+- [x] 13.16 Merge and the by-hand check (command line; the Wafflery check moved to whizbang M5, docs/reviews/m13-checkpoint.md)
+- [x] Checkpoint M13 → tag `m13` (on `661bd68`, tagged 2026-11-11)
 
 ## M14 Choosable segmenters (PLAN.md M14; SPEC.md "Choosable segmenters")
 - [x] 14.0 Record decision 15 (decided 2026-11-09); ADR 0018 section
@@ -193,5 +193,5 @@ with green CI on both platforms, and then the tag.
 - [x] 14.11 `describe`, `serve`'s controls and the CLI → tag `m14.3` (one commit for the three slices; `model-gate.sh --heal tiny` see below)
 - [x] 14.12 Wafflery: Installables list and Model choice (`m14-installables`)
 - [x] 14.13 Publish table-manners 0.6.0 (rascal, squint, Wafflery): published 2026-11-10; all three pin `=0.6.0` from crates.io
-- [ ] 14.14 The checkpoint (each of 14.5–14.8 merged or excluded with its failing gate recorded) → tag `m14`
+- [x] 14.14 The checkpoint (each of 14.5–14.8 merged or excluded with its failing gate recorded) → tag `m14`
 - [ ] Flaky (not M14): `rascal-mcp::it claims::a_request_cancelled_while_queued_keeps_its_id_with_no_run` timed out at 180 s on Linux CI (run 42744992404, 2026-11-10); the rerun and main's CI passed. Make it wait on an event, not on time.

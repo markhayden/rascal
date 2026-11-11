@@ -153,4 +153,56 @@ several minutes. Three bugs, fixed on `m14-handcheck`, test first, one commit ea
    load: a SIGTERM after the pack wrote the hold, but before it answered, found nothing
    registered. Holds are now registered before they are written and released by run.
 
-**Second attempt.** PENDING
+**Second attempt** (2026-11-10 and 11). Rebuilt from `c0c91fa`, with an empty models directory again.
+
+- **Part A, Wafflery.**
+  - All five models installed into the check's models directory. The bars moved throughout.
+  - The download was slow: about 2 MB/s in total, limited by the line. Tiny, BiRefNet and HQ-SAM each fetched
+    their shared detector graph separately, because they ran at the same time (R8).
+  - The owner ran 29 `remove-prompt` calls across 7 prompts on their own photos. Ranked by mask, best first:
+    1. **SAM 3** found every instance in crowded scenes (people, fish) and took nothing extra.
+    2. **BiRefNet** had the cleanest edges and took nothing extra, but left a rectangular block
+       on one prompt.
+    3. **HQ-SAM** had good edges but took neighbours: the jar with the mug, the branch with the swing.
+    4. **EVF-SAM2** fragmented on crowds. It ran on only 2 prompts.
+    5. **Tiny** masked a tree canopy for "tire swing".
+- **The ranked default.** The owner picked SAM 3, with the rest of that order as the fallback.
+  - Merged as `e02a273`: the catalogue ranks the models, and with no model named, the default
+    is the best-ranked model installed.
+  - With nothing installed it is SAM 3.
+  - An explicit model is never swapped.
+- **Wafflery.** The owner found three UI problems:
+  - the page scrolled into empty space;
+  - every model's requirement was listed whatever the choice;
+  - the model choice read "Not set".
+  These were fixed on Wafflery `ui-tidy` and merged after the check (`8d823a8`). The tag records the
+  Wafflery the check ran on, `c8ef141`.
+- **Part B, the command line**, with `[segment] model = "sam3"` and squint as the checker:
+  1. The first run was unchecked. squint exited 64 because the owner's squint config attests an
+     account from `SQUINT_ANTHROPIC_ACCOUNT`, which was unset. rascal drops the checker's
+     stderr, so the note said only "exit 64, 0 bytes", and the terminal said nothing (R9, R10).
+  2. With the variable set, squint refused its cap: its decision envelope is about $1.46 (the
+     worst case at its default budget), and `docs/fillers.md` recommends
+     `spend_usd_per_call = 0.01` (R11). The cap was raised to 1.50.
+  3. **Checked.**
+     - SAM 3 (`593e11a3…`) found all seven people, and LaMa removed them.
+     - squint answered `unsure`, naming no place. That is the faint smudges left in the front seats.
+     - The run kept try 1, as specified: rascal retries on `fail`, or on `unsure` that names a place.
+     - It spent $0.0034 of a $1.50 cap.
+     - A retry was not exercised by hand. The convergence gate runs one on every real model
+       with the scripted checker.
+
+M14's by-hand check passes.
+
+**Carried over, not fixed here.** rascal is frozen for the merge into whizbang, so R8–R13 are on
+whizbang's carry-over list:
+
+| # | Finding |
+|---|---|
+| R8 | Models installed at the same time each download a graph they share, not wait for it. |
+| R9 | `heal` prints only the image paths. A run that was not checked should say so on the terminal. |
+| R10 | The checker's stderr is dropped. Keep a bounded tail in the note. |
+| R11 | `[checker]` declares only `key_env`. A host that clears the environment (Wafflery) cannot pass anything else the checker needs, such as `SQUINT_ANTHROPIC_ACCOUNT`. Add `env = [...]`, as for packs. Also, `docs/fillers.md`'s 0.01 cap can never cover squint's envelope. |
+| R12 | Speed: LaMa on the CPU (41 s a fill); BiRefNet runs once per box (about 50 s on crowds); every ONNX session is CPU only; a repeat run is no faster, so the graphs may load each run. |
+| R13 | Wafflery: a model that is not installed cannot be picked. Its `bundle-replay` "changed native output identity" spec fails about 1 in 8 on WebKit, on `main` too. |
+| R14 | `just ci-local` cannot run: `scripts/ci/Dockerfile` installs `just` and `cargo-deny` but not `cargo-nextest`, which the `test` recipe uses since `9ce3986` (CI installs `cargo-nextest@0.9.148` itself). M14 is gated on GitHub CI's macOS and Linux legs instead. |
