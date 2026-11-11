@@ -1061,7 +1061,9 @@ to 7 (`docs/reviews/m14-spec-review-*-codex-2026-11-09.md`) are folded in.
 
 #### What a person sees
 
-- **Setup.** After `rascal tools setup`, `rascal tools models` lists the catalogue and `rascal
+- **Setup.** After `rascal tools setup`, `rascal tools models` lists the catalogue best first,
+  each with its rank, state and licence, marking `(default)` the model a call naming none would
+  run on this machine (`models --json`: `rank` and `default` per model), and `rascal
   tools get <model>` installs one; until a model is installed, `remove-prompt` is `needs_setup`
   with that instruction. `rascal tools remove <model>` removes one.
 - **Wafflery, a tool's setup.** A Segmenters list, one row per catalogued model: its title, a
@@ -1085,10 +1087,21 @@ to 7 (`docs/reviews/m14-spec-review-*-codex-2026-11-09.md`) are folded in.
 #### Choosing a model: one rule
 
 `model` is resolved once per call, in this order: the call's `model` argument; else
-`[segment] model` in the configuration; else the catalogue's default (`tiny`). An unknown id is
-`invalid`; a known id whose model is not installed is refused `not_ready` before any run,
-naming the model and the command that installs it. There is no fallback to another model: a
-different segmenter is a different result.
+`[segment] model` in the configuration; else the **default this machine resolves**: the
+catalogue's best-ranked model (`rank`, below) that is installed, complete (its current
+installation holds every catalogued file, non-empty) and runs on this platform; with none
+installed, the best-ranked model that runs here, so readiness reports it `missing` with its Get
+setup text (SAM 3 on a fresh machine). An unknown id is `invalid`; a known id whose model is not
+installed is refused `not_ready` before any run, naming the model and the command that installs
+it. An explicit choice (the call's `model` or `[segment] model`) is honoured exactly: it is never
+swapped for an installed model, and there is no fallback to another model, since a different
+segmenter is a different result. Only the default depends on what is installed, and it is
+resolved once per call, so installing a model changes the default of the next call, never a run
+under way. `describe`'s `model` default, readiness, the estimate's
+`effective["x-rascal"].segmenter`, `rascal tools models` and the run all resolve it from the same
+catalogue and models directory (rascal in `segmenters.rs`, the pack in `installer.default`);
+under `--replay` a run that names no model takes the recorded pack's manifest default, so a
+replay does not depend on what is installed now.
 
 - The resolved id is passed to every `segment` call the run makes, M13's crop retries included,
   so a run never mixes models. The installation is pinned the same way: rascal reads the
@@ -1104,7 +1117,7 @@ different segmenter is a different result.
 - `remove-prompt` gains an optional input `model` (Text), bound to the `segment` step's `model`
   parameter; the recipe's other steps are unchanged. The `remove_prompt` action's
   `params_schema` gains `model` as a string `enum` of the catalogue's ids, default the resolved
-  configuration default.
+  default (`[segment] model`, else the default this machine resolves).
 - `segment` stays a pack tool, not a public operation (as under v0.4). A recipe step cannot set
   `model` itself; the only way in is the `model` input, so the order above is the whole rule.
 - `model` and `installation` are forwarded to the pack only when the pack's `segment` manifest
@@ -1132,7 +1145,7 @@ id = "tiny"                                  # the `model` value; stable, lower-
 title = "OWLv2 + SAM 2.1 Tiny"
 adapter = "owlv2+sam2"                       # the pack class that runs it (below)
 params = ["threshold", "max_instances", "pad", "outline", "min_cover"]   # applicable parameters
-default = true                               # exactly one entry
+rank = 5                                     # preference, 1 best; the ranks are 1..n, each once
 licence = "Apache-2.0"                       # the weights' licence as read on the day (MODEL.md)
 licence_files = ["LICENSE.owlv2", "LICENSE.sam2"]   # artifacts installed beside the graphs
 files = ["owlv2-base-patch16.onnx", "owlv2-base-patch16.tokenizer.json",
@@ -1150,6 +1163,12 @@ lab = { round = "segment-01", remove = 0.548, iou = 0.576, best_for = "small and
   part `o` of the spill on another object, averaged over the images. `cpu_s`, when present, is
   the round's warm time per image with `cpu_machine` naming the machine; a measurement the round
   did not make is left out, and a host shows "not measured".
+- **`rank`** is the catalogue's one preference order, best first: the ranks are 1 to the number
+  of entries, each once, or the catalogue does not read (the pack refuses it as a packaging
+  error; rascal reports `segmenters.toml` `missing`). It decides the default (above); there is no
+  fixed default entry. The order is the owner's, from a hand check of the five models on seven
+  prompts (2026-11-10): `sam3`, `birefnet`, `hqsam`, `evfsam2`, `tiny`. The file lists the
+  entries in rank order for the reader; the rank, not the file order, decides.
 - **`platforms`** lists where the model's graphs are supported; elsewhere it is `unavailable`.
 - **`licence_files`** are installed with the model and listed in `install.json`; every model's
   release assets carry its licence text (for SAM 3, Meta's SAM License, which its terms
@@ -1157,13 +1176,13 @@ lab = { round = "segment-01", remove = 0.548, iou = 0.576, best_for = "small and
 
 The first catalogue, the lab's five contenders that run on a CPU, plus Tiny:
 
-| id | adapter | licence (weights) | lab remove score |
-|---|---|---|---|
-| `tiny` | `owlv2+sam2` (today's, unchanged), the default | Apache-2.0 | 0.548 |
-| `sam3` | `sam3` | SAM License (Meta) | 0.777 |
-| `birefnet` | `owlv2+birefnet` | MIT | 0.731 |
-| `hqsam` | `owlv2+hqsam` (ViT-L) | Apache-2.0 (`lkeab/hq-sam`'s card) | 0.679 |
-| `evfsam2` | `evfsam2` | Apache-2.0 (`YxZhang/evf-sam2-multitask`'s card) | 0.581 |
+| rank | id | adapter | licence (weights) | lab remove score |
+|---|---|---|---|---|
+| 1 | `sam3` | `sam3` | SAM License (Meta) | 0.777 |
+| 2 | `birefnet` | `owlv2+birefnet` | MIT | 0.731 |
+| 3 | `hqsam` | `owlv2+hqsam` (ViT-L) | Apache-2.0 (`lkeab/hq-sam`'s card) | 0.679 |
+| 4 | `evfsam2` | `evfsam2` | Apache-2.0 (`YxZhang/evf-sam2-multitask`'s card) | 0.581 |
+| 5 | `tiny` | `owlv2+sam2` (today's, unchanged) | Apache-2.0 | 0.548 |
 
 A model enters the catalogue only when its ONNX export passes the gate (below); one that fails
 stays out until it does. Sa2VA (Apache-2.0) is not catalogued: a 4B vision-language model,
@@ -1262,7 +1281,8 @@ spec.
 `artifacts.toml`, and checks each file's SHA-256 before anything reads it.
 `rascal-tools get <model> --from <directory>` installs from a directory holding the same
 assets (copied from a release), with the same checks and no network: the offline and
-air-gapped route. `rascal-tools fetch` is removed. `get` with no model gets the default.
+air-gapped route. `rascal-tools fetch` is removed. `get` with no model gets the default this
+machine resolves (with nothing installed, the best-ranked model that runs here).
 
 **The bundle carries no models.** `scripts/build-bundle.sh` stops copying model files;
 `rascal tools setup` installs the pack, and the person then gets the models they want. The

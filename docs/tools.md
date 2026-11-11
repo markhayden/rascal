@@ -266,11 +266,13 @@ larger and stays inside). It answers one polygon region per instance (the padded
 labelled with the query it answered, scored, best first) and one plane per region in the
 image's frame, with `plane_px_<n>`, `outline_<n>`, `retried_<n>` and `retry_kept_<n>` per
 instance; `not_applicable` when nothing scores over the threshold. `model` picks the segmenter
-from the pack's catalogue (`segmenters.toml`, default `tiny`); the tool's annotation says which
+from the pack's catalogue (`segmenters.toml`, ranked best first; with no `model` the best-ranked
+one installed here, else the best-ranked that runs here); the tool's annotation says which
 parameters each model uses (`applies`), and rascal leaves the others out of the call (not even
 defaulted) and refuses one given explicitly. Rascal resolves the model once per run: the call's
 `model` (`--model` on `run` and `heal`, `remove_prompt`'s `model`), else `[segment] model` in
-`rascal.toml`, else the pack's default; a recipe step cannot set it itself (remove-prompt binds
+`rascal.toml`, else the default this machine resolves from the catalogue's ranking (the same one
+`describe` shows; under `--replay`, the recorded pack's manifest default); a recipe step cannot set it itself (remove-prompt binds
 it from `inputs.model`), and a model that is not installed is refused before the run starts with
 `rascal tools get <model>` in the message. With a pack whose `segment` takes no `model`, naming
 one is refused and the recipe runs as before. The installation is pinned the same way: at
@@ -295,23 +297,29 @@ installation, verifies it once per process, and loads it on the first call; a ca
 `installation` runs exactly that one. A call for a model that is not installed is an
 operational error naming the directory looked in and `rascal-tools get <model>`.
 
-**Installing models.** `rascal-tools get <model>` installs a catalogued segmenter (the default
-with no model): its files (graphs, tokenizer, licence files) from the release assets
+**Installing models.** `rascal-tools get <model>` installs a catalogued segmenter (with no model,
+the default this machine resolves): its files (graphs, tokenizer, licence files) from the release assets
 `artifacts.toml` names over HTTPS, each bounded by its recorded size and checked against its
 SHA-256, or with `--from <dir>` from a directory holding the same files, with no network. It
 publishes them as one installation in the models directory (`tools/python/MODEL.md`
 "Installations"), reusing any file another model already installed; a second install or remove of
 the same model waits or, with `--no-wait`, is refused; Ctrl-C cancels and leaves the previous
 installation as it was. `rascal-tools remove <model>` removes one (a run holding it keeps it until
-the run ends), `rascal-tools models [--json]` lists the catalogue with each model's state
-(`installed`, `not_installed`, `installing`, `unavailable`) and last outcome, and `hold` /
+the run ends), `rascal-tools models [--json]` lists the catalogue best first with each model's
+rank, state (`installed`, `not_installed`, `installing`, `unavailable`), licence and last outcome;
+`default` (`(default)` in the text listing) marks the model a call naming none would run on this
+machine: the best-ranked installed and complete, else the best-ranked that runs here. The pack
+does not read rascal's `[segment] model`, which overrides it for rascal's calls; and `hold` /
 `release` pin an installation for a run (the lab uses them). Installing is the pack's one network
 step; serving never downloads.
 
 From rascal, `rascal tools models --config <rascal.toml> [--json]`, `rascal tools get [<model>]
 --config <rascal.toml> [--from <dir>]` and `rascal tools remove <model> --config <rascal.toml>` run
 the configured segmenter pack's installer with the pack's minimal environment and the models
-directory the pack reads, and exit as it does. Under `rascal serve` the same installer answers the
+directory the pack reads, and exit as it does. `rascal tools get` with no model gets the model a
+call naming none would run (`[segment] model`, else the default this machine resolves, as
+`describe` shows it), and `rascal tools models` adds a line naming `[segment] model` when it is
+set. Under `rascal serve` the same installer answers the
 contract's `install` and `uninstall` controls (`docs/contract.md`), started in its own process
 group with its output to `<models>/.status/<model>.log`, so an install outlives the request.
 

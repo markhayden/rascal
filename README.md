@@ -60,9 +60,13 @@ rascal tools setup --bundle https://github.com/markhayden/rascal/releases/downlo
 `setup` downloads the archive (the one network step), checks its digest, verifies every file
 inside against the bundle's manifest, installs offline, and prints the `[packs.rascal-tools]`
 entry to put in `rascal.toml`. `--bundle` also takes a local archive or an unpacked directory.
-A bundle carries no model: installing one is a setup step, `rascal-tools get tiny` from the
-install's environment (Tiny, the default segmenter: 749 MB, Apache-2.0, `tools/python/MODEL.md`),
-or `--from` a directory holding its release assets on a machine with no network; from rascal,
+A bundle carries no model: installing one is a setup step, `rascal-tools get <model>` from the
+install's environment, or `--from` a directory holding its release assets on a machine with no
+network. The catalogue ranks the segmenters best first (SAM 3, BiRefNet, HQ-SAM, EVF-SAM2,
+Tiny; `tools/python/MODEL.md` has each one's size and licence: SAM 3 is under Meta's SAM
+License, the others Apache-2.0 or MIT), and a call that names no model runs the best-ranked one
+installed; with none installed it asks for SAM 3. `[segment] model` in `rascal.toml` pins one
+instead; from rascal,
 `rascal tools models --config rascal.toml` lists the segmenters and `rascal tools get <model>
 --config rascal.toml` installs one (Wafflery's Get does the same). `docs/tools.md` has the whole
 of it.
