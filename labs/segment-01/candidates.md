@@ -36,8 +36,119 @@ Not read today (row values for these are not from a page): facebook/sam2.1-hiera
 
 ## Notes for the owner
 
-1. SAM 3 is under Meta's custom "SAM License", gated on Hugging Face. The text read has no commercial ban, but shipping exported weights means shipping the agreement with them, passing on its acceptable-use and trade-control terms, and accepting termination on breach. It is not OSI-approved. Decide whether that is acceptable before it enters the lab; at 0.9B params it is also far heavier on CPU than the current pair.
-2. HQ-SAM, MobileSAM, EfficientSAM, EVF-SAM and the GitHub Grounding DINO checkpoints state an Apache-2.0 code licence but no separate weights licence. Decide whether repo licence covers the weights, or confirm with authors, before shipping any winner.
-3. Florence-2 requires `trust_remote_code=True`; the lab would run its custom code. Its segmentation output format is not stated on the card.
+1. SAM 3 is under Meta's custom "SAM License", gated on Hugging Face. The text read has no commercial ban, but shipping exported weights means shipping the agreement with them, passing on its acceptable-use and trade-control terms, and accepting termination on breach. It is not OSI-approved. Decide whether that is acceptable before it enters the lab; at 0.9B params it is also far heavier on CPU than the current pair. **Decided 2026-11-05:** the owner accepted the SAM License for the lab; whether to ship it is decided only if it wins.
+2. HQ-SAM, MobileSAM, EfficientSAM, EVF-SAM and the GitHub Grounding DINO checkpoints state an Apache-2.0 code licence but no separate weights licence. Decide whether repo licence covers the weights, or confirm with authors, before shipping any winner. **Decided 2026-11-05 for HQ-SAM:** taken as the repo's Apache-2.0 for the lab; confirmed with the authors before shipping if it wins.
+3. Florence-2 requires `trust_remote_code=True`; the lab would run its custom code. Its segmentation output format is not stated on the card. **Superseded by round 2:** Transformers 5.x runs `florence-community/Florence-2-large` natively, and its segmentation output is polygons.
 4. Grounding DINO and OWLv2 large give boxes only; they pair with a SAM decoder, they do not replace it.
 5. Checkpoint MB figures were not on the pages; measure the files when downloading for the lab.
+
+## Round 2 survey (2026-11-05)
+
+Round 1 assumed every candidate had to run on CPU in rascal's pack. On 2026-11-05 the owner set
+two new terms. A production segmenter may be hosted on a GPU (Modal or similar). And the study
+should be comprehensive enough to write up. So size and CPU cost no longer exclude a candidate:
+the lab measures them instead. This survey covers what round 1 left out.
+
+Sources were read on 2026-11-05. Licence tags, parameter counts and file sizes come from the
+Hugging Face API (`/api/models/<id>?blobs=true`).
+
+### Findings that change round 1
+
+- **HQ-SAM 2:** the checkpoints are licensed explicitly. The sam-hq2 README says "The HQ-SAM 2,
+  SAM 2 model checkpoints … are licensed under Apache 2.0".
+- **HQ-SAM v1** (ViT-B/L/H): the weights carry only Hugging Face `apache-2.0` tags, on
+  lkeab/hq-sam and the syscv-community ports, with no licence text. PyPI's
+  `segment-anything-hq` 0.3 lists "MIT", while the repo LICENSE is Apache-2.0. The 2026-11-05
+  lab decision covers all three sizes.
+- **EVF-SAM:** all four weight repos (evf-sam, evf-sam2 and their -multitask variants) state
+  `license: apache-2.0`.
+- **MobileSAM:** the authors state no weights licence. The Hugging Face mirror
+  (dhkim2810/MobileSAM) is tagged `mit`, while the repo LICENSE is Apache-2.0.
+- **EfficientSAM:** the weights sit in the repo under its Apache-2.0 LICENSE, with no separate
+  statement.
+- **Unreliable `apache-2.0` tags:** some tags contradict the stated provenance.
+  - SAM3-LiteText keeps SAM 3's image encoder (SAM License), and its text encoder is
+    MobileCLIP-based (Apple's weights are research-only).
+  - Sa2VA-4B builds on a Qwen research-licensed model.
+  - Sa2VA-Qwen3-VL-4B-SAM3 vendors SAM 3.
+
+### Candidates
+
+| candidate | ids | code licence | weights licence | commercial / redistribution | in → out | size | verdict |
+|---|---|---|---|---|---|---|---|
+| SAM 2.1 Large | facebook/sam2.1-hiera-large | Apache 2.0 | Apache 2.0 (sam2 README) | yes / yes | box, points → 3 masks + IoU | 224M; 898 MB | candidate (outliner) |
+| HQ-SAM ViT-L / ViT-H | lkeab/hq-sam `sam_hq_vit_{l,h}.pth`; syscv-community/sam-hq-vit-{large,huge} | Apache-2.0 | HF tag `apache-2.0` only | yes / yes, taking the tags as the licence | box, points → best mask + IoU | L 314M / 1255 MB; H 643M / 2571 MB | candidate (outliner; lab decision as ViT-B) |
+| HQ-SAM 2 | lkeab/hq-sam `sam2.1_hq_hiera_large.pt` (code SysCV/sam-hq/sam-hq2) | Apache 2.0 | Apache 2.0 (sam-hq2 README) | yes / yes | box, points → 3 masks + IoU | 225M; 899 MB | candidate (outliner; its package is also named `sam2`, so it needs its own environment) |
+| EdgeTAM | facebook/EdgeTAM; yonigozlan/EdgeTAM-hf | Apache 2.0 | Apache 2.0 (README) | yes / yes | box, points → 3 masks + IoU | 14M | candidate (outliner, speed floor) |
+| MobileSAM | ChaoningZhang/MobileSAM `weights/mobile_sam.pt` | Apache-2.0 | not stated by the authors; HF mirror tagged `mit` | code yes; weights unclear | box, points → 3 masks + scores | 9.7M; 41 MB | candidate (outliner, speed floor) |
+| EfficientSAM Ti / S | yformer/EfficientSAM `weights/` | Apache-2.0 | not stated separately | code yes | box (as two points), points → 3 masks + IoU | Ti 41 MB; S 98 MB | candidate (outliner, speed floor) |
+| EfficientTAM | yunyangx/efficient-track-anything | Apache 2.0 | Apache 2.0 (README) | yes / yes | box, points → masks | not stated | candidate, low priority |
+| Grounding DINO base | IDEA-Research/grounding-dino-base | Apache-2.0 | HF tag `apache-2.0` | yes / yes | text → boxes + scores | 233M; 933 MB | candidate (box finder) |
+| OWLv2 large | google/owlv2-large-patch14-ensemble | Apache-2.0 | HF tag `apache-2.0` | yes / yes ("research output" on the card is not a licence term) | text → boxes + scores | 438M; 1751 MB | candidate (box finder) |
+| MM-Grounding-DINO large / LLMDet large | openmmlab-community/mm_grounding_dino_large_all; iSEE-Laboratory/llmdet_large | Apache-2.0 | HF tag `apache-2.0` | yes / yes | text → boxes + scores | 344M | candidate (box finder) |
+| Florence-2 large | florence-community/Florence-2-large (native in Transformers 5.x) | MIT | MIT | yes / yes | text → polygons (referring segmentation); box → polygons (region segmentation); no scores | 777M; 1554 MB | candidate (end to end, and as an outliner) |
+| EVF-SAM2 / EVF-SAM | YxZhang/evf-sam2, evf-sam (and -multitask) | Apache-2.0 | `apache-2.0` (cards) | yes / yes | text → 1 mask (best of 3); no score; no point input | 898M / 1.32B | candidate (end to end; repo code is CUDA-bound and needs patching for CPU) |
+| Sa2VA-Qwen3-VL-4B | ByteDance/Sa2VA-Qwen3-VL-4B | Apache-2.0 | `apache-2.0`; base Qwen3-VL-4B `apache-2.0` | yes / yes | chat text → masks; no scores | 5.1B | candidate (end to end; heavy; `trust_remote_code`; written for Transformers 4.57) |
+| SAM3-LiteText | vil-uob/sam3-litetext-l | Apache-2.0 tag | conflicting (see above) | conflicting | text, box → instance masks | 611M | lab only, under the SAM License decision; out for shipping |
+| BiRefNet (general, HR, matting) | ZhengPeng7/BiRefNet, _HR, -matting | MIT | MIT | yes / yes | image or box crop → soft foreground map | 221M; 444 MB | candidate (refiner after the outliner) |
+| CascadePSP | PyPI `segmentation-refinement` | MIT | not stated separately | code yes | image + coarse mask → refined mask | 259 MB | candidate (refiner) |
+| ViTMatte | hustvl/vitmatte-small-composition-1k | MIT | HF tag `apache-2.0` | yes / yes | image + trimap → alpha | 26M; 103 MB | candidate (refiner, trimap from the mask) |
+| SegRefiner | MengyuWang826/SegRefiner | Apache-2.0 | not stated | not stated | image + mask → mask | not stated | out: needs Python 3.8, torch 1.12 and CUDA 11.3 |
+| EVF-Effi-SAM | (README table) | Apache-2.0 | not stated | not stated | text → mask | 232M to 700M | out: no checkpoint location found |
+| Sa2VA (older Qwen2.5 / InternLM variants) | ByteDance/Sa2VA-4B and others | Apache-2.0 | base models research-only or not read | inherits research terms | chat text → masks | 4B+ | out: base-model licences |
+| X-SAM | hao9610/X-SAM | Apache-2.0 | `apache-2.0`; Phi-3 not read | not stated | text → masks | not stated | out for this round: a CUDA training stack, no CPU path |
+| LISA / LISA++ | xinlai/LISA-7B-v1 | Apache-2.0 | not stated | not stated | text → mask | 7B / 13B | out: weights licence not stated |
+| Moondream 2 / 3 | vikhyatk/moondream2; moondream/moondream3-preview | Apache-2.0 / BSL 1.1 | as code | 3: restricted | text → boxes or points; no segmentation | 1.9B / 9B | out: no segmentation (and BSL for 3) |
+| YOLOE | THU-MIG/yoloe | AGPL-3.0 | `agpl-3.0` | copyleft | text → boxes + masks | — | out: AGPL |
+| DINO-X | DINO-X-API | API client | no weights | n/a | text → masks via API | n/a | out: API only |
+| Rex-Omni | IDEA-Research/Rex-Omni | IDEA License 1.0 | research (Qwen2.5-VL base) | research | text → boxes | 4.1B | out: research licence, no masks |
+| Grounded-SAM 2 | IDEA-Research/Grounded-SAM-2 | Apache-2.0 | as its parts | — | text → boxes → SAM 2 masks | — | not separate: it is the Grounding DINO + SAM 2.1 recipe the lab already runs |
+
+**Decided 2026-11-05** (owner):
+- MobileSAM, EfficientSAM and CascadePSP are cleared for the lab on their repos' licences, the
+  HQ-SAM rule. Their authors confirm the weights' licence before any of them ships.
+- Candidates that run their own code are run in the lab, each pinned to an exact revision whose
+  code was read before it ran, and in its own environment where packages clash. These are
+  BiRefNet and Sa2VA (`trust_remote_code`), and EVF-SAM and HQ-SAM 2 (cloned repos, EVF-SAM
+  patched to run without CUDA).
+- SAM3-LiteText runs in the lab under the SAM License decision.
+
+The run recipe for each candidate (Python package, class, input and output format, and gotchas)
+is in the lab's adapters, `rascal-lab/segment-lab/src/segment_lab/adapters/`.
+
+### Sources (read 2026-11-05)
+
+- **Hugging Face cards and API:**
+  - SAM 2.1, HQ-SAM and EdgeTAM:
+    - facebook/sam2.1-hiera-large
+    - lkeab/hq-sam
+    - syscv-community/sam-hq-vit-{base,large,huge}
+    - facebook/EdgeTAM; yonigozlan/EdgeTAM-hf
+  - Box finders:
+    - IDEA-Research/grounding-dino-base
+    - google/owlv2-large-patch14{,-ensemble,-finetuned}
+    - openmmlab-community/mm_grounding_dino_{large,base}_all
+    - iSEE-Laboratory/llmdet_{tiny,base,large}
+  - End to end:
+    - YxZhang/evf-sam, evf-sam2, evf-sam-multitask, evf-sam2-multitask
+    - microsoft/Florence-2-large; florence-community/Florence-2-large
+    - ByteDance/Sa2VA-4B, Sa2VA-Qwen3-VL-4B, Sa2VA-Qwen3-VL-4B-SAM3
+    - vil-uob/sam3-litetext-{l,s0}
+  - Small SAMs: dhkim2810/MobileSAM
+  - Refiners: ZhengPeng7/BiRefNet, BiRefNet_HR, BiRefNet-matting; hustvl/vitmatte-{base,small}-composition-1k
+  - Others read for exclusion or licence checks:
+    - hao9610/X-SAM; xinlai/LISA-7B-v1; jameslahm/yoloe-v8l-seg; IDEA-Research/Rex-Omni
+    - vikhyatk/moondream2; moondream/moondream3-preview; moondream/moondream3.1-9B-A2B
+    - apple/MobileCLIP2-L-14
+    - Qwen/Qwen2.5-3B-Instruct; Qwen/Qwen2.5-VL-3B-Instruct; Qwen/Qwen3-VL-4B-Instruct; internlm/internlm2_5-7b-chat
+- **GitHub READMEs and LICENSE files:**
+  - SAM family: facebookresearch/sam2; SysCV/sam-hq (and sam-hq2/README.md); facebookresearch/EdgeTAM
+  - End to end: hustvl/EVF-SAM; magic-research/Sa2VA; wanghao9610/X-SAM; dvlab-research/LISA
+  - Small SAMs: ChaoningZhang/MobileSAM; yformer/EfficientSAM; yformer/EfficientTAM
+  - Refiners: ZhengPeng7/BiRefNet (issue #285); hustvl/ViTMatte; hkchengrex/CascadePSP; MengyuWang826/SegRefiner
+  - Box finders and pipelines: THU-MIG/yoloe; IDEA-Research/Grounded-SAM-2; IDEA-Research/DINO-X-API
+- **Transformers v5.22.1:** the model directory and the model docs for florence2, sam_hq, owlv2,
+  vitmatte, edgetam, sam3_lite_text and mm-grounding-dino.
+- **PyPI:** transformers, segment-anything-hq, segmentation-refinement.
+- **Not read**, so not used for any value: the Phi-3, InternLM 2.5, LLaVA/LLaMA and Moondream
+  Model License texts, and the onnx-community ports.
