@@ -1,8 +1,10 @@
 //! A fake segmenter pack install, shaped as `rascal tools setup` leaves one: the launcher
 //! `<dir>/.venv/bin/rascal-tools` (a shell script that runs any program, such as the fake pack),
-//! `<dir>/artifacts.toml` naming the model files, `<dir>/segmenters.toml` naming the default
-//! model's files, and with `models` the default model installed under `<dir>/models/` as the pack
-//! lays an installation out (`<models>/tiny/current` naming `<models>/tiny/<identity>/`). Readiness inspects exactly this shape (PLAN.md 12.2).
+//! `<dir>/artifacts.toml` naming the model files, `<dir>/segmenters.toml` ranking two models
+//! (`sam3` first, `tiny` second, whose files these are), and with `models` tiny installed under
+//! `<dir>/models/` as the pack lays an installation out (`<models>/tiny/current` naming
+//! `<models>/tiny/<identity>/`), so it is the default there. Readiness inspects exactly this
+//! shape (PLAN.md 12.2). [`write_catalogue`] and [`install_model`] lay out any other catalogue.
 
 use std::path::{Path, PathBuf};
 
@@ -66,7 +68,7 @@ pub fn write(dir: &Path, program: &[&str], models: bool) -> std::io::Result<Fake
     std::fs::write(
         dir.join("segmenters.toml"),
         format!(
-            "[[segmenter]]\nid = \"tiny\"\ntitle = \"Fake Tiny\"\nlicence = \"Apache-2.0\"\ndefault = true\nparams = [\"threshold\", \"max_instances\", \"pad\"]\nfiles = [{files}]\nlicence_files = []\ndownload_mb = 1\ninstalled_mb = 1\nlab = {{ round = \"segment-01\", remove = 0.548 }}\n\n[[segmenter]]\nid = \"sam3\"\ntitle = \"Fake SAM 3\"\nlicence = \"SAM License\"\nparams = [\"threshold\", \"max_instances\"]\nfiles = [\"sam3.onnx\"]\nlicence_files = []\ndownload_mb = 3400\ninstalled_mb = 3400\n"
+            "[[segmenter]]\nid = \"tiny\"\ntitle = \"Fake Tiny\"\nlicence = \"Apache-2.0\"\nrank = 2\nparams = [\"threshold\", \"max_instances\", \"pad\"]\nfiles = [{files}]\nlicence_files = []\ndownload_mb = 1\ninstalled_mb = 1\nlab = {{ round = \"segment-01\", remove = 0.548 }}\n\n[[segmenter]]\nid = \"sam3\"\ntitle = \"Fake SAM 3\"\nlicence = \"SAM License\"\nrank = 1\nparams = [\"threshold\", \"max_instances\"]\nfiles = [\"sam3.onnx\"]\nlicence_files = []\ndownload_mb = 3400\ninstalled_mb = 3400\n"
         ),
     )?;
     if models {
@@ -94,6 +96,54 @@ pub fn write_models(models: &Path) -> std::io::Result<()> {
         std::fs::write(installation.join(name), b"fake weights")?;
     }
     std::fs::write(models.join("tiny/current"), format!("{INSTALLATION}\n"))
+}
+
+/// One entry of a catalogue [`write_catalogue`] writes.
+#[derive(Debug, Clone)]
+pub struct CatalogueEntry<'a> {
+    pub id: &'a str,
+    /// The preference order, 1 best.
+    pub rank: u32,
+    /// The platforms it runs on; empty for every platform.
+    pub platforms: &'a [&'a str],
+}
+
+/// The files [`install_model`] lays out for `id` and [`write_catalogue`] names for it.
+pub fn files_of(id: &str) -> [String; 2] {
+    [format!("{id}.onnx"), format!("LICENSE.{id}")]
+}
+
+/// Replaces `<dir>/segmenters.toml` with `entries`, in the order given, each naming
+/// [`files_of`] its id.
+pub fn write_catalogue(dir: &Path, entries: &[CatalogueEntry<'_>]) -> std::io::Result<()> {
+    let mut text = String::new();
+    for e in entries {
+        let [file, licence] = files_of(e.id);
+        text.push_str(&format!(
+            "[[segmenter]]\nid = {:?}\ntitle = {:?}\nlicence = \"Apache-2.0\"\nrank = {}\nparams = [\"threshold\", \"max_instances\"]\nfiles = [{file:?}]\nlicence_files = [{licence:?}]\ndownload_mb = 1\ninstalled_mb = 1\n",
+            e.id,
+            e.id.to_uppercase(),
+            e.rank
+        ));
+        if !e.platforms.is_empty() {
+            text.push_str(&format!("platforms = {:?}\n", e.platforms));
+        }
+        text.push('\n');
+    }
+    std::fs::write(dir.join("segmenters.toml"), text)
+}
+
+/// Installs `id` under `models` as the pack lays an installation out, with [`files_of`] it
+/// non-empty; without `complete`, its licence file is left out, so it is no installation.
+pub fn install_model(models: &Path, id: &str, complete: bool) -> std::io::Result<()> {
+    let installation = models.join(id).join(INSTALLATION);
+    std::fs::create_dir_all(&installation)?;
+    let [file, licence] = files_of(id);
+    std::fs::write(installation.join(file), b"fake weights")?;
+    if complete {
+        std::fs::write(installation.join(licence), b"licence")?;
+    }
+    std::fs::write(models.join(id).join("current"), format!("{INSTALLATION}\n"))
 }
 
 /// Makes the install's launcher also a fake installer (SPEC.md "Installing a model"), standing in

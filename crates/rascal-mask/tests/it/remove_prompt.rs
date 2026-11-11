@@ -287,9 +287,10 @@ fn run_prompt(config: &Path, out: &Path, extra: &[&str]) -> Output {
 }
 
 #[test]
-fn the_model_is_the_calls_else_the_configs_else_the_packs_default() {
+fn the_model_is_the_calls_else_the_configs_else_the_default() {
     let dir = scratch("model-order");
-    // No call, no [segment]: the pack's default, passed explicitly.
+    // No call, no [segment]: the default this machine resolves (tiny, the only model
+    // installed, though sam3 is ranked first), passed explicitly.
     let config = models_config(&dir, None);
     let out = dir.join("default");
     let r = run_prompt(&config, &out, &[]);
@@ -442,9 +443,9 @@ fn a_parameter_the_model_does_not_use_is_left_out_and_refused_when_given() {
         "pad does not apply to sam3: {params}"
     );
     assert!(params.get("threshold").is_some());
-    // Tiny keeps pad.
+    // Tiny keeps pad. (Named: with sam3 installed, sam3 is the default, being ranked first.)
     let out = dir.join("tiny");
-    let r = run_prompt(&config, &out, &[]);
+    let r = run_prompt(&config, &out, &["--model", "tiny"]);
     assert_eq!(r.status.code(), Some(0), "{}", text(&r.stderr));
     assert!(journal_step(&out, "segment")["params"].get("pad").is_some());
     // Given explicitly for sam3, even at its default, it is refused.

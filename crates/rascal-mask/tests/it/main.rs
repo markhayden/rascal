@@ -12,6 +12,7 @@ mod cli;
 mod contract_locations;
 mod corpus_cli;
 mod dash;
+mod default_segmenter;
 mod describe;
 mod estimate;
 mod fillers;

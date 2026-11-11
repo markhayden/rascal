@@ -121,8 +121,9 @@ fn remove_prompt_follows_an_install() {
         "{pack}"
     );
 
-    // The launcher without its model installed: the default model's requirement (one per
-    // catalogued model, for its `model` choice) missing, naming where it was looked for.
+    // The launcher with no model installed: one requirement per catalogued model, for its
+    // `model` choice; the default is the best-ranked (sam3), missing, naming where it was looked
+    // for and how to get it.
     fake_install::write(&install_dir, &[bin, "fake-pack", "exact"], false).unwrap();
     let readiness = remove_prompt(&home, &config, &[]);
     assert_eq!(readiness["state"], "needs_setup");
@@ -149,6 +150,14 @@ fn remove_prompt_follows_an_install() {
             && setup.contains("rascal tools get tiny"),
         "{setup}"
     );
+    let blocking: Vec<&str> = readiness["requirements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["kind"] == "file")
+        .map(|r| r["name"].as_str().unwrap())
+        .collect();
+    assert!(blocking.contains(&"segmenter:sam3"), "{readiness:#}");
 
     // Every file in the install's models/: ready.
     fake_install::write_models(&install_dir.join("models")).unwrap();
@@ -177,7 +186,7 @@ fn remove_prompt_follows_an_install() {
     // Another model in the catalogue, not installed: listed for its choice, but only the
     // default's counts, so remove_prompt stays ready (table-manners 3.1's truth table).
     let mut catalogue = std::fs::read_to_string(install_dir.join("segmenters.toml")).unwrap();
-    catalogue.push_str("\n[[segmenter]]\nid = \"other\"\nfiles = [\"other.onnx\"]\n");
+    catalogue.push_str("\n[[segmenter]]\nid = \"other\"\nrank = 3\nfiles = [\"other.onnx\"]\n");
     std::fs::write(install_dir.join("segmenters.toml"), catalogue).unwrap();
     let readiness = remove_prompt(&home, &config, &[]);
     assert_eq!(readiness["state"], "ready", "{readiness:#}");

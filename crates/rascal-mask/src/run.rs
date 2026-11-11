@@ -340,7 +340,8 @@ pub fn declares_model(recipe: &Recipe) -> bool {
 }
 
 /// The segmenter a run of `recipe` uses, resolved once (SPEC.md "Choosable segmenters"): the
-/// call's `model`, else `[segment] model`, else the pack's default. A step may not set `model`
+/// call's `model`, else `[segment] model`, else the default this machine resolves from the
+/// catalogue's ranking (`segmenters::run_default`; the pack's manifest default under `--replay`). A step may not set `model`
 /// itself (a literal, or an override): the only way in is `inputs.model`. With a pack whose
 /// `segment` takes no `model`, the binding is dropped and naming a model is refused. A model
 /// that is not installed is refused before anything runs, naming the command that installs it;
@@ -376,10 +377,11 @@ pub fn resolve_model(
     let choices = param.as_ref().map(|p| {
         (
             p.choices.clone(),
-            p.default
-                .as_ref()
-                .and_then(|d| d.as_str())
-                .map(str::to_string),
+            rascal_mask::segmenters::run_default(
+                config,
+                p.default.as_ref().and_then(|d| d.as_str()),
+                replay,
+            ),
         )
     });
     let resolved = rascal_mask::segmenters::resolve(
