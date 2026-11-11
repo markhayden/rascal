@@ -175,7 +175,7 @@ never starts a pack, sends a request or writes anything.
 | `dependency` | a command filler's `command[0]` | `present` when it is an executable file (by path, or found on `PATH`), else `missing` |
 | `dependency` | `packs.<name>` (`remove_prompt`) | the entry whose command is `<dir>/.venv/bin/rascal-tools`: `missing` with no such entry or no launcher there, `invalid` when `serve` could not start it, else `present` |
 | `file` | each file of the default segmenter (its `files` and `licence_files` in the install's `segmenters.toml`; another model's files never make `remove_prompt` need setup) | `present` when it is in the directory the pack reads and not empty, else `missing` naming that directory; digests are not hashed here (the pack checks them before use), so a file is never `valid` |
-| `env` | each non-secret variable the segmenter entry passes (`[packs.*] env`) | `present` when set; unset, `RASCAL_TOOLS_MODELS` is `missing` only when the files are not where the pack falls back to, and anything else is omitted |
+| `env` | each non-secret variable the segmenter entry passes (`[packs.*] env`) | `present` when set; unset, `RASCAL_TOOLS_MODELS` is `missing` when the files are not where the pack falls back to, and otherwise any unset variable is `missing` and `optional` (`for` "configuring the segmenter pack"), never omitted: a host that passes a tool only the variables it names (Wafflery's probe runs with none) learns to pass it |
 
 The directory the pack reads its models from is resolved exactly as the pack does:
 `RASCAL_TOOLS_MODELS` when the entry passes it and it is set and not empty, else `models/` in the

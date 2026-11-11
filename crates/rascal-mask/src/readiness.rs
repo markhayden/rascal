@@ -25,6 +25,10 @@ pub const SEGMENTER_ACTION: &str = "remove_prompt";
 /// What an optional checker requirement is for (table-manners 3.1's `for`).
 pub const CHECK_FOR: &str = "checking the result";
 
+/// What an optional pack variable is for (table-manners 3.1's `for`): one the pack is
+/// configured to receive but that is not set.
+pub const PACK_ENV_FOR: &str = "configuring the segmenter pack";
+
 /// The variable the segmenter pack reads its model directory from.
 pub const MODELS_ENV: &str = "RASCAL_TOOLS_MODELS";
 
@@ -460,6 +464,24 @@ fn segmenter_requirements(
                 )),
                 optional: false,
                 needed_for: None,
+                for_choice: None,
+                installable: None,
+            });
+        } else {
+            // Listed though nothing stands in the way, so a host that passes a tool only the
+            // variables it names (Wafflery's probe runs with none) passes this one when it is set.
+            out.push(Requirement {
+                kind: RequirementKind::Env,
+                name: var.clone(),
+                state: RequirementState::Missing,
+                setup: (var == MODELS_ENV).then(|| {
+                    format!(
+                        "Optional: set `{MODELS_ENV}` to read models from another directory than {}.",
+                        models.display()
+                    )
+                }),
+                optional: true,
+                needed_for: Some(PACK_ENV_FOR.into()),
                 for_choice: None,
                 installable: None,
             });

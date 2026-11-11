@@ -1360,7 +1360,8 @@ uses the installation.
   `state` (`installed`, `not_installed`, `installing`, `unavailable`), `progress` (0 to 1, only
   while `installing`), `requirements` (what installing needs, such as free disk; never what
   running needs), `notes`, and `x-<tool>` (rascal: `lab`). The state is read from disk (the
-  installations, the lock and a status file the installer writes): describe stays a local
+  installations, the lock and a status file the installer writes, its progress at every 1% of
+  the bytes): describe stays a local
   inspection. `last_outcome` (`null`, or `{action, state, error, at}` with `action` `install`
   or `uninstall` and `state` `succeeded`, `failed` or `cancelled`) reports the most recent one
   that finished, until the next starts, so a host that reconnects learns how a detached install

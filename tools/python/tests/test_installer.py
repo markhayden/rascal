@@ -32,6 +32,7 @@ class FakeTransport:
         self.gate: threading.Event | None = None
         self.started = threading.Event()
         self.after_first_chunk = None
+        self.each_read = None
 
     @contextlib.contextmanager
     def open(self, url: str):
@@ -47,6 +48,8 @@ class FakeTransport:
                 if transport.gate is not None:
                     transport.gate.wait(10)
                 chunk = super().read(n)
+                if transport.each_read is not None:
+                    transport.each_read()
                 if Stream.first and transport.after_first_chunk is not None:
                     Stream.first = False
                     transport.after_first_chunk()
@@ -163,6 +166,17 @@ def test_cancel_at_each_stage_leaves_the_previous_installation(setup, stage, mon
     assert models.current("tiny") == first and models.resolve("tiny")
     assert no_staging(models)
     assert models.status("tiny")["last_outcome"]["state"] == "cancelled"
+
+
+def test_progress_is_recorded_while_a_file_downloads(setup) -> None:
+    # A host reads progress from the status file. A model's first file can take many minutes,
+    # so progress written only between files sits at 0 the whole time.
+    models, transport, get, _, _ = setup
+    seen: list[float] = []
+    transport.each_read = lambda: seen.append(models.status("tiny").get("progress") or 0.0)
+    get()
+    during_graph = seen[: len(GRAPH) // installer.CHUNK]
+    assert any(0.0 < p < 1.0 for p in during_graph), seen
 
 
 def test_a_crash_is_cleaned_by_the_next_get(setup) -> None:

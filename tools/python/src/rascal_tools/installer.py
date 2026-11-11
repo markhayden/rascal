@@ -177,12 +177,30 @@ def get(
             models.clean()
         staging = models.staging(model)
         done = 0
+        written = 0.0
+
+        def installing() -> None:
+            nonlocal written
+            written = round(done / total, 4) if total else 1.0
+            models.write_status(
+                model,
+                {
+                    "state": "installing",
+                    "progress": written,
+                    "pid": os.getpid(),
+                    "last_outcome": previous,
+                },
+            )
 
         def progress(n: int) -> None:
+            # The status file is what a host shows, so it follows the bytes (every 1%), not
+            # only the files: a model's first file can take many minutes.
             nonlocal done
             done += n
             fraction = done / total if total else 1.0
             report(fraction)
+            if fraction - written >= 0.01:
+                installing()
 
         try:
             records = []
@@ -211,15 +229,7 @@ def get(
                         f"{artifact.sha256}; nothing was installed"
                     )
                 records.append((artifact.name, artifact.size, artifact.sha256))
-                models.write_status(
-                    model,
-                    {
-                        "state": "installing",
-                        "progress": round(done / total, 4) if total else 1.0,
-                        "pid": os.getpid(),
-                        "last_outcome": previous,
-                    },
-                )
+                installing()
             cancel.check()
             record = installs.manifest_for(model, revision(entry), records)
             with models.lock():

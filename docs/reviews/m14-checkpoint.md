@@ -130,4 +130,27 @@ committed, in 4 s. The live checkouts and models directory were not touched.
 
 ## The owner's check
 
-PENDING
+In isolation under `~/rascal-manual/m14/`: rascal (`4eee8d2`), Wafflery (`c8ef141`) and squint
+(`f288738`) built from their merged mains, an empty models directory, a fresh Wafflery library,
+and a `rascal.toml` with the pack, LaMa and squint's `source_fidelity` as the checker.
+
+**First attempt.** Get on the four new models showed *Installing*, and the bars barely moved for
+several minutes. Three bugs, fixed on `m14-handcheck`, test first, one commit each:
+
+1. **The installs went to the wrong directory** (`1e1cade`).
+   - Cause: Wafflery passes a tool only the variables its description names, learned from a
+     probe run with none set. With Tiny already in `~/.cache/rascal-tools` (the pack's
+     fallback), readiness omitted `RASCAL_TOOLS_MODELS`, so Wafflery never passed it.
+   - Fix: a variable the pack is configured to receive is always listed; unset, it is
+     `missing` and `optional`.
+   - The partial downloads were cancelled, which deleted their staging. The empty model
+     directories and status files they left were removed, so `~/.cache/rascal-tools` holds
+     Tiny only, as before. Its stale `.install-tiny.lock` (pre-`bc650f6` layout) was removed
+     too.
+2. **Progress sat at 0** (`88d7591`). The status file a host reads was written only between
+   files. SAM 3's and EVF-SAM2's first files take many minutes. It is now written at every 1%.
+3. **A hold could be left by a signal** (`edb852b`). The full gate's hold test failed once under
+   load: a SIGTERM after the pack wrote the hold, but before it answered, found nothing
+   registered. Holds are now registered before they are written and released by run.
+
+**Second attempt.** PENDING

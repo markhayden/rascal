@@ -155,14 +155,18 @@ struct Taken {
     models: PathBuf,
     model: String,
     run: String,
-    installation: String,
+    /// `None` while `hold` runs: a signal then releases the run's hold on every installation.
+    installation: Option<String>,
 }
 
 impl Taken {
     fn release(&self) {
-        let _ = std::process::Command::new(&self.launcher)
-            .args(["release", &self.model, "--run", &self.run, "--installation"])
-            .arg(&self.installation)
+        let mut release = std::process::Command::new(&self.launcher);
+        release.args(["release", &self.model, "--run", &self.run]);
+        if let Some(installation) = &self.installation {
+            release.args(["--installation", installation]);
+        }
+        let _ = release
             .env(rascal_mask::readiness::MODELS_ENV, &self.models)
             .output();
     }
@@ -188,6 +192,21 @@ impl Hold {
             .map(|d| d.as_nanos())
             .unwrap_or_default();
         let run = format!("rascal-{}-{nanos}", std::process::id());
+        // Registered before the hold is written, so a signal in between still releases it.
+        if let Ok(mut held) = HELD.lock() {
+            held.push(Taken {
+                launcher: launcher.clone(),
+                models: segmenters.models.clone(),
+                model: model.to_string(),
+                run: run.clone(),
+                installation: None,
+            });
+        }
+        // Dropped on any error below, which releases the run's hold wherever it was written.
+        let mut hold = Hold {
+            run: run.clone(),
+            installation: String::new(),
+        };
         let out = std::process::Command::new(&launcher)
             .args(["hold", model, "--run", &run, "--pid"])
             .arg(std::process::id().to_string())
@@ -201,16 +220,13 @@ impl Hold {
                 String::from_utf8_lossy(&out.stderr).trim()
             )));
         }
-        if let Ok(mut held) = HELD.lock() {
-            held.push(Taken {
-                launcher,
-                models: segmenters.models.clone(),
-                model: model.to_string(),
-                run: run.clone(),
-                installation: installation.clone(),
-            });
+        if let Ok(mut held) = HELD.lock()
+            && let Some(taken) = held.iter_mut().find(|h| h.run == run)
+        {
+            taken.installation = Some(installation.clone());
         }
-        Ok(Hold { run, installation })
+        hold.installation = installation;
+        Ok(hold)
     }
 }
 
